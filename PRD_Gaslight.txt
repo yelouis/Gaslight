@@ -1,0 +1,56 @@
+﻿Product Requirements Document (PRD)
+Working Title: Gaslight
+Platform: Mobile Web Browser (Room-code based, similar to Jackbox/skribbl.io)
+Player Count: 4–8 Players
+Genre: Social Deduction / Party Game
+________________
+1. The Elevator Pitch
+Gaslight is a psychological party game where one player (The Asker) secretly tries to manipulate their friends into splitting their votes to hit a specific "Target Number." Meanwhile, the other players (The Voters) are trying to read the Asker's mind, guess their secret target, and potentially sabotage their master plan.
+2. Core Gameplay Loop (Round-by-Round)
+Each round consists of four distinct phases executed entirely on individual mobile screens, with an optional shared screen (like a TV or tablet) for the "Reveal."
+Phase 1: The Draft (Asynchronous Setup)
+* The Action: While waiting in the lobby or between rounds, players contribute to the "Prompt Bank" by writing only the first half of a binary question.
+* Formats: * The Investment: "You get $10 million, BUT..."
+   * The Dealbreaker: "They are a perfect 10/10, BUT..."
+   * The Classic: "Would you rather have to whisper everything, OR..."
+Phase 2: The Craft (The Asker's Turn)
+* The Secret: The active player (The Asker) is secretly assigned a Target Number ($T$). If there are 8 players, $T$ will be between 2 and 7.
+* The Slot Machine: The Asker's screen displays a slot machine UI that rolls a random "first half" prompt from the community bank.
+* The Input: The Asker must type the second half of the prompt. Their goal is to engineer the options so that exactly $T$ people vote for Option B.
+Phase 3: The Choice & Prediction (The Voters' Turn)
+* Step A (The Vote): The Voters see the completed prompt (Option A vs. Option B). They cast their vote based on their actual preference or strategic sabotage.
+* Step B (The Prediction): Immediately after voting, a slider appears on the Voter's screen: "What number do you think [Asker's Name] was aiming for?" Voters submit their guess for $T$.
+Phase 4: The Reveal (The Viral Moment)
+* The Tally: The UI counts the votes one by one with rising audio tension.
+* The Target Reveal: The Asker’s secret Target Number ($T$) drops onto the screen.
+* The Mind-Read: The game reveals which Voters correctly guessed the Asker's Target Number.
+________________
+3. Scoring & Game Theory (The Incentives)
+The game thrives on Information Asymmetry. The Asker wants to hit their target, but if they make the prompt too obvious, the Voters will easily guess their target and penalize them.
+Condition
+	Role
+	Points Awarded
+	Bullseye
+	Asker
+	+10 Points (Hit $T$ exactly)
+	Near Miss
+	Asker
+	+2 Points (Off by exactly 1 vote)
+	Exposed Penalty
+	Asker
+	-5 Points (If >50% of Voters guess $T$ correctly)
+	Mind Reader
+	Voter
+	+5 Points (Guessed $T$ correctly)
+	Strategic Result: This forces the Asker to write "blurry," nuanced prompts. They have to double-bluff, making a question look like it's aiming for 2 people when it's actually aiming for 5. Voters, meanwhile, must decide whether to vote honestly or vote against the grain to ruin the Asker's assumed math.
+________________
+4. Viral Features & UI UX
+The "Heat Map" Summary Screen
+At the end of the round, players see a shareable, colorful Heat Map graph. It displays the Asker's secret target versus a scatter plot of what the Voters thought the target was. This screen includes a one-tap "Share to Instagram/TikTok" button with a generated caption (e.g., "I tried to trick 5 friends into giving up tacos forever and they saw right through me. 🎯").
+Automated "Anti-Boring" Filter
+To keep the game spicy, the backend tracks the success rate of the community-generated prompts. If a specific "first half" prompt consistently results in the Asker getting the "Exposed Penalty" (meaning it's too easy to read), the game flags it as a "Dead Prompt" and permanently retires it from the bank.
+Player Archetypes (End of Game Awards)
+Instead of just showing 1st, 2nd, and 3rd place, the game assigns titles based on behavior:
+* The Sniper: The Voter who most frequently changed the outcome with a sabotage vote.
+* The Mind Reader: The Voter who guessed the Target Number most often.
+* The Puppet Master: The Asker who successfully hit their Target Number without getting caught.
