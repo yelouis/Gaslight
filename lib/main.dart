@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 
 // Screens
@@ -15,10 +16,12 @@ import 'services/game_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
+
   runApp(
     ChangeNotifierProvider(
       create: (context) => GameService(),
@@ -36,7 +39,8 @@ class GaslightApp extends StatelessWidget {
       title: 'Gaslight',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF141A17), // Deep dark fantasy tavern/ruins
+        scaffoldBackgroundColor:
+            const Color(0xFF141A17), // Deep dark fantasy tavern/ruins
         textTheme: GoogleFonts.loraTextTheme(ThemeData.dark().textTheme).apply(
           bodyColor: const Color(0xFFF5EEDB), // Antique ivory text
           displayColor: const Color(0xFFD4AF37), // Gold headers
