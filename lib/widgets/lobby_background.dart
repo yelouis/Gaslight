@@ -51,8 +51,15 @@ class _AnimatedLobbyBackgroundState extends State<AnimatedLobbyBackground> with 
         );
       },
       child: Stack(
+        fit: StackFit.expand,
         children: [
-          // Optional: Add subtle noise or texture overlay here if desired
+          // Background Image
+          Image.asset(
+            'assets/images/lobby_background.gif',
+            fit: BoxFit.cover,
+            color: Colors.black.withOpacity(0.5), // Darken slightly so text remains readable
+            colorBlendMode: BlendMode.darken,
+          ),
           Positioned.fill(
             child: widget.child,
           ),

@@ -60,31 +60,30 @@ class _AnimatedLobbyLogoState extends State<AnimatedLobbyLogo> with SingleTicker
                 children: [
                    Positioned(top: 8, left: 8, child: Text('A', style: TextStyle(color: primaryColor, fontSize: 24, fontWeight: FontWeight.bold))),
                    Positioned(bottom: 8, right: 8, child: RotatedBox(quarterTurns: 2, child: Text('A', style: TextStyle(color: primaryColor, fontSize: 24, fontWeight: FontWeight.bold)))),
-                   // The Magical Ember in the center
+                   // The Gaslight Mascot
                    Center(
                      child: AnimatedBuilder(
                        animation: _flickerController,
                        builder: (context, child) {
                          return Container(
-                           width: 60,
-                           height: 80,
+                           width: 80,
+                           height: 100,
                            decoration: BoxDecoration(
                              shape: BoxShape.circle,
                              boxShadow: [
                                BoxShadow(
                                  color: primaryColor.withOpacity(0.5 * _flickerController.value),
-                                 blurRadius: 40 * _flickerController.value,
-                                 spreadRadius: 15 * _flickerController.value,
+                                 blurRadius: 20 * _flickerController.value,
+                                 spreadRadius: 5 * _flickerController.value,
                                )
                              ]
                            ),
-                           child: Icon(
-                             Icons.local_fire_department,
-                             color: primaryColor,
-                             size: 60,
-                             shadows: const [
-                               Shadow(color: Colors.black, blurRadius: 4, offset: Offset(2, 2))
-                             ],
+                           child: ClipRRect(
+                             borderRadius: BorderRadius.circular(12),
+                             child: Image.asset(
+                               'assets/images/gaslight_mascot.png',
+                               fit: BoxFit.cover,
+                             ),
                            ),
                          );
                        },
