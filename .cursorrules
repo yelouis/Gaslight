@@ -1,0 +1,11 @@
+# Global Repository Guidelines
+
+Welcome to the repository! When using AI coding assistants (like Antigravity, Cursor, or Cline) to vibe code in this repository, strictly adhere to the following rules:
+
+## 1. Code Commits
+- ALWAYS read and follow the commit guidelines detailed in `.agents/skills/commit_message_guidelines/SKILL.md` before making any git commits.
+- Ensure that the "WHY" behind code changes is thoroughly documented in the commit message body so that AI models can extract the implicit intention and architectural decisions.
+
+## 2. General Practices
+- Prioritize writing clean, maintainable, and self-documenting code.
+- Whenever making architectural changes, briefly leave context in the commit history or inline comments targeting future AI context windows.
