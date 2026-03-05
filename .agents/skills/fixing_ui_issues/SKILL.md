@@ -1,40 +1,33 @@
 ---
-name: Fixing UI Issues
-description: Best practices and guidelines for AI models when diagnosing and fixing UI issues in this Flutter project.
+name: Iterating on UX and Design
+description: Best practices and guidelines for AI models when responding to subjective UX/UI design requests and visual tweaks in this Flutter project.
 ---
 
-# UI Issue Resolution Guidelines
+# UX and Design Iteration Guidelines
 
-When asked to fix or debug UI issues (such as overflows, layout constraints, clipping, or styling bugs) in this Flutter application, follow these steps and principles to ensure high-quality, maintainable, and responsive solutions.
+When asked to update, tweak, or redesign UI elements based on subjective user preferences (e.g., "make this look cleaner," "improve the padding," "add more visual hierarchy"), follow these principles to ensure high-quality, beautiful, and consistent design.
 
 ## 1. Request and Analyze Visual Context First
-- **Request a Screenshot:** Before diving into code changes or making assumptions, ALWAYS ask the user to provide a screenshot or screen recording of the UI issue. Flutter layouts are highly visual, and seeing the issue first-hand is crucial.
+- **Request a Screenshot:** Before diving into complex layout changes or visual overhauls, it is highly recommended to ask the user to provide a screenshot or screen recording of the current UI. Understanding the starting point visually is incredibly helpful for subjective design tasks.
 - **Analyze the Screenshot:** When provided with visual context, observe the following:
-  - Look for Flutter's distinctive yellow and black striped overflow tape to pinpoint the exact boundary where constraints failed.
-  - Check if text is clipping, wrapping improperly, or expanding out of its container.
-  - Determine if the issue is a flex factor error (e.g., elements not dividing space correctly) or an unbounded scroll error.
-  - Relate the visual bounds seen in the image to the layout widgets like `Row`, `Column`, `ListView`, or `Container`.
+  - Current spacing, typography hierarchy, and alignment.
+  - Color contrast and how elements stand out against the background.
+  - Overall visual balance and areas that feel cluttered or disconnected.
 
-## 2. Diagnose First, Fix Second
-- **Understand the Layout Tree:** Do not blindly wrap widgets in `Expanded` or `SingleChildScrollView`. Analyze the widget tree to understand *why* the constraints are failing (e.g., an unbounded height constraint inside a `Column`).
-- **Constraint Fundamentals:** Remember that in Flutter, constraints go down, sizes go up, and parents set positions. Identify which widget is passing infinite constraints to a child that expects bounded ones.
+## 2. Adhere to the Established Design System
+- **Use Theme context:** Always leverage `Theme.of(context)` for colors, text styles, and shaping. Do not introduce arbitrary hardcoded hex colors or non-standard font sizes unless explicitly requested.
+- **Maintain Consistency:** If the app uses a specific style (e.g., rounded corners of `12.0`, elevated cards with subtle shadows), ensure your new designs match this established aesthetic. Look at surrounding widgets to infer the design language.
 
-## 3. Common Flutter UI Pitfalls
-- **RenderFlex Overflows (Yellow/Black Striped Tape):**
-  - If a `Row` or `Column` child overflows, determine if it should scale down (use `Flexible` or `Expanded`), or if the parent should allow scrolling (`SingleChildScrollView`).
-  - Be careful with nested ListViews or ScrollViews. If necessary, use `shrinkWrap: true` and `physics: NeverScrollableScrollPhysics()` for inner scrollables.
-- **Text Truncation:**
-  - Ensure text elements gracefully degrade by using `overflow: TextOverflow.ellipsis`, `maxLines`, or wrapping them in flexible widgets.
-- **Responsiveness:**
-  - Avoid hardcoding specific pixel sizes (`width: 300`, `height: 800`) unless explicitly required by a design system.
-  - Rely on Flex layouts (`Expanded`, `Flexible`), `LayoutBuilder`, or `MediaQuery` to accommodate various screen sizes across mobile and desktop.
+## 3. Principles for Subjective Design
+- **Improve Spacing and Grouping:** Often, making something "look better" involves adding appropriate whitespace. Use `SizedBox` for explicit gaps or standardize padding (e.g., `EdgeInsets.all(16.0)`) to let elements breathe and clearly group related items.
+- **Visual Hierarchy:** Guide the user's eye by varying font weights, sizes, and opacities (e.g., using `Theme.of(context).textTheme.bodySmall` with a muted color for secondary text). 
+- **Subtle Polish:** Consider adding subtle touches that elevate the feel of the app, such as slight border radiuses, gentle entry animations, or improved interactive states (InkWell splashes, hover effects if applicable).
 
-## 4. Making the Fix
-- **Minimal Interference:** Apply the narrowest fix needed to solve the issue. Avoid rewriting an entire screen's layout unless the existing hierarchy is fundamentally broken.
-- **Use the Theme:** When altering padding, text styles, or colors, use the existing design system (`Theme.of(context)`, standardized padding constants, or centralized color definitions). Do not introduce arbitrary numbers or hardcoded hex colors.
-- **Widget Extraction:** If fixing the UI requires excessive nesting, extract the updated segment into a separate, focused Widget class.
+## 4. Iterative Collaboration
+- **Explain Design Choices:** When you propose a UI change, explain *why* it improves the UX. (e.g., *"I increased the padding and darkened the title color to create a clearer visual hierarchy between the header and the body text."*)
+- **Provide Options (If Ambiguous):** If the user's request is very broad, consider suggesting a couple of different approaches (e.g., a card-based layout vs. a flat list) and implementing the preferred one.
 
 ## 5. Documentation and Intent
 - When committing your changes, follow the repository's `Commit Message Guidelines`. 
-- Use the `fix(ui): <description>` format.
-- Critically, explain *why* the overflow or layout bug occurred in the commit body (e.g., *"The Column parent was passing infinite width to the Row, so I wrapped the text in Expanded to bound it."*).
+- Use the `style:` or `feat(ui):` commit types appropriately.
+- Ensure the commit message body reflects the design intent behind the changes.
