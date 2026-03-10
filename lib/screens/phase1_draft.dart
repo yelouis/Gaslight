@@ -38,16 +38,7 @@ class _Phase1DraftScreenState extends State<Phase1DraftScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_assignedTemplates.isEmpty) {
-      final gs = context.read<GameService>();
-      final rounds = gs.gameState?.totalRounds ?? 1;
-      // Provide enough random templates
-      _assignedTemplates = (_templates.toList()..shuffle()).take(rounds).toList();
-      // Failsafe in case totalRounds > templates length (wrap around or repeat)
-      while (_assignedTemplates.length < rounds) {
-        _assignedTemplates.add(_templates[Random().nextInt(_templates.length)]);
-      }
-    }
+    // Move logic to build where we are guaranteed gameState is not null.
   }
 
   void _submitDraft(GameService gs, PlayerState player) {
@@ -115,6 +106,30 @@ class _Phase1DraftScreenState extends State<Phase1DraftScreen> {
         Navigator.pushReplacementNamed(context, '/craft');
       });
       return const SizedBox.shrink();
+    }
+
+    if (_assignedTemplates.isEmpty || _assignedTemplates.length < gameState.totalRounds) {
+      final neededRounds = gameState.totalRounds;
+      final currentAssigned = _assignedTemplates.length;
+      final templatesToTake = (_templates.toList()..shuffle()).take(neededRounds - currentAssigned).toList();
+      _assignedTemplates.addAll(templatesToTake);
+      
+      while (_assignedTemplates.length < neededRounds) {
+        _assignedTemplates.add(_templates[Random().nextInt(_templates.length)]);
+      }
+    }
+
+    final int actualPromptIndex = _currentPromptIndex > currentPlayer.draftedPromptHalves.length 
+        ? _currentPromptIndex 
+        : currentPlayer.draftedPromptHalves.length;
+    final bool isActuallySubmitted = _submitted || actualPromptIndex >= gameState.totalRounds;
+    
+    // Sync local state subtly
+    if (actualPromptIndex > _currentPromptIndex) {
+      _currentPromptIndex = actualPromptIndex;
+    }
+    if (isActuallySubmitted && !_submitted) {
+      _submitted = true;
     }
 
     final theme = Theme.of(context);

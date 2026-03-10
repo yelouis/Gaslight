@@ -100,25 +100,34 @@ class _PromptDeckState extends State<PromptDeck> with TickerProviderStateMixin {
               )
             ],
           ),
-          child: index == widget.totalCount - 1 && _displayedCards >= widget.totalCount - 1
-            ? const Center(child: CircularProgressIndicator()) 
-            : _buildCardBackPattern(),
+          child: _buildCardBackPattern(),
         ),
       ),
     );
   }
 
   Widget _buildCardBackPattern() {
-    return Container(
-      margin: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.red.shade800,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.white, width: 2),
-      ),
-      child: Center(
-        child: Icon(Icons.diamond, color: Colors.white.withOpacity(0.5), size: 40),
-      ),
+    return Builder(
+      builder: (context) {
+        final theme = Theme.of(context);
+        return Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: theme.colorScheme.secondary, width: 2),
+          ),
+          child: Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: Image.asset(
+                'assets/images/gaslight_mascot.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

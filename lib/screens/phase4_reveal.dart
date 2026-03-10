@@ -23,17 +23,17 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_isInit) {
-      _calculateAndShowResults();
-      _isInit = true;
+      final gs = context.read<GameService>();
+      if (gs.gameState != null && gs.gameState?.currentTricksterId != null) {
+        _calculateAndShowResults(gs);
+        _isInit = true;
+      }
     }
   }
 
-  void _calculateAndShowResults() async {
-    final gs = context.read<GameService>();
-    final state = gs.gameState;
+  void _calculateAndShowResults(GameService gs) async {
+    final state = gs.gameState!;
     final players = gs.players;
-    
-    if (state == null || state.currentTricksterId == null) return;
 
     if (gs.currentPlayer?.isHost == true) {
       // Calculate scores uniquely as Host to avoid multiple writes

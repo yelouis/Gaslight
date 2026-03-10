@@ -35,18 +35,18 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with TickerProvid
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_isInit) {
-      _initPhaseLogic();
-      _isInit = true;
+      final gs = context.read<GameService>();
+      if (gs.gameState != null && gs.players.isNotEmpty && gs.currentPlayer != null) {
+        _initPhaseLogic(gs);
+        _isInit = true;
+      }
     }
   }
 
-  void _initPhaseLogic() {
-    final gs = context.read<GameService>();
-    final state = gs.gameState;
+  void _initPhaseLogic(GameService gs) {
+    final state = gs.gameState!;
     final players = gs.players;
-    final current = gs.currentPlayer;
-
-    if (state == null || players.isEmpty || current == null) return;
+    final current = gs.currentPlayer!;
 
     if (current.isHost && state.currentTricksterId == null) {
       // Assign roles and setup the prompt
