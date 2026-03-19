@@ -60,6 +60,162 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
   }
 
+  void _showInstructions() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600, maxHeight: 800),
+            child: ParchmentCard(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Text(
+                      'HOW TO PLAY',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w900,
+                        fontFamily: 'serif',
+                        letterSpacing: 2,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Divider(color: theme.colorScheme.primary.withOpacity(0.5), thickness: 2),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(12.0, 0, 12.0, 24.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildInstructionSection(
+                            theme,
+                            '1. THE OBJECTIVE',
+                            [
+                              _highlightItem('The Asker: ', 'Secretly assigned a Target Number. Write a prompt that manipulates the Voters so EXACTLY that number of people choose their specified option.'),
+                              _highlightItem('The Voters: ', 'Vote honestly on the prompt AND guess the Asker\'s Target Number.'),
+                            ],
+                          ),
+                          _buildInstructionSection(
+                            theme,
+                            '2. SETTING UP',
+                            [
+                              _highlightItem('Players: ', 'Best with 4–8 players.'),
+                              _highlightItem('Phase 1 (The Bank): ', 'While waiting in the lobby, players write the first half of a binary question (e.g., "You get \$10 million, BUT...").'),
+                            ],
+                          ),
+                          _buildInstructionSection(
+                            theme,
+                            '3. ROUND-BY-ROUND',
+                            [
+                              _highlightItem('Step 1: The Craft ', '(Asker\'s Turn)\nOne player is chosen as the Asker and given a secret Target Number. They type the second half of a random prompt, trying to design it so exactly their Target Number of people will choose it.'),
+                              _highlightItem('Step 2: The Choice ', '(Voters\' Turn)\nThe other players see the completed prompt. They must vote honestly. Immediately after voting, they guess what the Asker’s Target Number was.'),
+                              _highlightItem('Step 3: The Reveal ', '\nThe votes are tallied, the Asker’s secret Target Number is revealed, and we see who successfully read their mind.'),
+                            ],
+                          ),
+                          _buildInstructionSection(
+                            theme,
+                            '4. SCORING',
+                            [
+                              _highlightItem('Bullseye (+10 pts): ', 'Asker exactly hits their Target Number.'),
+                              _highlightItem('Near Miss (+2 pts): ', 'Asker is off by exactly 1 vote.'),
+                              _highlightItem('Exposed Penalty (-5 pts): ', 'If more than half of the Voters correctly guess the Target Number, the Asker loses points.'),
+                              _highlightItem('Mind Reader (+5 pts): ', 'Voters who correctly guess the Asker\'s Target Number get points.'),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: const Color(0xFFF5EEDB),
+                      minimumSize: const Size(double.infinity, 55),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: theme.colorScheme.secondary, width: 2),
+                      ),
+                      elevation: 4,
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('GOT IT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 2.0)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  TextSpan _highlightItem(String boldPart, String normalPart) {
+    return TextSpan(
+      children: [
+        TextSpan(text: boldPart, style: const TextStyle(fontWeight: FontWeight.w900)),
+        TextSpan(text: normalPart, style: const TextStyle(fontWeight: FontWeight.w500)),
+      ],
+    );
+  }
+
+  Widget _buildInstructionSection(ThemeData theme, String title, List<TextSpan> bulletPoints) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceTint.withOpacity(0.1),
+              border: Border(left: BorderSide(color: theme.colorScheme.secondary, width: 4)),
+            ),
+            child: Text(
+              title,
+              style: TextStyle(
+                color: theme.colorScheme.primary,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                fontFamily: 'serif',
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...bulletPoints.map((span) => Padding(
+            padding: const EdgeInsets.only(bottom: 10.0, left: 8.0, right: 8.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('• ', style: TextStyle(color: theme.colorScheme.secondary, fontSize: 18, fontWeight: FontWeight.bold)),
+                Expanded(
+                  child: RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
+                        fontSize: 16,
+                        height: 1.5,
+                      ),
+                      children: [span],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -289,6 +445,19 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       ),
                       onPressed: _joinRoom,
                       child: const Text('JOIN ROOM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 1.5)),
+                    ),
+                    const SizedBox(height: 15),
+                    TextButton.icon(
+                      onPressed: _showInstructions,
+                      icon: Icon(Icons.menu_book, color: theme.colorScheme.onSurface),
+                      label: Text(
+                        'Read Instructions',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
                     ),
                   ],
                 ),
