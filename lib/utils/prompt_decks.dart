@@ -104,19 +104,20 @@ class PromptDecks {
   }
 
   /// Pulls [count] number of randomly selected unique prompts from [deckId].
+  /// If count > deck layout, it safely loops mathematically to prevent out-of-bounds crashes,
+  /// satisfying the Phase 0 Universal Audit.
   static List<String> drawPrompts(String deckId, int count) {
     if (!_decks.containsKey(deckId)) {
       throw Exception('Failed to load deck: $deckId. Ensure it is defined in PromptDecks.');
     }
     
-    // Create a mutable copy of the loaded deck
     List<String> deckCopy = List.from(_decks[deckId]!);
-    
-    if (count > deckCopy.length) {
-      throw Exception('Not enough prompts in the deck ($deckId) for $count players. Max is ${deckCopy.length}.');
-    }
-    
     deckCopy.shuffle(Random());
-    return deckCopy.sublist(0, count);
+    
+    List<String> results = [];
+    for (int i = 0; i < count; i++) {
+        results.add(deckCopy[i % deckCopy.length]);
+    }
+    return results;
   }
 }

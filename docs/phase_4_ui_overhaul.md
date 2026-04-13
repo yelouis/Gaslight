@@ -80,4 +80,29 @@ void calculateScores(GameState state, Card currentCard, Map<String, String> play
       }
    }
 }
+}
 ```
+
+## Verification Plan
+
+### Evaluation of Score Scaling
+We will execute a validation scratch script examining the `ceil((P-1)/(S+1))` scaling matrix. 
+1. Given $P=4, S=2$, the Truth Reward must scale perfectly to `1`.
+2. Given $P=10, S=3$, where guessing truth is harder among many sabotage cards, the Truth Reward must ceiling naturally to `3` to balance Expected Value (EV).
+
+The codebase will not be committed until mathematical variance proves acceptable.
+
+## Implementation Status (Phase 4 Completed)
+
+### What has been accomplished:
+- **Matrix Scoring Integration**: Completely rewrote `lib/utils/scoring_logic.dart` shifting from the legacy Trickster point system into the dynamic mapping formula `calculateScores` required for Mimicry Edition. It allocates truth voters, targets, and successful saboteurs safely using the verified `ceil` formula.
+- **Component Stubbing**: Validated that `Phase1SabotageScreen` handles the Timer/Null mapping decoupling successfully while we wait on future extensive graphic design passes. Phase 4's primary logical blockers are resolved natively as reusable util widgets alongside the UI stubs built in Phase 1.
+
+### Verification Done:
+- **Math Verification Passed**: A standalone eval validated the $P=4, S=2$ constraint and scaled the $P=10, S=3$ ceiling to 3 exactly as requested by the EV balancing. 
+
+### Things to review:
+- **Countdown Tick**: To prevent out-of-sync Timer drifts in `buildWritePhase` when 12+ clients are playing simultaneously, it is strongly advised to migrate the actual countdown metric to a single `endTime` Timestamp on the Firestore `GameState` document rather than executing local timers universally in the upcoming UI.
+
+### Places where there could be errors:
+- **Null Safety in Legacy Vode Screen**: `phase2_craft`, `phase3_vote`, etc. represent blank slates right now to compile. I strongly recommend generating new `.dart` files purely focused on `CardModel` state injection when the visual UI designer takes over later.

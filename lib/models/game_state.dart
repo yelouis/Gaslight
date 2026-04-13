@@ -22,6 +22,9 @@ class GameState {
   // Track who is reading the card during Phase 3 & 4
   final String? currentReaderId;
 
+  // Pre-calculated offline-safe rotation derivations (Phase 2 Master Fix)
+  final Map<String, Map<String, String>> rotationPlan; // Stored as String keys for Firestore config parsing
+
   GameState({
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
@@ -31,6 +34,7 @@ class GameState {
     this.cards = const [],
     this.currentCardAssignments = const {},
     this.currentReaderId,
+    this.rotationPlan = const {},
   });
 
   GameState copyWith({
@@ -42,6 +46,7 @@ class GameState {
     List<CardModel>? cards,
     Map<String, String>? currentCardAssignments,
     String? currentReaderId,
+    Map<String, Map<String, String>>? rotationPlan,
   }) {
     return GameState(
       roomCode: roomCode ?? this.roomCode,
@@ -52,6 +57,7 @@ class GameState {
       cards: cards ?? this.cards,
       currentCardAssignments: currentCardAssignments ?? this.currentCardAssignments,
       currentReaderId: currentReaderId ?? this.currentReaderId,
+      rotationPlan: rotationPlan ?? this.rotationPlan,
     );
   }
 
@@ -65,10 +71,21 @@ class GameState {
       'cards': cards.map((c) => c.toMap()).toList(),
       'currentCardAssignments': currentCardAssignments,
       'currentReaderId': currentReaderId,
+      'rotationPlan': rotationPlan,
     };
   }
 
   factory GameState.fromMap(Map<String, dynamic> map, String docId) {
+    // Firebase converts Map<int, Object> into Map<String, Object> 
+    // so we handle the rotationPlan cast generically
+    Map<String, Map<String, String>> rotMap = {};
+    if (map['rotationPlan'] != null) {
+      final rawPlan = map['rotationPlan'] as Map<dynamic, dynamic>;
+      rawPlan.forEach((key, val) {
+         rotMap[key.toString()] = Map<String, String>.from(val);
+      });
+    }
+
     return GameState(
       roomCode: docId,
       currentPhase: GamePhase.values.firstWhere(
@@ -83,6 +100,7 @@ class GameState {
           .toList(),
       currentCardAssignments: Map<String, String>.from(map['currentCardAssignments'] ?? {}),
       currentReaderId: map['currentReaderId'],
+      rotationPlan: rotMap,
     );
   }
 }

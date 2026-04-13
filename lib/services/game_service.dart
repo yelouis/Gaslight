@@ -136,16 +136,14 @@ class GameService extends ChangeNotifier {
 
   // --- PHASE 2: ROTATION ENGINE & GAME LOOP ---
 
-  bool _rotationsCached = false;
-  Map<int, Map<String, String>> _cachedRotations = {};
-
   Future<void> startGame(String deckId) async {
     if (_gameState == null || _players.length < 2) return;
     
     // 1. Calculate mathematical rotations across S derivations securely natively.
     var pIds = _players.map((p) => p.id).toList();
-    _cachedRotations = RotationEngine.generateRotations(pIds, _gameState!.sabotageAnswersCount);
-    _rotationsCached = true;
+    var nativeRotations = RotationEngine.generateRotations(pIds, _gameState!.sabotageAnswersCount);
+    Map<String, Map<String, String>> stringRotations = {};
+    nativeRotations.forEach((key, val) => stringRotations[key.toString()] = val);
 
     // 2. Draw Cards dynamically based on player count
     var prompts = PromptDecks.drawPrompts(deckId, _players.length);
@@ -159,13 +157,14 @@ class GameService extends ChangeNotifier {
 
     // 3. Initiate first rotation
     int startIdx = 1;
-    Map<String, String> initAssignments = _cachedRotations[startIdx]!;
+    Map<String, String> initAssignments = stringRotations[startIdx.toString()]!;
 
     await updateGameState(_gameState!.copyWith(
         currentPhase: GamePhase.sabotage,
         currentRotationIndex: startIdx,
         cards: startingCards,
         currentCardAssignments: initAssignments,
+        rotationPlan: stringRotations,
     ));
     await _resetAllPlayersReady();
   }
@@ -192,7 +191,7 @@ class GameService extends ChangeNotifier {
 
     if (_gameState!.currentRotationIndex < _gameState!.sabotageAnswersCount) {
         int nextRot = _gameState!.currentRotationIndex + 1;
-        Map<String, String> nextAssignments = _cachedRotations[nextRot]!;
+        Map<String, String> nextAssignments = _gameState!.rotationPlan[nextRot.toString()]!;
         await updateGameState(_gameState!.copyWith(
             currentRotationIndex: nextRot,
             currentCardAssignments: nextAssignments,
