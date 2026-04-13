@@ -35,6 +35,10 @@ class GameService extends ChangeNotifier {
     0xFF006064, // Turquoise
     0xFF880E4F, // Garnet
     0xFF3E2723, // Obsidian
+    0xFFFBC02D, // Gold/Amber
+    0xFF795548, // Bronze
+    0xFF455A64, // Iron/Steel
+    0xFF607D8B, // Silver
   ];
 
   // Generate 4 letter room code
