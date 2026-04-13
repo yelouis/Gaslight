@@ -27,7 +27,18 @@ Due to the complexity of the errors found (specifically stemming from legacy UI 
 
 ---
 
-## 2. Unresolved E2E Errors (Current)
+## 2. Unresolved Cross-Cutting Bugs (Current)
 
-- **ALL ERRORS RESOLVED.** The 10-player E2E simulation passed with 0 crashes. Final scores were mathematically verified against expected values (Host: 9, Bots: 19) for a 10-player/2-Sabotage configuration.
+### Firestore Listener Leaks (Active)
+- **Error Description**: `GameService.listenToRoom()` (`game_service.dart:119-133`) creates two Firestore `snapshots().listen()` subscriptions but **never stores the `StreamSubscription` references**. There is no `dispose()`, `cancel()`, or cleanup method in `GameService`. If a player joins Room A, leaves, then joins Room B, listeners for Room A persist in memory and continue firing callbacks that overwrite `_gameState` and `_players` with stale data from the old room.
+- **Impact**: Memory leak, potential data corruption if a user navigates back to lobby and creates/joins a new room within the same app session.
+- **Fix**: Store subscriptions as class fields and cancel them at the start of each new `listenToRoom()` call and in a `dispose()` method.
 
+### No Session Persistence / Rejoin Mechanism (Design Gap)
+- **Error Description**: Player IDs are generated fresh via `Uuid().v4()` on every `createRoom` / `joinRoom` call (`lobby_screen.dart:34, 52`). If the app is killed, backgrounded, or hot-restarted, the player cannot rejoin their existing room. Their old player document persists in Firestore as a ghost, and `readyPlayers` / `evaluateReadyState` will permanently wait for a player who will never respond.
+- **Impact**: Any app restart during an active game permanently stalls the lobby. Ghost player documents also inflate the `_players.length` count used in scoring and readiness calculations.
+- **Fix**: Persist `(roomCode, playerId)` to `SharedPreferences` or `Hive` and attempt rejoin on app launch.
+
+### `totalPlayers` Scoring Miscalculation (Critical — Cross-Phase)
+- **Error Description**: Documented in detail under Phase 2, but the impact crosses into Phase 4 (scoring display) and the Game Over screen. `GameState.totalPlayers` defaults to `4` and is never updated. The `ceil((P-1)/(S+1))` formula in `ScoringLogic` uses this stale value, producing incorrect point rewards for any game with ≠4 players. The Game Over screen (`game_over_screen.dart`) then displays these incorrect final scores.
+- **Root Files**: `game_service.dart:69` (default), `game_service.dart:254` (missing `totalPlayers: _players.length`), `scoring_logic.dart:17-19` (consumer).
