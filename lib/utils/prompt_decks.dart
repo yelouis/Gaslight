@@ -104,8 +104,8 @@ class PromptDecks {
   }
 
   /// Pulls [count] number of randomly selected unique prompts from [deckId].
-  /// If count > deck layout, it safely loops mathematically to prevent out-of-bounds crashes,
-  /// satisfying the Phase 0 Universal Audit.
+  /// Throws an exception if count > deck size to prevent silent duplication,
+  /// satisfying the Phase 3 Integrity Audit.
   static List<String> drawPrompts(String deckId, int count) {
     if (!_decks.containsKey(deckId)) {
       throw Exception('Failed to load deck: $deckId. Ensure it is defined in PromptDecks.');

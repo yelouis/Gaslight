@@ -5,12 +5,14 @@ class CardModel {
   final String promptId;
   final String truthAnswer;
   final Map<String, String> sabotageAnswers;
+  final Map<String, String> votes; // VoterId -> VotedForId
 
   CardModel({
     required this.targetPlayerId,
     required this.promptId,
     this.truthAnswer = '',
     this.sabotageAnswers = const {},
+    this.votes = const {},
   });
 
   CardModel copyWith({
@@ -18,12 +20,14 @@ class CardModel {
     String? promptId,
     String? truthAnswer,
     Map<String, String>? sabotageAnswers,
+    Map<String, String>? votes,
   }) {
     return CardModel(
       targetPlayerId: targetPlayerId ?? this.targetPlayerId,
       promptId: promptId ?? this.promptId,
       truthAnswer: truthAnswer ?? this.truthAnswer,
       sabotageAnswers: sabotageAnswers ?? this.sabotageAnswers,
+      votes: votes ?? this.votes,
     );
   }
 
@@ -33,6 +37,7 @@ class CardModel {
       'promptId': promptId,
       'truthAnswer': truthAnswer,
       'sabotageAnswers': sabotageAnswers,
+      'votes': votes,
     };
   }
 
@@ -42,6 +47,7 @@ class CardModel {
       promptId: map['promptId'] ?? '',
       truthAnswer: map['truthAnswer'] ?? '',
       sabotageAnswers: Map<String, String>.from(map['sabotageAnswers'] ?? {}),
+      votes: Map<String, String>.from(map['votes'] ?? {}),
     );
   }
 }

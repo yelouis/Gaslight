@@ -42,33 +42,22 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
   }
 
   void _castVote(GameService gs, String votedForId) async {
-    if (votedForId == gs.currentPlayer?.id) return; // Self-vote prevention!
+    final state = gs.gameState;
+    final me = gs.currentPlayer;
+    if (state == null || me == null) return;
+    
+    // Determine the current card we are voting on
+    final currentTargetId = state.currentReaderId;
+    if (currentTargetId == null) return;
+    
+    if (votedForId == me.id) return; // Self-vote prevention!
     
     setState(() => _submitted = true);
     
-    // In a full implementation, we'd write this vote to a specific map in GameState/CardModel
-    // For now we just flag the player ready to proceed to Phase 4
-    await gs.setPlayerReady(true);
-    
-    if (gs.currentPlayer!.isHost) {
-      // Manual trigger for Host just in case
-      gs.evaluateReadyState();
-    }
-    
-    _checkPhaseTransition(gs);
+    // Service handles readiness update internally
+    await gs.castVote(currentTargetId, me.id, votedForId);
   }
 
-  void _checkPhaseTransition(GameService gs) {
-    if (!gs.currentPlayer!.isHost) return;
-    
-    final voters = gs.players;
-    final allVoted = voters.every((p) => p.isReadyForNextRotation);
-    
-    if (allVoted) {
-      final newGameState = gs.gameState!.copyWith(currentPhase: GamePhase.reveal);
-      gs.updateGameState(newGameState);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,9 +78,14 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
       return const SizedBox.shrink();
     }
 
-    // Determine whose card is being resolved. For Phase 3 stub, we pick the first card.
-    // In a fully dynamic multi-card step-through, this would index via state.currentReaderId or similar.
-    CardModel? currentCard = state.cards.isNotEmpty ? state.cards.first : null;
+    // Determine whose card is being resolved. 
+    final currentTargetId = state.currentReaderId;
+    CardModel? currentCard;
+    if (currentTargetId != null) {
+      try {
+        currentCard = state.cards.firstWhere((c) => c.targetPlayerId == currentTargetId);
+      } catch (_) {}
+    }
 
     if (currentCard != null) {
        _generateShuffledAnswers(currentCard);

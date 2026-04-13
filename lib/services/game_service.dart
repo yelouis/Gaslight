@@ -174,6 +174,37 @@ class GameService extends ChangeNotifier {
     });
   }
 
+  Future<void> castVote(String targetCardId, String voterId, String votedForId) async {
+    if (_gameState == null) return;
+    
+    final roomRef = _db.collection('rooms').doc(_gameState!.roomCode);
+    
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+      
+      final data = snapshot.data()!;
+      final currentState = GameState.fromMap(data, snapshot.id);
+      
+      final cardIdx = currentState.cards.indexWhere((c) => c.targetPlayerId == targetCardId);
+      if (cardIdx == -1) return;
+      
+      final card = currentState.cards[cardIdx];
+      final newVotes = Map<String, String>.from(card.votes);
+      newVotes[voterId] = votedForId;
+      
+      final updatedCard = card.copyWith(votes: newVotes);
+      final newCards = List<CardModel>.from(currentState.cards);
+      newCards[cardIdx] = updatedCard;
+      
+      transaction.update(roomRef, {
+         'cards': newCards.map((c) => c.toMap()).toList()
+      });
+    });
+    
+    await setPlayerReady(true);
+  }
+
   // --- PHASE 2: ROTATION ENGINE & GAME LOOP ---
 
   Future<void> startGame(String deckId) async {
@@ -233,24 +264,60 @@ class GameService extends ChangeNotifier {
   Future<void> _advanceRotationOrPhase() async {
     if (_gameState == null) return;
 
-    if (_gameState!.currentRotationIndex < _gameState!.sabotageAnswersCount) {
-        int nextRot = _gameState!.currentRotationIndex + 1;
-        Map<String, String> nextAssignments = _gameState!.rotationPlan[nextRot.toString()]!;
-        await updateGameState(_gameState!.copyWith(
-            currentRotationIndex: nextRot,
-            currentCardAssignments: nextAssignments,
-        ));
-    } else {
-        // Transition to Truth Phase: Every player gets their own card back
+    if (_gameState!.currentPhase == GamePhase.sabotage) {
+        if (_gameState!.currentRotationIndex < _gameState!.sabotageAnswersCount) {
+            int nextRot = _gameState!.currentRotationIndex + 1;
+            Map<String, String> nextAssignments = _gameState!.rotationPlan[nextRot.toString()]!;
+            await updateGameState(_gameState!.copyWith(
+                currentRotationIndex: nextRot,
+                currentCardAssignments: nextAssignments,
+            ));
+        } else {
+            // Transition to Truth Phase: Every player gets their own card back
+            var pIds = _players.map((p) => p.id).toList();
+            Map<String, String> truthAssignments = { for (var id in pIds) id : id };
+            
+            await updateGameState(_gameState!.copyWith(
+                currentPhase: GamePhase.truth,
+                currentCardAssignments: truthAssignments,
+            ));
+        }
+    } else if (_gameState!.currentPhase == GamePhase.truth) {
+        // Transition to Vote Phase: First player is the reader
         var pIds = _players.map((p) => p.id).toList();
-        Map<String, String> truthAssignments = { for (var id in pIds) id : id };
-        
         await updateGameState(_gameState!.copyWith(
-            currentPhase: GamePhase.truth,
-            currentCardAssignments: truthAssignments,
+            currentPhase: GamePhase.vote,
+            currentReaderId: pIds.first,
+        ));
+    } else if (_gameState!.currentPhase == GamePhase.vote) {
+        // Transition to Reveal for the CURRENT reader
+        await updateGameState(_gameState!.copyWith(
+            currentPhase: GamePhase.reveal,
         ));
     }
+    
     await _resetAllPlayersReady();
+  }
+
+  Future<void> advanceToNextResolution() async {
+    if (_gameState == null || currentPlayer?.isHost != true) return;
+    
+    final pIds = _players.map((p) => p.id).toList();
+    final currentIdx = pIds.indexOf(_gameState!.currentReaderId ?? '');
+    
+    if (currentIdx != -1 && currentIdx < pIds.length - 1) {
+        // Move to next player's card
+        await updateGameState(_gameState!.copyWith(
+            currentPhase: GamePhase.vote,
+            currentReaderId: pIds[currentIdx + 1],
+        ));
+        await _resetAllPlayersReady();
+    } else {
+        // All cards resolved -> Game Over
+        await updateGameState(_gameState!.copyWith(
+            currentPhase: GamePhase.gameOver,
+        ));
+    }
   }
 
   Future<void> _resetAllPlayersReady() async {

@@ -73,9 +73,18 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: Text(
-            state.currentPhase == GamePhase.truth ? 'TRUTH PHASE' : 'SABOTAGE PHASE', 
-            style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2)
+          title: Column(
+            children: [
+              Text(
+                state.currentPhase == GamePhase.truth ? 'TRUTH PHASE' : 'SABOTAGE PHASE', 
+                style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)
+              ),
+              if (state.currentPhase == GamePhase.sabotage)
+                Text(
+                  'Rotation ${state.currentRotationIndex} of ${state.sabotageAnswersCount}',
+                  style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.5), fontSize: 12, letterSpacing: 1),
+                ),
+            ],
           ),
           centerTitle: true,
           backgroundColor: Colors.transparent,

@@ -35,26 +35,21 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
     final state = gs.gameState!;
     final players = gs.players;
     
-    // In Mimicry, we resolve one card at a time.
-    // For the UI stub, we just pick the first card (or should use a proper cursor).
-    CardModel? currentCard = state.cards.isNotEmpty ? state.cards.first : null;
+    final currentTargetId = state.currentReaderId;
+    CardModel? currentCard;
+    if (currentTargetId != null) {
+      try {
+        currentCard = state.cards.firstWhere((c) => c.targetPlayerId == currentTargetId);
+      } catch (_) {}
+    }
     
     if (currentCard == null) return;
 
     if (gs.currentPlayer?.isHost == true) {
-      // Stub: in a real game, players have their votes stored in a map/subcollection
-      // For now we mock it as everyone voting for truth
-      Map<String, String> mockVotes = {};
-      for (var p in players) {
-          if (p.id != currentCard.targetPlayerId) {
-             mockVotes[p.id] = 'TRUTH';
-          }
-      }
-
       final scoreDeltas = ScoringLogic.calculateScores(
         state: state,
         currentCard: currentCard,
-        playerVotes: mockVotes,
+        playerVotes: currentCard.votes,
       );
 
       // Apply deltas
@@ -98,7 +93,13 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
       return const SizedBox.shrink();
     }
 
-    CardModel? currentCard = state.cards.isNotEmpty ? state.cards.first : null;
+    final currentTargetId = state.currentReaderId;
+    CardModel? currentCard;
+    if (currentTargetId != null) {
+      try {
+        currentCard = state.cards.firstWhere((c) => c.targetPlayerId == currentTargetId);
+      } catch (_) {}
+    }
 
     return AnimatedThinkingBackground(
       child: Scaffold(
@@ -141,12 +142,8 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                 if (gs.currentPlayer?.isHost == true) ...[
                   const SizedBox(height: 50),
                   PrimaryButton(
-                    text: 'SEE SUPERLATIVES (GAME OVER)',
-                    onPressed: () async {
-                      // In a full game flow, we would either loop to next card, 
-                      // or next round (GamePhase.sabotage), or Game Over.
-                      gs.updateGameState(state.copyWith(currentPhase: GamePhase.gameOver));
-                    },
+                    text: 'CONTINUE',
+                    onPressed: () => gs.advanceToNextResolution(),
                   ),
                 ],
               ],

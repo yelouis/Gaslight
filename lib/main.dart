@@ -7,7 +7,6 @@ import 'firebase_options.dart';
 
 // Screens
 import 'screens/lobby_screen.dart';
-import 'screens/phase1_draft.dart';
 import 'screens/phase2_craft.dart';
 import 'screens/phase3_vote.dart';
 import 'screens/phase4_reveal.dart';
@@ -57,7 +56,6 @@ class GaslightApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const LobbyScreen(),
-        '/draft': (context) => const Phase1SabotageScreen(),
         '/craft': (context) => const Phase2CraftScreen(),
         '/vote': (context) => const Phase3VoteScreen(),
         '/reveal': (context) => const Phase4RevealScreen(),
