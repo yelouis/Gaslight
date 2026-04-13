@@ -31,19 +31,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     
     final targetId = state.currentCardAssignments[me.id];
     if (targetId != null) {
-      CardModel targetCard = state.cards.firstWhere((c) => c.targetPlayerId == targetId);
-      
-      if (state.currentPhase == GamePhase.truth) {
-        targetCard = targetCard.copyWith(truthAnswer: text);
-      } else {
-        Map<String, String> newSabs = Map.from(targetCard.sabotageAnswers);
-        newSabs[me.id] = text;
-        targetCard = targetCard.copyWith(sabotageAnswers: newSabs);
-      }
-
-      List<CardModel> newCards = state.cards.map((c) => c.targetPlayerId == targetId ? targetCard : c).toList();
-      
-      await gs.updateGameState(state.copyWith(cards: newCards));
+      bool isTruth = state.currentPhase == GamePhase.truth;
+      await gs.submitCardAnswer(targetId, me.id, text, isTruth);
     }
     
     await gs.setPlayerReady(true);

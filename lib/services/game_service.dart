@@ -139,9 +139,49 @@ class GameService extends ChangeNotifier {
   }
 
   // --- PHASE 2: ROTATION ENGINE & GAME LOOP ---
+  
+  Future<void> submitCardAnswer(String targetCardId, String authorId, String text, bool isTruth) async {
+    if (_gameState == null) return;
+    
+    final roomRef = _db.collection('rooms').doc(_gameState!.roomCode);
+    
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+      
+      final data = snapshot.data()!;
+      final currentState = GameState.fromMap(data, snapshot.id);
+      
+      final cardIdx = currentState.cards.indexWhere((c) => c.targetPlayerId == targetCardId);
+      if (cardIdx == -1) return;
+      
+      final card = currentState.cards[cardIdx];
+      CardModel updatedCard;
+      if (isTruth) {
+         updatedCard = card.copyWith(truthAnswer: text);
+      } else {
+         final sabs = Map<String, String>.from(card.sabotageAnswers);
+         sabs[authorId] = text;
+         updatedCard = card.copyWith(sabotageAnswers: sabs);
+      }
+      
+      final newCards = List<CardModel>.from(currentState.cards);
+      newCards[cardIdx] = updatedCard;
+      
+      transaction.update(roomRef, {
+         'cards': newCards.map((c) => c.toMap()).toList()
+      });
+    });
+  }
+
+  // --- PHASE 2: ROTATION ENGINE & GAME LOOP ---
 
   Future<void> startGame(String deckId) async {
     if (_gameState == null || _players.length < 2) return;
+    
+    if (_players.length <= _gameState!.sabotageAnswersCount) {
+        throw Exception("Cannot start: Need more players than sabotage rounds.");
+    }
     
     // 1. Calculate mathematical rotations across S derivations securely natively.
     var pIds = _players.map((p) => p.id).toList();
