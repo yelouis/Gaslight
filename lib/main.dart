@@ -57,7 +57,7 @@ class GaslightApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const LobbyScreen(),
-        '/draft': (context) => const Phase1DraftScreen(),
+        '/draft': (context) => const Phase1SabotageScreen(),
         '/craft': (context) => const Phase2CraftScreen(),
         '/vote': (context) => const Phase3VoteScreen(),
         '/reveal': (context) => const Phase4RevealScreen(),

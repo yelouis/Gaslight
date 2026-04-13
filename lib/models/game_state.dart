@@ -1,53 +1,57 @@
-enum GamePhase { lobby, draft, craft, vote, reveal, gameOver }
+import 'card_model.dart';
+
+enum GamePhase { lobby, sabotage, truth, vote, reveal, gameOver }
 
 class GameState {
   final String roomCode;
   final GamePhase currentPhase;
-  final int totalRounds;
-  final int currentRound;
-  final String? currentTricksterId;
-  final int? secretTarget;
-  final String? activeTemplate;
-  final String? activePromptFirstHalf;
-  final String? activePromptSecondHalf;
-  final Map<String, String> promptBank; // Map ofplayerId -> prompt half
+
+  // Custom Configurability
+  final int totalPlayers;
+  final int sabotageAnswersCount;
+
+  // Rotation Tracking
+  final int currentRotationIndex;
+
+  // The master list of cards in the current round
+  final List<CardModel> cards;
+
+  // Who is holding whose card mapped by holdingPlayerId -> targetPlayerId
+  final Map<String, String> currentCardAssignments;
+
+  // Track who is reading the card during Phase 3 & 4
+  final String? currentReaderId;
 
   GameState({
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
-    this.totalRounds = 1,
-    this.currentRound = 1,
-    this.currentTricksterId,
-    this.secretTarget,
-    this.activeTemplate,
-    this.activePromptFirstHalf,
-    this.activePromptSecondHalf,
-    this.promptBank = const {},
+    this.totalPlayers = 4,
+    this.sabotageAnswersCount = 2,
+    this.currentRotationIndex = 0,
+    this.cards = const [],
+    this.currentCardAssignments = const {},
+    this.currentReaderId,
   });
 
   GameState copyWith({
     String? roomCode,
     GamePhase? currentPhase,
-    int? totalRounds,
-    int? currentRound,
-    String? currentTricksterId,
-    int? secretTarget,
-    String? activeTemplate,
-    String? activePromptFirstHalf,
-    String? activePromptSecondHalf,
-    Map<String, String>? promptBank,
+    int? totalPlayers,
+    int? sabotageAnswersCount,
+    int? currentRotationIndex,
+    List<CardModel>? cards,
+    Map<String, String>? currentCardAssignments,
+    String? currentReaderId,
   }) {
     return GameState(
       roomCode: roomCode ?? this.roomCode,
       currentPhase: currentPhase ?? this.currentPhase,
-      totalRounds: totalRounds ?? this.totalRounds,
-      currentRound: currentRound ?? this.currentRound,
-      currentTricksterId: currentTricksterId ?? this.currentTricksterId,
-      secretTarget: secretTarget ?? this.secretTarget,
-      activeTemplate: activeTemplate ?? this.activeTemplate,
-      activePromptFirstHalf: activePromptFirstHalf ?? this.activePromptFirstHalf,
-      activePromptSecondHalf: activePromptSecondHalf ?? this.activePromptSecondHalf,
-      promptBank: promptBank ?? this.promptBank,
+      totalPlayers: totalPlayers ?? this.totalPlayers,
+      sabotageAnswersCount: sabotageAnswersCount ?? this.sabotageAnswersCount,
+      currentRotationIndex: currentRotationIndex ?? this.currentRotationIndex,
+      cards: cards ?? this.cards,
+      currentCardAssignments: currentCardAssignments ?? this.currentCardAssignments,
+      currentReaderId: currentReaderId ?? this.currentReaderId,
     );
   }
 
@@ -55,13 +59,12 @@ class GameState {
     return {
       'roomCode': roomCode,
       'currentPhase': currentPhase.name,
-      'totalRounds': totalRounds,
-      'currentRound': currentRound,
-      'currentTricksterId': currentTricksterId,
-      'secretTarget': secretTarget,
-      'activePromptFirstHalf': activePromptFirstHalf,
-      'activePromptSecondHalf': activePromptSecondHalf,
-      'promptBank': promptBank,
+      'totalPlayers': totalPlayers,
+      'sabotageAnswersCount': sabotageAnswersCount,
+      'currentRotationIndex': currentRotationIndex,
+      'cards': cards.map((c) => c.toMap()).toList(),
+      'currentCardAssignments': currentCardAssignments,
+      'currentReaderId': currentReaderId,
     };
   }
 
@@ -72,13 +75,14 @@ class GameState {
         (e) => e.name == map['currentPhase'],
         orElse: () => GamePhase.lobby,
       ),
-      totalRounds: map['totalRounds']?.toInt() ?? 1,
-      currentRound: map['currentRound']?.toInt() ?? 1,
-      currentTricksterId: map['currentTricksterId'],
-      secretTarget: map['secretTarget']?.toInt(),
-      activePromptFirstHalf: map['activePromptFirstHalf'],
-      activePromptSecondHalf: map['activePromptSecondHalf'],
-      promptBank: Map<String, String>.from(map['promptBank'] ?? {}),
+      totalPlayers: map['totalPlayers']?.toInt() ?? 4,
+      sabotageAnswersCount: map['sabotageAnswersCount']?.toInt() ?? 2,
+      currentRotationIndex: map['currentRotationIndex']?.toInt() ?? 0,
+      cards: (map['cards'] as List<dynamic>? ?? [])
+          .map((c) => CardModel.fromMap(c as Map<String, dynamic>))
+          .toList(),
+      currentCardAssignments: Map<String, String>.from(map['currentCardAssignments'] ?? {}),
+      currentReaderId: map['currentReaderId'],
     );
   }
 }

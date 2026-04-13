@@ -1,63 +1,49 @@
-enum PlayerRole { trickster, voter, unassigned }
+enum PlayerRole { saboteur, target, voter, unassigned }
 
 class PlayerState {
   final String id;
   final String name;
-  final int score;
+  final int totalScore;
   final PlayerRole role;
   final bool isHost;
+  
+  // Phase Readiness indicator (used for waiting rooms in rotation logic)
+  final bool isReadyForNextRotation;
   
   // Visuals
   final int colorValue; // Hex color for the player
   final int avatarIndex; // Reference to a local simple avatar
-  
-  // Phase 1 Draft Data
-  final List<String> draftedTemplates;
-  final List<String> draftedPromptHalves;
-  
-  // Phase 3 Vote Data
-  final String? selectedOption; // 'A' or 'B'
-  final int? guessedTarget;
 
   PlayerState({
     required this.id,
     required this.name,
-    this.score = 0,
+    this.totalScore = 0,
     this.role = PlayerRole.unassigned,
     this.isHost = false,
+    this.isReadyForNextRotation = false,
     this.colorValue = 0xFF58A6FF,
     this.avatarIndex = 0,
-    this.draftedTemplates = const [],
-    this.draftedPromptHalves = const [],
-    this.selectedOption,
-    this.guessedTarget,
   });
 
   PlayerState copyWith({
     String? id,
     String? name,
-    int? score,
+    int? totalScore,
     PlayerRole? role,
     bool? isHost,
+    bool? isReadyForNextRotation,
     int? colorValue,
     int? avatarIndex,
-    List<String>? draftedTemplates,
-    List<String>? draftedPromptHalves,
-    String? selectedOption,
-    int? guessedTarget,
   }) {
     return PlayerState(
       id: id ?? this.id,
       name: name ?? this.name,
-      score: score ?? this.score,
+      totalScore: totalScore ?? this.totalScore,
       role: role ?? this.role,
       isHost: isHost ?? this.isHost,
+      isReadyForNextRotation: isReadyForNextRotation ?? this.isReadyForNextRotation,
       colorValue: colorValue ?? this.colorValue,
       avatarIndex: avatarIndex ?? this.avatarIndex,
-      draftedTemplates: draftedTemplates ?? this.draftedTemplates,
-      draftedPromptHalves: draftedPromptHalves ?? this.draftedPromptHalves,
-      selectedOption: selectedOption ?? this.selectedOption,
-      guessedTarget: guessedTarget ?? this.guessedTarget,
     );
   }
 
@@ -65,15 +51,12 @@ class PlayerState {
     return {
       'id': id,
       'name': name,
-      'score': score,
+      'totalScore': totalScore,
       'role': role.name,
       'isHost': isHost,
+      'isReadyForNextRotation': isReadyForNextRotation,
       'colorValue': colorValue,
       'avatarIndex': avatarIndex,
-      'draftedTemplates': draftedTemplates,
-      'draftedPromptHalves': draftedPromptHalves,
-      'selectedOption': selectedOption,
-      'guessedTarget': guessedTarget,
     };
   }
 
@@ -81,18 +64,15 @@ class PlayerState {
     return PlayerState(
       id: docId,
       name: map['name'] ?? '',
-      score: map['score']?.toInt() ?? 0,
+      totalScore: map['totalScore']?.toInt() ?? 0,
       role: PlayerRole.values.firstWhere(
         (e) => e.name == map['role'],
         orElse: () => PlayerRole.unassigned,
       ),
       isHost: map['isHost'] ?? false,
+      isReadyForNextRotation: map['isReadyForNextRotation'] ?? false,
       colorValue: map['colorValue']?.toInt() ?? 0xFF58A6FF,
       avatarIndex: map['avatarIndex']?.toInt() ?? 0,
-      draftedTemplates: List<String>.from(map['draftedTemplates'] ?? []),
-      draftedPromptHalves: List<String>.from(map['draftedPromptHalves'] ?? []),
-      selectedOption: map['selectedOption'],
-      guessedTarget: map['guessedTarget']?.toInt(),
     );
   }
 }

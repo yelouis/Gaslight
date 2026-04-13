@@ -57,11 +57,15 @@ class GameService extends ChangeNotifier {
     return Random().nextInt(6); // 6 different icon types
   }
 
-  Future<void> createRoom(String playerName, String playerId, {int totalRounds = 1, int? avatarIndex}) async {
+  Future<void> createRoom(String playerName, String playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex}) async {
     final roomCode = _generateRoomCode();
     _currentPlayerId = playerId;
 
-    final initialState = GameState(roomCode: roomCode, totalRounds: totalRounds);
+    final initialState = GameState(
+      roomCode: roomCode, 
+      totalPlayers: totalPlayers,
+      sabotageAnswersCount: sabotageAnswersCount,
+    );
     final initialPlayer = PlayerState(
       id: playerId,
       name: playerName,

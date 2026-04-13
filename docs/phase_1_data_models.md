@@ -69,7 +69,22 @@ const Map<String, List<String>> _localDecks = {
       "The most absurd lie I told to get out of an obligation...",
   ],
   "fears": [
-      "My biggest irrational fear that I still hold onto today..."
   ]
 };
 ```
+
+## Implementation Status (Phase 1 Completed)
+
+### What has been accomplished:
+- **CardModel Implementation**: Created `lib/models/card_model.dart` which acts as the cornerstone of the Mimicry Edition. It tracks the target player, the local prompt, the singular truth answer, and maps Saboteur IDs to their deceptive submissions.
+- **GameState Restructuring**: Fully obliterated the old single-trickster state logic. Implemented `GamePhase` routing (`lobby`, `sabotage`, `truth`, `vote`, `reveal`), configured `totalPlayers` & `sabotageAnswersCount`, and added tracking for the newly designed `cards` sub-collection and rotation metrics.
+- **PlayerState Refactoring**: Cleaned up legacy fields from the original drafting game (e.g., `draftedTemplates`) and replaced them with `isReadyForNextRotation`, ensuring we can implement smooth auto-advancing ready-checks natively synced with Firebase.
+- **UI Decoupling Stub**: To prevent the entire application from failing to compile upon removing the legacy properties from `GameService`, `Phase1DraftScreen` was correctly stubbed out into a non-breaking `Phase1SabotageScreen` skeleton, paving the way for Phase 4 (User Interface Overhaul).
+
+### Things to review:
+- **Card Answer Map Validation**: Currently, `CardModel.sabotageAnswers` is fundamentally a `Map<String, String>` where `String` is `playerId`. During Phase 2 Game Logic implementation, we must heavily ensure this Map handles concurrent writes cleanly in Firestore, because multiple Saboteurs will be writing to the same card simultaneously.
+- **Score Accumulation Strategy**: The new `PlayerState` has a simplified `totalScore` rather than an explicit per-round tracking array (as Firestore handles arrays somewhat clunkily). For a per-round breakdown on the UI, we might need a separate sub-collection if simple point aggregation isn't enough for the Reveal Screen graph logic later down the line. I'd like your thoughts here.
+
+### Places where there could be errors:
+- **Compilation Breaks in Other Screens**: While I stubbed out `phase1_draft.dart` and the `GameService.createRoom` method, it is highly likely that `phase2_craft.dart`, `phase3_vote.dart`, and `phase4_reveal.dart` still contain compilation errors because they were built explicitly for the legacy `GameState` (relying on `draftedPromptHalves`, etc.). These files currently sit broken pending Phase 4. We can safely ignore them until we rebuild the views.
+- **Firebase Mapping**: When fetching `cards` from `GameState.fromMap()`, manual list casting of complex objects can sometimes cause hidden null-pointer breaks if nested arrays are poorly formatted in the DB. We should inject a unit test on `cards` JSON-to-Dart mapping right before we wire everything up to the live Sandbox database.
