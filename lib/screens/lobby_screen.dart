@@ -293,7 +293,14 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   if (val != null) setState(() => _selectedDeck = val);
                 },
               ),
-              const SizedBox(height: 20),
+              if (players.length < 10)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                  child: TextButton(
+                    onPressed: () => gs.debugAddBots(),
+                    child: const Text('DEBUG: ADD 9 BOTS', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                  ),
+                ),
               PrimaryButton(
                 text: 'START GAME',
                 onPressed: players.isNotEmpty ? () {

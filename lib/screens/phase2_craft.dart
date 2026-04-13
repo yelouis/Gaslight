@@ -154,6 +154,11 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
             text: 'EVALUATE READY STATE (HOST)',
             onPressed: () => gs.evaluateReadyState(),
           ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: () => gs.debugSimulateBotResponses(),
+            child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+          ),
         ]
       ],
     );
@@ -217,6 +222,14 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                           text: 'SUBMIT',
                           onPressed: () => _submitAnswer(gs),
                         ),
+                  if (gs.currentPlayer!.isHost)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: TextButton(
+                        onPressed: () => gs.debugSimulateBotResponses(),
+                        child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                      ),
+                    ),
                 ],
               ),
             ),

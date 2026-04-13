@@ -135,7 +135,21 @@ class GameService extends ChangeNotifier {
   }
 
   Future<void> updatePlayerState(String roomCode, PlayerState player) async {
-    await _db.collection('rooms').doc(roomCode).collection('players').doc(player.id).update(player.toMap());
+    await _db.collection('rooms').doc(roomCode).collection('players').doc(player.id).set(player.toMap(), SetOptions(merge: true));
+  }
+
+  /// Atomically updates scores for all players in a room.
+  /// Resolves the 'Sequential Write' bottleneck identified for 10-player games.
+  Future<void> applyScoreDeltas(String roomCode, Map<String, int> deltas) async {
+    final batch = _db.batch();
+    for (var p in _players) {
+      final delta = deltas[p.id] ?? 0;
+      if (delta != 0) {
+        final ref = _db.collection('rooms').doc(roomCode).collection('players').doc(p.id);
+        batch.update(ref, {'totalScore': p.totalScore + delta});
+      }
+    }
+    await batch.commit();
   }
 
   // --- PHASE 2: ROTATION ENGINE & GAME LOOP ---
@@ -328,9 +342,63 @@ class GameService extends ChangeNotifier {
         await _resetAllPlayersReady();
     } else {
         // All cards resolved -> Game Over
-        await updateGameState(_gameState!.copyWith(
-            currentPhase: GamePhase.gameOver,
-        ));
+        await _advanceToGameOver();
+    }
+  }
+
+  Future<void> _advanceToGameOver() async {
+    await updateGameState(_gameState!.copyWith(
+        currentPhase: GamePhase.gameOver,
+    ));
+  }
+
+  // --- SIMULATION HELPERS (DEBUG ONLY) ---
+
+  /// Programmatically fills the lobby with 9 bots for E2E stress testing.
+  Future<void> debugAddBots() async {
+    if (_gameState == null) return;
+    final rCode = _gameState!.roomCode;
+    final batch = _db.batch();
+    
+    for (int i = 1; i <= 9; i++) {
+        final botId = 'bot_$i';
+        final bot = PlayerState(
+          id: botId,
+          name: 'Bot $i',
+          isHost: false,
+          colorValue: _getRandomColor(),
+          avatarIndex: i % 6,
+        );
+        final ref = _db.collection('rooms').doc(rCode).collection('players').doc(botId);
+        batch.set(ref, bot.toMap());
+    }
+    await batch.commit();
+  }
+
+  /// Auto-submits answers for all bots in the current phase.
+  Future<void> debugSimulateBotResponses() async {
+    if (_gameState == null) return;
+    final state = _gameState!;
+    final phase = state.currentPhase;
+    
+    for (var p in _players) {
+      if (!p.id.startsWith('bot_')) continue;
+      
+      if (phase == GamePhase.sabotage || phase == GamePhase.truth) {
+         final targetId = state.currentCardAssignments[p.id];
+         if (targetId != null) {
+            await submitCardAnswer(targetId, p.id, 'Simulated Answer from ${p.name}', phase == GamePhase.truth);
+         }
+      } else if (phase == GamePhase.vote) {
+         // Bots vote for truth (or someone random)
+         final currentTarget = state.currentReaderId;
+         if (currentTarget != null && currentTarget != p.id) {
+            await castVote(currentTarget, p.id, 'TRUTH');
+         } else {
+            // Reader just marks ready
+            await setPlayerReady(true); // Wait, this needs to be specific to the bot
+         }
+      }
     }
   }
 

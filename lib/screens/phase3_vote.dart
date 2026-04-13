@@ -134,6 +134,11 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
               },
             ),
           ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: () => gs.debugSimulateBotResponses(),
+            child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+          ),
       ],
     );
   }
@@ -164,7 +169,12 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
               setState(() => _submitted = true);
               await context.read<GameService>().setPlayerReady(true);
             },
-          )
+          ),
+          if (context.read<GameService>().currentPlayer!.isHost)
+            TextButton(
+              onPressed: () => context.read<GameService>().debugSimulateBotResponses(),
+              child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+            ),
         ],
       );
     }

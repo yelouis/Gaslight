@@ -4,6 +4,7 @@ import '../services/game_service.dart';
 import '../models/game_state.dart';
 import '../models/card_model.dart';
 import '../utils/scoring_logic.dart';
+import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 
@@ -52,14 +53,8 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
         playerVotes: currentCard.votes,
       );
 
-      // Apply deltas
-      for (var p in players) {
-        final delta = scoreDeltas[p.id] ?? 0;
-        if (delta > 0) {
-           final updatedPlayer = p.copyWith(totalScore: p.totalScore + delta);
-           await gs.updatePlayerState(state.roomCode, updatedPlayer);
-        }
-      }
+      // Apply deltas atomically via WriteBatch
+      await gs.applyScoreDeltas(state.roomCode, scoreDeltas);
       
       if (mounted) {
         setState(() => _latestDeltas = scoreDeltas);
@@ -134,13 +129,19 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                 if (currentCard != null) ...[
                   const SizedBox(height: 10),
                   Text(currentCard.promptId, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, fontFamily: 'serif')),
-                  const SizedBox(height: 20),
-                  Text('TRUTH WAS:', style: TextStyle(color: theme.colorScheme.primary, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                  Text(currentCard.truthAnswer.isNotEmpty ? currentCard.truthAnswer : '[No Truth Submitted]', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: theme.colorScheme.primary)),
+                  const SizedBox(height: 24),
+                  
+                  // Options & Votes List
+                  ...[
+                    _buildOptionRow('TRUTH', currentCard.truthAnswer, currentCard, gs, theme, isTruth: true),
+                    ...currentCard.sabotageAnswers.entries.map((e) => 
+                      _buildOptionRow(e.key, e.value, currentCard!, gs, theme)
+                    ),
+                  ],
                 ],
                 const SizedBox(height: 40),
                 if (gs.currentPlayer?.isHost == true) ...[
-                  const SizedBox(height: 50),
+                  const SizedBox(height: 20),
                   PrimaryButton(
                     text: 'CONTINUE',
                     onPressed: () => gs.advanceToNextResolution(),
@@ -151,6 +152,58 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
           ),
         ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildOptionRow(String authorId, String text, CardModel card, GameService gs, ThemeData theme, {bool isTruth = false}) {
+    final voters = gs.players.where((p) => card.votes[p.id] == authorId).toList();
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isTruth ? theme.colorScheme.primary.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: isTruth ? theme.colorScheme.primary : theme.colorScheme.secondary.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isTruth ? 'TRUTH' : 'SABOTAGE',
+                        style: TextStyle(
+                          color: isTruth ? theme.colorScheme.primary : theme.colorScheme.secondary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          letterSpacing: 1
+                        ),
+                      ),
+                      Text(text, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                    ],
+                  ),
+                ),
+                if (voters.isNotEmpty)
+                  Row(
+                    children: voters.map((v) => Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Tooltip(
+                        message: v.name,
+                        child: PlayerAvatar(player: v, size: 30),
+                      ),
+                    )).toList(),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
