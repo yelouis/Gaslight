@@ -2,14 +2,14 @@
 
 class CardModel {
   final String targetPlayerId;
-  final String promptId;
+  final String promptText;
   final String truthAnswer;
   final Map<String, String> sabotageAnswers;
   final Map<String, String> votes; // VoterId -> VotedForId
 
   CardModel({
     required this.targetPlayerId,
-    required this.promptId,
+    required this.promptText,
     this.truthAnswer = '',
     this.sabotageAnswers = const {},
     this.votes = const {},
@@ -17,14 +17,14 @@ class CardModel {
 
   CardModel copyWith({
     String? targetPlayerId,
-    String? promptId,
+    String? promptText,
     String? truthAnswer,
     Map<String, String>? sabotageAnswers,
     Map<String, String>? votes,
   }) {
     return CardModel(
       targetPlayerId: targetPlayerId ?? this.targetPlayerId,
-      promptId: promptId ?? this.promptId,
+      promptText: promptText ?? this.promptText,
       truthAnswer: truthAnswer ?? this.truthAnswer,
       sabotageAnswers: sabotageAnswers ?? this.sabotageAnswers,
       votes: votes ?? this.votes,
@@ -34,7 +34,7 @@ class CardModel {
   Map<String, dynamic> toMap() {
     return {
       'targetPlayerId': targetPlayerId,
-      'promptId': promptId,
+      'promptText': promptText,
       'truthAnswer': truthAnswer,
       'sabotageAnswers': sabotageAnswers,
       'votes': votes,
@@ -44,7 +44,7 @@ class CardModel {
   factory CardModel.fromMap(Map<String, dynamic> map) {
     return CardModel(
       targetPlayerId: map['targetPlayerId'] ?? '',
-      promptId: map['promptId'] ?? '',
+      promptText: map['promptText'] ?? '',
       truthAnswer: map['truthAnswer'] ?? '',
       sabotageAnswers: Map<String, String>.from(map['sabotageAnswers'] ?? {}),
       votes: Map<String, String>.from(map['votes'] ?? {}),

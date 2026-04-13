@@ -28,6 +28,9 @@ class GameState {
   // Centralized readiness tracking to prevent race conditions
   final Map<String, bool> readyPlayers;
 
+  // Auto-advance timestamp (millisecondsSinceEpoch)
+  final int? endTime;
+
   GameState({
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
@@ -39,6 +42,7 @@ class GameState {
     this.currentReaderId,
     this.rotationPlan = const {},
     this.readyPlayers = const {},
+    this.endTime,
   });
 
   GameState copyWith({
@@ -52,7 +56,9 @@ class GameState {
     String? currentReaderId,
     Map<String, Map<String, String>>? rotationPlan,
     Map<String, bool>? readyPlayers,
+    int? endTime,
     bool clearReaderId = false,
+    bool clearEndTime = false,
   }) {
     return GameState(
       roomCode: roomCode ?? this.roomCode,
@@ -65,6 +71,7 @@ class GameState {
       currentReaderId: clearReaderId ? null : (currentReaderId ?? this.currentReaderId),
       rotationPlan: rotationPlan ?? this.rotationPlan,
       readyPlayers: readyPlayers ?? this.readyPlayers,
+      endTime: clearEndTime ? null : (endTime ?? this.endTime),
     );
   }
 
@@ -80,6 +87,7 @@ class GameState {
       'currentReaderId': currentReaderId,
       'rotationPlan': rotationPlan,
       'readyPlayers': readyPlayers,
+      'endTime': endTime,
     };
   }
 
@@ -110,6 +118,7 @@ class GameState {
       currentReaderId: map['currentReaderId'],
       rotationPlan: rotMap,
       readyPlayers: Map<String, bool>.from(map['readyPlayers'] ?? {}),
+      endTime: map['endTime']?.toInt(),
     );
   }
 }

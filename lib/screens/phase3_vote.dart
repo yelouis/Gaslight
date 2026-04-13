@@ -7,6 +7,7 @@ import '../models/card_model.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
+import '../widgets/auto_advance_timer.dart';
 
 class Phase3VoteScreen extends StatefulWidget {
   const Phase3VoteScreen({super.key});
@@ -95,7 +96,18 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: Text('PHASE 3: THE VOTE', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2)),
+          title: Column(
+            children: [
+              Text('PHASE 3: THE VOTE', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)),
+              const SizedBox(height: 4),
+              AutoAdvanceTimer(
+                endTime: state.endTime,
+                onTimerExpired: () {
+                  if (me.isHost) gs.evaluateReadyState();
+                },
+              ),
+            ],
+          ),
           centerTitle: true,
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -124,7 +136,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
         const Text('YOUR VOTE IS LOCKED IN', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         const SizedBox(height: 10),
         Text('Waiting for $unready other voters...', style: TextStyle(color: Colors.white70)),
-        if (gs.currentPlayer!.isHost)
+        if (gs.currentPlayer!.isHost) ...[
           Padding(
             padding: const EdgeInsets.only(top: 40),
             child: SecondaryButton(
@@ -139,6 +151,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             onPressed: () => gs.debugSimulateBotResponses(),
             child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
           ),
+        ],
       ],
     );
   }

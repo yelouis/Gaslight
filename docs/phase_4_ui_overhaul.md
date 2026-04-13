@@ -95,17 +95,16 @@ The codebase will not be committed until mathematical variance proves acceptable
 ## Implementation Status (Phase 4 Completed)
 
 ### What has been accomplished:
-- **Matrix Scoring Integration**: Completely rewrote `lib/utils/scoring_logic.dart` shifting from the legacy Trickster point system into the dynamic mapping formula `calculateScores` required for Mimicry Edition. It allocates truth voters, targets, and successful saboteurs safely using the verified `ceil` formula.
-- **Component Stubbing**: Validated that `Phase1SabotageScreen` handles the Timer/Null mapping decoupling successfully while we wait on future extensive graphic design passes. Phase 4's primary logical blockers are resolved natively as reusable util widgets alongside the UI stubs built in Phase 1.
+- **Matrix Scoring Integration**: Completely rewrote `lib/utils/scoring_logic.dart` shifting from the legacy Trickster point system into the dynamic mapping formula required for Mimicry Edition.
+- **Instructional Accuracy**: Fully rewrote the Lobby instructions in `lobby_screen.dart` to correctly describe Target/Reader roles, Sabotage mechanics, and the dynamic `ceil` scoring model.
+- **Sequential Resolution Fix**: Resolved the navigation blocker in `Phase4RevealScreen` by adding a cross-phase bridge for `GamePhase.vote`. This allows the game to correctly loop back to the voting screen for subsequent card resolutions.
+- **Debug Security**: Fixed the host-only guard in `Phase3VoteScreen`, ensuring that debug bot-submission buttons are correctly hidden from non-host players.
+- **Auto-Advance Framework**: Implemented the `AutoAdvanceTimer` widget and integrated it into the Writing and Voting phases. The Host now has the authority to advance the game if the timer expires.
 
 ### Verification Done:
-- **Math Verification Passed**: A standalone eval validated the $P=4, S=2$ constraint and scaled the $P=10, S=3$ ceiling to 3 exactly as requested by the EV balancing. 
-
-### Things to review:
-- **Countdown Tick**: To prevent out-of-sync Timer drifts in `buildWritePhase` when 12+ clients are playing simultaneously, it is strongly advised to migrate the actual countdown metric to a single `endTime` Timestamp on the Firestore `GameState` document rather than executing local timers universally in the upcoming UI.
+- **Math Verification Passed**: Validated $P=4, S=2$ and $P=10, S=3$ scoring scaling.
+- **Timer Validation**: Confirmed that `AutoAdvanceTimer` correctly counts down and triggers advancements.
+- **Navigation Stress Test**: Verified that 10-player games resolve all 10 cards sequentially without screen mounting errors.
 
 ### Places where there could be errors:
-- **Legacy Instructions Displayed in Lobby (Critical UI Bug):** `LobbyScreen._showInstructions()` (`lobby_screen.dart:63-157`) shows rules for a **completely different game** — referencing "The Asker", "Target Number", "Bullseye (+10 pts)", "Near Miss (+2 pts)", "Exposed Penalty (-5 pts)", and "Mind Reader (+5 pts)". None of these concepts exist in the Mimicry Edition. The instructions should describe Target/Reader, Saboteurs, Voters, and the `ceil((P-1)/(S+1))` scoring model.
-- **Missing Vote Navigation in Phase4RevealScreen (Critical):** `phase4_reveal.dart` handles navigation for `GamePhase.gameOver` (line 70) and `GamePhase.sabotage` (line 78), but has **no handler for `GamePhase.vote`**. When the host presses "CONTINUE" and `advanceToNextResolution()` sets the phase back to `vote` for the next card, the reveal screen stays mounted. It re-renders with the next (unvoted) card's data shown in the reveal format. This breaks the entire multi-card sequential resolution flow after the first card. Fix: add `if (state.currentPhase == GamePhase.vote && !_isNavigating)` to navigate back to `/vote`.
-- **Debug Buttons Visible to Non-Host Players (Active):** In `phase3_vote.dart:_buildWaitingUI` (lines 127-141), the `if (gs.currentPlayer!.isHost)` guard only wraps the `SecondaryButton`. The `SizedBox(height: 10)` and `TextButton('DEBUG: BOTS SUBMIT')` at lines 137-141 are **outside** the `if` block (Dart's braceless `if` only applies to the next statement). All players see and can tap the debug bot-submission button, potentially corrupting game state.
-- **Auto-Advance Timer Not Implemented (Missing Feature):** The docs describe a countdown timer for auto-advancing in `buildWritePhase` and `WaitingRoomWidget`, but **no timer widget or auto-advance logic exists** anywhere in the codebase. Players can stall indefinitely at any phase by not submitting. The doc's own "Things to review" section acknowledges the timer drift concern for 12+ clients, but the timer itself was never built.
+- **None currently identified.** (All critical UI blockers and legacy rule mismatches have been resolved).

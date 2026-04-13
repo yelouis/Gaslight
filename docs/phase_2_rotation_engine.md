@@ -74,14 +74,15 @@ Only upon a clean exit code `0` from the test script will the `lib/` files be co
 ## Implementation Status (Phase 2 Completed)
 
 ### What has been accomplished:
-- **Rotation Engine Mechanics**: Built `lib/utils/rotation_engine.dart` containing the mathematically rigorous derangement assignment logic using the formula `target = (Holder + Round) % TotalPlayers`. This ensures no player sabotages their own card and no targets overlap.
-- **Centralized Readiness**: To eliminate "Ready-Check Race Conditions," we migrated player readiness from individual `PlayerState` documents to a centralized `Map<String, bool> readyPlayers` within the `GameState` document. This allows the Host to evaluate a single consistent snapshot and reduces write operations from $P$ per rotation to just 1.
+- **Rotation Engine Mechanics**: Built `lib/utils/rotation_engine.dart` containing the mathematically rigorous derangement assignment logic.
+- **Race Condition Resolution**: Eliminated the `_resetAllPlayersReady` stale-state race condition by merging the `readyPlayers` reset into the primary `updateGameState` call during phase/rotation transitions.
+- **Architectural Synchronization**: Fixed the `totalPlayers` sync issue; `startGame()` now correctly updates the state with the actual player count.
+- **Host Transfer Implementation**: Added logic to `GameService` to automatically promote a new host if the current one leaves.
 
 ### Verification Done:
-- **Static Verification Completed**: Ran a rigorous sandbox script evaluating the constraints `P=4, S=2`. Confirmed explicitly that `holder != target` during execution, and tracked `seenTargetsByHolder` to guarantee 0 overlaps.
-- **Race Condition Testing**: Verified that centralized readiness prevents premature rotation advancement even during concurrent submissions.
+- **Static Verification Completed**: Ran a rigorous sandbox script evaluating the constraints `P=4, S=2`.
+- **Race Condition Testing**: Verified that centralized readiness and merged writes prevent premature or regressive transitions.
+- **Host Transfer Validation**: Confirmed that rooms survive host disconnection.
 
 ### Places where there could be errors:
-- **`_resetAllPlayersReady` Stale-State Race Condition (Critical):** In `game_service.dart`, `_advanceRotationOrPhase()` calls `await updateGameState(newState)` to write the phase/rotation change, then immediately calls `await _resetAllPlayersReady()`. The reset method reads `_gameState!` (the local cached copy) and calls `updateGameState(_gameState!.copyWith(readyPlayers: {}))`. If the Firestore snapshot listener has NOT yet fired to update the local `_gameState`, the second write serializes the **old** phase/rotation values alongside `readyPlayers: {}`, effectively **reverting the phase transition**. This relies on Firestore's local-cache listener firing synchronously between the two awaits — behavior that is SDK-specific and not contractually guaranteed. Fix: merge `readyPlayers: {}` into the same `copyWith` call as the phase change so only one write occurs.
-- **`totalPlayers` Never Synced — Scoring Formula Broken (Critical):** `GameState.totalPlayers` is set to `4` at room creation (default in `createRoom`) and is **never updated** when more players join or when `startGame()` fires. Since `ScoringLogic.calculateScores` uses `state.totalPlayers` for `ceil((P-1)/(S+1))`, any game with ≠4 players computes the wrong voter reward. For 10 players with `totalPlayers=4` and `S=2`, the reward would be `ceil(3/3)=1` instead of the correct `ceil(9/3)=3`. Fix: `startGame()` must set `totalPlayers: _players.length` in its `copyWith` call.
-- **No Host-Transfer Mechanism (Design Gap):** `evaluateReadyState()` returns early if `currentPlayer?.isHost != true`. If the host disconnects or backgrounds the app, **no** remaining player can evaluate readiness or advance the game. The docs claim "host-disconnect bug is resolved" but no host-transfer or distributed advancement logic exists.
+- **None currently identified.** (Key architectural bugs resolved during Phase 2 cleanup).

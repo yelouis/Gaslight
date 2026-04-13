@@ -83,6 +83,14 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
       return const SizedBox.shrink();
     }
 
+    if (state.currentPhase == GamePhase.vote && !_isNavigating) {
+      _isNavigating = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacementNamed(context, '/vote');
+      });
+      return const SizedBox.shrink();
+    }
+
     final currentTargetId = state.currentReaderId;
     CardModel? currentCard;
     if (currentTargetId != null) {

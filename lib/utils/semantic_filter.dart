@@ -6,6 +6,11 @@ import 'package:http/http.dart' as http;
 class SemanticFilter {
   static const double threshold = 0.85;
   static final Map<String, List<double>> _vectorCache = {};
+  
+  /// Clears the static embedding cache. Should be called at the start of every game.
+  static void clearCache() {
+    _vectorCache.clear();
+  }
 
   /// Compares the newly submitted answer against all previously existing answers.
   /// Returns `true` if it is unique (below threshold similarity to all others).

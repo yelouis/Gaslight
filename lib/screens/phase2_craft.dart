@@ -8,6 +8,7 @@ import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../utils/prompt_decks.dart';
 import '../utils/semantic_filter.dart';
+import '../widgets/auto_advance_timer.dart';
 
 class Phase2CraftScreen extends StatefulWidget {
   const Phase2CraftScreen({super.key});
@@ -106,10 +107,20 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                 state.currentPhase == GamePhase.truth ? 'TRUTH PHASE' : 'SABOTAGE PHASE', 
                 style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)
               ),
+              const SizedBox(height: 4),
+              AutoAdvanceTimer(
+                endTime: state.endTime,
+                onTimerExpired: () {
+                  if (me.isHost) gs.evaluateReadyState();
+                },
+              ),
               if (state.currentPhase == GamePhase.sabotage)
-                Text(
-                  'Rotation ${state.currentRotationIndex} of ${state.sabotageAnswersCount}',
-                  style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.5), fontSize: 12, letterSpacing: 1),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Rotation ${state.currentRotationIndex} of ${state.sabotageAnswersCount}',
+                    style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.5), fontSize: 12, letterSpacing: 1),
+                  ),
                 ),
             ],
           ),

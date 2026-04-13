@@ -88,6 +88,3 @@ class PromptDecks {
 ### Things to review:
 - **Deck Bootstrapping Volume:** Currently, 4 decks are implemented with 20 cards each, rather than the complete "20 decks x 50 cards" target. This was done to minimize code bloat while establishing the exact structure needed for prototyping. A 20-card deck safely supports testing up to 20-player lobbies. Once you approve the data structure, we can bulk-generate the remaining data.
 - **Synchronous Map vs. Async JSON:** We intentionally diverted from the async JSON file loading shown in the pseudo code. Hardcoding the constants in `.dart` files simplifies state management down the line because you do not have to orchestrate `FutureBuilder`s just to select prompts. I suggest sticking with this approach until UI or memory requirements explicitly dictate asset caching.
-
-### Places where there could be errors:
-- **Dart Random Generator:** `deckCopy.shuffle(Random())` leverages standard RNG. It is sufficient across platforms but is pseudo-random. If test cases need exact reproduction states, the `Random()` seed would need to be parameterized.

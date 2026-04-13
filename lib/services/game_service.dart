@@ -128,7 +128,19 @@ class GameService extends ChangeNotifier {
     // Listen to Players
     _db.collection('rooms').doc(roomCode).collection('players').snapshots().listen((snapshot) {
       _players = snapshot.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
+      
+      // HOST TRANSFER LOGIC: If no host exists, promote the first player
+      if (_players.isNotEmpty && !_players.any((p) => p.isHost)) {
+        final newHost = _players.first;
+        updatePlayerState(roomCode, newHost.copyWith(isHost: true));
+      }
+      
       notifyListeners();
+      
+      // If Host, evaluate ready state whenever players update (e.g. someone joins/leaves/marks ready)
+      if (currentPlayer?.isHost == true) {
+        evaluateReadyState();
+      }
     });
   }
 
@@ -230,6 +242,9 @@ class GameService extends ChangeNotifier {
     if (_players.length <= _gameState!.sabotageAnswersCount) {
         throw Exception("Cannot start: Need more players than sabotage rounds.");
     }
+
+    // 0. Maintenance
+    SemanticFilter.clearCache();
     
     // 1. Calculate mathematical rotations across S derivations securely natively.
     var pIds = _players.map((p) => p.id).toList();
@@ -243,7 +258,7 @@ class GameService extends ChangeNotifier {
     for (int i = 0; i < pIds.length; i++) {
         startingCards.add(CardModel(
            targetPlayerId: pIds[i],
-           promptId: prompts[i]
+           promptText: prompts[i]
         ));
     }
 
@@ -251,14 +266,19 @@ class GameService extends ChangeNotifier {
     int startIdx = 1;
     Map<String, String> initAssignments = stringRotations[startIdx.toString()]!;
 
+    // Set end time for sabotage phase (60 seconds)
+    final endTime = DateTime.now().add(const Duration(seconds: 60)).millisecondsSinceEpoch;
+
     await updateGameState(_gameState!.copyWith(
         currentPhase: GamePhase.sabotage,
+        totalPlayers: _players.length, // FIX: Sync totalPlayers
         currentRotationIndex: startIdx,
         cards: startingCards,
         currentCardAssignments: initAssignments,
         rotationPlan: stringRotations,
+        readyPlayers: {}, // FIX: Reset readyPlayers in same write
+        endTime: endTime,
     ));
-    await _resetAllPlayersReady();
   }
   
   Future<void> setPlayerReady(bool ready, {String? playerId}) async {
@@ -288,7 +308,14 @@ class GameService extends ChangeNotifier {
     if (currentPlayer?.isHost != true) return;
     
     bool allReady = _players.every((p) => _gameState!.readyPlayers[p.id] == true);
-    if (allReady && _players.isNotEmpty) {
+    
+    // Check for timer expiration
+    bool timerExpired = false;
+    if (_gameState!.endTime != null) {
+      timerExpired = DateTime.now().millisecondsSinceEpoch >= _gameState!.endTime!;
+    }
+
+    if ((allReady || timerExpired) && _players.isNotEmpty) {
        await _advanceRotationOrPhase();
     }
   }
@@ -296,31 +323,39 @@ class GameService extends ChangeNotifier {
   Future<void> _advanceRotationOrPhase() async {
     if (_gameState == null) return;
 
+    GameState nextState = _gameState!.copyWith(readyPlayers: {});
+    int sabotageDuration = 60;
+    int truthDuration = 60;
+    int voteDuration = 45;
+
     if (_gameState!.currentPhase == GamePhase.sabotage) {
         if (_gameState!.currentRotationIndex < _gameState!.sabotageAnswersCount) {
             int nextRot = _gameState!.currentRotationIndex + 1;
             Map<String, String> nextAssignments = _gameState!.rotationPlan[nextRot.toString()]!;
-            await updateGameState(_gameState!.copyWith(
+            nextState = nextState.copyWith(
                 currentRotationIndex: nextRot,
                 currentCardAssignments: nextAssignments,
-            ));
+                endTime: DateTime.now().add(Duration(seconds: sabotageDuration)).millisecondsSinceEpoch,
+            );
         } else {
             // Transition to Truth Phase: Every player gets their own card back
             var pIds = _players.map((p) => p.id).toList();
             Map<String, String> truthAssignments = { for (var id in pIds) id : id };
             
-            await updateGameState(_gameState!.copyWith(
+            nextState = nextState.copyWith(
                 currentPhase: GamePhase.truth,
                 currentCardAssignments: truthAssignments,
-            ));
+                endTime: DateTime.now().add(Duration(seconds: truthDuration)).millisecondsSinceEpoch,
+            );
         }
     } else if (_gameState!.currentPhase == GamePhase.truth) {
         // Transition to Vote Phase: First player is the reader
         var pIds = _players.map((p) => p.id).toList();
-        await updateGameState(_gameState!.copyWith(
+        nextState = nextState.copyWith(
             currentPhase: GamePhase.vote,
             currentReaderId: pIds.first,
-        ));
+            endTime: DateTime.now().add(Duration(seconds: voteDuration)).millisecondsSinceEpoch,
+        );
     } else if (_gameState!.currentPhase == GamePhase.vote) {
         // Transition to Reveal for the CURRENT reader
         // 1. Calculate and apply scores for the current resolved card
@@ -329,12 +364,13 @@ class GameService extends ChangeNotifier {
         await applyScoreDeltas(_gameState!.roomCode, deltas);
 
         // 2. Advance Phase
-        await updateGameState(_gameState!.copyWith(
+        nextState = nextState.copyWith(
             currentPhase: GamePhase.reveal,
-        ));
+            clearEndTime: true,
+        );
     }
     
-    await _resetAllPlayersReady();
+    await updateGameState(nextState);
   }
 
   Future<void> advanceToNextResolution() async {
@@ -348,8 +384,9 @@ class GameService extends ChangeNotifier {
         await updateGameState(_gameState!.copyWith(
             currentPhase: GamePhase.vote,
             currentReaderId: pIds[currentIdx + 1],
+            readyPlayers: {},
+            endTime: DateTime.now().add(const Duration(seconds: 45)).millisecondsSinceEpoch,
         ));
-        await _resetAllPlayersReady();
     } else {
         // All cards resolved -> Game Over
         await _advanceToGameOver();

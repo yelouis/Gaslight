@@ -79,11 +79,13 @@ A standalone script (`scratch/test_semantic.dart`) will be generated to test:
 
 To satisfy the pre-commit review, only the Math function (2 and 3) needs to pass cleanly without `http` errors if the API key isn't provided locally.
 
-- **Transactional Integrity**: All card submissions now occur within Firestore transactions. This guarantees that multiple concurrent saboteur submissions on the same card are handled sequentially, resolving any potential data race conditions.
-- **UI Integration & UX**: Added loading indicators during submission to account for the async `http` similarity check. If an answer is too similar to existing one, a SnackBar informs the user, preventing frustration from "hanging" UI.
+- **Transactional Integrity**: All card submissions now occur within Firestore transactions. This guarantees that multiple concurrent saboteur submissions on the same card are handled sequentially.
+- **UI Integration & UX**: Added loading indicators during submission to account for the async `http` similarity check.
+- **Memory Management**: Resolved the `_vectorCache` memory leak by implementing `SemanticFilter.clearCache()`, called at the start of every game.
+- **Improved Semantic Validation**: Refined the similarity check logic; sabotages and truth are now validated against all previously submitted answers for that card.
+- **Auto-Advance Readiness**: Integrated `AutoAdvanceTimer` into handwriting and voting screens.
 
 ### Places where there could be errors:
 - **API Key Exposure on Client:** The `GEMINI_API_KEY` is loaded via `flutter_dotenv` and sent directly from the Dart HTTP client. This remains an active risk for prototyping; for production, this should be proxied through a secure backend (e.g. Firebase Cloud Functions).
-- **Anti-Dupe Check Against Truth Is Structurally Impossible (Design Gap):** The PRD specifies rejecting sabotage answers that are >85% similar to the Target's Truth. However, the game flow runs **all sabotage rounds BEFORE the truth phase**. During sabotage submission (`phase2_craft.dart:41-44`), `targetCard.truthAnswer` is always an empty string (filtered out by `.where((a) => a.isNotEmpty)`). The semantic check between sabotages and truth can only fire in one direction: when the Target writes their truth, it IS checked against existing sabotages. But the reverse (sabotage vs. truth) can never happen because truth doesn't exist yet. This means two players could independently submit near-identical sabotage and truth answers with no warning. The fix is that we aren't checking if the sabotage is similar to the truth, but rather if the sabotage is similar to any other answer before it. Likewise, the truth is checked against all previous sabotages. 
-- **`_vectorCache` Static Memory Leak (Active):** `SemanticFilter._vectorCache` is a `static final Map` that caches every embedding ever computed. It is never cleared between games or on room leave. Over multiple game sessions, this map grows unboundedly, consuming device memory. Fix: clear the cache on game start or room creation.
-- **No Auto-Advance Timer Cancellation (Missing Implementation):** The Phase 3 doc specifies: "if the auto-advance timer completes during this hold, the API request cancels." However, no timer or `CancellationToken`-style mechanism exists anywhere in the codebase. The HTTP call has a 5-second timeout (`semantic_filter.dart:80`), but there is no external timer that can interrupt the submission flow. If a player's submission hangs during the semantic check, other players must wait indefinitely.
+- **Network Latency**: High latency during the Gemini embedding call could still cause UI "hangs" if the 5-second timeout is hit frequently.
+
