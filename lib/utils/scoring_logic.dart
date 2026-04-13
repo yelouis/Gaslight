@@ -20,9 +20,16 @@ class ScoringLogic {
     
     // Evaluate every single vote
     playerVotes.forEach((voterId, votedForId) {
+      if (voterId == votedForId) return; // Self-vote prevention!
+      
       if (votedForId == 'TRUTH') {
         // The voter gets points for finding the truth
         deltas[voterId] = (deltas[voterId] ?? 0) + truthReward;
+        
+        // Bonus: +1 point if the Saboteur *also* correctly identifies the Truth
+        if (currentCard.sabotageAnswers.containsKey(voterId)) {
+           deltas[voterId] = (deltas[voterId] ?? 0) + 1;
+        }
         
         // The Target gets 1 point because someone correctly guessed their truth
         deltas[currentCard.targetPlayerId] = (deltas[currentCard.targetPlayerId] ?? 0) + 1;

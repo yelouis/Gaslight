@@ -42,6 +42,8 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
   }
 
   void _castVote(GameService gs, String votedForId) async {
+    if (votedForId == gs.currentPlayer?.id) return; // Self-vote prevention!
+    
     setState(() => _submitted = true);
     
     // In a full implementation, we'd write this vote to a specific map in GameState/CardModel
@@ -208,33 +210,44 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
                  final ans = _shuffledAnswers![idx];
                  return Padding(
                    padding: const EdgeInsets.only(bottom: 12.0),
-                   child: InkWell(
-                     onTap: () => _castVote(context.read<GameService>(), ans.authorId),
-                     borderRadius: BorderRadius.circular(8),
-                     child: Container(
-                       padding: const EdgeInsets.all(16),
-                       decoration: BoxDecoration(
-                         color: theme.colorScheme.surface.withOpacity(0.9),
-                         borderRadius: BorderRadius.circular(8),
-                         border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.5)),
-                         boxShadow: [
-                           BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))
-                         ]
-                       ),
-                       child: Center(
-                         child: Text(
-                           ans.text,
-                           style: TextStyle(
-                             color: theme.colorScheme.primary,
-                             fontSize: 18,
-                             fontWeight: FontWeight.bold,
-                             fontFamily: 'serif'
-                           ),
-                           textAlign: TextAlign.center,
-                         ),
-                       ),
-                     ),
-                   ),
+                    child: InkWell(
+                      onTap: ans.authorId == me.id ? null : () => _castVote(context.read<GameService>(), ans.authorId),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Opacity(
+                        opacity: ans.authorId == me.id ? 0.5 : 1.0,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surface.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: ans.authorId == me.id ? Colors.grey : theme.colorScheme.secondary.withOpacity(0.5)),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))
+                            ]
+                          ),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                Text(
+                                  ans.text,
+                                  style: TextStyle(
+                                    color: ans.authorId == me.id ? Colors.grey : theme.colorScheme.primary,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'serif'
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                if (ans.authorId == me.id) ...[
+                                  const SizedBox(height: 8),
+                                  Text('(Your Sabotage)', style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic)),
+                                ]
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                  );
                },
              ),
