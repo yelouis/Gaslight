@@ -113,10 +113,13 @@ class PromptDecks {
     
     List<String> deckCopy = List.from(_decks[deckId]!);
     deckCopy.shuffle(Random());
+    if (count > deckCopy.length) {
+      throw Exception('Not enough prompts in the deck for $count players. Max is ${deckCopy.length}.');
+    }
     
     List<String> results = [];
     for (int i = 0; i < count; i++) {
-        results.add(deckCopy[i % deckCopy.length]);
+        results.add(deckCopy[i]);
     }
     return results;
   }
