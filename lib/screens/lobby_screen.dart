@@ -7,6 +7,7 @@ import '../widgets/lobby_background.dart';
 import '../widgets/lobby_logo.dart';
 import '../models/game_state.dart';
 import '../widgets/shared_ui.dart';
+import '../utils/prompt_decks.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -22,6 +23,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
   int _selectedRounds = 1;
   int _selectedAvatarIndex = 0;
   bool _isNavigating = false;
+  String _selectedDeck = PromptDecks.availableDecks.first;
 
   void _createRoom() async {
     final name = _nameController.text.trim();
@@ -33,7 +35,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     try {
       await gameService.createRoom(name, playerId, sabotageAnswersCount: _selectedRounds, avatarIndex: _selectedAvatarIndex);
-      if (mounted) Navigator.pushReplacementNamed(context, '/draft');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -52,7 +53,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     try {
       await gameService.joinRoom(roomCode, name, playerId, avatarIndex: _selectedAvatarIndex);
-      if (mounted) Navigator.pushReplacementNamed(context, '/draft');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -226,7 +226,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
       if (gs.gameState!.currentPhase != GamePhase.lobby && !_isNavigating) {
         _isNavigating = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          Navigator.pushReplacementNamed(context, '/draft');
+          Navigator.pushReplacementNamed(context, '/craft');
         });
         return const SizedBox.shrink();
       }
@@ -277,14 +277,30 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 },
               ),
             ),
-            if (isHost)
+            if (isHost) ...[
+              const SizedBox(height: 20),
+              DropdownButton<String>(
+                value: _selectedDeck,
+                dropdownColor: theme.colorScheme.surface,
+                style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold),
+                items: PromptDecks.availableDecks.map((deckId) {
+                  return DropdownMenuItem(
+                    value: deckId,
+                    child: Text(PromptDecks.getDeckName(deckId)),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedDeck = val);
+                },
+              ),
+              const SizedBox(height: 20),
               PrimaryButton(
                 text: 'START GAME',
                 onPressed: players.isNotEmpty ? () {
-                  // Ready to start! Update state.
-                  gs.updateGameState(gs.gameState!.copyWith(currentPhase: GamePhase.draft));
+                  gs.startGame(_selectedDeck);
                 } : null,
               ),
+            ],
             if (!isHost)
               Padding(
                 padding: const EdgeInsets.all(16.0),
