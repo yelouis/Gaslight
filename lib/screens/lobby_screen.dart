@@ -32,7 +32,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final playerId = const Uuid().v4();
 
     try {
-      await gameService.createRoom(name, playerId, totalRounds: _selectedRounds, avatarIndex: _selectedAvatarIndex);
+      await gameService.createRoom(name, playerId, sabotageAnswersCount: _selectedRounds, avatarIndex: _selectedAvatarIndex);
       if (mounted) Navigator.pushReplacementNamed(context, '/draft');
     } catch (e) {
       if (mounted) {
