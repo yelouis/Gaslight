@@ -1,4 +1,4 @@
-# 10-Player Simulation Debug & Error Report
+# Ongoing General Errors
 
 ## Overview
 As requested, a full end-to-end simulation of 10 players was executed to identify boundary cases, logical crashes, and state management errors during the migration from the legacy Single-Trickster architecture to the Phase 4 Mimicry Edition. 
