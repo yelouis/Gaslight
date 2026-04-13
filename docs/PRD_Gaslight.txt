@@ -1,0 +1,38 @@
+﻿## Gaslight: Mimicry Edition PRD (v2.0)
+
+### 1. Game Flow & Roles
+* **The Target (Reader):** The person whose name is on the card. They read the prompt and all four answers aloud. They are **silenced** during the deliberation to prevent vocal/facial cues from giving away the truth.
+* **The Saboteurs:** Three players assigned to write believable answers for the Target.
+* **The Voters:** All players except the Target. Saboteurs *are* voters, but they cannot vote for their own answer.
+
+### 2. Semantic Integrity
+To ensure a high-quality round, the system will perform **Semantic Similarity Checks**:
+* **Anti-Duplicate:** If a Saboteur’s answer is $>85\%$ semantically similar to another Saboteur’s answer or the Target’s "Truth," the system prompts them to rewrite.
+* **Subjective Focus:** Prompts are restricted to experiential or opinion-based queries (e.g., "The most irrational thing I am afraid of") to prevent objective "Google-able" answers.
+
+### 3. Balanced Scoring Model
+Given 10 players (9 voters, 1 reader) and 4 options (1 Truth, 3 Sabotages):
+
+* **Voter (Success):** $+3$ points for correctly identifying the Truth.
+* **Voter (Failure):** $0$ points.
+* **Saboteur (Success):** $+1$ point for every vote their fake answer receives.
+* **Saboteur (Bonus):** $+1$ point if they *also* correctly guess the Truth on that card.
+* **Target (Reader):** $+1$ point for every player who correctly identifies their Truth. (This discourages the Target from "trolling" and ensures they write a recognizable truth).
+
+---
+
+## Implementation Plan
+
+### Phase 1: The Rotation & Assignment Engine
+* **Circular Constraint Logic:** You need a non-repeating derangement algorithm.
+    * **The $N-1$ Rule:** For $P$ players and $S$ sabotage rounds, the card $C_i$ (belonging to $P_i$) must be routed through a list of Saboteurs $S \subset \{P \setminus P_i\}$.
+    * **Data Structure:** A queue of "Task Objects" for each player. Each object contains `{target_id: string, prompt_id: string, current_round: int}`.
+* **State Machine:** Use a "Ready Check" system. Once all 10 players submit their rotation, the global state advances.
+
+### Phase 2: AI-Assisted Semantic Filtering
+* **Embeddings:** Use a lightweight embedding model (like `text-embedding-004`) to compare the four answers before the Reveal Phase begins.
+* **Workflow:** If $CosineSimilarity(Answer_A, Answer_B) > 0.85$, flag for the player to "Be more specific" or "Change your angle." This prevents the "Two people said 'spiders'" spoiler that ruins the deduction.
+
+### Phase 3: The "Theater" (Reveal Phase) UI
+* **Randomized Ordering:** The UI must shuffle the four answers so the "Truth" isn't always in the same slot.
+* **The "Reveal" Animation:** Display the votes landing on each answer one by one, then highlight the Truth and the Saboteurs behind the fakes.
