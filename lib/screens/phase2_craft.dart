@@ -7,6 +7,7 @@ import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../utils/prompt_decks.dart';
+import '../utils/semantic_filter.dart';
 
 class Phase2CraftScreen extends StatefulWidget {
   const Phase2CraftScreen({super.key});
@@ -29,11 +30,37 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     final state = gs.gameState!;
     final me = gs.currentPlayer!;
     
+    // 1. Semantic Similarity Check
     final targetId = state.currentCardAssignments[me.id];
-    if (targetId != null) {
-      bool isTruth = state.currentPhase == GamePhase.truth;
-      await gs.submitCardAnswer(targetId, me.id, text, isTruth);
+    if (targetId == null) {
+      setState(() => _isSubmitting = false);
+      return;
     }
+
+    final targetCard = state.cards.firstWhere((c) => c.targetPlayerId == targetId);
+    final comparisonAnswers = [
+      targetCard.truthAnswer,
+      ...targetCard.sabotageAnswers.values
+    ].where((a) => a.isNotEmpty).toList();
+
+    final isUnique = await SemanticFilter.isAnswerUnique(text, comparisonAnswers);
+    
+    if (!isUnique) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Too similar to an existing answer! Be more creative.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        setState(() => _isSubmitting = false);
+      }
+      return;
+    }
+
+    // 2. Proceed with submission
+    bool isTruth = state.currentPhase == GamePhase.truth;
+    await gs.submitCardAnswer(targetId, me.id, text, isTruth);
     
     await gs.setPlayerReady(true);
     
@@ -94,7 +121,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
-            child: me.isReadyForNextRotation ? _buildWaitingUI(state, gs, theme) : _buildWriteUI(state, me, theme, gs),
+            child: (state.readyPlayers[me.id] ?? false) ? _buildWaitingUI(state, gs, theme) : _buildWriteUI(state, me, theme, gs),
           ),
         ),
       ),
@@ -102,7 +129,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
   }
 
   Widget _buildWaitingUI(GameState state, GameService gs, ThemeData theme) {
-    int unready = gs.players.where((p) => !p.isReadyForNextRotation).length;
+    int readyCount = state.readyPlayers.values.where((v) => v).length;
+    int unready = gs.players.length - readyCount;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

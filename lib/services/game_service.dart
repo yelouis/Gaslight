@@ -245,8 +245,22 @@ class GameService extends ChangeNotifier {
   }
   
   Future<void> setPlayerReady(bool ready) async {
-    if (_gameState == null || currentPlayer == null) return;
-    await updatePlayerState(_gameState!.roomCode, currentPlayer!.copyWith(isReadyForNextRotation: ready));
+    if (_gameState == null || _currentPlayerId == null) return;
+    
+    final roomRef = _db.collection('rooms').doc(_gameState!.roomCode);
+    
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+      
+      final data = snapshot.data()!;
+      final currentState = GameState.fromMap(data, snapshot.id);
+      
+      final newReadyMap = Map<String, bool>.from(currentState.readyPlayers);
+      newReadyMap[_currentPlayerId!] = ready;
+      
+      transaction.update(roomRef, {'readyPlayers': newReadyMap});
+    });
   }
 
   Future<void> evaluateReadyState() async {
@@ -255,8 +269,8 @@ class GameService extends ChangeNotifier {
     // Triggered often by listeners. If Host, evaluate.
     if (currentPlayer?.isHost != true) return;
     
-    bool allReady = _players.every((p) => p.isReadyForNextRotation);
-    if (allReady) {
+    bool allReady = _players.every((p) => _gameState!.readyPlayers[p.id] == true);
+    if (allReady && _players.isNotEmpty) {
        await _advanceRotationOrPhase();
     }
   }
@@ -322,11 +336,7 @@ class GameService extends ChangeNotifier {
 
   Future<void> _resetAllPlayersReady() async {
     if (_gameState == null) return;
-    WriteBatch batch = _db.batch();
-    for (var p in _players) {
-        DocumentReference ref = _db.collection('rooms').doc(_gameState!.roomCode).collection('players').doc(p.id);
-        batch.update(ref, {'isReadyForNextRotation': false});
-    }
-    await batch.commit();
+    // Single write instead of P writes!
+    await updateGameState(_gameState!.copyWith(readyPlayers: {}));
   }
 }

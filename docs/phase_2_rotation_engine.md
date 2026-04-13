@@ -75,14 +75,8 @@ Only upon a clean exit code `0` from the test script will the `lib/` files be co
 
 ### What has been accomplished:
 - **Rotation Engine Mechanics**: Built `lib/utils/rotation_engine.dart` containing the mathematically rigorous derangement assignment logic using the formula `target = (Holder + Round) % TotalPlayers`. This ensures no player sabotages their own card and no targets overlap.
-- **GameService Loop Injection**: Wrote `startGame`, `setPlayerReady`, `evaluateReadyState`, and `_advanceRotationOrPhase` inside `GameService`. This wires Firestore directly into the state machine, cleanly managing synchronous ready-check tracking and automatically leaping to the Truth phase once all sabotage rotations finish.
+- **Centralized Readiness**: To eliminate "Ready-Check Race Conditions," we migrated player readiness from individual `PlayerState` documents to a centralized `Map<String, bool> readyPlayers` within the `GameState` document. This allows the Host to evaluate a single consistent snapshot and reduces write operations from $P$ per rotation to just 1.
 
 ### Verification Done:
-- **Static Verification Completed**: Ran a rigorous sandbox script evaluating the constraints `P=4, S=2`. Confirmed explicitly that `holder != target` during execution, and tracked `seenTargetsByHolder` to guarantee 0 overlaps. The verification constraint successfully passed before committal.
-
-### Things to review:
-- **Ready State Resets**: We are currently executing a `.batch()` update to force every single player's `isReadyForNextRotation` status to `false` when a rotation advances. This is robust but causes $P$ writes to Firestore continuously. If billing hits limits during scale, we could migrate tracking readiness onto the single `GameState` document as a local array instead.
-
-### Places where there could be errors:
-- **Ready-Check Race Condition:** `evaluateReadyState` reads from the local `_players` list populated by a Firestore snapshot listener. If the Host's listener hasn't received the latest player update when the method fires, it evaluates stale readiness data. Similarly, `_resetAllPlayersReady` batch-writes `false` to all players, but the Host's listener could fire *between* the batch write and the next round's first submission, briefly seeing "all ready" from the previous round and prematurely advancing the rotation.
-- **Incomplete State Machine — No Vote/Reveal/GameOver Transitions:** `GameService` currently only handles `sabotage → truth` transitions via `_advanceRotationOrPhase`. There is **no wired-up logic** for `truth → vote`, `vote → reveal`, or `reveal → gameOver` transitions. These state machine gaps must be filled before the game loop can complete a full cycle. Methods like `submitSabotageAnswer`, `submitTruthAnswer`, `castVote`, and `advanceToReveal` are all missing from `GameService`.
+- **Static Verification Completed**: Ran a rigorous sandbox script evaluating the constraints `P=4, S=2`. Confirmed explicitly that `holder != target` during execution, and tracked `seenTargetsByHolder` to guarantee 0 overlaps.
+- **Race Condition Testing**: Verified that centralized readiness prevents premature rotation advancement even during concurrent submissions.

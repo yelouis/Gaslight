@@ -25,6 +25,9 @@ class GameState {
   // Pre-calculated offline-safe rotation derivations (Phase 2 Master Fix)
   final Map<String, Map<String, String>> rotationPlan; // Stored as String keys for Firestore config parsing
 
+  // Centralized readiness tracking to prevent race conditions
+  final Map<String, bool> readyPlayers;
+
   GameState({
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
@@ -35,6 +38,7 @@ class GameState {
     this.currentCardAssignments = const {},
     this.currentReaderId,
     this.rotationPlan = const {},
+    this.readyPlayers = const {},
   });
 
   GameState copyWith({
@@ -47,6 +51,7 @@ class GameState {
     Map<String, String>? currentCardAssignments,
     String? currentReaderId,
     Map<String, Map<String, String>>? rotationPlan,
+    Map<String, bool>? readyPlayers,
     bool clearReaderId = false,
   }) {
     return GameState(
@@ -59,6 +64,7 @@ class GameState {
       currentCardAssignments: currentCardAssignments ?? this.currentCardAssignments,
       currentReaderId: clearReaderId ? null : (currentReaderId ?? this.currentReaderId),
       rotationPlan: rotationPlan ?? this.rotationPlan,
+      readyPlayers: readyPlayers ?? this.readyPlayers,
     );
   }
 
@@ -73,6 +79,7 @@ class GameState {
       'currentCardAssignments': currentCardAssignments,
       'currentReaderId': currentReaderId,
       'rotationPlan': rotationPlan,
+      'readyPlayers': readyPlayers,
     };
   }
 
@@ -102,6 +109,7 @@ class GameState {
       currentCardAssignments: Map<String, String>.from(map['currentCardAssignments'] ?? {}),
       currentReaderId: map['currentReaderId'],
       rotationPlan: rotMap,
+      readyPlayers: Map<String, bool>.from(map['readyPlayers'] ?? {}),
     );
   }
 }

@@ -104,7 +104,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
-            child: _submitted || me.isReadyForNextRotation 
+            child: _submitted || (state.readyPlayers[me.id] ?? false) 
               ? _buildWaitingUI(theme, gs, state) 
               : _buildVotingUI(state, me, theme, currentCard),
           ),
@@ -114,7 +114,8 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
   }
 
   Widget _buildWaitingUI(ThemeData theme, GameService gs, GameState state) {
-    int unready = gs.players.where((p) => !p.isReadyForNextRotation).length;
+    int readyCount = state.readyPlayers.values.where((v) => v).length;
+    int unready = gs.players.length - readyCount;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

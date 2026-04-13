@@ -7,9 +7,6 @@ class PlayerState {
   final PlayerRole role;
   final bool isHost;
   
-  // Phase Readiness indicator (used for waiting rooms in rotation logic)
-  final bool isReadyForNextRotation;
-  
   // Visuals
   final int colorValue; // Hex color for the player
   final int avatarIndex; // Reference to a local simple avatar
@@ -20,7 +17,6 @@ class PlayerState {
     this.totalScore = 0,
     this.role = PlayerRole.unassigned,
     this.isHost = false,
-    this.isReadyForNextRotation = false,
     this.colorValue = 0xFF58A6FF,
     this.avatarIndex = 0,
   });
@@ -31,7 +27,6 @@ class PlayerState {
     int? totalScore,
     PlayerRole? role,
     bool? isHost,
-    bool? isReadyForNextRotation,
     int? colorValue,
     int? avatarIndex,
   }) {
@@ -41,7 +36,6 @@ class PlayerState {
       totalScore: totalScore ?? this.totalScore,
       role: role ?? this.role,
       isHost: isHost ?? this.isHost,
-      isReadyForNextRotation: isReadyForNextRotation ?? this.isReadyForNextRotation,
       colorValue: colorValue ?? this.colorValue,
       avatarIndex: avatarIndex ?? this.avatarIndex,
     );
@@ -54,7 +48,6 @@ class PlayerState {
       'totalScore': totalScore,
       'role': role.name,
       'isHost': isHost,
-      'isReadyForNextRotation': isReadyForNextRotation,
       'colorValue': colorValue,
       'avatarIndex': avatarIndex,
     };
@@ -70,7 +63,6 @@ class PlayerState {
         orElse: () => PlayerRole.unassigned,
       ),
       isHost: map['isHost'] ?? false,
-      isReadyForNextRotation: map['isReadyForNextRotation'] ?? false,
       colorValue: map['colorValue']?.toInt() ?? 0xFF58A6FF,
       avatarIndex: map['avatarIndex']?.toInt() ?? 0,
     );
