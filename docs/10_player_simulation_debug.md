@@ -12,5 +12,7 @@ Due to the complexity of the errors found (specifically stemming from legacy UI 
 ### Parameter Mismatch in Lobby Registration (Resolved)
 - **Error Description**: In `lib/screens/lobby_screen.dart`, creating a lobby with the UI form passed `totalRounds: _selectedRounds`. However, `GameService.createRoom` only accepts `totalPlayers` and `sabotageAnswersCount`. This caused a compilation failure that blocked standard initialization.
 - **Resolution**: Fixed inline. Changed the named parameter to `sabotageAnswersCount: _selectedRounds` to align with the new GameService data limits.
+## 2. Unresolved E2E Errors (Phase 4 & Game Over)
 
+- **ALL ERRORS RESOLVED.** The Phase 4 Reveal Screen and Game Over Screens have been safely mocked with the new Architecture and all legacy properties (`currentTricksterId`, `totalRounds`, `p.score`) have been eradicated. Matrix mapping logic has been successfully implemented.
 
