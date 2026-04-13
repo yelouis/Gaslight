@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'dart:math';
 import 'package:provider/provider.dart';
+import 'dart:math';
 import '../services/game_service.dart';
 import '../models/game_state.dart';
+import '../models/card_model.dart';
 import '../widgets/player_avatar.dart';
-import '../widgets/swipeable_card.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 
@@ -16,24 +15,43 @@ class Phase3VoteScreen extends StatefulWidget {
   State<Phase3VoteScreen> createState() => _Phase3VoteScreenState();
 }
 
+class _AnonymizedAnswer {
+  final String authorId;
+  final String text;
+  _AnonymizedAnswer(this.authorId, this.text);
+}
+
 class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
-  String? _selectedOption;
-  double _sliderValue = 1;
   bool _submitted = false;
   bool _isNavigating = false;
+  List<_AnonymizedAnswer>? _shuffledAnswers;
 
-  void _submitVote(GameService gs) {
-    if (_selectedOption == null) return;
+  void _generateShuffledAnswers(CardModel card) {
+    if (_shuffledAnswers != null) return;
     
+    List<_AnonymizedAnswer> answers = [];
+    answers.add(_AnonymizedAnswer('TRUTH', card.truthAnswer));
+    card.sabotageAnswers.forEach((authorId, text) {
+      answers.add(_AnonymizedAnswer(authorId, text));
+    });
+    
+    answers.shuffle(Random());
+    setState(() {
+      _shuffledAnswers = answers;
+    });
+  }
+
+  void _castVote(GameService gs, String votedForId) async {
     setState(() => _submitted = true);
     
-    final player = gs.currentPlayer!;
-    final updatedPlayer = player.copyWith(
-      selectedOption: _selectedOption,
-      guessedTarget: _sliderValue.toInt(),
-    );
+    // In a full implementation, we'd write this vote to a specific map in GameState/CardModel
+    // For now we just flag the player ready to proceed to Phase 4
+    await gs.setPlayerReady(true);
     
-    gs.updatePlayerState(gs.gameState!.roomCode, updatedPlayer);
+    if (gs.currentPlayer!.isHost) {
+      // Manual trigger for Host just in case
+      gs.evaluateReadyState();
+    }
     
     _checkPhaseTransition(gs);
   }
@@ -41,9 +59,8 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
   void _checkPhaseTransition(GameService gs) {
     if (!gs.currentPlayer!.isHost) return;
     
-    // Check if everyone EXCEPT the trickster has voted
-    final voters = gs.players.where((p) => p.id != gs.gameState!.currentTricksterId);
-    final allVoted = voters.every((p) => p.selectedOption != null);
+    final voters = gs.players;
+    final allVoted = voters.every((p) => p.isReadyForNextRotation);
     
     if (allVoted) {
       final newGameState = gs.gameState!.copyWith(currentPhase: GamePhase.reveal);
@@ -55,10 +72,10 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
   Widget build(BuildContext context) {
     final gs = context.watch<GameService>();
     final state = gs.gameState;
-    final current = gs.currentPlayer;
+    final me = gs.currentPlayer;
     final theme = Theme.of(context);
 
-    if (state == null || current == null) {
+    if (state == null || me == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
@@ -70,7 +87,13 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
       return const SizedBox.shrink();
     }
 
-    final isTrickster = current.id == state.currentTricksterId;
+    // Determine whose card is being resolved. For Phase 3 stub, we pick the first card.
+    // In a fully dynamic multi-card step-through, this would index via state.currentReaderId or similar.
+    CardModel? currentCard = state.cards.isNotEmpty ? state.cards.first : null;
+
+    if (currentCard != null) {
+       _generateShuffledAnswers(currentCard);
+    }
 
     return AnimatedThinkingBackground(
       child: Scaffold(
@@ -85,240 +108,139 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
-            child: isTrickster ? _buildTricksterWaiting(theme) : _buildVoterUI(state, gs, theme),
+            child: _submitted || me.isReadyForNextRotation 
+              ? _buildWaitingUI(theme, gs, state) 
+              : _buildVotingUI(state, me, theme, currentCard),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildVoterUI(GameState state, GameService gs, ThemeData theme) {
-    if (_submitted) {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 20),
-          const Text('Waiting for other Voters...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          if (gs.currentPlayer!.isHost)
-            Padding(
-              padding: const EdgeInsets.only(top: 20),
-              child: SecondaryButton(
-                text: 'PROCEED TO REVEAL (HOST)',
-                onPressed: () { // Manual override wrapper
-                  gs.updateGameState(state.copyWith(currentPhase: GamePhase.reveal));
-                },
-              ),
-            ),
-        ],
-      );
-    }
-
-    int maxVoters = gs.players.length > 1 ? gs.players.length - 1 : 1;
-
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && _selectedOption == null) {
-          if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-            setState(() => _selectedOption = 'A');
-            return KeyEventResult.handled;
-          } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-            setState(() => _selectedOption = 'B');
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isSmallScreen = constraints.maxWidth < 600;
-          return SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: constraints.maxHeight,
-                minWidth: constraints.maxWidth,
-              ),
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 16.0 : 32.0, vertical: 24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-          PlayerAvatar(player: gs.currentPlayer!, size: 50),
-          const SizedBox(height: 16),
-          if (_selectedOption == null) ...[
-            Text(
-              'MAKE YOUR CHOICE',
-              style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 2),
-            ),
-            const SizedBox(height: 20),
-            Center(
-              child: Builder(
-                builder: (context) {
-                  final screenWidth = MediaQuery.of(context).size.width;
-                  final cardWidth = screenWidth < 392 ? screenWidth - 32 : 360.0;
-                  final idealCardHeight = cardWidth * 1.4;
-
-                  return ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 360),
-                    child: SwipeableCard(
-                      onSwiped: (isRight) {
-                        setState(() {
-                          _selectedOption = isRight ? 'A' : 'B';
-                        });
-                      },
-                      child: Stack(
-                        children: [
-                          ParchmentCard(
-                            padding: const EdgeInsets.only(top: 40, bottom: 40, left: 24, right: 24),
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(minHeight: idealCardHeight),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Column(
-                                    children: [
-                                      Text(
-                                        (state.activeTemplate ?? "").split('%A').first.trim(),
-                                        style: TextStyle(fontSize: 18, color: Colors.grey.shade600, fontWeight: FontWeight.bold),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 20),
-                                      Text(
-                                        state.activePromptFirstHalf ?? "Prompt missing",
-                                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 20),
-                                      const Text('... OR ...', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w900, letterSpacing: 2)),
-                                      const SizedBox(height: 20),
-                                      Text(
-                                        state.activePromptSecondHalf ?? "Option missing",
-                                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.red.shade900),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ],
-                                  ),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text('👈 OPTION 2', style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 16)),
-                                      const Text('OPTION 1 👉', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
-                                    ],
-                                  )
-                                ],
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 12,
-                            left: 12,
-                            child: _buildCardIndex(theme),
-                          ),
-                          Positioned(
-                            bottom: 12,
-                            right: 12,
-                            child: Transform.rotate(
-                              angle: pi,
-                              child: _buildCardIndex(theme),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ] else ...[
-            ParchmentCard(
-              child: Column(
-                children: [
-                  Text(
-                    'You voted for Option $_selectedOption',
-                    style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 30),
-                  Text(
-                    'What was the Trickster aiming for?',
-                    style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                  const SizedBox(height: 20),
-                  Slider(
-                    value: _sliderValue,
-                    min: 1,
-                    max: maxVoters.toDouble(),
-                    divisions: maxVoters > 1 ? maxVoters - 1 : null,
-                    label: _sliderValue.toInt().toString(),
-                    activeColor: theme.colorScheme.primary,
-                    onChanged: (val) {
-                      setState(() => _sliderValue = val);
-                    },
-                  ),
-                  Text(
-                    '${_sliderValue.toInt()} Votes',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
-                  ),
-                  const SizedBox(height: 30),
-                  PrimaryButton(
-                    text: 'LOCK IN BET',
-                    onPressed: () => _submitVote(gs),
-                  ),
-                ],
-              ),
-            ),
-          ]
-        ],
-      ),
-    ),
-            ),
-          );
-        }
-      ),
-    );
-  }
-
-  Widget _buildCardIndex(ThemeData theme) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Q', // Queen
-          style: TextStyle(
-            color: theme.colorScheme.primary, // Burgundy
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'serif',
-            height: 1.0,
-          ),
-        ),
-        Icon(
-          Icons.remove_red_eye,
-          color: theme.colorScheme.primary,
-          size: 18,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTricksterWaiting(ThemeData theme) {
+  Widget _buildWaitingUI(ThemeData theme, GameService gs, GameState state) {
+    int unready = gs.players.where((p) => !p.isReadyForNextRotation).length;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         CircularProgressIndicator(color: theme.colorScheme.secondary),
-        const SizedBox(height: 30),
-        Text(
-          'THE TRAP IS SET',
-          style: theme.textTheme.headlineSmall?.copyWith(
-            color: theme.colorScheme.secondary,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2,
-            shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 8)],
-          ),
-        ),
+        const SizedBox(height: 20),
+        const Text('YOUR VOTE IS LOCKED IN', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         const SizedBox(height: 10),
-        const Text('Waiting for the Voters to fall for it...', style: TextStyle(color: Colors.white)),
+        Text('Waiting for $unready other voters...', style: TextStyle(color: Colors.white70)),
+        if (gs.currentPlayer!.isHost)
+          Padding(
+            padding: const EdgeInsets.only(top: 40),
+            child: SecondaryButton(
+              text: 'PROCEED TO REVEAL (HOST)',
+              onPressed: () { 
+                gs.updateGameState(state.copyWith(currentPhase: GamePhase.reveal));
+              },
+            ),
+          ),
       ],
+    );
+  }
+
+  Widget _buildVotingUI(GameState state, dynamic me, ThemeData theme, CardModel? currentCard) {
+    if (currentCard == null) return const Text('No card to vote on.');
+
+    if (me.id == state.currentReaderId || me.id == currentCard.targetPlayerId) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.remove_red_eye, size: 80, color: theme.colorScheme.secondary),
+          const SizedBox(height: 24),
+          Text(
+            'THEY ARE VOTING ON YOUR CARD...',
+            style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 2),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Keep a straight face.',
+            style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 16),
+          ),
+          const SizedBox(height: 40),
+          PrimaryButton(
+            text: 'I\'M READY',
+            onPressed: () async {
+              setState(() => _submitted = true);
+              await context.read<GameService>().setPlayerReady(true);
+            },
+          )
+        ],
+      );
+    }
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 500),
+      child: Column(
+        children: [
+           PlayerAvatar(player: me, size: 50),
+           const SizedBox(height: 20),
+           Text(
+             'WHICH ONE IS THE TRUTH?',
+             style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 2),
+           ),
+           const SizedBox(height: 20),
+           ParchmentCard(
+             padding: const EdgeInsets.all(20),
+             child: Column(
+               children: [
+                 Text(
+                   'Prompt:',
+                   style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontWeight: FontWeight.bold),
+                 ),
+                 const SizedBox(height: 10),
+                 Text(
+                   currentCard.promptId,
+                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontFamily: 'serif'),
+                   textAlign: TextAlign.center,
+                 ),
+               ],
+             ),
+           ),
+           const SizedBox(height: 24),
+           Expanded(
+             child: ListView.builder(
+               itemCount: _shuffledAnswers?.length ?? 0,
+               itemBuilder: (context, idx) {
+                 final ans = _shuffledAnswers![idx];
+                 return Padding(
+                   padding: const EdgeInsets.only(bottom: 12.0),
+                   child: InkWell(
+                     onTap: () => _castVote(context.read<GameService>(), ans.authorId),
+                     borderRadius: BorderRadius.circular(8),
+                     child: Container(
+                       padding: const EdgeInsets.all(16),
+                       decoration: BoxDecoration(
+                         color: theme.colorScheme.surface.withOpacity(0.9),
+                         borderRadius: BorderRadius.circular(8),
+                         border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.5)),
+                         boxShadow: [
+                           BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))
+                         ]
+                       ),
+                       child: Center(
+                         child: Text(
+                           ans.text,
+                           style: TextStyle(
+                             color: theme.colorScheme.primary,
+                             fontSize: 18,
+                             fontWeight: FontWeight.bold,
+                             fontFamily: 'serif'
+                           ),
+                           textAlign: TextAlign.center,
+                         ),
+                       ),
+                     ),
+                   ),
+                 );
+               },
+             ),
+           ),
+        ],
+      ),
     );
   }
 }
