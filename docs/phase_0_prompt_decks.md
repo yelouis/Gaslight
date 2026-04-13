@@ -76,3 +76,19 @@ class PromptDecks {
   }
 }
 ```
+
+## Implementation Status (Phase 0 Completed)
+
+### What has been accomplished:
+- Created the foundational prompt utility class `PromptDecks` in `lib/utils/prompt_decks.dart`.
+- Instead of using JSON/Future-based parsing originally proposed in the pseudo-code, implemented the storage securely using in-memory native Dart `const Map<String, List<String>>`. This maintains synchronous capability and keeps the application extremely fast and lightweight without parsing overhead, aligning perfectly with the primary goal in **Key Processing Logic 1**.
+- Seeded **4 distinct initial decks** (`the_daily_grind`, `deep_fears_and_phobias`, `unhinged_quirks`, `romantic_disasters`) with 20 subjective prompts each to bootstrap the testing of the game's Sabotage and Target logic safely.
+- Wrote the `drawPrompts()` engine with randomization, deck ID resolution, and error handling.
+
+### Things to review:
+- **Deck Bootstrapping Volume:** Currently, 4 decks are implemented with 20 cards each, rather than the complete "20 decks x 50 cards" target. This was done to minimize code bloat while establishing the exact structure needed for prototyping. A 20-card deck safely supports testing up to 20-player lobbies. Once you approve the data structure, we can bulk-generate the remaining data.
+- **Synchronous Map vs. Async JSON:** We intentionally diverted from the async JSON file loading shown in the pseudo code. Hardcoding the constants in `.dart` files simplifies state management down the line because you do not have to orchestrate `FutureBuilder`s just to select prompts. I suggest sticking with this approach until UI or memory requirements explicitly dictate asset caching.
+
+### Places where there could be errors:
+- **Deck Depletion (Cards < Players):** The code strictly throws an Exception if the requested `count` exceeds the `deckCopy.length`. Since the initialized decks hold 20 cards, starting a game with 21+ players choosing one of these decks will crash the app upon `drawPrompts()`. The UI/Lobby initialization state logic must enforce maximum player limits based on `PromptDecks.availableDecks` sizing.
+- **Dart Random Generator:** `deckCopy.shuffle(Random())` leverages standard RNG. It is sufficient across platforms but is pseudo-random. If test cases need exact reproduction states, the `Random()` seed would need to be parameterized.
