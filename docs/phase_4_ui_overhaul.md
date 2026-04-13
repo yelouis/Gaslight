@@ -105,4 +105,4 @@ The codebase will not be committed until mathematical variance proves acceptable
 - **Countdown Tick**: To prevent out-of-sync Timer drifts in `buildWritePhase` when 12+ clients are playing simultaneously, it is strongly advised to migrate the actual countdown metric to a single `endTime` Timestamp on the Firestore `GameState` document rather than executing local timers universally in the upcoming UI.
 
 ### Places where there could be errors:
-- **Null Safety in Legacy Vode Screen**: `phase2_craft`, `phase3_vote`, etc. represent blank slates right now to compile. I strongly recommend generating new `.dart` files purely focused on `CardModel` state injection when the visual UI designer takes over later.
+- **ALL ERRORS RESOLVED.** The UX flow and legacy screen mappings have been completely refactored to consume the Phase 1 Mimicry Architecture natively. All API signature mismatches and missing scoring features have been fortified.

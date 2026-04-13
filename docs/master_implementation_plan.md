@@ -59,3 +59,42 @@ The objective is to implement the "Mimicry Edition" of Gaslight as outlined in t
   - Build animations displaying votes landing on each option sequentially.
   - Reveal authors of the sabotages and the actual Truth.
   - Tally and update the score on screen in real-time according to the configurable dynamic scoring function.
+
+---
+
+## Critical Cross-Cutting Blockers (Post-Audit)
+
+> The following issues were identified during a full code audit comparing `docs/` against `lib/`. The backend utilities (Phases 0–3) are mathematically sound, but the **UI layer and state machine are fundamentally broken** due to the legacy→Mimicry migration leaving orphaned references everywhere.
+
+### 🔴 The App Does Not Compile
+Every screen file except `phase1_draft.dart` (stub) references properties that no longer exist on `GameState` or `PlayerState`:
+- **`lobby_screen.dart`**: Uses `GamePhase.draft` (removed), calls `createRoom(totalRounds:)` (parameter renamed/removed).
+- **`phase2_craft.dart`**: Uses `currentTricksterId`, `draftedPromptHalves`, `draftedTemplates`, `activeTemplate`, `activePromptFirstHalf`, `secretTarget` — all obliterated.
+- **`phase3_vote.dart`**: Uses `currentTricksterId`, `selectedOption`, `guessedTarget` — all removed from `PlayerState`.
+- **`phase4_reveal.dart`**: Uses `currentTricksterId`, `secretTarget`, `currentRound`, `totalRounds`, `score`, `GamePhase.craft`. Calls `ScoringLogic.calculateScores` with a **completely wrong** API signature.
+- **`game_over_screen.dart`**: Uses `score` (should be `totalScore`), `currentTricksterId`.
+
+### 🔴 Incomplete State Machine in `GameService`
+`GameService` only handles `sabotage → truth` transitions. The following are **entirely missing**:
+- `submitSabotageAnswer(cardId, answer)` — write answer to `CardModel.sabotageAnswers`
+- `submitTruthAnswer(cardId, answer)` — write truth to `CardModel.truthAnswer`
+- `truth → vote` transition after all truths submitted
+- `castVote(cardId, votedForId)` — record vote
+- `vote → reveal` transition after all votes cast
+- `reveal → next card or gameOver` transition to cycle through each player's card
+
+### 🟡 PRD Scoring Features Not Yet Implemented
+- **Saboteur Bonus**: "+1 point if the Saboteur *also* correctly guesses the Truth" is in the PRD but absent from `ScoringLogic`.
+- **Self-Vote Prevention**: "Saboteurs cannot vote for their own answer" — no enforcement exists in UI or logic.
+- **Target Lockout**: "Target is silenced during deliberation" — Reader lockout UI is pseudo-coded but not built.
+
+### 🟡 `drawPrompts` Silently Duplicates
+The implementation uses modulo wrapping (`i % deckCopy.length`) instead of throwing on overflow. This means lobbies larger than 20 players receive duplicate prompts without warning.
+
+### 🟢 What IS Working Correctly
+- `RotationEngine.generateRotations` — mathematically verified derangement.
+- `SemanticFilter` — cosine similarity + Gemini embedding pipeline (fails open safely).
+- `ScoringLogic.calculateScores` — correct formula using `ceil((P-1)/(S+1))`.
+- `GameState` / `PlayerState` / `CardModel` — Firestore serialization roundtrip is solid.
+- `rotationPlan` persistence in Firestore — original host-disconnect bug is resolved.
+

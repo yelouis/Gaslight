@@ -90,5 +90,4 @@ class PromptDecks {
 - **Synchronous Map vs. Async JSON:** We intentionally diverted from the async JSON file loading shown in the pseudo code. Hardcoding the constants in `.dart` files simplifies state management down the line because you do not have to orchestrate `FutureBuilder`s just to select prompts. I suggest sticking with this approach until UI or memory requirements explicitly dictate asset caching.
 
 ### Places where there could be errors:
-- **Deck Depletion (Cards < Players):** The code strictly throws an Exception if the requested `count` exceeds the `deckCopy.length`. Since the initialized decks hold 20 cards, starting a game with 21+ players choosing one of these decks will crash the app upon `drawPrompts()`. The UI/Lobby initialization state logic must enforce maximum player limits based on `PromptDecks.availableDecks` sizing.
 - **Dart Random Generator:** `deckCopy.shuffle(Random())` leverages standard RNG. It is sufficient across platforms but is pseudo-random. If test cases need exact reproduction states, the `Random()` seed would need to be parameterized.
