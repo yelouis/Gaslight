@@ -34,7 +34,6 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
 
   void _calculateAndShowResults(GameService gs) async {
     final state = gs.gameState!;
-    final players = gs.players;
     
     final currentTargetId = state.currentReaderId;
     CardModel? currentCard;
@@ -46,19 +45,15 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
     
     if (currentCard == null) return;
 
-    if (gs.currentPlayer?.isHost == true) {
-      final scoreDeltas = ScoringLogic.calculateScores(
-        state: state,
-        currentCard: currentCard,
-        playerVotes: currentCard.votes,
-      );
+    // Use ScoringLogic just to locally determine what to show in the UI tooltips/highlights
+    final scoreDeltas = ScoringLogic.calculateScores(
+      state: state,
+      currentCard: currentCard,
+      playerVotes: currentCard.votes,
+    );
 
-      // Apply deltas atomically via WriteBatch
-      await gs.applyScoreDeltas(state.roomCode, scoreDeltas);
-      
-      if (mounted) {
-        setState(() => _latestDeltas = scoreDeltas);
-      }
+    if (mounted) {
+      setState(() => _latestDeltas = scoreDeltas);
     }
   }
 
@@ -191,14 +186,17 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                   ),
                 ),
                 if (voters.isNotEmpty)
-                  Row(
-                    children: voters.map((v) => Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: Tooltip(
+                  SizedBox(
+                    width: 120,
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      alignment: WrapAlignment.end,
+                      children: voters.map((v) => Tooltip(
                         message: v.name,
-                        child: PlayerAvatar(player: v, size: 30),
-                      ),
-                    )).toList(),
+                        child: PlayerAvatar(player: v, size: 28),
+                      )).toList(),
+                    ),
                   ),
               ],
             ),

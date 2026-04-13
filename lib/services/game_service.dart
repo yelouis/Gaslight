@@ -6,8 +6,11 @@ import 'dart:math';
 import '../utils/prompt_decks.dart';
 import '../utils/rotation_engine.dart';
 import '../models/card_model.dart';
+import '../utils/scoring_logic.dart';
 class GameService extends ChangeNotifier {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
+  
+  GameService({FirebaseFirestore? db}) : _db = db ?? FirebaseFirestore.instance;
   
   GameState? _gameState;
   List<PlayerState> _players = [];
@@ -216,7 +219,7 @@ class GameService extends ChangeNotifier {
       });
     });
     
-    await setPlayerReady(true);
+    await setPlayerReady(true, playerId: voterId);
   }
 
   // --- PHASE 2: ROTATION ENGINE & GAME LOOP ---
@@ -258,8 +261,9 @@ class GameService extends ChangeNotifier {
     await _resetAllPlayersReady();
   }
   
-  Future<void> setPlayerReady(bool ready) async {
-    if (_gameState == null || _currentPlayerId == null) return;
+  Future<void> setPlayerReady(bool ready, {String? playerId}) async {
+    final targetId = playerId ?? _currentPlayerId;
+    if (_gameState == null || targetId == null) return;
     
     final roomRef = _db.collection('rooms').doc(_gameState!.roomCode);
     
@@ -271,7 +275,7 @@ class GameService extends ChangeNotifier {
       final currentState = GameState.fromMap(data, snapshot.id);
       
       final newReadyMap = Map<String, bool>.from(currentState.readyPlayers);
-      newReadyMap[_currentPlayerId!] = ready;
+      newReadyMap[targetId] = ready;
       
       transaction.update(roomRef, {'readyPlayers': newReadyMap});
     });
@@ -319,6 +323,12 @@ class GameService extends ChangeNotifier {
         ));
     } else if (_gameState!.currentPhase == GamePhase.vote) {
         // Transition to Reveal for the CURRENT reader
+        // 1. Calculate and apply scores for the current resolved card
+        final currentCard = _gameState!.cards.firstWhere((c) => c.targetPlayerId == _gameState!.currentReaderId);
+        final deltas = ScoringLogic.calculateScores(state: _gameState!, currentCard: currentCard, playerVotes: currentCard.votes);
+        await applyScoreDeltas(_gameState!.roomCode, deltas);
+
+        // 2. Advance Phase
         await updateGameState(_gameState!.copyWith(
             currentPhase: GamePhase.reveal,
         ));
@@ -388,15 +398,22 @@ class GameService extends ChangeNotifier {
          final targetId = state.currentCardAssignments[p.id];
          if (targetId != null) {
             await submitCardAnswer(targetId, p.id, 'Simulated Answer from ${p.name}', phase == GamePhase.truth);
+            await setPlayerReady(true, playerId: p.id);
          }
-      } else if (phase == GamePhase.vote) {
+      } else if (phase == GamePhase.vote || phase == GamePhase.reveal) {
          // Bots vote for truth (or someone random)
+         if (phase == GamePhase.reveal) {
+            // In reveal phase, everyone just needs to tap "next" or "ready"
+            await setPlayerReady(true, playerId: p.id);
+            continue;
+         }
+
          final currentTarget = state.currentReaderId;
          if (currentTarget != null && currentTarget != p.id) {
             await castVote(currentTarget, p.id, 'TRUTH');
-         } else {
+         } else if (currentTarget == p.id) {
             // Reader just marks ready
-            await setPlayerReady(true); // Wait, this needs to be specific to the bot
+            await setPlayerReady(true, playerId: p.id); 
          }
       }
     }
