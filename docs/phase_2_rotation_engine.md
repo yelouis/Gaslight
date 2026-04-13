@@ -58,4 +58,30 @@ Future<void> advanceRotationOrPhase() async {
     await resetAllPlayersReady();
   }
 }
+}
 ```
+
+## Verification Plan
+
+### Automated Mathematical Verification
+A script will be temporarily generated and run utilizing `dart` natively to verify:
+1. `generateRotations(P, S)` successfully creates $S$ distinct rotation maps.
+2. In every map, `assignment[playerId] != playerId`. No player receives their own card during the Sabotage phase.
+3. Over the course of all $S$ rotations, no player receives the *same* Target's card twice.
+
+Only upon a clean exit code `0` from the test script will the `lib/` files be committed.
+
+## Implementation Status (Phase 2 Completed)
+
+### What has been accomplished:
+- **Rotation Engine Mechanics**: Built `lib/utils/rotation_engine.dart` containing the mathematically rigorous derangement assignment logic using the formula `target = (Holder + Round) % TotalPlayers`. This ensures no player sabotages their own card and no targets overlap.
+- **GameService Loop Injection**: Wrote `startGame`, `setPlayerReady`, `evaluateReadyState`, and `_advanceRotationOrPhase` inside `GameService`. This wires Firestore directly into the state machine, cleanly managing synchronous ready-check tracking and automatically leaping to the Truth phase once all sabotage rotations finish.
+
+### Verification Done:
+- **Static Verification Completed**: Ran a rigorous sandbox script evaluating the constraints `P=4, S=2`. Confirmed explicitly that `holder != target` during execution, and tracked `seenTargetsByHolder` to guarantee 0 overlaps. The verification constraint successfully passed before committal.
+
+### Things to review:
+- **Ready State Resets**: We are currently executing a `.batch()` update to force every single player's `isReadyForNextRotation` status to `false` when a rotation advances. This is robust but causes $P$ writes to Firestore continuously. If billing hits limits during scale, we could migrate tracking readiness onto the single `GameState` document as a local array instead.
+
+### Places where there could be errors:
+- **Null Safety on Cached Rotations**: `_cachedRotations` is initialized in memory on the Host when `startGame` runs. If the Host disconnects and another client somehow assumes Host to call `_advanceRotationOrPhase()`, their local `_cachedRotations` might be empty, resulting in a crash. For absolute structural safety later down the line, caching the whole map inside `GameState` instead of `GameService` runtime memory could resolve offline handling.

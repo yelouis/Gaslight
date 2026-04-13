@@ -3,7 +3,9 @@ import 'package:flutter/foundation.dart';
 import '../models/game_state.dart';
 import '../models/player_state.dart';
 import 'dart:math';
-
+import '../utils/prompt_decks.dart';
+import '../utils/rotation_engine.dart';
+import '../models/card_model.dart';
 class GameService extends ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   
@@ -130,5 +132,91 @@ class GameService extends ChangeNotifier {
 
   Future<void> updatePlayerState(String roomCode, PlayerState player) async {
     await _db.collection('rooms').doc(roomCode).collection('players').doc(player.id).update(player.toMap());
+  }
+
+  // --- PHASE 2: ROTATION ENGINE & GAME LOOP ---
+
+  bool _rotationsCached = false;
+  Map<int, Map<String, String>> _cachedRotations = {};
+
+  Future<void> startGame(String deckId) async {
+    if (_gameState == null || _players.length < 2) return;
+    
+    // 1. Calculate mathematical rotations across S derivations securely natively.
+    var pIds = _players.map((p) => p.id).toList();
+    _cachedRotations = RotationEngine.generateRotations(pIds, _gameState!.sabotageAnswersCount);
+    _rotationsCached = true;
+
+    // 2. Draw Cards dynamically based on player count
+    var prompts = PromptDecks.drawPrompts(deckId, _players.length);
+    List<CardModel> startingCards = [];
+    for (int i = 0; i < pIds.length; i++) {
+        startingCards.add(CardModel(
+           targetPlayerId: pIds[i],
+           promptId: prompts[i]
+        ));
+    }
+
+    // 3. Initiate first rotation
+    int startIdx = 1;
+    Map<String, String> initAssignments = _cachedRotations[startIdx]!;
+
+    await updateGameState(_gameState!.copyWith(
+        currentPhase: GamePhase.sabotage,
+        currentRotationIndex: startIdx,
+        cards: startingCards,
+        currentCardAssignments: initAssignments,
+    ));
+    await _resetAllPlayersReady();
+  }
+  
+  Future<void> setPlayerReady(bool ready) async {
+    if (_gameState == null || currentPlayer == null) return;
+    await updatePlayerState(_gameState!.roomCode, currentPlayer!.copyWith(isReadyForNextRotation: ready));
+  }
+
+  Future<void> evaluateReadyState() async {
+    if (_gameState == null) return;
+    
+    // Triggered often by listeners. If Host, evaluate.
+    if (currentPlayer?.isHost != true) return;
+    
+    bool allReady = _players.every((p) => p.isReadyForNextRotation);
+    if (allReady) {
+       await _advanceRotationOrPhase();
+    }
+  }
+
+  Future<void> _advanceRotationOrPhase() async {
+    if (_gameState == null) return;
+
+    if (_gameState!.currentRotationIndex < _gameState!.sabotageAnswersCount) {
+        int nextRot = _gameState!.currentRotationIndex + 1;
+        Map<String, String> nextAssignments = _cachedRotations[nextRot]!;
+        await updateGameState(_gameState!.copyWith(
+            currentRotationIndex: nextRot,
+            currentCardAssignments: nextAssignments,
+        ));
+    } else {
+        // Transition to Truth Phase: Every player gets their own card back
+        var pIds = _players.map((p) => p.id).toList();
+        Map<String, String> truthAssignments = { for (var id in pIds) id : id };
+        
+        await updateGameState(_gameState!.copyWith(
+            currentPhase: GamePhase.truth,
+            currentCardAssignments: truthAssignments,
+        ));
+    }
+    await _resetAllPlayersReady();
+  }
+
+  Future<void> _resetAllPlayersReady() async {
+    if (_gameState == null) return;
+    WriteBatch batch = _db.batch();
+    for (var p in _players) {
+        DocumentReference ref = _db.collection('rooms').doc(_gameState!.roomCode).collection('players').doc(p.id);
+        batch.update(ref, {'isReadyForNextRotation': false});
+    }
+    await batch.commit();
   }
 }
