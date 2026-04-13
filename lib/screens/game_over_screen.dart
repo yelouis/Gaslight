@@ -19,14 +19,11 @@ class GameOverScreen extends StatelessWidget {
     }
 
     // Determine Superlatives natively
-    final sortedByScore = List<PlayerState>.from(players)..sort((a, b) => b.score.compareTo(a.score));
+    final sortedByScore = List<PlayerState>.from(players)..sort((a, b) => b.totalScore.compareTo(a.totalScore));
     final mastermind = sortedByScore.first;
     
     // Sort logic for other titles could be more complex, but simplified here based on roles/scores
-    final tricksterCard = players.firstWhere(
-      (p) => p.id == gs.gameState?.currentTricksterId, 
-      orElse: () => mastermind,
-    );
+    final tricksterCard = sortedByScore.length > 2 ? sortedByScore[1] : mastermind;
 
     return AnimatedLobbyBackground(
       child: Scaffold(
@@ -125,7 +122,7 @@ class GameOverScreen extends StatelessWidget {
           const SizedBox(height: 4),
           Text(player.name, style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'serif'), textAlign: TextAlign.center),
           const SizedBox(height: 4),
-          Text('${player.score} Pts', style: TextStyle(color: theme.colorScheme.primary, fontSize: 16, fontWeight: FontWeight.bold)),
+          Text('${player.totalScore} Pts', style: TextStyle(color: theme.colorScheme.primary, fontSize: 16, fontWeight: FontWeight.bold)),
         ],
       ),
     );

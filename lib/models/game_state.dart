@@ -47,6 +47,7 @@ class GameState {
     Map<String, String>? currentCardAssignments,
     String? currentReaderId,
     Map<String, Map<String, String>>? rotationPlan,
+    bool clearReaderId = false,
   }) {
     return GameState(
       roomCode: roomCode ?? this.roomCode,
@@ -56,7 +57,7 @@ class GameState {
       currentRotationIndex: currentRotationIndex ?? this.currentRotationIndex,
       cards: cards ?? this.cards,
       currentCardAssignments: currentCardAssignments ?? this.currentCardAssignments,
-      currentReaderId: currentReaderId ?? this.currentReaderId,
+      currentReaderId: clearReaderId ? null : (currentReaderId ?? this.currentReaderId),
       rotationPlan: rotationPlan ?? this.rotationPlan,
     );
   }
@@ -96,7 +97,7 @@ class GameState {
       sabotageAnswersCount: map['sabotageAnswersCount']?.toInt() ?? 2,
       currentRotationIndex: map['currentRotationIndex']?.toInt() ?? 0,
       cards: (map['cards'] as List<dynamic>? ?? [])
-          .map((c) => CardModel.fromMap(c as Map<String, dynamic>))
+          .map((c) => CardModel.fromMap(Map<String, dynamic>.from(c as Map)))
           .toList(),
       currentCardAssignments: Map<String, String>.from(map['currentCardAssignments'] ?? {}),
       currentReaderId: map['currentReaderId'],
