@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 class SemanticFilter {
   static const double threshold = 0.85;
+  static final Map<String, List<double>> _vectorCache = {};
 
   /// Compares the newly submitted answer against all previously existing answers.
   /// Returns `true` if it is unique (below threshold similarity to all others).
@@ -59,7 +60,11 @@ class SemanticFilter {
       throw Exception('Missing GEMINI_API_KEY');
     }
 
-    final url = 'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=\$apiKey';
+    if (_vectorCache.containsKey(text)) {
+      return _vectorCache[text]!;
+    }
+
+    final url = 'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=$apiKey';
     
     final response = await http.post(
       Uri.parse(url),
@@ -72,13 +77,15 @@ class SemanticFilter {
           'parts': [{'text': text}]
         }
       })
-    );
+    ).timeout(const Duration(seconds: 5));
     
     if (response.statusCode != 200) {
       throw Exception('Gemini API returned \${response.statusCode}: \${response.body}');
     }
 
     final data = jsonDecode(response.body);
-    return List<double>.from(data['embedding']['values']);
+    final vector = List<double>.from(data['embedding']['values']);
+    _vectorCache[text] = vector;
+    return vector;
   }
 }
