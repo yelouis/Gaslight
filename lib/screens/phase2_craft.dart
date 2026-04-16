@@ -8,7 +8,7 @@ import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../utils/prompt_decks.dart';
 import '../utils/semantic_filter.dart';
-import '../widgets/auto_advance_timer.dart';
+
 
 class Phase2CraftScreen extends StatefulWidget {
   const Phase2CraftScreen({super.key});
@@ -108,12 +108,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                 style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)
               ),
               const SizedBox(height: 4),
-              AutoAdvanceTimer(
-                endTime: state.endTime,
-                onTimerExpired: () {
-                  if (me.isHost) gs.evaluateReadyState();
-                },
-              ),
+
               if (state.currentPhase == GamePhase.sabotage)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
@@ -206,7 +201,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    targetCard.promptId, // Contains the full prompt string based on PromptDecks
+                    targetCard.promptText, // Contains the full prompt string based on PromptDecks
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, fontFamily: 'serif'),
                     textAlign: TextAlign.center,
                   ),

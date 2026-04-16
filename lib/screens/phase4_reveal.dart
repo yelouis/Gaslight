@@ -131,7 +131,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                 ),
                 if (currentCard != null) ...[
                   const SizedBox(height: 10),
-                  Text(currentCard.promptId, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, fontFamily: 'serif')),
+                  Text(currentCard.promptText, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, fontFamily: 'serif')),
                   const SizedBox(height: 24),
                   
                   // Options & Votes List

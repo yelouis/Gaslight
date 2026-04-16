@@ -7,7 +7,7 @@ import '../models/card_model.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
-import '../widgets/auto_advance_timer.dart';
+
 
 class Phase3VoteScreen extends StatefulWidget {
   const Phase3VoteScreen({super.key});
@@ -100,12 +100,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             children: [
               Text('PHASE 3: THE VOTE', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)),
               const SizedBox(height: 4),
-              AutoAdvanceTimer(
-                endTime: state.endTime,
-                onTimerExpired: () {
-                  if (me.isHost) gs.evaluateReadyState();
-                },
-              ),
+
             ],
           ),
           centerTitle: true,
@@ -213,7 +208,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
                  ),
                  const SizedBox(height: 10),
                  Text(
-                   currentCard.promptId,
+                   currentCard.promptText,
                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontFamily: 'serif'),
                    textAlign: TextAlign.center,
                  ),

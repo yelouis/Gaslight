@@ -7,6 +7,8 @@ import '../utils/prompt_decks.dart';
 import '../utils/rotation_engine.dart';
 import '../models/card_model.dart';
 import '../utils/scoring_logic.dart';
+import '../utils/semantic_filter.dart';
+
 class GameService extends ChangeNotifier {
   final FirebaseFirestore _db;
   
@@ -309,13 +311,7 @@ class GameService extends ChangeNotifier {
     
     bool allReady = _players.every((p) => _gameState!.readyPlayers[p.id] == true);
     
-    // Check for timer expiration
-    bool timerExpired = false;
-    if (_gameState!.endTime != null) {
-      timerExpired = DateTime.now().millisecondsSinceEpoch >= _gameState!.endTime!;
-    }
-
-    if ((allReady || timerExpired) && _players.isNotEmpty) {
+    if (allReady && _players.isNotEmpty) {
        await _advanceRotationOrPhase();
     }
   }
