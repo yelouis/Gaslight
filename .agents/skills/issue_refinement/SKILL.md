@@ -5,7 +5,11 @@ description: A systematic process for analyzing, verifying, and refining GitHub 
 
 # Issue Refinement & Verification
 
-This skill provides a structured workflow for Antigravity to process GitHub issues. Use this skill when a user asks you to "refine", "groom", or "look into" a specific GitHub issue.
+This skill provides a structured workflow for Antigravity to process GitHub issues. The goal is to enrich existing issues with technical context, root cause analysis, and reproduction steps, and then update the issue on GitHub. 
+
+> [!IMPORTANT]
+> The primary objective of this skill is to **rewrite and update the GitHub issue description**. 
+> DO NOT create a local `implementation_plan.md` or start code changes as part of this skill.
 
 ## Workflow
 
@@ -26,20 +30,17 @@ This skill provides a structured workflow for Antigravity to process GitHub issu
     - Verify the current implementation of the affected components.
     - Identify any technical debt or architectural constraints.
 
-### 4. Refinement Artifact
-Create a detailed "Issue Refinement" artifact for the user. Do not modify the code yet. The artifact should include:
+### 4. Draft Refined Issue Content
+Prepare a detailed draft for the GitHub issue description. This should focus on providing context and detail for whoever eventually implements the fix. The draft should include:
 
 - **Revised Description**: A clear, structured version of the issue (Summary, Steps to Reproduce, Expected vs. Actual).
-- **Technical Root Cause**: (For bugs) A hypothesis or confirmed explanation of why the issue is occurring.
-- **Affected Components**: A list of files and functions that need to be modified.
-- **Proposed Suggestions**:
-    - High-level architectural or logic changes.
-    - Specific codebase patterns or utilities to leverage.
-    - Potential side effects or risks.
-- **Verification Plan**: How the fix should be verified (automated tests, manual steps).
+- **Technical Context/Root Cause**: A technical explanation of where the issue resides in the code and why it occurs.
+- **Affected Components**: A list of specific files, classes, or functions involved.
+- **Implementation Hints**: (Optional) Brief technical suggestions or pointers to relevant utilities/patterns.
 
-### 5. Update GitHub (Optional)
-If the user approves the refinement, offer to update the GitHub issue description with the refined version using `gh issue edit <ISSUE_ID> --body-file <FILE>`.
+### 5. Update GitHub Issue
+Present the refined draft to the user. Once approved, update the GitHub issue description using:
+`gh issue edit <ISSUE_ID> --body-file <PATH_TO_DRAFT_FILE>`
 
 ## Example Structure for Refined Issue Description
 
@@ -56,10 +57,8 @@ If the user approves the refinement, offer to update the GitHub issue descriptio
 2. Click "Join" while the timer is at 1s.
 3. Observe the crash.
 
-## Proposed Suggestions
-- Wrap the callback in a `mounted` check.
-- Use a `ValueNotifier` instead of `setState` for more granular updates.
-
-## Risk Assessment
-- Might conflict with the existing `auto_advance_timer.dart` logic.
+## Technical Details & Hints
+- The logic in `lib/utils/timer_controller.dart` handles the 1s edge case incorrectly.
+- Suggest checking the `isMounted` property before calling the update.
 ```
+
