@@ -6,7 +6,7 @@ This document defines the Firestore collection hierarchies, schemas, role defini
 
 The match progresses through the following sequential states:
 ```dart
-enum GamePhase { lobby, sabotage, truth, vote, reveal, gameOver }
+enum GamePhase { lobby, forgery, truth, vote, reveal, gameOver }
 ```
 
 ---

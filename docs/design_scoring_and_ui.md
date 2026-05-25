@@ -27,12 +27,17 @@ To allow seamless recovery from app restarts, device sleep, or connection losses
   ```dart
   static String getRouteForPhase(GamePhase phase) {
     switch (phase) {
-      case GamePhase.lobby: return '/lobby';
-      case GamePhase.sabotage: return '/craft';
-      case GamePhase.truth: return '/craft';
-      case GamePhase.vote: return '/vote';
-      case GamePhase.reveal: return '/reveal';
-      case GamePhase.gameOver: return '/reveal';
+      case GamePhase.lobby:
+        return '/';
+      case GamePhase.forgery:
+      case GamePhase.truth:
+        return '/craft';
+      case GamePhase.vote:
+        return '/vote';
+      case GamePhase.reveal:
+        return '/reveal';
+      case GamePhase.gameOver:
+        return '/game-over';
     }
   }
   ```
