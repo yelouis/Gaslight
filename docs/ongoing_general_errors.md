@@ -36,4 +36,30 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-None. All previously identified issues have been resolved and verified.
+### Issue 1: Redundant Phase Numbering Mismatches in UI and Routing
+**Status**: ⚠️ Confirmed Unresolved — Verified in `lobby_screen.dart` (lines 123-125), `phase3_vote.dart` (line 109), and `phase4_reveal.dart` (line 95). The system currently mixes filename numbering (e.g. `phase2_craft.dart`), conceptual phase numbering in instructions (e.g. "Phase 1 (Sabotage)"), and screen headers (e.g. "PHASE 3: THE VOTE").
+
+**Option A (recommended)**: **Remove Phase Numbers and Standardize Titles** — Standardize all screen titles and instructions to use descriptive titles only ("SABOTAGE", "TRUTH", "THE VOTE", "THE REVEAL") and completely eliminate numbers.
+  - *Pros*: Avoids confusing numbering mismatches and keeps the UI clean and premium.
+  - *Cons*: Requires minor edits in screens and instructions.
+
+**Option B**: **Align Numbering System-Wide** — Rewrite all screens, routes, and instructions to follow a single consecutive sequence (e.g., Phase 1: Sabotage, Phase 2: Truth, Phase 3: Vote, Phase 4: Reveal).
+  - *Pros*: Preserves step-by-step numbering which some players might find helpful.
+  - *Cons*: Numbers can become redundant as the screen titles are already descriptive.
+
+Your selection: _____
+
+---
+
+### Issue 2: Gemini Star Spark Floating Background Animation
+**Status**: ⚠️ Confirmed Unresolved — Verified in `thinking_background.dart` (lines 28-38): The particle generator is hardcoded to float '✦' and '✧' sparks (resembling the Gemini star logo symbols) up the screen, which doesn't fit the deduction/gaslight theme.
+
+**Option A (recommended)**: **Transition to Mystery Glyphs** — Replace the floating star sparks with question marks, asterisks, or ancient glyphs ('?', '⚹', '¿') matching the Lora serif mystery theme of the game.
+  - *Pros*: Reinforces the theme of deduction, secrets, and gaslighting.
+  - *Cons*: Simple character change; does not add complex dynamic lighting effects.
+
+**Option B**: **Implement Drifting Mist Shader Animation** — Replace the particle painter with overlapping animated radial gradients or low-opacity curves simulating floating "gaslight" vapor/smoke.
+  - *Pros*: Extremely premium visual experience that directly fits the game title "Gaslight".
+  - *Cons*: Higher rendering computational cost and implementation complexity.
+
+Your selection: _____
