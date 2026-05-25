@@ -40,7 +40,7 @@ class SemanticFilter {
       return true;
     } catch (e) {
       // Print error in debug but fail open to allow gameplay to continue
-      print('Semantic API Error (failing open): \$e');
+      print('Semantic API Error (failing open): $e');
       return true;
     }
   }

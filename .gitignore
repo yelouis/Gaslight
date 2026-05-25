@@ -50,3 +50,6 @@ app.*.map.json
 **/google-services.json
 **/GoogleService-Info.plist
 web_config.txt
+
+# Local ChromeDriver binaries
+chromedriver/
