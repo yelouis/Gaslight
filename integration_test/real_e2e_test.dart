@@ -78,6 +78,7 @@ void main() {
           elapsedMs += 500;
         }
         expect(find.text('CONTINUE'), findsOneWidget);
+        await tick(1000); // Allow route transition and animations to fully settle
         await tester.tap(find.text('CONTINUE'));
         await tick(500);
       }
@@ -173,6 +174,7 @@ void main() {
           elapsedMs += 500;
         }
         expect(find.text('THEY ARE VOTING ON YOUR CARD...'), findsOneWidget);
+        await tick(1000); // Allow transition to settle
         await tester.tap(find.text('I\'M READY'));
         await tick(500);
       } else {
@@ -205,6 +207,7 @@ void main() {
             elapsedMs += 500;
           }
           expect(find.text('THEY ARE VOTING ON YOUR CARD...'), findsOneWidget);
+          await tick(1000); // Allow transition to settle
           await tester.tap(find.text('I\'M READY'));
           await tick(500);
         } else {
@@ -234,6 +237,7 @@ void main() {
         elapsedMs += 500;
       }
       expect(find.text('RETURN TO LOBBY'), findsOneWidget);
+      await tick(1000); // Allow transition to settle
       await tester.tap(find.text('RETURN TO LOBBY'));
       
       // Wait for back to home screen

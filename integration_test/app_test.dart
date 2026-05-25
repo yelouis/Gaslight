@@ -26,7 +26,7 @@ void main() {
       print('--- STARTING INTEGRATION E2E TEST ---');
 
       // Resize virtual screen to fit all scrollable inputs
-      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.physicalSize = const Size(1200, 2000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
         tester.view.resetPhysicalSize();
@@ -142,7 +142,7 @@ void main() {
 
       // 8. Verify transition to REVEAL phase
       expect(find.text('THE REVEAL'), findsOneWidget);
-      expect(find.text('RESOLVING CARD'), findsOneWidget);
+      expect(find.text('RESOLVING ALICE\'S CARD'), findsOneWidget);
       expect(find.text('POINTS AWARDED THIS CARD'), findsOneWidget);
       print('Successfully transitioned to THE REVEAL phase.');
 

@@ -116,7 +116,9 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'RESOLVING CARD',
+                  currentTargetId != null
+                      ? 'RESOLVING ${gs.players.firstWhere((p) => p.id == currentTargetId, orElse: () => PlayerState(id: '', name: 'Unknown')).name.toUpperCase()}\'S CARD'
+                      : 'RESOLVING CARD',
                   style: TextStyle(color: theme.colorScheme.secondary, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2),
                 ),
                 if (currentCard != null) ...[

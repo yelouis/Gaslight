@@ -93,6 +93,34 @@ class PromptDecks {
       "The most awkward 'meet the parents' story I possess.",
       "A time I accidentally set up a date with the wrong person."
     ],
+    'rated_r_nsfw': [
+      "The most embarrassing thing that has ever happened to me in the bedroom.",
+      "The weirdest place I've ever hooked up with someone.",
+      "A secret fantasy I have that I would never tell my parents.",
+      "The most awkward text message I've sent to an ex after drinking.",
+      "The biggest lie I told to get someone into bed.",
+      "The most inappropriate thing I've done while on a video call.",
+      "A time I got caught doing something private.",
+      "The worst pick-up line I've used that actually worked.",
+      "A tattoo or piercing I secretly want in a private place.",
+      "The weirdest thing I've used as a romantic prop.",
+      "My most expensive or regrettable late-night purchase when tipsy.",
+      "A secret crush I have on a friend's partner."
+    ],
+    'cah_dark_humor': [
+      "The absolute worst thing to say at a funeral.",
+      "A highly inappropriate theme for a children's birthday party.",
+      "The real reason the dinosaurs went extinct.",
+      "A terrible advertising slogan for a brand of baby food.",
+      "The most offensive gift you could bring to a housewarming party.",
+      "What is secretly hiding under the host's floorboards.",
+      "The worst candidate for a modern saint.",
+      "A dark secret that would immediately cancel a politician.",
+      "The real reason I am going to hell.",
+      "A terrible topic to bring up on a first date.",
+      "What my future biographer will write to summarize my life choices.",
+      "The weirdest item to put in a time capsule for future generations."
+    ],
   };
 
   /// Returns a list of the available deck IDs.

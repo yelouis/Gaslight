@@ -311,10 +311,14 @@ class GameService extends ChangeNotifier {
     // 2. Adjust ready players map
     final newReadyPlayers = Map<String, bool>.from(state.readyPlayers)..remove(disconnectedPlayerId);
     
+    // 3. Prune resolutionOrder list if it contains the player
+    final newResolutionOrder = List<String>.from(state.resolutionOrder)..remove(disconnectedPlayerId);
+    
     GameState nextState = state.copyWith(
       cards: updatedCards,
       totalPlayers: _players.where((p) => p.role != PlayerRole.spectator).length,
       readyPlayers: newReadyPlayers,
+      resolutionOrder: newResolutionOrder,
     );
     
     // 3. Phase-specific adjustments
@@ -372,12 +376,13 @@ class GameService extends ChangeNotifier {
       nextState = nextState.copyWith(currentCardAssignments: assignments);
     } else if (phase == GamePhase.vote || phase == GamePhase.reveal) {
       if (state.currentReaderId == disconnectedPlayerId) {
-        final activePlayerIds = _players
-            .where((p) => p.id != disconnectedPlayerId && p.role != PlayerRole.spectator)
-            .map((p) => p.id)
-            .toList();
-        if (activePlayerIds.isNotEmpty) {
-          nextState = nextState.copyWith(currentReaderId: activePlayerIds.first);
+        if (newResolutionOrder.isNotEmpty) {
+          final originalIdx = state.resolutionOrder.indexOf(disconnectedPlayerId);
+          if (originalIdx != -1 && originalIdx < newResolutionOrder.length) {
+            nextState = nextState.copyWith(currentReaderId: newResolutionOrder[originalIdx]);
+          } else {
+            nextState = nextState.copyWith(currentReaderId: newResolutionOrder.first);
+          }
         } else {
           nextState = nextState.copyWith(currentPhase: GamePhase.gameOver);
         }
@@ -598,11 +603,13 @@ class GameService extends ChangeNotifier {
             );
         }
     } else if (_gameState!.currentPhase == GamePhase.truth) {
-        // Transition to Vote Phase: First player is the reader
+        // Transition to Vote Phase: Randomize player order for card resolution
         var pIds = _players.where((p) => p.role != PlayerRole.spectator).map((p) => p.id).toList();
+        pIds.shuffle(Random()); // Randomize resolution order!
         nextState = nextState.copyWith(
             currentPhase: GamePhase.vote,
             currentReaderId: pIds.isNotEmpty ? pIds.first : null,
+            resolutionOrder: pIds,
             endTime: _gameState!.isTimerDisabled ? null : DateTime.now().add(Duration(seconds: voteDuration)).millisecondsSinceEpoch,
             clearEndTime: _gameState!.isTimerDisabled,
         );
@@ -630,14 +637,14 @@ class GameService extends ChangeNotifier {
     if (_advancedStateKeys.contains(key)) return;
     _advancedStateKeys.add(key);
 
-    final pIds = _players.where((p) => p.role != PlayerRole.spectator).map((p) => p.id).toList();
-    final currentIdx = pIds.indexOf(_gameState!.currentReaderId ?? '');
+    final order = _gameState!.resolutionOrder;
+    final currentIdx = order.indexOf(_gameState!.currentReaderId ?? '');
     
-    if (currentIdx != -1 && currentIdx < pIds.length - 1) {
+    if (currentIdx != -1 && currentIdx < order.length - 1) {
         // Move to next player's card
         await updateGameState(_gameState!.copyWith(
             currentPhase: GamePhase.vote,
-            currentReaderId: pIds[currentIdx + 1],
+            currentReaderId: order[currentIdx + 1],
             readyPlayers: {},
             endTime: _gameState!.isTimerDisabled ? null : DateTime.now().add(const Duration(seconds: 45)).millisecondsSinceEpoch,
             clearEndTime: _gameState!.isTimerDisabled,

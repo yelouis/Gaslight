@@ -11,9 +11,15 @@ To keep the game client lightweight and minimize Firestore reads, all prompt dec
 
 ### Maturity Ratings & Themes
 The system supports multiple distinct thematic decks grouped by player maturity/vibe:
-1. **PG-13 / Relatable**: e.g., `"the_daily_grind"`, `"deep_fears_and_phobias"`, `"unhinged_quirks"`, `"romantic_disasters"`.
-2. **Rated R / NSFW**: e.g., bedroom blunders, gross-out, Intoxicated confessions.
-3. **CAH / Dark Humor**: e.g., offensive hot takes, vile fantasies.
+1. **PG-13 / Relatable**: 
+   - `"the_daily_grind"`: Professional and workplace blunders.
+   - `"deep_fears_and_phobias"`: Irrational anxieties and worries.
+   - `"unhinged_quirks"`: Weird solo routines and food combinations.
+   - `"romantic_disasters"`: Failed dates, cringe texts, and awkward encounters.
+2. **Rated R / NSFW**: 
+   - `"rated_r_nsfw"`: Bedroom mishaps, wild nights out, and private confessions.
+3. **CAH / Dark Humor**: 
+   - `"cah_dark_humor"`: Offensive hot takes, cards against humanity style prompts, and dark scenarios.
 
 Each deck contains highly subjective prompts that allow believable lies to be written on behalf of other players, avoiding objective questions (e.g., "What is my height?") and favoring experiential claims.
 

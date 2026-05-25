@@ -25,7 +25,7 @@ void main() {
       print('--- STARTING UI E2E WIDGET TEST ---');
 
       // Resize virtual screen to fit all scrollable inputs
-      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.physicalSize = const Size(1200, 2000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
         tester.view.resetPhysicalSize();
@@ -123,55 +123,43 @@ void main() {
       await gameService.evaluateReadyState();
       await tick(600);
 
-      // 7. Verify transition to VOTE phase
-      expect(find.text('THE VOTE'), findsOneWidget);
-      print('Successfully transitioned to THE VOTE phase.');
+      // 7. Verify transition to VOTE phase and resolve all 10 cards
+      for (int i = 0; i < 10; i++) {
+        if (i > 0) {
+          await tester.tap(find.text('CONTINUE'));
+          await tick(600);
+        }
 
-      // Verify target lockout screen
-      expect(find.text('THEY ARE VOTING ON YOUR CARD...'), findsOneWidget);
-      print('Lock-out screen verified for the active card target.');
-
-      // Lock ready and simulate votes
-      await tester.tap(find.text('I\'M READY'));
-      await tick(400);
-      await gameService.debugSimulateBotResponses();
-      await tick(200);
-      await gameService.evaluateReadyState();
-      await tick(600);
-
-      // 8. Verify transition to REVEAL phase
-      expect(find.text('THE REVEAL'), findsOneWidget);
-      expect(find.text('RESOLVING CARD'), findsOneWidget);
-      expect(find.text('POINTS AWARDED THIS CARD'), findsOneWidget);
-      print('Successfully transitioned to THE REVEAL phase.');
-
-      // Loop to resolve all 10 cards
-      for (int i = 0; i < 9; i++) {
-        await tester.tap(find.text('CONTINUE'));
-        await tick(600);
-
-        // Verify transition back to VOTE
         expect(find.text('THE VOTE'), findsOneWidget);
+        final isHostTarget = gameService.currentPlayerId == gameService.gameState!.currentReaderId;
 
-        // Cast vote for the host (Alice) since debugSimulateBotResponses only handles bots
-        final currentTargetId = gameService.gameState!.currentReaderId!;
-        await gameService.castVote(currentTargetId, gameService.currentPlayerId!, 'TRUTH');
-        await tick(100);
+        if (isHostTarget) {
+          expect(find.text('THEY ARE VOTING ON YOUR CARD...'), findsOneWidget);
+          await tester.tap(find.text('I\'M READY'));
+          await tick(400);
+        } else {
+          final currentTargetId = gameService.gameState!.currentReaderId!;
+          await gameService.castVote(currentTargetId, gameService.currentPlayerId!, 'TRUTH');
+          await tick(100);
+        }
 
         await gameService.debugSimulateBotResponses();
         await tick(200);
         await gameService.evaluateReadyState();
         await tick(600);
 
-        // Verify transition to REVEAL
+        // Verify transition to REVEAL phase
         expect(find.text('THE REVEAL'), findsOneWidget);
+        final currentTargetName = gameService.players.firstWhere((p) => p.id == gameService.gameState!.currentReaderId).name.toUpperCase();
+        expect(find.text("RESOLVING ${currentTargetName}'S CARD"), findsOneWidget);
+        expect(find.text('POINTS AWARDED THIS CARD'), findsOneWidget);
       }
 
       // Final continue to Game Over
       await tester.tap(find.text('CONTINUE'));
       await tick(600);
 
-      // 9. Verify transition to GAME OVER phase
+      // 8. Verify transition to GAME OVER phase
       expect(find.text('GAME OVER'), findsOneWidget);
       expect(find.text('THE CREW\'S HONORS'), findsOneWidget);
       print('Successfully transitioned to GAME OVER phase.');

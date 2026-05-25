@@ -32,6 +32,9 @@ class GameState {
   // Auto-advance timestamp (millisecondsSinceEpoch)
   final int? endTime;
 
+  // Randomized card resolution order
+  final List<String> resolutionOrder;
+
   GameState({
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
@@ -45,6 +48,7 @@ class GameState {
     this.rotationPlan = const {},
     this.readyPlayers = const {},
     this.endTime,
+    this.resolutionOrder = const [],
   });
 
   GameState copyWith({
@@ -60,6 +64,7 @@ class GameState {
     Map<String, Map<String, String>>? rotationPlan,
     Map<String, bool>? readyPlayers,
     int? endTime,
+    List<String>? resolutionOrder,
     bool clearReaderId = false,
     bool clearEndTime = false,
   }) {
@@ -76,6 +81,7 @@ class GameState {
       rotationPlan: rotationPlan ?? this.rotationPlan,
       readyPlayers: readyPlayers ?? this.readyPlayers,
       endTime: clearEndTime ? null : (endTime ?? this.endTime),
+      resolutionOrder: resolutionOrder ?? this.resolutionOrder,
     );
   }
 
@@ -93,6 +99,7 @@ class GameState {
       'rotationPlan': rotationPlan,
       'readyPlayers': readyPlayers,
       'endTime': endTime,
+      'resolutionOrder': resolutionOrder,
     };
   }
 
@@ -125,6 +132,7 @@ class GameState {
       rotationPlan: rotMap,
       readyPlayers: Map<String, bool>.from(map['readyPlayers'] ?? {}),
       endTime: map['endTime']?.toInt(),
+      resolutionOrder: List<String>.from(map['resolutionOrder'] ?? []),
     );
   }
 

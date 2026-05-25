@@ -65,3 +65,4 @@ The root room document storing global match settings and rotation assignments.
 * `currentReaderId` (String?): ID of the player whose card is being resolved.
 * `readyPlayers` (Map<String, bool>): Readiness map tracking which active players have submitted their input.
 * `endTime` (int?): Epoch timestamp denoting when the phase will auto-advance.
+* `resolutionOrder` (List<String>): Shuffled list of active player IDs determining the sequence in which cards are resolved during the `vote` and `reveal` phases.
