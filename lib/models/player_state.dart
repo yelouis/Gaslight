@@ -10,6 +10,7 @@ class PlayerState {
   // Visuals
   final int colorValue; // Hex color for the player
   final int avatarIndex; // Reference to a local simple avatar
+  final int? lastSeen; // Epoch timestamp for heartbeat
 
   PlayerState({
     required this.id,
@@ -19,6 +20,7 @@ class PlayerState {
     this.isHost = false,
     this.colorValue = 0xFF58A6FF,
     this.avatarIndex = 0,
+    this.lastSeen,
   });
 
   PlayerState copyWith({
@@ -29,6 +31,7 @@ class PlayerState {
     bool? isHost,
     int? colorValue,
     int? avatarIndex,
+    int? lastSeen,
   }) {
     return PlayerState(
       id: id ?? this.id,
@@ -38,6 +41,7 @@ class PlayerState {
       isHost: isHost ?? this.isHost,
       colorValue: colorValue ?? this.colorValue,
       avatarIndex: avatarIndex ?? this.avatarIndex,
+      lastSeen: lastSeen ?? this.lastSeen,
     );
   }
 
@@ -50,6 +54,7 @@ class PlayerState {
       'isHost': isHost,
       'colorValue': colorValue,
       'avatarIndex': avatarIndex,
+      'lastSeen': lastSeen,
     };
   }
 
@@ -65,6 +70,7 @@ class PlayerState {
       isHost: map['isHost'] ?? false,
       colorValue: map['colorValue']?.toInt() ?? 0xFF58A6FF,
       avatarIndex: map['avatarIndex']?.toInt() ?? 0,
+      lastSeen: map['lastSeen']?.toInt(),
     );
   }
 }

@@ -7,6 +7,7 @@ import '../models/card_model.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
+import '../widgets/auto_advance_timer.dart';
 
 
 class Phase3VoteScreen extends StatefulWidget {
@@ -26,9 +27,10 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
   bool _submitted = false;
   bool _isNavigating = false;
   List<_AnonymizedAnswer>? _shuffledAnswers;
+  String? _shuffledCardId;
 
   void _generateShuffledAnswers(CardModel card) {
-    if (_shuffledAnswers != null) return;
+    if (_shuffledAnswers != null && _shuffledCardId == card.targetPlayerId) return;
     
     List<_AnonymizedAnswer> answers = [];
     answers.add(_AnonymizedAnswer('TRUTH', card.truthAnswer));
@@ -39,6 +41,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
     answers.shuffle(Random());
     setState(() {
       _shuffledAnswers = answers;
+      _shuffledCardId = card.targetPlayerId;
     });
   }
 
@@ -71,12 +74,17 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (state.currentPhase == GamePhase.reveal && !_isNavigating) {
-      _isNavigating = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushReplacementNamed(context, '/reveal');
-      });
+    final correctRoute = GameState.getRouteForPhase(state.currentPhase);
+    if (correctRoute != '/vote') {
+      if (!_isNavigating) {
+        _isNavigating = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Navigator.pushReplacementNamed(context, correctRoute);
+        });
+      }
       return const SizedBox.shrink();
+    } else {
+      _isNavigating = false;
     }
 
     // Determine whose card is being resolved. 
@@ -100,13 +108,27 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             children: [
               Text('PHASE 3: THE VOTE', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)),
               const SizedBox(height: 4),
-
             ],
           ),
           centerTitle: true,
           backgroundColor: Colors.transparent,
           elevation: 0,
           automaticallyImplyLeading: false,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Center(
+                child: AutoAdvanceTimer(
+                  endTime: state.endTime,
+                  onTimerExpired: () {
+                    if (me.isHost) {
+                      gs.forceAdvance();
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
         body: Center(
           child: Padding(

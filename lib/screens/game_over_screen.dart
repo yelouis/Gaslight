@@ -72,7 +72,12 @@ class GameOverScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               TextButton(
-                onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
+                onPressed: () async {
+                  await gs.leaveRoom();
+                  if (context.mounted) {
+                    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+                  }
+                },
                 child: Text('RETURN TO LOBBY', style: TextStyle(color: theme.colorScheme.secondary)),
               )
             ],

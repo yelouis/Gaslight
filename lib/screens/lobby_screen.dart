@@ -25,6 +25,20 @@ class _LobbyScreenState extends State<LobbyScreen> {
   bool _isNavigating = false;
   String _selectedDeck = PromptDecks.availableDecks.first;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final gs = context.read<GameService>();
+      final rejoining = await gs.tryRejoinSession();
+      if (rejoining && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Rejoined active game session!')),
+        );
+      }
+    });
+  }
+
   void _createRoom() async {
     final name = _nameController.text.trim();
     setState(() => _nameError = name.isEmpty);
@@ -221,12 +235,17 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     // If we're already in a room
     if (gs.gameState != null && gs.currentPlayer != null) {
-      if (gs.gameState!.currentPhase != GamePhase.lobby && !_isNavigating) {
-        _isNavigating = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          Navigator.pushReplacementNamed(context, '/craft');
-        });
+      if (gs.gameState!.currentPhase != GamePhase.lobby) {
+        if (!_isNavigating) {
+          _isNavigating = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final targetRoute = GameState.getRouteForPhase(gs.gameState!.currentPhase);
+            Navigator.pushReplacementNamed(context, targetRoute);
+          });
+        }
         return const SizedBox.shrink();
+      } else {
+        _isNavigating = false;
       }
       return AnimatedLobbyBackground(child: _buildWaitingRoom(theme, gs));
     }

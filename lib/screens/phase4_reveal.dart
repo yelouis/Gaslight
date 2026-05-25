@@ -67,28 +67,17 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     
-    if (state.currentPhase == GamePhase.gameOver && !_isNavigating) {
-      _isNavigating = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushReplacementNamed(context, '/game-over');
-      });
+    final correctRoute = GameState.getRouteForPhase(state.currentPhase);
+    if (correctRoute != '/reveal') {
+      if (!_isNavigating) {
+        _isNavigating = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Navigator.pushReplacementNamed(context, correctRoute);
+        });
+      }
       return const SizedBox.shrink();
-    }
-    
-    if (state.currentPhase == GamePhase.sabotage && !_isNavigating) {
-      _isNavigating = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushReplacementNamed(context, '/craft'); // Re-uses Phase 2 UI
-      });
-      return const SizedBox.shrink();
-    }
-
-    if (state.currentPhase == GamePhase.vote && !_isNavigating) {
-      _isNavigating = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushReplacementNamed(context, '/vote');
-      });
-      return const SizedBox.shrink();
+    } else {
+      _isNavigating = false;
     }
 
     final currentTargetId = state.currentReaderId;
@@ -139,6 +128,32 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                     _buildOptionRow('TRUTH', currentCard.truthAnswer, currentCard, gs, theme, isTruth: true),
                     ...currentCard.sabotageAnswers.entries.map((e) => 
                       _buildOptionRow(e.key, e.value, currentCard!, gs, theme)
+                    ),
+                  ],
+
+                  // Render Points Awarded (locally calculated for presentation only)
+                  // WARNING: Do NOT invoke gs.applyScoreDeltas() here. Scores are already
+                  // applied atomically during the transition in GameService._advanceRotationOrPhase().
+                  if (_latestDeltas.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    Text(
+                      'POINTS AWARDED THIS CARD', 
+                      style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1.5),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: _latestDeltas.entries.where((e) => e.value > 0).map((e) {
+                        final player = gs.players.firstWhere((p) => p.id == e.key, orElse: () => PlayerState(id: e.key, name: 'Unknown'));
+                        return Chip(
+                          avatar: PlayerAvatar(player: player, size: 20, showName: false),
+                          label: Text('${player.name}: +${e.value}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+                          backgroundColor: theme.colorScheme.secondary.withOpacity(0.2),
+                          side: BorderSide(color: theme.colorScheme.secondary),
+                        );
+                      }).toList(),
                     ),
                   ],
                 ],

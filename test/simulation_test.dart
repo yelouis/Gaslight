@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../lib/services/game_service.dart';
 import '../lib/models/game_state.dart';
 import '../lib/models/player_state.dart';
@@ -209,6 +210,8 @@ class FakeTransaction extends Fake implements Transaction {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('10-Player E2E Simulation', () {
     late FakeFirestore mockDb;
     late GameService gameService;
@@ -216,6 +219,7 @@ void main() {
     final String hostName = 'Host';
 
     setUp(() {
+      SharedPreferences.setMockInitialValues({});
       mockDb = FakeFirestore();
       gameService = GameService(db: mockDb);
     });

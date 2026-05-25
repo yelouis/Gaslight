@@ -6,6 +6,7 @@ import '../models/card_model.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
+import '../widgets/auto_advance_timer.dart';
 import '../utils/prompt_decks.dart';
 import '../utils/semantic_filter.dart';
 
@@ -89,12 +90,17 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (state.currentPhase == GamePhase.vote && !_isNavigating) {
-      _isNavigating = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushReplacementNamed(context, '/vote');
-      });
+    final correctRoute = GameState.getRouteForPhase(state.currentPhase);
+    if (correctRoute != '/craft') {
+      if (!_isNavigating) {
+        _isNavigating = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Navigator.pushReplacementNamed(context, correctRoute);
+        });
+      }
       return const SizedBox.shrink();
+    } else {
+      _isNavigating = false;
     }
 
     return AnimatedThinkingBackground(
@@ -123,6 +129,21 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           automaticallyImplyLeading: false,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Center(
+                child: AutoAdvanceTimer(
+                  endTime: state.endTime,
+                  onTimerExpired: () {
+                    if (me.isHost) {
+                      gs.forceAdvance();
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
         body: Center(
           child: Padding(

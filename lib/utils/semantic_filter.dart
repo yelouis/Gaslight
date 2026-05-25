@@ -69,12 +69,13 @@ class SemanticFilter {
       return _vectorCache[text]!;
     }
 
-    final url = 'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=$apiKey';
+    final url = 'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent';
     
     final response = await http.post(
       Uri.parse(url),
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
       },
       body: jsonEncode({
         'model': 'models/text-embedding-004', 

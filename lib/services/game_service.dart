@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../models/game_state.dart';
 import '../models/player_state.dart';
 import 'dart:math';
+import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/prompt_decks.dart';
 import '../utils/rotation_engine.dart';
 import '../models/card_model.dart';
@@ -18,6 +20,14 @@ class GameService extends ChangeNotifier {
   List<PlayerState> _players = [];
   String? _currentPlayerId;
 
+  // Cleanup and Heartbeat
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _roomSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _playersSubscription;
+  Timer? _heartbeatTimer;
+
+  // Duplicate-advance guards
+  final Set<String> _advancedStateKeys = {};
+
   GameState? get gameState => _gameState;
   List<PlayerState> get players => _players;
   String? get currentPlayerId => _currentPlayerId;
@@ -28,6 +38,12 @@ class GameService extends ChangeNotifier {
     } catch (_) {
       return null;
     }
+  }
+
+  String _currentStateKey() {
+    final state = _gameState;
+    if (state == null) return '';
+    return '${state.roomCode}_${state.currentPhase.name}_${state.currentRotationIndex}_${state.currentReaderId}';
   }
 
   // Gem colors for dark fantasy poker chips
@@ -83,11 +99,16 @@ class GameService extends ChangeNotifier {
       isHost: true,
       colorValue: _getRandomColor(),
       avatarIndex: avatarIndex ?? _getRandomAvatar(),
+      lastSeen: DateTime.now().millisecondsSinceEpoch,
     );
 
     await _db.collection('rooms').doc(roomCode).set(initialState.toMap());
     await _db.collection('rooms').doc(roomCode).collection('players').doc(playerId).set(initialPlayer.toMap());
     
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('room_code', roomCode);
+    await prefs.setString('player_id', playerId);
+
     listenToRoom(roomCode);
   }
 
@@ -111,16 +132,101 @@ class GameService extends ChangeNotifier {
       name: playerName,
       colorValue: selectedColor,
       avatarIndex: avatarIndex ?? _getRandomAvatar(),
+      lastSeen: DateTime.now().millisecondsSinceEpoch,
     );
 
     await _db.collection('rooms').doc(roomCode).collection('players').doc(playerId).set(newPlayer.toMap());
     
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('room_code', roomCode);
+    await prefs.setString('player_id', playerId);
+
     listenToRoom(roomCode);
   }
 
+  Future<bool> tryRejoinSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedRoom = prefs.getString('room_code');
+      final savedPlayerId = prefs.getString('player_id');
+      if (savedRoom != null && savedPlayerId != null) {
+        final roomDoc = await _db.collection('rooms').doc(savedRoom).get();
+        final playerDoc = await _db.collection('rooms').doc(savedRoom).collection('players').doc(savedPlayerId).get();
+        if (roomDoc.exists && playerDoc.exists) {
+          _currentPlayerId = savedPlayerId;
+          _gameState = GameState.fromMap(roomDoc.data()!, roomDoc.id);
+          listenToRoom(savedRoom);
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error rejoining session: $e');
+    }
+    return false;
+  }
+
+  void _startHeartbeat(String roomCode, String playerId) {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (_gameState == null) {
+        timer.cancel();
+        return;
+      }
+      try {
+        await _db.collection('rooms').doc(roomCode).collection('players').doc(playerId).update({
+          'lastSeen': DateTime.now().millisecondsSinceEpoch,
+        });
+      } catch (_) {}
+    });
+  }
+
+  Future<void> leaveRoom() async {
+    final roomCode = _gameState?.roomCode;
+    final playerId = _currentPlayerId;
+
+    _roomSubscription?.cancel();
+    _playersSubscription?.cancel();
+    _heartbeatTimer?.cancel();
+    _roomSubscription = null;
+    _playersSubscription = null;
+    _heartbeatTimer = null;
+
+    if (roomCode != null && playerId != null) {
+      try {
+        await _db.collection('rooms').doc(roomCode).collection('players').doc(playerId).delete();
+
+        final playersSnap = await _db.collection('rooms').doc(roomCode).collection('players').get();
+        if (playersSnap.docs.isEmpty) {
+          await _db.collection('rooms').doc(roomCode).delete();
+        }
+      } catch (e) {
+        debugPrint('Error cleaning up Firestore on leave: $e');
+      }
+    }
+
+    _gameState = null;
+    _players = [];
+    _currentPlayerId = null;
+    _advancedStateKeys.clear();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('room_code');
+    await prefs.remove('player_id');
+
+    notifyListeners();
+  }
+
   void listenToRoom(String roomCode) {
+    _roomSubscription?.cancel();
+    _playersSubscription?.cancel();
+    _heartbeatTimer?.cancel();
+
+    if (_currentPlayerId != null) {
+      _startHeartbeat(roomCode, _currentPlayerId!);
+    }
+
     // Listen to Game State
-    _db.collection('rooms').doc(roomCode).snapshots().listen((snapshot) {
+    _roomSubscription = _db.collection('rooms').doc(roomCode).snapshots().listen((snapshot) {
       if (snapshot.exists) {
         _gameState = GameState.fromMap(snapshot.data()!, snapshot.id);
         notifyListeners();
@@ -128,9 +234,23 @@ class GameService extends ChangeNotifier {
     });
 
     // Listen to Players
-    _db.collection('rooms').doc(roomCode).collection('players').snapshots().listen((snapshot) {
+    _playersSubscription = _db.collection('rooms').doc(roomCode).collection('players').snapshots().listen((snapshot) {
       _players = snapshot.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
       
+      final now = DateTime.now().millisecondsSinceEpoch;
+      
+      // Clean up inactive/dead players (15 seconds threshold)
+      final deadPlayers = _players.where((p) {
+        if (p.id == _currentPlayerId) return false;
+        final lastSeen = p.lastSeen;
+        if (lastSeen == null) return false;
+        return (now - lastSeen) > 15000;
+      }).toList();
+
+      for (var dp in deadPlayers) {
+        _db.collection('rooms').doc(roomCode).collection('players').doc(dp.id).delete().catchError((_) {});
+      }
+
       // HOST TRANSFER LOGIC: If no host exists, promote the first player
       if (_players.isNotEmpty && !_players.any((p) => p.isHost)) {
         final newHost = _players.first;
@@ -309,11 +429,28 @@ class GameService extends ChangeNotifier {
     // Triggered often by listeners. If Host, evaluate.
     if (currentPlayer?.isHost != true) return;
     
+    final phase = _gameState!.currentPhase;
+    if (phase != GamePhase.sabotage && phase != GamePhase.truth && phase != GamePhase.vote) {
+      return;
+    }
+
+    final key = _currentStateKey();
+    if (_advancedStateKeys.contains(key)) return;
+    
     bool allReady = _players.every((p) => _gameState!.readyPlayers[p.id] == true);
     
     if (allReady && _players.isNotEmpty) {
+       _advancedStateKeys.add(key);
        await _advanceRotationOrPhase();
     }
+  }
+
+  Future<void> forceAdvance() async {
+    if (_gameState == null || currentPlayer?.isHost != true) return;
+    final key = _currentStateKey();
+    if (_advancedStateKeys.contains(key)) return;
+    _advancedStateKeys.add(key);
+    await _advanceRotationOrPhase();
   }
 
   Future<void> _advanceRotationOrPhase() async {
@@ -372,6 +509,10 @@ class GameService extends ChangeNotifier {
   Future<void> advanceToNextResolution() async {
     if (_gameState == null || currentPlayer?.isHost != true) return;
     
+    final key = _currentStateKey();
+    if (_advancedStateKeys.contains(key)) return;
+    _advancedStateKeys.add(key);
+
     final pIds = _players.map((p) => p.id).toList();
     final currentIdx = pIds.indexOf(_gameState!.currentReaderId ?? '');
     
@@ -456,5 +597,13 @@ class GameService extends ChangeNotifier {
     if (_gameState == null) return;
     // Single write instead of P writes!
     await updateGameState(_gameState!.copyWith(readyPlayers: {}));
+  }
+
+  @override
+  void dispose() {
+    _roomSubscription?.cancel();
+    _playersSubscription?.cancel();
+    _heartbeatTimer?.cancel();
+    super.dispose();
   }
 }

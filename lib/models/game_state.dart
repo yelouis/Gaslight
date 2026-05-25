@@ -121,4 +121,20 @@ class GameState {
       endTime: map['endTime']?.toInt(),
     );
   }
+
+  static String getRouteForPhase(GamePhase phase) {
+    switch (phase) {
+      case GamePhase.lobby:
+        return '/';
+      case GamePhase.sabotage:
+      case GamePhase.truth:
+        return '/craft';
+      case GamePhase.vote:
+        return '/vote';
+      case GamePhase.reveal:
+        return '/reveal';
+      case GamePhase.gameOver:
+        return '/game-over';
+    }
+  }
 }
