@@ -35,8 +35,8 @@ This skill systematically reviews the "Resolved Issues & Implementation Refineme
 
 ### 4. Design & UI Integration
 - If the issue modifies core system behavior or screen flows:
-  - Update the relevant architectural or design documentation (such as `README.md` or code comments) to reflect the new system behavior.
-  - Clearly state *why* the design was updated (e.g. why we bridge card assignments on disconnect, or why we use Firestore auth rules instead of raw writes) so that subsequent modifications do not introduce regressions.
+  - Locate the corresponding system design layer document under `docs/` (`design_prompt_system.md`, `design_game_state_and_models.md`, `design_rotation_engine.md`, `design_semantic_integrity.md`, `design_scoring_and_ui.md`, `design_database_and_security.md`) and update it to reflect the new system behavior.
+  - Clearly state *why* the design was updated (e.g. why we bridge card assignments on disconnect in `design_rotation_engine.md`, or why we use Firestore auth rules instead of raw writes in `design_database_and_security.md`) so that subsequent modifications do not introduce regressions.
 - If it is a minor fix (e.g., formatting issues, simple SnackBar display adjustments) and does not require system-level design updates, it is slated for cleanup.
 
 ### 5. Cleanup
@@ -44,5 +44,5 @@ This skill systematically reviews the "Resolved Issues & Implementation Refineme
 
 ## 🏁 Success Criteria
 - All resolved issues are verified in the codebase.
-- System design changes are documented in the repository's main files with explanations preventing regressions.
+- System design changes are documented in the corresponding system design layer documents with explanations preventing regressions.
 - The `docs/ongoing_general_errors.md` file remains clean, focused, and free of redundant historical entries.
