@@ -26,13 +26,14 @@ class _AnimatedThinkingBackgroundState extends State<AnimatedThinkingBackground>
   }
 
   _ThoughtParticle _generateParticle({bool initial = false}) {
+    const symbols = ['?', '⚹', '¿'];
     return _ThoughtParticle(
       x: _random.nextDouble(),
       y: initial ? _random.nextDouble() : 1.1, // Start below screen if not initial
       speed: 0.1 + _random.nextDouble() * 0.2, // Speed of floating up
       size: 24 + _random.nextDouble() * 40,
       opacity: 0.1 + _random.nextDouble() * 0.4, // More visible glowing embers
-      symbol: _random.nextBool() ? '✦' : '✧', // Magical sparks
+      symbol: symbols[_random.nextInt(symbols.length)], // Mystery glyphs
       wobbleSpeed: 2.0 + _random.nextDouble() * 5.0,
       wobbleAmount: 10.0 + _random.nextDouble() * 20.0,
     );

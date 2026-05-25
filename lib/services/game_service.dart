@@ -84,7 +84,7 @@ class GameService extends ChangeNotifier {
     return Random().nextInt(6); // 6 different icon types
   }
 
-  Future<void> createRoom(String playerName, String playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex}) async {
+  Future<void> createRoom(String playerName, String playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex, bool isTimerDisabled = false}) async {
     final roomCode = _generateRoomCode();
     _currentPlayerId = playerId;
 
@@ -92,6 +92,7 @@ class GameService extends ChangeNotifier {
       roomCode: roomCode, 
       totalPlayers: totalPlayers,
       sabotageAnswersCount: sabotageAnswersCount,
+      isTimerDisabled: isTimerDisabled,
     );
     final initialPlayer = PlayerState(
       id: playerId,
@@ -171,7 +172,7 @@ class GameService extends ChangeNotifier {
 
   void _startHeartbeat(String roomCode, String playerId) {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
       if (_gameState == null) {
         timer.cancel();
         return;
@@ -243,12 +244,12 @@ class GameService extends ChangeNotifier {
       
       final now = DateTime.now().millisecondsSinceEpoch;
       
-      // Clean up inactive/dead players (15 seconds threshold)
+      // Clean up inactive/dead players (30 seconds threshold)
       final deadPlayers = _players.where((p) {
         if (p.id == _currentPlayerId) return false;
         final lastSeen = p.lastSeen;
         if (lastSeen == null) return false;
-        return (now - lastSeen) > 15000;
+        return (now - lastSeen) > 30000;
       }).toList();
 
       for (var dp in deadPlayers) {
@@ -310,7 +311,7 @@ class GameService extends ChangeNotifier {
     );
     
     // 3. Phase-specific adjustments
-    if (phase == GamePhase.sabotage) {
+    if (phase == GamePhase.forgery) {
       final assignments = Map<String, String>.from(state.currentCardAssignments);
       
       String? holderOfDisconnected;
@@ -345,7 +346,8 @@ class GameService extends ChangeNotifier {
           currentCardAssignments: truthAssignments,
           sabotageAnswersCount: 0,
           currentRotationIndex: 0,
-          endTime: DateTime.now().add(const Duration(seconds: 60)).millisecondsSinceEpoch,
+          endTime: state.isTimerDisabled ? null : DateTime.now().add(const Duration(seconds: 60)).millisecondsSinceEpoch,
+          clearEndTime: state.isTimerDisabled,
         );
       } else {
         final newRotations = RotationEngine.generateRotations(activePlayerIds, remainingRotations);
@@ -491,11 +493,11 @@ class GameService extends ChangeNotifier {
     int startIdx = 1;
     Map<String, String> initAssignments = stringRotations[startIdx.toString()]!;
 
-    // Set end time for sabotage phase (60 seconds)
-    final endTime = DateTime.now().add(const Duration(seconds: 60)).millisecondsSinceEpoch;
+    // Set end time for forgery phase (60 seconds)
+    final endTime = _gameState!.isTimerDisabled ? null : DateTime.now().add(const Duration(seconds: 60)).millisecondsSinceEpoch;
 
     await updateGameState(_gameState!.copyWith(
-        currentPhase: GamePhase.sabotage,
+        currentPhase: GamePhase.forgery,
         totalPlayers: _players.length, // FIX: Sync totalPlayers
         currentRotationIndex: startIdx,
         cards: startingCards,
@@ -503,6 +505,7 @@ class GameService extends ChangeNotifier {
         rotationPlan: stringRotations,
         readyPlayers: {}, // FIX: Reset readyPlayers in same write
         endTime: endTime,
+        clearEndTime: _gameState!.isTimerDisabled,
     ));
   }
   
@@ -533,7 +536,7 @@ class GameService extends ChangeNotifier {
     if (currentPlayer?.isHost != true) return;
     
     final phase = _gameState!.currentPhase;
-    if (phase != GamePhase.sabotage && phase != GamePhase.truth && phase != GamePhase.vote) {
+    if (phase != GamePhase.forgery && phase != GamePhase.truth && phase != GamePhase.vote) {
       return;
     }
 
@@ -561,18 +564,19 @@ class GameService extends ChangeNotifier {
     if (_gameState == null) return;
 
     GameState nextState = _gameState!.copyWith(readyPlayers: {});
-    int sabotageDuration = 60;
+    int forgeryDuration = 60;
     int truthDuration = 60;
     int voteDuration = 45;
 
-    if (_gameState!.currentPhase == GamePhase.sabotage) {
+    if (_gameState!.currentPhase == GamePhase.forgery) {
         if (_gameState!.currentRotationIndex < _gameState!.sabotageAnswersCount) {
             int nextRot = _gameState!.currentRotationIndex + 1;
             Map<String, String> nextAssignments = _gameState!.rotationPlan[nextRot.toString()]!;
             nextState = nextState.copyWith(
                 currentRotationIndex: nextRot,
                 currentCardAssignments: nextAssignments,
-                endTime: DateTime.now().add(Duration(seconds: sabotageDuration)).millisecondsSinceEpoch,
+                endTime: _gameState!.isTimerDisabled ? null : DateTime.now().add(Duration(seconds: forgeryDuration)).millisecondsSinceEpoch,
+                clearEndTime: _gameState!.isTimerDisabled,
             );
         } else {
             // Transition to Truth Phase: Every player gets their own card back
@@ -582,7 +586,8 @@ class GameService extends ChangeNotifier {
             nextState = nextState.copyWith(
                 currentPhase: GamePhase.truth,
                 currentCardAssignments: truthAssignments,
-                endTime: DateTime.now().add(Duration(seconds: truthDuration)).millisecondsSinceEpoch,
+                endTime: _gameState!.isTimerDisabled ? null : DateTime.now().add(Duration(seconds: truthDuration)).millisecondsSinceEpoch,
+                clearEndTime: _gameState!.isTimerDisabled,
             );
         }
     } else if (_gameState!.currentPhase == GamePhase.truth) {
@@ -591,7 +596,8 @@ class GameService extends ChangeNotifier {
         nextState = nextState.copyWith(
             currentPhase: GamePhase.vote,
             currentReaderId: pIds.isNotEmpty ? pIds.first : null,
-            endTime: DateTime.now().add(Duration(seconds: voteDuration)).millisecondsSinceEpoch,
+            endTime: _gameState!.isTimerDisabled ? null : DateTime.now().add(Duration(seconds: voteDuration)).millisecondsSinceEpoch,
+            clearEndTime: _gameState!.isTimerDisabled,
         );
     } else if (_gameState!.currentPhase == GamePhase.vote) {
         // Transition to Reveal for the CURRENT reader
@@ -626,7 +632,8 @@ class GameService extends ChangeNotifier {
             currentPhase: GamePhase.vote,
             currentReaderId: pIds[currentIdx + 1],
             readyPlayers: {},
-            endTime: DateTime.now().add(const Duration(seconds: 45)).millisecondsSinceEpoch,
+            endTime: _gameState!.isTimerDisabled ? null : DateTime.now().add(const Duration(seconds: 45)).millisecondsSinceEpoch,
+            clearEndTime: _gameState!.isTimerDisabled,
         ));
     } else {
         // All cards resolved -> Game Over
@@ -672,7 +679,7 @@ class GameService extends ChangeNotifier {
     for (var p in _players) {
       if (!p.id.startsWith('bot_')) continue;
       
-      if (phase == GamePhase.sabotage || phase == GamePhase.truth) {
+      if (phase == GamePhase.forgery || phase == GamePhase.truth) {
          final targetId = state.currentCardAssignments[p.id];
          if (targetId != null) {
             await submitCardAnswer(targetId, p.id, 'Simulated Answer from ${p.name}', phase == GamePhase.truth);

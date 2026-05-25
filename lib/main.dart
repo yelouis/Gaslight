@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
@@ -20,6 +21,12 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  try {
+    await FirebaseAuth.instance.signInAnonymously();
+  } catch (e) {
+    debugPrint('Error signing in anonymously: $e');
+  }
 
   runApp(
     ChangeNotifierProvider(

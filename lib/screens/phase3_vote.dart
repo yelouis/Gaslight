@@ -107,7 +107,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
         appBar: AppBar(
           title: Column(
             children: [
-              Text('PHASE 3: THE VOTE', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)),
+              Text('THE VOTE', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)),
               const SizedBox(height: 4),
             ],
           ),
@@ -119,14 +119,16 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 16.0),
               child: Center(
-                child: AutoAdvanceTimer(
-                  endTime: state.endTime,
-                  onTimerExpired: () {
-                    if (me.isHost) {
-                      gs.forceAdvance();
-                    }
-                  },
-                ),
+                child: state.isTimerDisabled
+                    ? const SizedBox.shrink()
+                    : AutoAdvanceTimer(
+                        endTime: state.endTime,
+                        onTimerExpired: () {
+                          if (me.isHost) {
+                            gs.forceAdvance();
+                          }
+                        },
+                      ),
               ),
             ),
           ],
@@ -278,7 +280,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
                                 ),
                                 if (ans.authorId == me.id) ...[
                                   const SizedBox(height: 8),
-                                  Text('(Your Sabotage)', style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic)),
+                                  Text('(Your Forgery)', style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic)),
                                 ]
                               ],
                             ),

@@ -1,6 +1,6 @@
 import 'card_model.dart';
 
-enum GamePhase { lobby, sabotage, truth, vote, reveal, gameOver }
+enum GamePhase { lobby, forgery, truth, vote, reveal, gameOver }
 
 class GameState {
   final String roomCode;
@@ -9,6 +9,7 @@ class GameState {
   // Custom Configurability
   final int totalPlayers;
   final int sabotageAnswersCount;
+  final bool isTimerDisabled;
 
   // Rotation Tracking
   final int currentRotationIndex;
@@ -36,6 +37,7 @@ class GameState {
     this.currentPhase = GamePhase.lobby,
     this.totalPlayers = 4,
     this.sabotageAnswersCount = 2,
+    this.isTimerDisabled = false,
     this.currentRotationIndex = 0,
     this.cards = const [],
     this.currentCardAssignments = const {},
@@ -50,6 +52,7 @@ class GameState {
     GamePhase? currentPhase,
     int? totalPlayers,
     int? sabotageAnswersCount,
+    bool? isTimerDisabled,
     int? currentRotationIndex,
     List<CardModel>? cards,
     Map<String, String>? currentCardAssignments,
@@ -65,6 +68,7 @@ class GameState {
       currentPhase: currentPhase ?? this.currentPhase,
       totalPlayers: totalPlayers ?? this.totalPlayers,
       sabotageAnswersCount: sabotageAnswersCount ?? this.sabotageAnswersCount,
+      isTimerDisabled: isTimerDisabled ?? this.isTimerDisabled,
       currentRotationIndex: currentRotationIndex ?? this.currentRotationIndex,
       cards: cards ?? this.cards,
       currentCardAssignments: currentCardAssignments ?? this.currentCardAssignments,
@@ -81,6 +85,7 @@ class GameState {
       'currentPhase': currentPhase.name,
       'totalPlayers': totalPlayers,
       'sabotageAnswersCount': sabotageAnswersCount,
+      'isTimerDisabled': isTimerDisabled,
       'currentRotationIndex': currentRotationIndex,
       'cards': cards.map((c) => c.toMap()).toList(),
       'currentCardAssignments': currentCardAssignments,
@@ -110,6 +115,7 @@ class GameState {
       ),
       totalPlayers: map['totalPlayers']?.toInt() ?? 4,
       sabotageAnswersCount: map['sabotageAnswersCount']?.toInt() ?? 2,
+      isTimerDisabled: map['isTimerDisabled'] as bool? ?? false,
       currentRotationIndex: map['currentRotationIndex']?.toInt() ?? 0,
       cards: (map['cards'] as List<dynamic>? ?? [])
           .map((c) => CardModel.fromMap(Map<String, dynamic>.from(c as Map)))
@@ -126,7 +132,7 @@ class GameState {
     switch (phase) {
       case GamePhase.lobby:
         return '/';
-      case GamePhase.sabotage:
+      case GamePhase.forgery:
       case GamePhase.truth:
         return '/craft';
       case GamePhase.vote:

@@ -24,6 +24,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
   int _selectedAvatarIndex = 0;
   bool _isNavigating = false;
   String _selectedDeck = PromptDecks.availableDecks.first;
+  bool _isTimerDisabled = false;
 
   @override
   void initState() {
@@ -48,7 +49,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final playerId = const Uuid().v4();
 
     try {
-      await gameService.createRoom(name, playerId, sabotageAnswersCount: _selectedRounds, avatarIndex: _selectedAvatarIndex);
+      await gameService.createRoom(
+        name,
+        playerId,
+        sabotageAnswersCount: _selectedRounds,
+        avatarIndex: _selectedAvatarIndex,
+        isTimerDisabled: _isTimerDisabled,
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -110,27 +117,27 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         children: [
                           _buildInstructionSection(
                             theme,
-                            '1. THE OBJECTIVE',
+                            'THE OBJECTIVE',
                             [
                               _highlightItem('Mimicry: ', 'Every player receives a secret card with a prompt. You are the "Target" of your card.'),
-                              _highlightItem('Sabotage: ', 'Cards rotate. You will receive others\' cards to write believable lies (Sabotages) on their behalf.'),
+                              _highlightItem('Forgery: ', 'Cards rotate. You will receive others\' cards to write believable lies (Forgeries) on their behalf.'),
                             ],
                           ),
                           _buildInstructionSection(
                             theme,
-                            '2. THE PHASES',
+                            'THE PHASES',
                             [
-                              _highlightItem('Phase 1 (Sabotage): ', 'Write deceptive answers for the cards you hold. These will be mixed with the real Target\'s truth.'),
-                              _highlightItem('Phase 2 (The Truth): ', 'You get your own card back. Write the cold, hard biological truth.'),
-                              _highlightItem('Phase 3 (The Vote): ', 'A Reader presents all answers (1 Truth + Several Sabotages). Voters must find the Truth.'),
+                              _highlightItem('Forgery: ', 'Write deceptive answers for the cards you hold. These will be mixed with the real Target\'s truth.'),
+                              _highlightItem('Truth: ', 'You get your own card back. Write the cold, hard biological truth.'),
+                              _highlightItem('The Vote: ', 'A Reader presents all answers (1 Truth + Several Forgeries). Voters must find the Truth.'),
                             ],
                           ),
                           _buildInstructionSection(
                             theme,
                             '3. SCORING (Dynamic)',
                             [
-                              _highlightItem('Finding Truth: ', 'Points scale based on difficulty. Formula: ceil((Players - 1) / (Sabotages + 1))'),
-                              _highlightItem('Successful Sabotage: ', 'Get +1 point for every player you successfully trick into voting for your lie.'),
+                               _highlightItem('Finding Truth: ', 'Points scale based on difficulty. Formula: ceil((Players - 1) / (Forgeries + 1))'),
+                               _highlightItem('Successful Forgery: ', 'Get +1 point for every player you successfully trick into voting for your lie.'),
                               _highlightItem('Believeable Target: ', 'Targets get +1 point for every player who correctly identifies their truth.'),
                             ],
                           ),
@@ -404,6 +411,25 @@ class _LobbyScreenState extends State<LobbyScreen> {
                           });
                         }
                       },
+                    ),
+                    const SizedBox(height: 15),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Disable Game Timers',
+                          style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
+                        ),
+                        Switch(
+                          value: _isTimerDisabled,
+                          activeColor: theme.colorScheme.primary,
+                          onChanged: (val) {
+                            setState(() {
+                              _isTimerDisabled = val;
+                            });
+                          },
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 20),
                     Text('Choose Your Token', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.8), fontWeight: FontWeight.bold, fontSize: 16)),

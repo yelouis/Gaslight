@@ -111,12 +111,12 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
           title: Column(
             children: [
               Text(
-                state.currentPhase == GamePhase.truth ? 'TRUTH PHASE' : 'SABOTAGE PHASE', 
+                state.currentPhase == GamePhase.truth ? 'TRUTH' : 'FORGERY', 
                 style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)
               ),
               const SizedBox(height: 4),
 
-              if (state.currentPhase == GamePhase.sabotage)
+              if (state.currentPhase == GamePhase.forgery)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
@@ -134,14 +134,16 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 16.0),
               child: Center(
-                child: AutoAdvanceTimer(
-                  endTime: state.endTime,
-                  onTimerExpired: () {
-                    if (me.isHost) {
-                      gs.forceAdvance();
-                    }
-                  },
-                ),
+                child: state.isTimerDisabled
+                    ? const SizedBox.shrink()
+                    : AutoAdvanceTimer(
+                        endTime: state.endTime,
+                        onTimerExpired: () {
+                          if (me.isHost) {
+                            gs.forceAdvance();
+                          }
+                        },
+                      ),
               ),
             ),
           ],
@@ -278,7 +280,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
             PlayerAvatar(player: me, size: 50),
             const SizedBox(height: 20),
             Text(
-              isTruthRound ? "WRITE YOUR TRUTH" : "SABOTAGE FOR ${targetName.toUpperCase()}",
+              isTruthRound ? "WRITE YOUR TRUTH" : "FORGERY FOR ${targetName.toUpperCase()}",
               style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1.5),
             ),
             const SizedBox(height: 24),

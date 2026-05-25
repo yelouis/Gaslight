@@ -92,7 +92,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: Text('PHASE 4: THE REVEAL', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2)),
+          title: Text('THE REVEAL', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2)),
           centerTitle: true,
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -196,7 +196,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isTruth ? 'TRUTH' : 'SABOTAGE',
+                        isTruth ? 'TRUTH' : 'FORGERY',
                         style: TextStyle(
                           color: isTruth ? theme.colorScheme.primary : theme.colorScheme.secondary,
                           fontWeight: FontWeight.bold,

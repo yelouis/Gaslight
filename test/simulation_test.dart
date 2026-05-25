@@ -250,7 +250,7 @@ void main() {
       // 3. Start Game
       await gameService.startGame('the_daily_grind');
       await Future.delayed(Duration(milliseconds: 100));
-      expect(gameService.gameState!.currentPhase, GamePhase.sabotage);
+      expect(gameService.gameState!.currentPhase, GamePhase.forgery);
       print('Game started. Phase: Sabotage Round 1');
 
       // 4. Sabotage Round 1
@@ -343,7 +343,7 @@ void main() {
       // 3. Start Game
       await gameService.startGame('the_daily_grind');
       await Future.delayed(Duration(milliseconds: 100));
-      expect(gameService.gameState!.currentPhase, GamePhase.sabotage);
+      expect(gameService.gameState!.currentPhase, GamePhase.forgery);
       print('Game started. Phase: Sabotage Round 1');
 
       // 4. Spectator Joins mid-game

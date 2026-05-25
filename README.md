@@ -35,10 +35,24 @@ This project uses `flutter_dotenv` to manage Firebase API keys. The keys must no
    ```bash
    flutter pub get
    ```
-2. Run the application on your connected device or emulator:
+3. Run the application on your connected device or emulator:
    ```bash
    flutter run
    ```
+
+### Emulator & Simulator Networking Setup
+
+When testing the application locally with a local Firebase emulator suite or calling local servers, configuring networking is required:
+
+*   **iOS Simulator**: Connects directly to `localhost` or `127.0.0.1`.
+*   **Android Emulator**: Cannot resolve `127.0.0.1` as the host machine. Instead, use the special loopback IP address **`10.0.2.2`** which redirects to your host machine's loopback (`127.0.0.1`).
+*   **Physical Android Device**: Ensure both your host machine and mobile device are connected to the same Wi-Fi network, and target the host machine's IP address (e.g. `192.168.x.x`). Alternatively, perform port forwarding using `adb reverse tcp:8080 tcp:8080` (or appropriate Firestore/auth ports).
+
+### Gemini API Key Prototyping Risk
+
+*   **Current Architecture**: The application loads the Gemini API key via `.env` on the client and passes it directly in HTTP headers (`x-goog-api-key`) to facilitate rapid, serverless prototyping.
+*   **Production Risk**: In compiled production binaries, client-side API keys can be reverse-engineered and extracted.
+*   **Production Migration Path**: For production releases, client-side Gemini requests must be migrated to a secure backend proxy (such as Firebase Cloud Functions or a dedicated Node.js/Go middleware server) to keep the API key fully hidden.
 
 ## Development
 
