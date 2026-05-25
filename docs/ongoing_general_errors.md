@@ -47,7 +47,7 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
   - *Pros*: Preserves step-by-step numbering which some players might find helpful.
   - *Cons*: Numbers can become redundant as the screen titles are already descriptive.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -62,7 +62,7 @@ Your selection: _____
   - *Pros*: Extremely premium visual experience that directly fits the game title "Gaslight".
   - *Cons*: Higher rendering computational cost and implementation complexity.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -77,22 +77,26 @@ Your selection: _____
   - *Pros*: Prevents unmounting the button context during state changes.
   - *Cons*: Could lead to null or index errors on other widgets if the widget tree references empty lists during disposal.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
 ### Issue 4: "Sabotage" Phase Name is Non-Descriptive
 **Status**: ⚠️ Confirmed Unresolved — Verified in `game_state.dart` (line 3) and `game_service.dart` (line 568): The first writing phase is named `GamePhase.sabotage`, which is non-descriptive as the whole game is about sabotage, and it clashes conceptually with write actions in subsequent phases.
 
-**Option A (recommended)**: **Rename to `mimicry` or `writeSabotage`** — Rename `GamePhase.sabotage` to `GamePhase.mimicry` system-wide to reflect the active writing task of copying others' styles.
-  - *Pros*: Standardizes terminology and makes codebase logic much cleaner for new developers.
-  - *Cons*: Requires extensive search-and-replace across multiple model, service, and screen files.
+**Option A (recommended)**: **Rename to `forgery` System-Wide** — Rename `GamePhase.sabotage` to `GamePhase.forgery` to accurately describe the action of forging fake claims on another player's behalf.
+  - *Pros*: Clear, descriptive of the player's core task, and matches the game's gothic theme.
+  - *Cons*: Requires search-and-replace across multiple files.
 
-**Option B**: **Keep Database Schema and Update User Strings Only** — Retain the Firestore enum key as `sabotage` but change the user-facing text and headers to "THE DECEPTION" or "MIMICRY".
-  - *Pros*: Avoids database key migrations or code search-replace.
-  - *Cons*: Leaves conceptual clutter in the code and database document snapshots.
+**Option B**: **Rename to `deception` System-Wide** — Rename to `GamePhase.deception` to focus on writing deceitful claims.
+  - *Pros*: Standardizes terminology and avoids naming overlap.
+  - *Cons*: Less specific than "forgery".
 
-Your selection: _____
+**Option C**: **Rename to `impersonation` System-Wide** — Rename to `GamePhase.impersonation` focusing on mimicking other players.
+  - *Pros*: Good descriptor for the style copy aspect.
+  - *Cons*: The enum name is somewhat long.
+
+Your selection: Proceed with Option A.
 
 ---
 
@@ -103,7 +107,7 @@ Your selection: _____
   - *Pros*: Improves developer onboarding and reduces setup troubleshooting time.
   - *Cons*: None.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -118,4 +122,41 @@ Your selection: _____
   - *Pros*: Extremely low implementation complexity.
   - *Cons*: Does not actually disable the timer; visual countdown still remains on screen.
 
-Your selection: _____
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 7: Missing Anonymous Firebase Authentication to Match Firestore Rules
+**Status**: ⚠️ Confirmed Unresolved — Verified in `main.dart` and `game_service.dart`: The newly introduced `firestore.rules` file enforces authentication checks (`request.auth != null`), but the client-side code never signs in to Firebase Auth. Consequently, all Firestore write operations will fail on runtime.
+
+**Option A (recommended)**: **Integrate Anonymous Firebase Auth** — Call `FirebaseAuth.instance.signInAnonymously()` during app initialization in `main.dart` so players are authenticated silently.
+  - *Pros*: Completely resolves the database write block silently and matches the rules configuration.
+  - *Cons*: Adds a dependency on the `firebase_auth` plugin.
+
+**Option B**: **Relax Rules to Allow Unauthenticated Writes** — Remove authentication checks from `firestore.rules`, allowing general unauthenticated client writes.
+  - *Pros*: Requires zero code modifications in client services.
+  - *Cons*: Exposes the database to malicious mutations and data deletion.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 8: Gemini API Key Exposure in Client-Side Binary
+**Status**: ⚠️ Confirmed Unresolved — Verified in `semantic_filter.dart` (lines 50-68): The Gemini API key is loaded via `.env` on the client and sent directly in HTTP headers, exposing it to reverse-engineering in compiled production builds.
+
+**Option A (recommended)**: **Document as Prototyping Risk and Plan Secure Proxy Migration** — Document the exposure as a known risk for local prototyping, with a plan to migrate to a secure Firebase Cloud Functions proxy server for production.
+  - *Pros*: Keeps prototyping fast and lightweight without backend server overhead.
+  - *Cons*: The API key remains exposed inside compiled client binaries in the short term.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 9: Firestore Heartbeat Write Volume Optimization
+**Status**: ⚠️ Confirmed Unresolved — Verified in `game_service.dart` (lines 175-185): The player heartbeat updates the database every 5 seconds. In a 10-player room, this generates high write traffic (240 writes/minute), rapidly consuming Firestore quotas.
+
+**Option A (recommended)**: **Increase Heartbeat Interval to 10 Seconds** — Increase the heartbeat interval to 10 seconds and the inactive player pruning delay to 30 seconds.
+  - *Pros*: Cuts Firestore writes in half, reducing quota usage while maintaining reliable disconnect handling.
+  - *Cons*: Increases the time to detect a disconnected player from 15 seconds to 30 seconds.
+
+Your selection: Proceed with Option A.
