@@ -63,3 +63,59 @@ Your selection: _____
   - *Cons*: Higher rendering computational cost and implementation complexity.
 
 Your selection: _____
+
+---
+
+### Issue 3: "Return to lobby" Action Freezes/Stalls on Rebuild
+**Status**: ⚠️ Confirmed Unresolved — Verified in `game_over_screen.dart` (lines 74-82): When the host or a player clicks "RETURN TO LOBBY", the asynchronous method `gs.leaveRoom()` is invoked. During this call, the players list is cleared and the parent `watch<GameService>()` triggers a synchronous widget rebuild. Because the rebuild returns a `CircularProgressIndicator` instead of the original `Column`, the `TextButton` and its BuildContext are unmounted, preventing the subsequent routing code (`Navigator.pushNamedAndRemoveUntil`) from executing.
+
+**Option A (recommended)**: **Capture Navigator State Before Async Call** — Capture the `NavigatorState` locally prior to the async call (`final nav = Navigator.of(context)`), then navigate using the captured reference.
+  - *Pros*: Simple, safe, and completely avoids dependency on context remaining mounted.
+  - *Cons*: None.
+
+**Option B**: **Remove Rebuild Guard on Player Count** — Remove the early return `if (players.isEmpty)` that swaps the layout with a loading screen.
+  - *Pros*: Prevents unmounting the button context during state changes.
+  - *Cons*: Could lead to null or index errors on other widgets if the widget tree references empty lists during disposal.
+
+Your selection: _____
+
+---
+
+### Issue 4: "Sabotage" Phase Name is Non-Descriptive
+**Status**: ⚠️ Confirmed Unresolved — Verified in `game_state.dart` (line 3) and `game_service.dart` (line 568): The first writing phase is named `GamePhase.sabotage`, which is non-descriptive as the whole game is about sabotage, and it clashes conceptually with write actions in subsequent phases.
+
+**Option A (recommended)**: **Rename to `mimicry` or `writeSabotage`** — Rename `GamePhase.sabotage` to `GamePhase.mimicry` system-wide to reflect the active writing task of copying others' styles.
+  - *Pros*: Standardizes terminology and makes codebase logic much cleaner for new developers.
+  - *Cons*: Requires extensive search-and-replace across multiple model, service, and screen files.
+
+**Option B**: **Keep Database Schema and Update User Strings Only** — Retain the Firestore enum key as `sabotage` but change the user-facing text and headers to "THE DECEPTION" or "MIMICRY".
+  - *Pros*: Avoids database key migrations or code search-replace.
+  - *Cons*: Leaves conceptual clutter in the code and database document snapshots.
+
+Your selection: _____
+
+---
+
+### Issue 5: Missing Simulator and Emulator Networking Instructions
+**Status**: ⚠️ Confirmed Unresolved — Verified in `README.md` (lines 32-41): The documentation lacks setup guides for targeting emulators, troubleshooting connection configurations, and explaining host machine loopbacks (e.g. `10.0.2.2` for Android emulator networking).
+
+**Option A (recommended)**: **Update README.md with Emulator & Network Setup Guide** — Add detailed instructions to `README.md` covering Android Studio Emulator/iOS Simulator execution, port forwarding, and local emulator loops.
+  - *Pros*: Improves developer onboarding and reduces setup troubleshooting time.
+  - *Cons*: None.
+
+Your selection: _____
+
+---
+
+### Issue 6: No Option to Disable the Auto-Advance Timer
+**Status**: ⚠️ Confirmed Unresolved — Verified in `lobby_screen.dart` and `game_service.dart`: The game loop enforces an auto-advance timer on the writing and voting screens. There is no setting to disable it for casual/relaxed game play.
+
+**Option A (recommended)**: **Add a "Disable Timer" Option to Lobby** — Add a boolean `isTimerDisabled` to `GameState` and a checkbox in the lobby room options. If set, skip writing `endTime` and hide the timer widgets in game screens.
+  - *Pros*: Fully configurable; supports both fast competitive play and casual play styles.
+  - *Cons*: Requires database and lobby UI schema updates.
+
+**Option B**: **Simply Increase Default Timers** — Set the default timer length to a high duration (e.g. 5 minutes) rather than adding option toggles.
+  - *Pros*: Extremely low implementation complexity.
+  - *Cons*: Does not actually disable the timer; visual countdown still remains on screen.
+
+Your selection: _____
