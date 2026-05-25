@@ -351,9 +351,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
         ),
       ),
     );
-  }
-
-  Widget _buildEntryForm(ThemeData theme) {
+  }  Widget _buildEntryForm(ThemeData theme) {
+    final ivoryColor = const Color(0xFFF5EEDB);
+    final crimsonColor = theme.colorScheme.primary; // Burgundy/Crimson accent
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: LayoutBuilder(
@@ -371,180 +371,248 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const AnimatedLobbyLogo(),
-                      const SizedBox(height: 60),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
-                child: ParchmentCard(
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _nameController,
-                      style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
-                      decoration: InputDecoration(
-                        labelText: 'Your Name * (Required)',
-                        errorText: _nameError ? 'Please enter a name first' : null,
-                        labelStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontWeight: FontWeight.bold),
-                        border: const OutlineInputBorder(),
-                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.secondary.withOpacity(0.5))),
-                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.primary, width: 2)),
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.5), // Semi-transparent over parchment
-                      ),
-                      onChanged: (_) {
-                        if (_nameError) setState(() => _nameError = false);
-                      },
-                    ),
-                    const SizedBox(height: 15),
-                    DropdownButtonFormField<int>(
-                      value: _selectedRounds,
-                      style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontFamily: 'serif'),
-                      decoration: InputDecoration(
-                        labelText: 'Number of Rounds',
-                        labelStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontWeight: FontWeight.bold),
-                        border: const OutlineInputBorder(),
-                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.secondary.withOpacity(0.5))),
-                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.primary, width: 2)),
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.5),
-                      ),
-                      dropdownColor: theme.colorScheme.surface,
-                      items: [1, 2, 3, 4, 5].map((int value) {
-                        return DropdownMenuItem<int>(
-                          value: value,
-                          child: Text('$value Round${value > 1 ? 's' : ''}'),
-                        );
-                      }).toList(),
-                      onChanged: (int? newValue) {
-                        if (newValue != null) {
-                          setState(() {
-                            _selectedRounds = newValue;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 15),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Disable Game Timers',
-                          style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
-                        ),
-                        Switch(
-                          value: _isTimerDisabled,
-                          activeColor: theme.colorScheme.primary,
-                          onChanged: (val) {
-                            setState(() {
-                              _isTimerDisabled = val;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Text('Choose Your Token', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.8), fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      alignment: WrapAlignment.center,
-                      children: List.generate(PlayerAvatar.thematicIcons.length, (index) {
-                        final isSelected = _selectedAvatarIndex == index;
-                        return GestureDetector(
-                          onTap: () => setState(() => _selectedAvatarIndex = index),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            transform: Matrix4.identity()..scale(isSelected ? 1.15 : 1.0),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: isSelected ? [
-                                BoxShadow(color: theme.colorScheme.primary.withOpacity(0.5), blurRadius: 10, spreadRadius: 2)
-                              ] : null,
-                            ),
-                            child: Opacity(
-                              opacity: isSelected ? 1.0 : 0.5,
-                              child: PlayerAvatar.buildChip(
-                                colorValue: isSelected ? theme.colorScheme.primary.value : Colors.grey.shade600.value,
-                                avatarIndex: index,
-                                size: 50,
+                      const SizedBox(height: 40),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: CrimsonShadowCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                'CREW STATION',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: crimsonColor,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 4,
+                                  fontFamily: 'serif',
+                                ),
                               ),
-                            ),
+                              const SizedBox(height: 24),
+                              TextField(
+                                controller: _nameController,
+                                style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontSize: 16),
+                                decoration: InputDecoration(
+                                  labelText: 'Your Name *',
+                                  errorText: _nameError ? 'Please enter a name first' : null,
+                                  labelStyle: TextStyle(color: ivoryColor.withOpacity(0.7), fontWeight: FontWeight.bold),
+                                  errorStyle: const TextStyle(fontWeight: FontWeight.bold),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(color: crimsonColor.withOpacity(0.4)),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(color: crimsonColor, width: 2),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.black.withOpacity(0.5),
+                                  prefixIcon: Icon(Icons.person, color: crimsonColor.withOpacity(0.8)),
+                                ),
+                                onChanged: (_) {
+                                  if (_nameError) setState(() => _nameError = false);
+                                },
+                              ),
+                              const SizedBox(height: 18),
+                              DropdownButtonFormField<int>(
+                                value: _selectedRounds,
+                                style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontFamily: 'serif', fontSize: 16),
+                                decoration: InputDecoration(
+                                  labelText: 'Number of Rounds',
+                                  labelStyle: TextStyle(color: ivoryColor.withOpacity(0.7), fontWeight: FontWeight.bold),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(color: crimsonColor.withOpacity(0.4)),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(color: crimsonColor, width: 2),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.black.withOpacity(0.5),
+                                  prefixIcon: Icon(Icons.loop, color: crimsonColor.withOpacity(0.8)),
+                                ),
+                                dropdownColor: const Color(0xFF161C19),
+                                items: [1, 2, 3, 4, 5].map((int value) {
+                                  return DropdownMenuItem<int>(
+                                    value: value,
+                                    child: Text('$value Round${value > 1 ? 's' : ''}', style: TextStyle(color: ivoryColor)),
+                                  );
+                                }).toList(),
+                                onChanged: (int? newValue) {
+                                  if (newValue != null) {
+                                    setState(() {
+                                      _selectedRounds = newValue;
+                                    });
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 18),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.4),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: crimsonColor.withOpacity(0.2)),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.timer_off, color: crimsonColor.withOpacity(0.8), size: 20),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              'Disable Game Timers',
+                                              style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontSize: 14),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Switch(
+                                      value: _isTimerDisabled,
+                                      activeColor: crimsonColor,
+                                      activeTrackColor: crimsonColor.withOpacity(0.4),
+                                      inactiveThumbColor: Colors.grey,
+                                      inactiveTrackColor: Colors.grey.withOpacity(0.3),
+                                      onChanged: (val) {
+                                        setState(() {
+                                          _isTimerDisabled = val;
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              Text(
+                                'Select Character Token',
+                                style: TextStyle(color: crimsonColor, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1),
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                alignment: WrapAlignment.center,
+                                children: List.generate(PlayerAvatar.thematicIcons.length, (index) {
+                                  final isSelected = _selectedAvatarIndex == index;
+                                  return GestureDetector(
+                                    onTap: () => setState(() => _selectedAvatarIndex = index),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 200),
+                                      transform: Matrix4.identity()..scale(isSelected ? 1.15 : 1.0),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: isSelected ? crimsonColor : Colors.transparent,
+                                          width: 2.5,
+                                        ),
+                                        boxShadow: isSelected ? [
+                                          BoxShadow(color: crimsonColor.withOpacity(0.5), blurRadius: 10, spreadRadius: 1.5)
+                                        ] : null,
+                                      ),
+                                      child: Opacity(
+                                        opacity: isSelected ? 1.0 : 0.4,
+                                        child: PlayerAvatar.buildChip(
+                                          colorValue: isSelected ? crimsonColor.value : Colors.grey.shade700.value,
+                                          avatarIndex: index,
+                                          size: 46,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ),
+                              const SizedBox(height: 30),
+                              PrimaryButton(
+                                text: 'CREATE ROOM',
+                                onPressed: _createRoom,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                child: Row(
+                                  children: [
+                                    Expanded(child: Divider(color: crimsonColor.withOpacity(0.3), thickness: 1)),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                      child: Text(
+                                        'OR',
+                                        style: TextStyle(fontWeight: FontWeight.bold, color: ivoryColor.withOpacity(0.6), letterSpacing: 2),
+                                      ),
+                                    ),
+                                    Expanded(child: Divider(color: crimsonColor.withOpacity(0.3), thickness: 1)),
+                                  ],
+                                ),
+                              ),
+                              TextField(
+                                controller: _roomCodeController,
+                                style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, letterSpacing: 8, fontSize: 18),
+                                textAlign: TextAlign.center,
+                                decoration: InputDecoration(
+                                  labelText: 'Room Code (4 Letters)',
+                                  labelStyle: TextStyle(color: ivoryColor.withOpacity(0.7), fontWeight: FontWeight.bold, letterSpacing: 0),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(color: crimsonColor.withOpacity(0.4)),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(color: crimsonColor, width: 2),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.black.withOpacity(0.5),
+                                  prefixIcon: Icon(Icons.vpn_key, color: crimsonColor.withOpacity(0.8)),
+                                  counterText: '',
+                                ),
+                                textCapitalization: TextCapitalization.characters,
+                                maxLength: 4,
+                              ),
+                              const SizedBox(height: 18),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: theme.colorScheme.tertiary, // Emerald
+                                  foregroundColor: ivoryColor, // Ivory Text
+                                  minimumSize: const Size(double.infinity, 58),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: BorderSide(color: crimsonColor.withOpacity(0.4), width: 1.5), // Crimson Border
+                                  ),
+                                  elevation: 6,
+                                ),
+                                onPressed: _joinRoom,
+                                child: const Text('JOIN ROOM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 2.0)),
+                              ),
+                              const SizedBox(height: 18),
+                              TextButton.icon(
+                                onPressed: _showInstructions,
+                                icon: Icon(Icons.menu_book, color: crimsonColor),
+                                label: Text(
+                                  'READ MANUAL',
+                                  style: TextStyle(
+                                    color: ivoryColor,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.5,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: ivoryColor,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 25),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary, // Burgundy
-                        foregroundColor: const Color(0xFFF5EEDB), // Ivory Text
-                        minimumSize: const Size(double.infinity, 60),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: BorderSide(color: theme.colorScheme.secondary, width: 2), // Gold Border
-                        ),
-                        elevation: 8,
-                      ),
-                      onPressed: _createRoom,
-                      child: const Text('CREATE ROOM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 1.5)),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      child: Text('OR', style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface.withOpacity(0.6))),
-                    ),
-                    TextField(
-                      controller: _roomCodeController,
-                      style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, letterSpacing: 4),
-                      decoration: InputDecoration(
-                        labelText: 'Room Code (4 Letters)',
-                        labelStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontWeight: FontWeight.bold, letterSpacing: 0),
-                        border: const OutlineInputBorder(),
-                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.secondary.withOpacity(0.5))),
-                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.primary, width: 2)),
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.5),
-                      ),
-                      textCapitalization: TextCapitalization.characters,
-                      maxLength: 4,
-                    ),
-                    const SizedBox(height: 10),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.tertiary, // Emerald
-                        foregroundColor: const Color(0xFFF5EEDB), // Ivory Text
-                        minimumSize: const Size(double.infinity, 60),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: BorderSide(color: theme.colorScheme.secondary, width: 2), // Gold Border
-                        ),
-                        elevation: 8,
-                      ),
-                      onPressed: _joinRoom,
-                      child: const Text('JOIN ROOM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 1.5)),
-                    ),
-                    const SizedBox(height: 15),
-                    TextButton.icon(
-                      onPressed: _showInstructions,
-                      icon: Icon(Icons.menu_book, color: theme.colorScheme.onSurface),
-                      label: Text(
-                        'Read Instructions',
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface,
-                          fontWeight: FontWeight.bold,
-                          decoration: TextDecoration.underline,
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              ), // Close ConstrainedBox
-            ],
-          ),
-        ),
-      ),
-      ),
-      );
+            ),
+          );
         },
       ),
     );

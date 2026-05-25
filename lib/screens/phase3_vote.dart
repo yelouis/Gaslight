@@ -9,6 +9,7 @@ import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../widgets/auto_advance_timer.dart';
+import '../widgets/card_grid.dart';
 
 
 class Phase3VoteScreen extends StatefulWidget {
@@ -29,6 +30,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
   bool _isNavigating = false;
   List<_AnonymizedAnswer>? _shuffledAnswers;
   String? _shuffledCardId;
+  String? _localSelectedAuthorId;
 
   void _generateShuffledAnswers(CardModel card) {
     if (_shuffledAnswers != null && _shuffledCardId == card.targetPlayerId) return;
@@ -214,83 +216,57 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
       );
     }
 
+    final gridAnswers = _shuffledAnswers?.map((a) => VotingAnswer(authorId: a.authorId, text: a.text)).toList() ?? [];
+
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 500),
       child: Column(
         children: [
            PlayerAvatar(player: me, size: 50),
-           const SizedBox(height: 20),
+           const SizedBox(height: 16),
            Text(
              'WHICH ONE IS THE TRUTH?',
              style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 2),
            ),
-           const SizedBox(height: 20),
+           const SizedBox(height: 16),
            ParchmentCard(
-             padding: const EdgeInsets.all(20),
+             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
              child: Column(
                children: [
                  Text(
                    'Prompt:',
-                   style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontWeight: FontWeight.bold),
+                   style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontWeight: FontWeight.bold, fontSize: 13),
                  ),
-                 const SizedBox(height: 10),
+                 const SizedBox(height: 6),
                  Text(
                    currentCard.promptText,
-                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontFamily: 'serif'),
+                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontFamily: 'serif'),
                    textAlign: TextAlign.center,
                  ),
                ],
              ),
            ),
-           const SizedBox(height: 24),
+           const SizedBox(height: 16),
            Expanded(
-             child: ListView.builder(
-               itemCount: _shuffledAnswers?.length ?? 0,
-               itemBuilder: (context, idx) {
-                 final ans = _shuffledAnswers![idx];
-                 return Padding(
-                   padding: const EdgeInsets.only(bottom: 12.0),
-                    child: InkWell(
-                      onTap: ans.authorId == me.id ? null : () => _castVote(context.read<GameService>(), ans.authorId),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Opacity(
-                        opacity: ans.authorId == me.id ? 0.5 : 1.0,
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface.withOpacity(0.9),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: ans.authorId == me.id ? Colors.grey : theme.colorScheme.secondary.withOpacity(0.5)),
-                            boxShadow: [
-                              BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))
-                            ]
-                          ),
-                          child: Center(
-                            child: Column(
-                              children: [
-                                Text(
-                                  ans.text,
-                                  style: TextStyle(
-                                    color: ans.authorId == me.id ? Colors.grey : theme.colorScheme.primary,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    fontFamily: 'serif'
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                if (ans.authorId == me.id) ...[
-                                  const SizedBox(height: 8),
-                                  Text('(Your Forgery)', style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic)),
-                                ]
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                 );
-               },
+             child: SingleChildScrollView(
+               child: CardGrid(
+                 answers: gridAnswers,
+                 selectedAuthorId: _localSelectedAuthorId,
+                 currentPlayerId: me.id,
+                 onSelect: (authorId) {
+                   setState(() {
+                     _localSelectedAuthorId = authorId;
+                   });
+                 },
+               ),
              ),
+           ),
+           const SizedBox(height: 16),
+           PrimaryButton(
+             text: 'CONFIRM VOTE',
+             onPressed: _localSelectedAuthorId == null 
+                 ? null 
+                 : () => _castVote(context.read<GameService>(), _localSelectedAuthorId!),
            ),
         ],
       ),

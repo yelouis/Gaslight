@@ -284,18 +284,28 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
               style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1.5),
             ),
             const SizedBox(height: 24),
-            ParchmentCard(
-              padding: const EdgeInsets.all(24.0),
+            CrimsonShadowCard(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
               child: Column(
                 children: [
                   Text(
-                    "Prompt:",
-                    style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontWeight: FontWeight.bold, fontSize: 14),
+                    "CASE PROMPT",
+                    style: TextStyle(
+                      color: theme.colorScheme.primary, 
+                      fontWeight: FontWeight.w800, 
+                      fontSize: 13, 
+                      letterSpacing: 3.0,
+                    ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 16),
                   Text(
-                    targetCard.promptText, // Contains the full prompt string based on PromptDecks
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, fontFamily: 'serif'),
+                    targetCard.promptText,
+                    style: TextStyle(
+                      fontSize: 22, 
+                      fontWeight: FontWeight.bold, 
+                      color: theme.colorScheme.onSurface, 
+                      height: 1.4,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 30),
@@ -303,18 +313,30 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                     controller: _answerController,
                     maxLines: 3,
                     enabled: !_isSubmitting,
-                    style: TextStyle(color: theme.colorScheme.primary, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16, 
+                      fontWeight: FontWeight.bold, 
+                    ),
                     decoration: InputDecoration(
-                      hintText: 'Complete the sentence...',
-                      hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.5)),
-                      border: const OutlineInputBorder(),
-                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.secondary.withOpacity(0.5))),
-                      focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.primary, width: 2)),
+                      hintText: 'Enter your answer...',
+                      hintStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.4),
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: theme.colorScheme.primary.withOpacity(0.4)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: theme.colorScheme.primary, width: 2.0),
+                      ),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.5),
+                      fillColor: Colors.black.withOpacity(0.3),
                     ),
                   ),
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 28),
                   _isSubmitting
                       ? CircularProgressIndicator(color: theme.colorScheme.primary)
                       : PrimaryButton(

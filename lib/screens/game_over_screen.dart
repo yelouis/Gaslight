@@ -107,14 +107,15 @@ class GameOverScreen extends StatelessWidget {
   }
 
   Widget _honorCard(ThemeData theme, String title, PlayerState player, Color accentColor) {
+    final ivoryColor = const Color(0xFFF5EEDB);
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface, // Parchment
-        border: Border.all(color: accentColor, width: 3),
+        color: const Color(0xFF1A1F1C), // Deep charcoal background
+        border: Border.all(color: accentColor, width: 2.5),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 15, offset: const Offset(0, 8)),
-          BoxShadow(color: accentColor.withOpacity(0.3), blurRadius: 10, spreadRadius: 2),
+          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, 6)),
+          BoxShadow(color: accentColor.withOpacity(0.25), blurRadius: 12, spreadRadius: 1),
         ]
       ),
       padding: const EdgeInsets.all(12),
@@ -124,9 +125,9 @@ class GameOverScreen extends StatelessWidget {
           PlayerAvatar(player: player, size: 50, showName: false),
           const SizedBox(height: 12),
           Text(title, style: TextStyle(color: accentColor, fontSize: 13, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-          const SizedBox(height: 4),
-          Text(player.name, style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'serif'), textAlign: TextAlign.center),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
+          Text(player.name, style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'serif'), textAlign: TextAlign.center),
+          const SizedBox(height: 6),
           Text('${player.totalScore} Pts', style: TextStyle(color: theme.colorScheme.primary, fontSize: 16, fontWeight: FontWeight.bold)),
         ],
       ),

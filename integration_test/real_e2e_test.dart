@@ -37,7 +37,7 @@ void main() {
       final gameService = GameService(); // Real game service hitting real Firestore
 
       // Resize virtual screen to fit all scrollable inputs
-      tester.view.physicalSize = const Size(1600, 2000);
+      tester.view.physicalSize = const Size(1600, 3000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
         tester.view.resetPhysicalSize();

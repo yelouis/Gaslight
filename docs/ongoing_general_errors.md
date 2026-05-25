@@ -98,6 +98,21 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ---
 
+23. **Game Lobby and Waiting Room Aesthetic Upgrade (Resolved - May 25)**:
+    - **Problem**: The room creation forms, text fields, and avatar selectors utilized standard flat card layouts and lacked the visual depth required for a premium dark-mode card game.
+    - **Solution**: Replaced containers with `CrimsonShadowCard` featuring flat dark backgrounds and bold crimson drop-shadows. Upgraded input decorators, dropdown selection styling, and avatar token selectors with crimson focused outlines. Wrapped row controls with `Expanded` components to prevent RenderFlex layout overflows on narrow viewports.
+
+24. **Phase 2 (Crafting) Screen Redesign (Resolved - May 25)**:
+    - **Problem**: The prompt card and text entry fields used plain parchment styling and standard font structures, clashing with the dark modern game board style.
+    - **Solution**: Configured the screen to display prompts on a charcoal `CrimsonShadowCard` using clean modern sans-serif typography, and updated the typing text field to feature standard modern outline styling and dark black translucent fills.
+
+25. **Phase 3 (Voting) Screen Layout & Grid Upgrades (Resolved - May 25)**:
+    - **Problem**: The voting options were presented as a simple vertical scrollable list of rectangular cards, which lacked physical interactivity.
+    - **Solution**: Created a custom `CardGrid` widget rendering voting answers in a structured responsive grid of gold-trimmed parchment cards. Implemented local state voting selection displaying a red wax seal monogram stamp overlay when selected, and added a dedicated "CONFIRM VOTE" action button to cast the vote.
+
+---
+
 ## ⚠️ Unresolved Issues & Suggestions
 
 *No active unresolved issues.*
+

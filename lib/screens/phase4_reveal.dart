@@ -179,55 +179,104 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
 
   Widget _buildOptionRow(String authorId, String text, CardModel card, GameService gs, ThemeData theme, {bool isTruth = false}) {
     final voters = gs.players.where((p) => card.votes[p.id] == authorId).toList();
+    final cardColor = const Color(0xFF1A1F1C);
+    final truthBorderColor = theme.colorScheme.tertiary; // Emerald Green for Truth
+    final forgeryBorderColor = theme.colorScheme.primary; // Crimson for Forgery
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isTruth ? theme.colorScheme.primary.withOpacity(0.1) : Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: isTruth ? theme.colorScheme.primary : theme.colorScheme.secondary.withOpacity(0.3)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isTruth ? truthBorderColor : forgeryBorderColor.withOpacity(0.7),
+            width: isTruth ? 3.0 : 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isTruth 
+                  ? truthBorderColor.withOpacity(0.2) 
+                  : forgeryBorderColor.withOpacity(0.1),
+              blurRadius: 10,
+              spreadRadius: 1,
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            BoxShadow(
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            )
+          ]
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Text(
-                        isTruth ? 'TRUTH' : 'FORGERY',
-                        style: TextStyle(
-                          color: isTruth ? theme.colorScheme.primary : theme.colorScheme.secondary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          letterSpacing: 1
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (isTruth ? truthBorderColor : forgeryBorderColor).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isTruth ? 'THE TRUTH' : 'A FORGERY',
+                          style: TextStyle(
+                            color: isTruth ? truthBorderColor : forgeryBorderColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1.5,
+                          ),
                         ),
                       ),
-                      Text(text, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
                     ],
                   ),
-                ),
-                if (voters.isNotEmpty)
-                  SizedBox(
-                    width: 120,
-                    child: Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      alignment: WrapAlignment.end,
-                      children: voters.map((v) => Tooltip(
-                        message: v.name,
-                        child: PlayerAvatar(player: v, size: 28),
-                      )).toList(),
+                  const SizedBox(height: 8),
+                  Text(
+                    text, 
+                    style: TextStyle(
+                      fontSize: 18, 
+                      fontWeight: FontWeight.bold, 
+                      color: theme.colorScheme.onSurface,
+                      fontFamily: 'serif',
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            if (voters.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'VOTES',
+                    style: TextStyle(
+                      color: theme.colorScheme.secondary.withOpacity(0.6),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    alignment: WrapAlignment.end,
+                    children: voters.map((v) => Tooltip(
+                      message: v.name,
+                      child: PlayerAvatar(player: v, size: 28),
+                    )).toList(),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
