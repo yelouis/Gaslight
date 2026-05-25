@@ -67,3 +67,7 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 15. **Firestore Heartbeat Write Volume Optimization (Resolved - May 25)**:
     - **Problem**: Player heartbeats ran every 5 seconds, causing excessive write volume and Firestore quota consumption in larger rooms.
     - **Solution**: Optimized the heartbeat interval to 10 seconds and player pruning threshold to 30 seconds inside `GameService`.
+
+16. **Cache Bypass on Missing API Key in SemanticFilter (Resolved - May 25)**:
+    - **Problem**: `SemanticFilter._getEmbedding()` checked for `GEMINI_API_KEY` and threw an exception before looking at `_vectorCache`. This caused offline test runs or mock injections to fail open, bypassing similarity filtering.
+    - **Solution**: Reordered the logic in `_getEmbedding()` to perform the `_vectorCache` lookup first, bypassing API key checks and network requests for cached terms.

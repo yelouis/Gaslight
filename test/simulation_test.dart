@@ -6,6 +6,7 @@ import '../lib/models/game_state.dart';
 import '../lib/models/player_state.dart';
 import '../lib/models/card_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../lib/utils/semantic_filter.dart';
 
 // Minimal manual mock for Firestore
 class FakeFirestore extends Fake implements FirebaseFirestore {
@@ -440,6 +441,55 @@ void main() {
       }
 
       print('--- DISCONNECT SIMULATION COMPLETED SUCCESSFULLY ---');
+    });
+
+    test('Casual Mode (Disabled Game Timers) Simulation', () async {
+      print('--- STARTING CASUAL MODE SIMULATION ---');
+
+      // 1. Create Room with isTimerDisabled = true
+      await gameService.createRoom(hostName, hostId, sabotageAnswersCount: 2, isTimerDisabled: true);
+      await Future.delayed(Duration(milliseconds: 100));
+      expect(gameService.gameState, isNotNull);
+      expect(gameService.gameState!.isTimerDisabled, isTrue);
+
+      // 2. Add bots to satisfy player count guards
+      await gameService.debugAddBots();
+      await Future.delayed(Duration(milliseconds: 200));
+
+      // Start Game
+      await gameService.startGame('the_daily_grind');
+      await Future.delayed(Duration(milliseconds: 100));
+      
+      // Verify that currentPhase is forgery and endTime is null
+      expect(gameService.gameState!.currentPhase, GamePhase.forgery);
+      expect(gameService.gameState!.endTime, isNull);
+      print('Game started in Casual Mode. endTime is verified to be null.');
+    });
+
+    test('Semantic Similarity Filtering Validation', () async {
+      print('--- STARTING SEMANTIC INTEGRITY SIMULATION ---');
+
+      // Setup cache mock embeddings using debugSetEmbedding
+      SemanticFilter.clearCache();
+      SemanticFilter.debugSetEmbedding('sleeping in my bed all day', [1.0, 0.0, 0.0]);
+      SemanticFilter.debugSetEmbedding('sleep all day in bed', [0.95, 0.1, 0.0]); // Cosine Similarity: 0.95 / (1.0 * sqrt(0.9125)) ~= 0.99
+      SemanticFilter.debugSetEmbedding('playing video games', [0.0, 1.0, 0.0]); // Cosine Similarity: 0.0
+
+      // Test highly similar answer rejection
+      bool isUniqueDuplicate = await SemanticFilter.isAnswerUnique(
+        'sleep all day in bed',
+        ['sleeping in my bed all day'],
+      );
+      expect(isUniqueDuplicate, isFalse);
+      print('Verified: Highly similar answer was successfully rejected.');
+
+      // Test unique answer acceptance
+      bool isUniqueDifferent = await SemanticFilter.isAnswerUnique(
+        'playing video games',
+        ['sleeping in my bed all day'],
+      );
+      expect(isUniqueDifferent, isTrue);
+      print('Verified: Unique answer was successfully accepted.');
     });
   });
 }

@@ -12,6 +12,11 @@ class SemanticFilter {
     _vectorCache.clear();
   }
 
+  /// Pre-populates the embedding cache for testing/mocking.
+  static void debugSetEmbedding(String text, List<double> vector) {
+    _vectorCache[text] = vector;
+  }
+
   /// Compares the newly submitted answer against all previously existing answers.
   /// Returns `true` if it is unique (below threshold similarity to all others).
   /// Falls back to `true` silently if network/API failure occurs to prevent breaking the game.
@@ -60,13 +65,13 @@ class SemanticFilter {
 
   /// Pings Gemini directly using Dart HTTP without requiring thick Firebase Functions
   static Future<List<double>> _getEmbedding(String text) async {
+    if (_vectorCache.containsKey(text)) {
+      return _vectorCache[text]!;
+    }
+
     final apiKey = dotenv.env['GEMINI_API_KEY'];
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('Missing GEMINI_API_KEY');
-    }
-
-    if (_vectorCache.containsKey(text)) {
-      return _vectorCache[text]!;
     }
 
     final url = 'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent';
