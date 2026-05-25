@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/game_service.dart';
 import '../models/game_state.dart';
+import '../models/player_state.dart';
 import '../models/card_model.dart';
 import '../utils/scoring_logic.dart';
 import '../widgets/player_avatar.dart';
