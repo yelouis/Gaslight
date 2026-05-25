@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if the requesting user's UID matches the player ID
+    function isOwner(playerId) {
+      return isAuthenticated() && request.auth.uid == playerId;
+    }
+
+    // Helper to check if a room document exists
+    function roomExists(roomCode) {
+      return exists(/databases/$(database)/documents/rooms/$(roomCode));
+    }
+
+    // Helper to check if the requesting user is the host of the room
+    function isRoomHost(roomCode) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/rooms/$(roomCode)/players/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/rooms/$(roomCode)/players/$(request.auth.uid)).data.isHost == true;
+    }
+
+    match /rooms/{roomCode} {
+      // Anyone can read rooms (needed to fetch room state before or after joining)
+      allow read: if true;
+      
+      // Creating a room is allowed if the user is authenticated
+      allow create: if isAuthenticated();
+      
+      // Updates/Deletes to the room itself (like phase changes, card assignments, rotations) must be done by the host
+      allow update, delete: if isRoomHost(roomCode);
+
+      match /players/{playerId} {
+        // Anyone can read the player list of a room
+        allow read: if true;
+        
+        // A player can only create their own player document in a room
+        allow create: if isAuthenticated() && request.auth.uid == playerId;
+        
+        // A player can update their own document, or the host can update/delete it (e.g. to handle disconnects)
+        allow update, delete: if isOwner(playerId) || isRoomHost(roomCode);
+      }
+    }
+  }
+}

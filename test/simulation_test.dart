@@ -89,8 +89,15 @@ class FakeDocumentReference<T extends Object?> extends Fake implements DocumentR
   }
 
   @override
+  Future<void> delete() async {
+    firestore.data.remove(path);
+    _triggerListeners();
+  }
+
+  @override
   Future<DocumentSnapshot<T>> get([GetOptions? options]) async {
-    return FakeDocumentSnapshot(path, Map<String, dynamic>.from(firestore.data[path] ?? {})) as DocumentSnapshot<T>;
+    final rawData = firestore.data[path];
+    return FakeDocumentSnapshot(path, rawData != null ? Map<String, dynamic>.from(rawData) : null) as DocumentSnapshot<T>;
   }
 
   @override
@@ -315,6 +322,124 @@ void main() {
       }
 
       print('--- SIMULATION COMPLETED SUCCESSFULLY ---');
+    });
+
+    test('Mid-game Disconnect & Spectator Join Simulation', () async {
+      print('--- STARTING DISCONNECT & SPECTATOR JOIN SIMULATION ---');
+
+      // 1. Create Room
+      await gameService.createRoom(hostName, hostId, sabotageAnswersCount: 2);
+      await Future.delayed(Duration(milliseconds: 100));
+      expect(gameService.gameState, isNotNull);
+      final roomCode = gameService.gameState!.roomCode;
+      print('Room created: $roomCode');
+
+      // 2. Add 9 Bots (10 total players)
+      await gameService.debugAddBots();
+      await Future.delayed(Duration(milliseconds: 200));
+      expect(gameService.players.length, 10);
+      print('Players joined: ${gameService.players.length}');
+
+      // 3. Start Game
+      await gameService.startGame('the_daily_grind');
+      await Future.delayed(Duration(milliseconds: 100));
+      expect(gameService.gameState!.currentPhase, GamePhase.sabotage);
+      print('Game started. Phase: Sabotage Round 1');
+
+      // 4. Spectator Joins mid-game
+      final specService = GameService(db: mockDb);
+      await specService.joinRoom(roomCode, 'Spectator User', 'spectator_user');
+      await Future.delayed(Duration(milliseconds: 200));
+      
+      // Verify spectator is assigned the spectator role
+      final spectatorPlayer = gameService.players.firstWhere((p) => p.id == 'spectator_user');
+      expect(spectatorPlayer.role, PlayerRole.spectator);
+      print('Spectator joined successfully with role: ${spectatorPlayer.role}');
+
+      // 5. Sabotage Round 1 with Spectator present
+      await gameService.setPlayerReady(true); // Host ready
+      await gameService.debugSimulateBotResponses();
+      await Future.delayed(Duration(milliseconds: 100));
+      await gameService.evaluateReadyState(); // Advance manually as host
+      await Future.delayed(Duration(milliseconds: 100));
+      
+      // Verify transitioned to sabotage round 2, without needing spectator ready
+      expect(gameService.gameState!.currentRotationIndex, 2);
+      print('Advanced to Sabotage Round 2 (Spectator ignored for readiness)');
+
+      // 6. Simulate player disconnect (delete bot_1)
+      print('Simulating disconnect of bot_1...');
+      await mockDb.collection('rooms').doc(roomCode).collection('players').doc('bot_1').delete();
+      await Future.delayed(Duration(milliseconds: 200));
+
+      // Verify bot_1 is removed and their card is removed/bridged
+      final hasBot1 = gameService.players.any((p) => p.id == 'bot_1');
+      expect(hasBot1, isFalse);
+      
+      final cardTargets = gameService.gameState!.cards.map((c) => c.targetPlayerId).toSet();
+      expect(cardTargets.contains('bot_1'), isFalse);
+      print('bot_1 successfully removed. Card count: ${gameService.gameState!.cards.length}');
+
+      // 7. Finish Sabotage Round 2
+      await gameService.setPlayerReady(true);
+      await gameService.debugSimulateBotResponses();
+      await Future.delayed(Duration(milliseconds: 100));
+      await gameService.evaluateReadyState();
+      await Future.delayed(Duration(milliseconds: 100));
+      
+      expect(gameService.gameState!.currentPhase, GamePhase.truth);
+      print('Phase: Truth Round');
+
+      // 8. Truth Round
+      await gameService.setPlayerReady(true);
+      await gameService.debugSimulateBotResponses();
+      await Future.delayed(Duration(milliseconds: 100));
+      await gameService.evaluateReadyState();
+      await Future.delayed(Duration(milliseconds: 100));
+      
+      expect(gameService.gameState!.currentPhase, GamePhase.vote);
+      print('Phase: Voting (9 active cards remaining)');
+
+      // 9. Voting & Reveals for remaining 9 cards
+      final expectedCards = 9;
+      for (int i = 0; i < expectedCards; i++) {
+        final currentCardIdx = i + 1;
+        print('Processing Card $currentCardIdx/$expectedCards...');
+        
+        // Vote Phase
+        await gameService.setPlayerReady(true);
+        await gameService.debugSimulateBotResponses();
+        await Future.delayed(Duration(milliseconds: 100));
+        await gameService.evaluateReadyState();
+        await Future.delayed(Duration(milliseconds: 100));
+        
+        expect(gameService.gameState!.currentPhase, GamePhase.reveal);
+        
+        // Reveal Phase
+        await gameService.setPlayerReady(true);
+        await gameService.debugSimulateBotResponses();
+        await Future.delayed(Duration(milliseconds: 100));
+        await gameService.evaluateReadyState();
+        await Future.delayed(Duration(milliseconds: 100));
+        
+        // Advance to next resolution
+        await gameService.advanceToNextResolution();
+        await Future.delayed(Duration(milliseconds: 100));
+        
+        if (i < expectedCards - 1) {
+          expect(gameService.gameState!.currentPhase, GamePhase.vote);
+        } else {
+          expect(gameService.gameState!.currentPhase, GamePhase.gameOver);
+        }
+      }
+
+      print('Phase: Game Over');
+      print('--- FINAL SCORES ---');
+      for (var p in gameService.players) {
+        print('${p.name}: ${p.totalScore}');
+      }
+
+      print('--- DISCONNECT SIMULATION COMPLETED SUCCESSFULLY ---');
     });
   });
 }

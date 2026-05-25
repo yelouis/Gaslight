@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/game_service.dart';
 import '../models/game_state.dart';
+import '../models/player_state.dart';
 import '../models/card_model.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
@@ -148,10 +149,79 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
-            child: (state.readyPlayers[me.id] ?? false) ? _buildWaitingUI(state, gs, theme) : _buildWriteUI(state, me, theme, gs),
+            child: me.role == PlayerRole.spectator
+                ? _buildSpectatorUI(state, gs, theme)
+                : (state.readyPlayers[me.id] ?? false)
+                    ? _buildWaitingUI(state, gs, theme)
+                    : _buildWriteUI(state, me, theme, gs),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSpectatorUI(GameState state, GameService gs, ThemeData theme) {
+    int readyCount = state.readyPlayers.values.where((v) => v).length;
+    int totalActive = gs.players.where((p) => p.role != PlayerRole.spectator).length;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.remove_red_eye_outlined, size: 64, color: theme.colorScheme.secondary),
+        const SizedBox(height: 24),
+        Text(
+          'SPECTATOR MODE',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            color: theme.colorScheme.secondary,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'You joined mid-game. Enjoy watching the match!',
+          style: TextStyle(color: Colors.white70, fontSize: 16),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 30),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.3)),
+          ),
+          child: Column(
+            children: [
+              Text(
+                'Game Progress',
+                style: TextStyle(
+                  color: theme.colorScheme.secondary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Players ready: $readyCount / $totalActive',
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        if (gs.currentPlayer!.isHost) ...[
+          const SizedBox(height: 40),
+          SecondaryButton(
+            text: 'EVALUATE READY STATE (HOST)',
+            onPressed: () => gs.evaluateReadyState(),
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: () => gs.debugSimulateBotResponses(),
+            child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+          ),
+        ]
+      ],
     );
   }
 

@@ -1,4 +1,4 @@
-enum PlayerRole { saboteur, target, voter, unassigned }
+enum PlayerRole { saboteur, target, voter, spectator, unassigned }
 
 class PlayerState {
   final String id;

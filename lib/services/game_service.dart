@@ -116,6 +116,9 @@ class GameService extends ChangeNotifier {
     final doc = await _db.collection('rooms').doc(roomCode).get();
     if (!doc.exists) throw Exception('Room not found');
 
+    final roomState = GameState.fromMap(doc.data()!, doc.id);
+    final isSpectator = roomState.currentPhase != GamePhase.lobby;
+
     _currentPlayerId = playerId;
     
     // In order to pick a unique color, we need the current players, but we haven't listened yet
@@ -133,6 +136,7 @@ class GameService extends ChangeNotifier {
       colorValue: selectedColor,
       avatarIndex: avatarIndex ?? _getRandomAvatar(),
       lastSeen: DateTime.now().millisecondsSinceEpoch,
+      role: isSpectator ? PlayerRole.spectator : PlayerRole.unassigned,
     );
 
     await _db.collection('rooms').doc(roomCode).collection('players').doc(playerId).set(newPlayer.toMap());
@@ -262,6 +266,18 @@ class GameService extends ChangeNotifier {
       // If Host, evaluate ready state whenever players update (e.g. someone joins/leaves/marks ready)
       if (currentPlayer?.isHost == true) {
         evaluateReadyState();
+
+        // Disconnect detection: compare actual active players to cards in gameState
+        if (_gameState != null && 
+            _gameState!.currentPhase != GamePhase.lobby && 
+            _gameState!.currentPhase != GamePhase.gameOver) {
+          final activeIds = _players.map((p) => p.id).toSet();
+          final cardIds = _gameState!.cards.map((c) => c.targetPlayerId).toSet();
+          final disconnected = cardIds.difference(activeIds);
+          for (var dpId in disconnected) {
+            handlePlayerDisconnect(dpId);
+          }
+        }
       }
     });
   }
@@ -273,6 +289,93 @@ class GameService extends ChangeNotifier {
 
   Future<void> updatePlayerState(String roomCode, PlayerState player) async {
     await _db.collection('rooms').doc(roomCode).collection('players').doc(player.id).set(player.toMap(), SetOptions(merge: true));
+  }
+
+  Future<void> handlePlayerDisconnect(String disconnectedPlayerId) async {
+    if (_gameState == null || currentPlayer?.isHost != true) return;
+    
+    final state = _gameState!;
+    final phase = state.currentPhase;
+    
+    // 1. Remove the disconnected player's card from the list
+    final updatedCards = state.cards.where((c) => c.targetPlayerId != disconnectedPlayerId).toList();
+    
+    // 2. Adjust ready players map
+    final newReadyPlayers = Map<String, bool>.from(state.readyPlayers)..remove(disconnectedPlayerId);
+    
+    GameState nextState = state.copyWith(
+      cards: updatedCards,
+      totalPlayers: _players.where((p) => p.role != PlayerRole.spectator).length,
+      readyPlayers: newReadyPlayers,
+    );
+    
+    // 3. Phase-specific adjustments
+    if (phase == GamePhase.sabotage) {
+      final assignments = Map<String, String>.from(state.currentCardAssignments);
+      
+      String? holderOfDisconnected;
+      assignments.forEach((holder, target) {
+        if (target == disconnectedPlayerId) {
+          holderOfDisconnected = holder;
+        }
+      });
+      
+      final targetOfDisconnected = assignments[disconnectedPlayerId];
+      assignments.remove(disconnectedPlayerId);
+      
+      if (holderOfDisconnected != null && targetOfDisconnected != null) {
+        assignments[holderOfDisconnected!] = targetOfDisconnected;
+      }
+      
+      final activePlayerIds = _players
+          .where((p) => p.id != disconnectedPlayerId && p.role != PlayerRole.spectator)
+          .map((p) => p.id)
+          .toList();
+          
+      int remainingRotations = state.sabotageAnswersCount;
+      if (activePlayerIds.length <= remainingRotations) {
+        remainingRotations = activePlayerIds.length - 1;
+      }
+      
+      if (remainingRotations <= 0 || state.currentRotationIndex > remainingRotations) {
+        final pIds = activePlayerIds;
+        Map<String, String> truthAssignments = { for (var id in pIds) id : id };
+        nextState = nextState.copyWith(
+          currentPhase: GamePhase.truth,
+          currentCardAssignments: truthAssignments,
+          sabotageAnswersCount: 0,
+          currentRotationIndex: 0,
+          endTime: DateTime.now().add(const Duration(seconds: 60)).millisecondsSinceEpoch,
+        );
+      } else {
+        final newRotations = RotationEngine.generateRotations(activePlayerIds, remainingRotations);
+        Map<String, Map<String, String>> stringRotations = {};
+        newRotations.forEach((key, val) => stringRotations[key.toString()] = val);
+        
+        nextState = nextState.copyWith(
+          currentCardAssignments: assignments,
+          rotationPlan: stringRotations,
+          sabotageAnswersCount: remainingRotations,
+        );
+      }
+    } else if (phase == GamePhase.truth) {
+      final assignments = Map<String, String>.from(state.currentCardAssignments)..remove(disconnectedPlayerId);
+      nextState = nextState.copyWith(currentCardAssignments: assignments);
+    } else if (phase == GamePhase.vote || phase == GamePhase.reveal) {
+      if (state.currentReaderId == disconnectedPlayerId) {
+        final activePlayerIds = _players
+            .where((p) => p.id != disconnectedPlayerId && p.role != PlayerRole.spectator)
+            .map((p) => p.id)
+            .toList();
+        if (activePlayerIds.isNotEmpty) {
+          nextState = nextState.copyWith(currentReaderId: activePlayerIds.first);
+        } else {
+          nextState = nextState.copyWith(currentPhase: GamePhase.gameOver);
+        }
+      }
+    }
+    
+    await updateGameState(nextState);
   }
 
   /// Atomically updates scores for all players in a room.
@@ -437,9 +540,10 @@ class GameService extends ChangeNotifier {
     final key = _currentStateKey();
     if (_advancedStateKeys.contains(key)) return;
     
-    bool allReady = _players.every((p) => _gameState!.readyPlayers[p.id] == true);
+    final activePlayers = _players.where((p) => p.role != PlayerRole.spectator).toList();
+    bool allReady = activePlayers.every((p) => _gameState!.readyPlayers[p.id] == true);
     
-    if (allReady && _players.isNotEmpty) {
+    if (allReady && activePlayers.isNotEmpty) {
        _advancedStateKeys.add(key);
        await _advanceRotationOrPhase();
     }
@@ -472,7 +576,7 @@ class GameService extends ChangeNotifier {
             );
         } else {
             // Transition to Truth Phase: Every player gets their own card back
-            var pIds = _players.map((p) => p.id).toList();
+            var pIds = _players.where((p) => p.role != PlayerRole.spectator).map((p) => p.id).toList();
             Map<String, String> truthAssignments = { for (var id in pIds) id : id };
             
             nextState = nextState.copyWith(
@@ -483,10 +587,10 @@ class GameService extends ChangeNotifier {
         }
     } else if (_gameState!.currentPhase == GamePhase.truth) {
         // Transition to Vote Phase: First player is the reader
-        var pIds = _players.map((p) => p.id).toList();
+        var pIds = _players.where((p) => p.role != PlayerRole.spectator).map((p) => p.id).toList();
         nextState = nextState.copyWith(
             currentPhase: GamePhase.vote,
-            currentReaderId: pIds.first,
+            currentReaderId: pIds.isNotEmpty ? pIds.first : null,
             endTime: DateTime.now().add(Duration(seconds: voteDuration)).millisecondsSinceEpoch,
         );
     } else if (_gameState!.currentPhase == GamePhase.vote) {
@@ -513,7 +617,7 @@ class GameService extends ChangeNotifier {
     if (_advancedStateKeys.contains(key)) return;
     _advancedStateKeys.add(key);
 
-    final pIds = _players.map((p) => p.id).toList();
+    final pIds = _players.where((p) => p.role != PlayerRole.spectator).map((p) => p.id).toList();
     final currentIdx = pIds.indexOf(_gameState!.currentReaderId ?? '');
     
     if (currentIdx != -1 && currentIdx < pIds.length - 1) {

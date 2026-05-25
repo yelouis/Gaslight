@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'dart:math';
 import '../services/game_service.dart';
 import '../models/game_state.dart';
+import '../models/player_state.dart';
 import '../models/card_model.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
@@ -133,9 +134,11 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
-            child: _submitted || (state.readyPlayers[me.id] ?? false) 
-              ? _buildWaitingUI(theme, gs, state) 
-              : _buildVotingUI(state, me, theme, currentCard),
+            child: me.role == PlayerRole.spectator
+              ? _buildSpectatorVoteUI(state, me, theme, currentCard, gs)
+              : _submitted || (state.readyPlayers[me.id] ?? false) 
+                ? _buildWaitingUI(theme, gs, state) 
+                : _buildVotingUI(state, me, theme, currentCard),
           ),
         ),
       ),
@@ -288,6 +291,101 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
              ),
            ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSpectatorVoteUI(GameState state, dynamic me, ThemeData theme, CardModel? currentCard, GameService gs) {
+    int readyCount = state.readyPlayers.values.where((v) => v).length;
+    int totalActive = gs.players.where((p) => p.role != PlayerRole.spectator).length;
+    final currentTargetId = state.currentReaderId;
+    String targetName = gs.players.firstWhere((p) => p.id == currentTargetId, orElse: () => me).name;
+
+    return SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.remove_red_eye_outlined, size: 64, color: theme.colorScheme.secondary),
+            const SizedBox(height: 24),
+            Text(
+              'SPECTATING VOTE',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: theme.colorScheme.secondary,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Players are voting on ${targetName.toUpperCase()}\'s card.',
+              style: const TextStyle(color: Colors.white70, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 30),
+            if (currentCard != null) ...[
+              ParchmentCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    Text(
+                      'Prompt:',
+                      style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      currentCard.promptText,
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontFamily: 'serif'),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 30),
+            ],
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.3)),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'Voting Progress',
+                    style: TextStyle(
+                      color: theme.colorScheme.secondary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Votes Locked In: $readyCount / $totalActive',
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+            if (gs.currentPlayer!.isHost) ...[
+              const SizedBox(height: 40),
+              SecondaryButton(
+                text: 'PROCEED TO REVEAL (HOST)',
+                onPressed: () { 
+                  gs.updateGameState(state.copyWith(currentPhase: GamePhase.reveal));
+                },
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () => gs.debugSimulateBotResponses(),
+                child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+              ),
+            ]
+          ],
+        ),
       ),
     );
   }

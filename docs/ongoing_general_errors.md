@@ -67,49 +67,20 @@ This document tracks the technical engineering history, resolved issues, and unr
     - **Problem**: Phase transitions were strictly host-gated, meaning if a host disconnected, the game was permanently stuck.
     - **Solution**: Added a 5-second periodic heartbeat updating player `lastSeen` in Firestore, and auto-cleaned players inactive for 15+ seconds, which triggers host transfer if the host leaves.
 
+16. **Mid-Game Join State Corruption (Resolved - May 25)**:
+    - **Problem**: Players joining a game in progress corrupted the state because they were treated as active players but lacked cards/prompts.
+    - **Solution**: Implemented Spectator Mode (Option B). Late-joining players are assigned `PlayerRole.spectator`. Screen UIs (`Phase2CraftScreen` and `Phase3VoteScreen`) show beautiful spectator views, and their readiness/voting is ignored in gameplay calculations.
+
+17. **Mid-Game Disconnect Card Orphans (Resolved - May 25)**:
+    - **Problem**: When players disconnected mid-game, their cards and rotations remained, causing dead voting rounds or crashes.
+    - **Solution**: Implemented Dynamic Rotation Recalculation (Option B). The host detects player deletion, bridges card assignments (bypassing the departed player), recalculates future sabotage rotation plans dynamically, and auto-advances the card reader.
+
+18. **Direct Client-Side Firestore Mutation Security Risks (Resolved - May 25)**:
+    - **Problem**: Client applications wrote directly to Firestore without server-side validation or checks.
+    - **Solution**: Defined `firestore.rules` (Option A) enforcing write validations based on user authentication, restricting room changes to the host, and restricting player document changes to the owner (except for host cleanup).
+
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-### Issue 1: Mid-Game Join State Corruption
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lobby_screen.dart` (lines 45-61) and `game_service.dart` (lines 110-135): `joinRoom` does not check the current phase of the room. A player can join a room that is already in active gameplay, resulting in corrupted states (missing card assignments, index errors).
-
-**Option A (recommended)**: **Gate Joins to Lobby Phase Only** — In `joinRoom`, check if `gameState.currentPhase == GamePhase.lobby`. If not, throw an exception and display a snackbar explaining that the game has already started.
-  - *Pros*: Simple, completely prevents game state corruption from mid-game joins.
-  - *Cons*: None.
-
-**Option B**: **Support Spectator Mode** — If a player joins an active game, assign them a "spectator" role so they can watch the game without having cards or voting capability.
-  - *Pros*: Allows late-joining friends to watch the game.
-  - *Cons*: Requires significant refactoring of roles and UI screens.
-
-Your selection: _____
-
----
-
-### Issue 2: Mid-Game Disconnect Card Orphans
-**Status**: ⚠️ Confirmed Unresolved — Verified in `game_service.dart` (lines 142-154): While the player heartbeat deletes inactive players, their card remains in `GameState.cards` and the passing rotation, resulting in empty/stale answers and dead voting rounds.
-
-**Option A (recommended)**: **Auto-Submit Empty Answers and Skip Voting** — Keep their card in the game to avoid breaking the rotation index, but auto-fill their answers with empty strings and skip their card resolution during the vote phase.
-  - *Pros*: Maintains game integrity and does not require complex mid-game rotation recalculation.
-  - *Cons*: Inactive cards will still consume time unless skipped or force-advanced.
-
-**Option B**: **Dynamic Rotation Recalculation** — Recalculate the rotations and card assignments mid-game when a player disconnects.
-  - *Pros*: Completely removes the disconnected player's prompts and cards from the game.
-  - *Cons*: Extremely high complexity; risk of losing prompt distribution balance and existing player answers.
-
-Your selection: _____
-
----
-
-### Issue 3: Direct Client-Side Firestore Mutation Security Risks
-**Status**: ⚠️ Confirmed Unresolved — Verified in `game_service.dart` (e.g., `updatePlayerState`, `updateGameState`): Client applications write directly to Firestore collections without server-side validation. Clients can mutate other players' scores or force advance phases.
-
-**Option A (recommended)**: **Implement Firestore Security Rules** — Write rules in `firestore.rules` verifying that `request.auth.uid` matches the player document ID for writes, and that only the host player can modify the root room document.
-  - *Pros*: Extremely secure, industry-standard solution; zero backend code to write.
-  - *Cons*: Requires setting up Firebase Auth so that anonymous player IDs are linked to authenticated sessions.
-
-**Option B**: **Migrate Transitions to Cloud Functions** — Implement all state changes and score mutations behind HTTPS Callable Functions.
-  - *Pros*: Complete server-side control over game logic and scoring.
-  - *Cons*: High latency, increased cost, and breaks local offline-first emulation.
-
-Your selection: _____
+None. All previously identified issues have been resolved.
