@@ -72,19 +72,12 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Problem**: `SemanticFilter._getEmbedding()` checked for `GEMINI_API_KEY` and threw an exception before looking at `_vectorCache`. This caused offline test runs or mock injections to fail open, bypassing similarity filtering.
     - **Solution**: Reordered the logic in `_getEmbedding()` to perform the `_vectorCache` lookup first, bypassing API key checks and network requests for cached terms.
 
+17. **Firebase Anonymous Authentication Configuration Error (Resolved - May 25)**:
+    - **Problem**: Running the unmocked E2E integration test `integration_test/real_e2e_test.dart` in Chrome failed on app launch because the cloud Firebase project `gaslight-46368` (configured in `DefaultFirebaseOptions.currentPlatform`) threw a `FirebaseAuthException: [firebase_auth/configuration-not-found]` during `signInAnonymously()`.
+    - **Solution**: Enabled the Anonymous sign-in provider in the Firebase Authentication Console for the production project. Additionally, adjusted the test environment virtual viewport size to `1600x2000` to prevent layout warnings/errors on Chrome, and implemented robust waiting routines for `CONTINUE` and `RETURN TO LOBBY` buttons during transition animations.
+
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-### Issue 1: Firebase Anonymous Authentication Configuration Error
-**Status**: ⚠️ Confirmed Unresolved — Running the unmocked E2E integration test `integration_test/real_e2e_test.dart` in Chrome fails on app launch because the Firebase project `gaslight-46368` (configured in `DefaultFirebaseOptions.currentPlatform`) throws a `FirebaseAuthException: [firebase_auth/configuration-not-found]` during `signInAnonymously()`.
-
-**Option A (recommended)**: **Enable Anonymous Sign-In in Firebase Console** — Log into the Firebase Console for the `gaslight-46368` project, go to **Build > Authentication > Sign-in method**, and enable the **Anonymous** provider toggle.
-  - *Pros*: Re-establishes real E2E functional integrity without changing any application code.
-  - *Cons*: Requires administrative access to the Firebase Console of the cloud project.
-
-**Option B**: **Integrate Local Firebase Emulator Suite** — Configure the application and test suites to check for local emulator availability and fall back to `useAuthEmulator('localhost', 9099)` and `useFirestoreEmulator('localhost', 8080)`, bypassing cloud provider check limits.
-  - *Pros*: Decouples E2E test environments from cloud service state; works fully offline.
-  - *Cons*: Requires configuring `firebase.json` and launching local Firebase Emulators before running E2E tests.
-
-Your selection: _____
+*None currently.*

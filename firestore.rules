@@ -37,8 +37,8 @@ service cloud.firestore {
         // Anyone can read the player list of a room
         allow read: if true;
         
-        // A player can only create their own player document in a room
-        allow create: if isAuthenticated() && request.auth.uid == playerId;
+        // A player can only create their own player document in a room, or the host can create it (needed for bots)
+        allow create: if isAuthenticated() && (request.auth.uid == playerId || isRoomHost(roomCode));
         
         // A player can update their own document, or the host can update/delete it (e.g. to handle disconnects)
         allow update, delete: if isOwner(playerId) || isRoomHost(roomCode);

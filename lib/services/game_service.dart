@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/game_state.dart';
 import '../models/player_state.dart';
 import 'dart:math';
@@ -87,6 +88,12 @@ class GameService extends ChangeNotifier {
   Future<void> createRoom(String playerName, String playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex, bool isTimerDisabled = false}) async {
     final roomCode = _generateRoomCode();
     _currentPlayerId = playerId;
+    print('DEBUG: createRoom playerId = $playerId');
+    String? authUid;
+    try {
+      authUid = FirebaseAuth.instance.currentUser?.uid;
+    } catch (_) {}
+    print('DEBUG: FirebaseAuth UID = $authUid');
 
     final initialState = GameState(
       roomCode: roomCode, 
@@ -675,31 +682,98 @@ class GameService extends ChangeNotifier {
     if (_gameState == null) return;
     final state = _gameState!;
     final phase = state.currentPhase;
-    
-    for (var p in _players) {
-      if (!p.id.startsWith('bot_')) continue;
-      
-      if (phase == GamePhase.forgery || phase == GamePhase.truth) {
-         final targetId = state.currentCardAssignments[p.id];
-         if (targetId != null) {
-            await submitCardAnswer(targetId, p.id, 'Simulated Answer from ${p.name}', phase == GamePhase.truth);
-            await setPlayerReady(true, playerId: p.id);
-         }
-      } else if (phase == GamePhase.vote || phase == GamePhase.reveal) {
-         // Bots vote for truth (or someone random)
-         if (phase == GamePhase.reveal) {
-            // In reveal phase, everyone just needs to tap "next" or "ready"
-            await setPlayerReady(true, playerId: p.id);
-            continue;
-         }
+    final roomRef = _db.collection('rooms').doc(state.roomCode);
 
-         final currentTarget = state.currentReaderId;
-         if (currentTarget != null && currentTarget != p.id) {
-            await castVote(currentTarget, p.id, 'TRUTH');
-         } else if (currentTarget == p.id) {
-            // Reader just marks ready
-            await setPlayerReady(true, playerId: p.id); 
-         }
+    if (phase == GamePhase.forgery || phase == GamePhase.truth) {
+      // 1. Update all bot card answers and readyPlayers in a single transaction
+      await _db.runTransaction((transaction) async {
+        final snap = await transaction.get(roomRef);
+        if (!snap.exists) return;
+        final currentState = GameState.fromMap(snap.data()!, snap.id);
+        final newCards = List<CardModel>.from(currentState.cards);
+        final newReadyMap = Map<String, bool>.from(currentState.readyPlayers);
+
+        for (var p in _players) {
+          if (!p.id.startsWith('bot_')) continue;
+          
+          // Mark bot ready in the room document
+          newReadyMap[p.id] = true;
+
+          final targetId = currentState.currentCardAssignments[p.id];
+          if (targetId != null) {
+            final cardIdx = newCards.indexWhere((c) => c.targetPlayerId == targetId);
+            if (cardIdx != -1) {
+              final card = newCards[cardIdx];
+              if (phase == GamePhase.truth) {
+                newCards[cardIdx] = card.copyWith(truthAnswer: 'Simulated Answer from ${p.name}');
+              } else {
+                final sabs = Map<String, String>.from(card.sabotageAnswers);
+                sabs[p.id] = 'Simulated Answer from ${p.name}';
+                newCards[cardIdx] = card.copyWith(sabotageAnswers: sabs);
+              }
+            }
+          }
+        }
+        transaction.update(roomRef, {
+          'cards': newCards.map((c) => c.toMap()).toList(),
+          'readyPlayers': newReadyMap,
+        });
+      });
+
+      // 2. Set all bots to ready in a batch write for players collection
+      final batch = _db.batch();
+      for (var p in _players) {
+        if (!p.id.startsWith('bot_')) continue;
+        final pRef = _db.collection('rooms').doc(state.roomCode).collection('players').doc(p.id);
+        batch.update(pRef, {'isReady': true});
+      }
+      await batch.commit();
+
+    } else if (phase == GamePhase.vote) {
+      final currentTargetId = state.currentReaderId!;
+
+      // 1. Update all bot votes and readyPlayers in a single transaction
+      await _db.runTransaction((transaction) async {
+        final snap = await transaction.get(roomRef);
+        if (!snap.exists) return;
+        final currentState = GameState.fromMap(snap.data()!, snap.id);
+        final newCards = List<CardModel>.from(currentState.cards);
+        final newReadyMap = Map<String, bool>.from(currentState.readyPlayers);
+
+        final cardIdx = newCards.indexWhere((c) => c.targetPlayerId == currentTargetId);
+        if (cardIdx != -1) {
+          final card = newCards[cardIdx];
+          final newVotes = Map<String, String>.from(card.votes);
+
+          for (var p in _players) {
+            if (!p.id.startsWith('bot_')) continue;
+            
+            // Mark bot ready in the room document
+            newReadyMap[p.id] = true;
+
+            if (currentTargetId != p.id) {
+              newVotes[p.id] = 'TRUTH';
+            }
+          }
+          newCards[cardIdx] = card.copyWith(votes: newVotes);
+        }
+        
+        // If the current reader is a bot, mark them ready as well
+        if (currentTargetId.startsWith('bot_')) {
+          newReadyMap[currentTargetId] = true;
+        }
+
+        transaction.update(roomRef, {
+          'cards': newCards.map((c) => c.toMap()).toList(),
+          'readyPlayers': newReadyMap,
+        });
+      });
+
+      // 2. If the current reader/target is a bot, mark them ready in players collection
+      if (currentTargetId.startsWith('bot_')) {
+        await _db.collection('rooms').doc(state.roomCode).collection('players').doc(currentTargetId).update({
+          'isReady': true,
+        });
       }
     }
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/game_service.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/lobby_background.dart';
@@ -40,13 +41,21 @@ class _LobbyScreenState extends State<LobbyScreen> {
     });
   }
 
+  String _getPlayerId() {
+    try {
+      return FirebaseAuth.instance.currentUser?.uid ?? const Uuid().v4();
+    } catch (_) {
+      return const Uuid().v4();
+    }
+  }
+
   void _createRoom() async {
     final name = _nameController.text.trim();
     setState(() => _nameError = name.isEmpty);
     if (name.isEmpty) return;
 
     final gameService = context.read<GameService>();
-    final playerId = const Uuid().v4();
+    final playerId = _getPlayerId();
 
     try {
       await gameService.createRoom(
@@ -57,6 +66,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
         isTimerDisabled: _isTimerDisabled,
       );
     } catch (e) {
+      debugPrint('Error creating room: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
@@ -70,7 +80,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     if (name.isEmpty || roomCode.length != 4) return;
 
     final gameService = context.read<GameService>();
-    final playerId = const Uuid().v4();
+    final playerId = _getPlayerId();
 
     try {
       await gameService.joinRoom(roomCode, name, playerId, avatarIndex: _selectedAvatarIndex);
