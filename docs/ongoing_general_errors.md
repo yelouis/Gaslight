@@ -115,6 +115,8 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 ## ⚠️ Unresolved Issues & Suggestions
 
 > Discovered during a full docs + code-walkthrough of Journeys 1–5 (see `docs/e2e_testing_journeys.md`) on July 8. Each issue below was traced to specific source lines. **These are not yet fixed** — they are documented here for triage. Ordered by severity.
+>
+> ✅ **Selections made.** A step-by-step, player-language implementation & validation plan for the selected options now lives in **`docs/implementation_plan_selected_fixes.md`** (Waves A→C). New findings (Issues 8–11) and fun/gameplay proposals (P1–P6) were added below on July 9 and are awaiting your selection.
 
 ---
 
@@ -140,11 +142,17 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
   - *Pros*: Smallest change; unblocks multiplayer immediately with no client refactor.
   - *Cons*: Any player can overwrite the *entire* room document (scores, phase, other players' answers, votes) — trivially cheatable; abandons the integrity guarantees the current rules were written to provide.
 
-**Validation**:
-- Add a widget/integration test that instantiates **two** `GameService` instances against a rules-enforcing emulator (`firebase emulators:exec`), one host + one non-host human, and asserts the non-host can submit a forgery and cast a vote without `PERMISSION_DENIED`.
-- Manual: run two devices/emulators (host + joiner), reach FORGERY, and confirm the joiner's SUBMIT actually mutates `cards` in the Firestore console.
+**Option D (SELECTED — the Firebase industry standard for a scalable App Store game)**: **Server-Authoritative via Cloud Functions** — A small trusted server (Firebase Cloud Functions) becomes the *only* writer of the shared game. Players **read** the game live for instant UI, but every action (submit, vote, ready, advance, score) goes through a callable function that verifies it's really that player and enforces the rules. Security rules deny all direct client writes to the room. This also lets the Gemini API key live on the server, closing the key-exposure risk the README already flags.
+  - *Pros*: Cheat-resistant (no player's phone can rewrite scores/answers); auto-scales with Cloud Functions; the correct posture for a public App Store release; centralizes anti-cheat and the AI similarity check; secures the API key.
+  - *Cons*: Largest lift — introduces a backend and requires porting the pure game logic (`rotation_engine.dart`, `scoring_logic.dart`) to TypeScript; adds ~100–300 ms of call latency (fine for a turn-based party game); modest per-invocation cost.
 
-Your selection: Proceed with Option A.
+**Validation**:
+- Add an integration test with **two** authenticated clients (host + joiner) against the Functions+Firestore **emulator**; assert the joiner can submit/vote/ready and the game advances — the exact path that is impossible today.
+- Rules unit tests (`@firebase/rules-unit-testing`) proving a client cannot write `totalScore`, another player's doc, or the room doc.
+- Manual: two physical devices on a store build complete a full 4-player loop with no `PERMISSION_DENIED`.
+
+Your selection: Proceed with Option A → **overridden to Option D** per your note ("industry standard for security using Firebase; scalable App Store game").
+**Decision (July 9):** Implement **Option D (server-authoritative Cloud Functions)** as the production target — see `docs/implementation_plan_selected_fixes.md` **Wave C**. Optional interim: the Option A host-authoritative shim if a friend playtest is needed before the backend exists (Wave C5).
 
 ---
 
@@ -260,4 +268,156 @@ Your selection: Proceed with Option A.
 **Validation**: Unit-test honor selection for a 4-player + 1-spectator game asserting the spectator is never selected and no player holds two honors; render the screen for a 2-player game and confirm no duplicate honoree.
 
 Your selection: Proceed with Option A.
+
+---
+
+## 🆕 Newly Discovered Issues (July 9) — Awaiting Selection
+
+> Found in a second, deeper pass over the game loop, lobby, and disconnect/host-transfer logic. Same format as above. Each describes what it means for the player first.
+
+---
+
+### Issue 8: Tapping "Start Game" Can Silently Do Nothing
+**Status**: ⚠️ Confirmed Unresolved — Verified in `game_service.dart` `startGame` (line 478) and `lobby_screen.dart` (line 340).
+- **What it means for the player:** The host taps **START GAME** and… nothing happens. No message, no game, no explanation. This occurs when there are too few players, when the host chose more forgery rounds than there are players, or when the chosen deck doesn't have enough prompts for the player count.
+- **Root cause:** `startGame` bails silently on `_players.length < 2` (`return;` with no feedback) and `throw`s for `players <= rounds` / deck-too-small — but the lobby calls it fire-and-forget (`gs.startGame(_selectedDeck)` at `lobby_screen.dart:341`, not awaited, no `try/catch`), so the exception is swallowed and the host sees nothing. The button is enabled whenever `players.isNotEmpty` (even with 1 player).
+
+**Option A (recommended)**: **Surface Every Failure + Gate the Button** — Make `startGame` throw a descriptive error for all failure modes; in the lobby, `await` it in a `try/catch` and show a `SnackBar`. Additionally disable/annotate START until `players.length >= 2` and `players.length > selectedRounds`, and warn when the deck is too small for the player count.
+  - *Pros*: Host always understands why they can't start; prevents dead-button confusion; cheap.
+  - *Cons*: Requires threading the deck-capacity check into the lobby (small).
+
+**Option B**: **Auto-Correct Instead of Erroring** — Clamp rounds to `players - 1` and auto-swap to a large-enough deck silently.
+  - *Pros*: "Just works," never blocks the host.
+  - *Cons*: Hidden behavior changes the host's chosen settings without consent; can surprise players.
+
+**Validation**: Unit — `startGame` throws for 1 player, for `rounds >= players`, and for deck-too-small. Widget — lobby shows a SnackBar on each. Manual — try starting with 1 player and with 5 rounds/3 players; confirm a clear message.
+
+Your selection: _____
+
+---
+
+### Issue 9: A Player Who Leaves Can Be "Cleaned Up" Several Times at Once
+**Status**: ⚠️ Confirmed Unresolved — Verified in `game_service.dart` `listenToRoom` disconnect loop (lines 284–286) and `handlePlayerDisconnect` (line 302). No in-flight/idempotency guard.
+- **What it means for the player:** When someone drops out mid-game, the recovery routine can fire **multiple times for the same person before the first finishes**. That can double-remove cards, shrink the number of rounds more than once, or scramble who-writes-for-whom — occasionally corrupting the game right after a disconnect.
+- **Root cause:** The players listener recomputes `disconnected = cardIds.difference(activeIds)` and calls `handlePlayerDisconnect(dpId)` on *every* snapshot until the room write lands. Because that write is async and unguarded, overlapping snapshots (e.g. a heartbeat tick) start a second, third handler for the same id, each reading the same stale state and re-applying mutations.
+
+**Option A (recommended)**: **In-Flight Guard + Idempotency** — Track ids currently being processed in a `Set` and skip duplicates; also early-return if the player's card is already gone, so a late duplicate is a harmless no-op. (Fully resolved later when disconnect handling becomes an atomic server transaction under Issue 1 / Wave C.)
+  - *Pros*: Stops double-application; minimal change; composes with the eventual server migration.
+  - *Cons*: In-memory guard only protects a single client (acceptable — only the host runs this today).
+
+**Validation**: Fire disconnect detection twice synchronously for one player; assert `cards` shrinks by exactly one and `sabotageAnswersCount` decrements at most once. Manual — kill a bot mid-forgery; confirm exactly one card removed and rotations sane.
+
+Your selection: _____
+
+---
+
+### Issue 10: Host Handoff Picks a Semi-Random Player — Possibly a Spectator
+**Status**: ⚠️ Confirmed Unresolved — Verified in `game_service.dart` host-transfer block (`_players.first`, line 268). Contradicts `design_database_and_security.md` "longest-in-room" rule.
+- **What it means for the player:** If the host leaves, the game is supposed to promote the longest-standing player to run things. Instead it promotes an essentially **random** player — and it can even hand the host role to a **spectator who isn't playing**, which can stall the match because that person has no reason (or ability) to drive it forward.
+- **Root cause:** Firestore returns the players collection ordered by document ID (the random auth-uid/uuid), not by join time, so `_players.first` is not the oldest joiner. There is also no `role != spectator` filter before promotion.
+
+**Option A (recommended)**: **Promote Earliest-Joined Active Player** — Add a `joinedAt` timestamp to `PlayerState` on create; on host loss, promote the non-spectator with the smallest `joinedAt` (fallback to smallest id for legacy docs).
+  - *Pros*: Matches documented intent; never hands control to a spectator; deterministic.
+  - *Cons*: Adds one field + serialization.
+
+**Option B**: **Any Active Player, First to Detect Wins** — Skip join-order; simply promote the first *non-spectator* in the list.
+  - *Pros*: Smaller change (no new field).
+  - *Cons*: Still non-deterministic ordering; two clients could momentarily both claim host.
+
+**Validation**: Room with host + 2 players + 1 spectator; delete host; assert earliest-joined non-spectator becomes host. Manual — host leaves mid-game; a playing player takes over and the game continues.
+
+Your selection: _____
+
+---
+
+### Issue 11: Rejoining After the App Loses Its Anonymous Identity Locks the Player Out
+**Status**: ⚠️ Confirmed Unresolved — Verified against `main.dart` `signInAnonymously()`, `lobby_screen.dart` `_getPlayerId()` (uses `currentUser.uid`), and `firestore.rules` `isOwner(playerId)`.
+- **What it means for the player:** A player's identity is their anonymous Firebase account. If that account is lost — cleared browser storage on web, reinstall, or a failed silent sign-in — the app makes a **brand-new** identity on next launch. The saved "rejoin" info still points at the old identity, so the returning player can't edit their own record and effectively shows up as a stranger locked out of their seat.
+- **Root cause:** `player_id` is cached as the auth `uid`, but the rules require `request.auth.uid == playerId` for a player to write their own doc. After an identity change, cached `playerId != new uid`, so `tryRejoinSession` restores a session the player can no longer write to.
+
+**Option A (recommended)**: **Stable Local Player ID Decoupled from Auth** — Generate and persist a UUID `playerId` once per device (SharedPreferences) and keep it stable across auth changes; treat the anonymous `uid` purely as the auth credential. Adjust rules to map ownership via a server/function check rather than `uid == playerId` (naturally handled when Issue 1 / Wave C moves writes server-side and validates `uid` against the player's recorded `authUid`).
+  - *Pros*: Rejoin survives storage/identity loss; cleaner identity model; composes with the server-authoritative migration.
+  - *Cons*: Requires storing an `authUid` alongside `playerId` and validating server-side; interim rules can't express this without a function.
+
+**Option B**: **Detect Mismatch and Restart Cleanly** — On rejoin, if cached `playerId != currentUser.uid`, clear the session and send the player to the entry screen with a friendly "please rejoin" message instead of a broken restored state.
+  - *Pros*: Small; avoids the silent locked-out state.
+  - *Cons*: Player loses their seat/score on identity loss (mid-game they'd rejoin as a spectator).
+
+**Validation**: Simulate `currentUser.uid` changing between sessions; assert rejoin either keeps a stable id (Option A) or cleanly resets (Option B) rather than restoring an unwritable session. Manual (web) — clear site data mid-lobby, reload, confirm graceful behavior.
+
+Your selection: _____
+
+---
+
+## 💡 Gameplay & Fun Improvement Proposals (July 9) — Awaiting Selection
+
+> Not bugs — ideas to make Gaslight more fun, sticky, and satisfying. Same option/selection format so you can pick what to build. Ordered roughly by impact-to-effort.
+
+---
+
+### Proposal P1: Running Leaderboard Between Cards
+**What it adds:** Right now players only see standings at the very end. A compact leaderboard on the reveal screen (and a quick "standings" flash between cards) creates suspense and rivalry every single round — the "oh I just passed Bob!" moment that keeps party games tense.
+
+**Options:**
+- **Option A (recommended)**: A slim ranked strip on the reveal screen (avatar · name · score · ▲/▼ movement since last card).
+- **Option B**: A full standings screen that briefly appears between reveal and the next vote.
+- **Option C**: Both — strip always, full screen only at the halfway point and end.
+
+*Effort:* Low–Medium (data already exists in `PlayerState.totalScore`). Your selection: _____
+
+---
+
+### Proposal P2: Reveal Drama — Sequential Vote Landing + "Best Lie" Callout
+**What it adds:** The reveal is where the payoff lives. Instead of showing all votes at once, animate them landing one-by-one, save the Truth for last, then crown the round's **Master Forger** ("Bob's lie fooled 3 of you!"). This is the single biggest "table erupts" moment in games like this.
+
+**Options:**
+- **Option A (recommended)**: Staggered vote-chip animation → truth revealed last → "Best Forgery of the Round" banner (ties into the honor stats from Clarification 2 Option A).
+- **Option B**: Just the staggered animation, no banner.
+- **Option C**: Add suspense audio/haptic stings on each landing (needs bundled sound assets).
+
+*Effort:* Medium. Your selection: _____
+
+---
+
+### Proposal P3: Emoji Reactions During Reveal
+**What it adds:** Let players fire quick reactions (😂 🤨 🐍 👏) that float over the reveal. Cheap to build, huge for the social, laugh-out-loud feel that makes people want to replay — and great for shareable clips.
+
+**Options:**
+- **Option A (recommended)**: A fixed reaction tray; reactions broadcast via the players/room doc and animate for everyone.
+- **Option B**: Reactions only (no counts), ephemeral and local-broadcast to reduce writes.
+
+*Effort:* Medium (needs a small realtime channel; trivial once Issue 1's server exists). Your selection: _____
+
+---
+
+### Proposal P4: "I Can't Answer This" Prompt Re-Roll (Truth Phase)
+**What it adds:** Sometimes your own prompt genuinely doesn't apply to you ("worst breakup" for someone never in a relationship), which produces flat truths. A once-per-game re-roll on your **own** card keeps truths juicy and reduces dead cards.
+
+**Options:**
+- **Option A (recommended)**: One re-roll per player per game, only on your own Truth card, drawing an unused prompt.
+- **Option B**: Host-configurable number of re-rolls in the lobby (0–2).
+
+*Effort:* Low–Medium (deck already supports unique draws). Your selection: _____
+
+---
+
+### Proposal P5: Lobby Warmth — Live Roster, Ready-Check, and House Rules
+**What it adds:** The lobby is the first impression. Add live "player joined" flourishes, an optional non-host **ready-check** before start, and a couple of house-rule toggles (e.g., "family-friendly decks only", round count presets). Makes setup feel intentional and social rather than a form.
+
+**Options:**
+- **Option A (recommended)**: Live roster animations + ready-check + 2–3 house-rule toggles.
+- **Option B**: Just the ready-check (smallest step toward "everyone's actually here").
+
+*Effort:* Medium. Your selection: _____
+
+---
+
+### Proposal P6: Post-Game Shareable "Case File" Card
+**What it adds:** The Game Over screen already teases "Share to Instagram" (currently a stub). Generate a themed, image-exportable summary — winner, honors, funniest lie of the night — perfect for organic marketing on an App Store launch.
+
+**Options:**
+- **Option A (recommended)**: Render an in-theme summary card to an image and hook up native share sheet.
+- **Option B**: Copy a text recap to clipboard (fastest, less shareable).
+
+*Effort:* Medium. Your selection: _____
 
