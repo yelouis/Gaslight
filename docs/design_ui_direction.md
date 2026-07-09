@@ -44,7 +44,7 @@ Small shifts, big cohesion. The accents mostly stay; the **neutral gets a delibe
 
 **Semantic vs. accent:** keep verdigris (truth/correct) and crimson (forgery/wrong) as *semantic* colors in the Reveal, distinct from brass as the *brand* accent. Don't let all three shout at once.
 
-Your selection (warm-neutral shift): _____
+Your selection (warm-neutral shift): Sounds good. Proceed
 
 ---
 
@@ -62,7 +62,7 @@ Because the app targets the App Store and should work offline, **bundle the font
 
 *Recommendation:* Option A for phase titles + a restrained blackletter/engraved treatment reserved for the wordmark only.
 
-Your selection (display face): _____
+Your selection (display face): Sounds good. Proceed
 
 **Type scale & treatment:**
 - Phase titles: display face, ~28–32px, `letterSpacing: 3`, brass, with a soft dark drop-shadow (a "spotlight" feel).
@@ -87,7 +87,7 @@ Two devices, applied everywhere, make the app feel authored:
 - **Option A (recommended)** — Lamp-pool background everywhere + wax-seal/redaction concealment + card-flip reveal. Cohesive, still performant.
 - **Option B** — Lamp-pool background only (cheapest cohesion win), defer the flip/redaction work.
 
-Your selection (motif intensity): _____
+Your selection (motif intensity): Option A
 
 ---
 
@@ -115,7 +115,7 @@ Your selection (motif intensity): _____
 
 For the **avatar tokens**, swap the six Material glyphs for six **engraved "house sigils"** (moth, moon, key, raven, hourglass, flame) so each player is a little crest rather than a UI icon.
 
-Your selection (icon overhaul now / later): _____
+Your selection (icon overhaul now / later): Sounds good. Proceed
 
 ---
 
