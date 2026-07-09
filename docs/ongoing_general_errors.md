@@ -292,7 +292,7 @@ Your selection: Proceed with Option A.
 
 **Validation**: Unit — `startGame` throws for 1 player, for `rounds >= players`, and for deck-too-small. Widget — lobby shows a SnackBar on each. Manual — try starting with 1 player and with 5 rounds/3 players; confirm a clear message.
 
-Your selection: _____
+Your selection: Option A.
 
 ---
 
@@ -307,7 +307,7 @@ Your selection: _____
 
 **Validation**: Fire disconnect detection twice synchronously for one player; assert `cards` shrinks by exactly one and `sabotageAnswersCount` decrements at most once. Manual — kill a bot mid-forgery; confirm exactly one card removed and rotations sane.
 
-Your selection: _____
+Your selection: Option A.
 
 ---
 
@@ -326,7 +326,7 @@ Your selection: _____
 
 **Validation**: Room with host + 2 players + 1 spectator; delete host; assert earliest-joined non-spectator becomes host. Manual — host leaves mid-game; a playing player takes over and the game continues.
 
-Your selection: _____
+Your selection: Option A.
 
 ---
 
@@ -345,7 +345,7 @@ Your selection: _____
 
 **Validation**: Simulate `currentUser.uid` changing between sessions; assert rejoin either keeps a stable id (Option A) or cleanly resets (Option B) rather than restoring an unwritable session. Manual (web) — clear site data mid-lobby, reload, confirm graceful behavior.
 
-Your selection: _____
+Your selection: Option A.
 
 ---
 
@@ -363,7 +363,7 @@ Your selection: _____
 - **Option B**: A full standings screen that briefly appears between reveal and the next vote.
 - **Option C**: Both — strip always, full screen only at the halfway point and end.
 
-*Effort:* Low–Medium (data already exists in `PlayerState.totalScore`). Your selection: _____
+*Effort:* Low–Medium (data already exists in `PlayerState.totalScore`). Your selection: Option A.
 
 ---
 
@@ -375,7 +375,7 @@ Your selection: _____
 - **Option B**: Just the staggered animation, no banner.
 - **Option C**: Add suspense audio/haptic stings on each landing (needs bundled sound assets).
 
-*Effort:* Medium. Your selection: _____
+*Effort:* Medium. Your selection: Option A.
 
 ---
 
@@ -386,7 +386,7 @@ Your selection: _____
 - **Option A (recommended)**: A fixed reaction tray; reactions broadcast via the players/room doc and animate for everyone.
 - **Option B**: Reactions only (no counts), ephemeral and local-broadcast to reduce writes.
 
-*Effort:* Medium (needs a small realtime channel; trivial once Issue 1's server exists). Your selection: _____
+*Effort:* Medium (needs a small realtime channel; trivial once Issue 1's server exists). Your selection: Option A.
 
 ---
 
@@ -397,7 +397,7 @@ Your selection: _____
 - **Option A (recommended)**: One re-roll per player per game, only on your own Truth card, drawing an unused prompt.
 - **Option B**: Host-configurable number of re-rolls in the lobby (0–2).
 
-*Effort:* Low–Medium (deck already supports unique draws). Your selection: _____
+*Effort:* Low–Medium (deck already supports unique draws). Your selection: Option A.
 
 ---
 
@@ -408,7 +408,7 @@ Your selection: _____
 - **Option A (recommended)**: Live roster animations + ready-check + 2–3 house-rule toggles.
 - **Option B**: Just the ready-check (smallest step toward "everyone's actually here").
 
-*Effort:* Medium. Your selection: _____
+*Effort:* Medium. Your selection: Option A.
 
 ---
 
@@ -419,5 +419,5 @@ Your selection: _____
 - **Option A (recommended)**: Render an in-theme summary card to an image and hook up native share sheet.
 - **Option B**: Copy a text recap to clipboard (fastest, less shareable).
 
-*Effort:* Medium. Your selection: _____
+*Effort:* Medium. Your selection: Option A.
 
