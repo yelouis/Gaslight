@@ -149,9 +149,35 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
     );
   }
 
+  void _confirmAndProceed(BuildContext context, GameService gs) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('End Voting?'),
+          content: const Text('End voting now? Unvoted players will score nothing this card.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('CANCEL'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                gs.forceAdvance();
+              },
+              child: const Text('PROCEED'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildWaitingUI(ThemeData theme, GameService gs, GameState state) {
     int readyCount = state.readyPlayers.values.where((v) => v).length;
-    int unready = gs.players.length - readyCount;
+    final activeCount = gs.players.where((p) => p.role != PlayerRole.spectator).length;
+    final unready = (activeCount - readyCount).clamp(0, activeCount);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -165,9 +191,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             padding: const EdgeInsets.only(top: 40),
             child: SecondaryButton(
               text: 'PROCEED TO REVEAL (HOST)',
-              onPressed: () { 
-                gs.updateGameState(state.copyWith(currentPhase: GamePhase.reveal));
-              },
+              onPressed: () => _confirmAndProceed(context, gs),
             ),
           ),
           const SizedBox(height: 10),
@@ -352,9 +376,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
               const SizedBox(height: 40),
               SecondaryButton(
                 text: 'PROCEED TO REVEAL (HOST)',
-                onPressed: () { 
-                  gs.updateGameState(state.copyWith(currentPhase: GamePhase.reveal));
-                },
+                onPressed: () => _confirmAndProceed(context, gs),
               ),
               const SizedBox(height: 10),
               TextButton(

@@ -63,6 +63,8 @@ class GameService extends ChangeNotifier {
     0xFF607D8B, // Silver
   ];
 
+  static const String kMissingAnswerPlaceholder = "(The ink ran dry...)";
+
   // Generate 4 letter room code
   String _generateRoomCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -394,13 +396,24 @@ class GameService extends ChangeNotifier {
 
   /// Atomically updates scores for all players in a room.
   /// Resolves the 'Sequential Write' bottleneck identified for 10-player games.
-  Future<void> applyScoreDeltas(String roomCode, Map<String, int> deltas) async {
+  Future<void> applyScoresAndStats(
+    String roomCode, 
+    Map<String, int> scoreDeltas, 
+    Map<String, int> timesFooledDeltas, 
+    Map<String, int> playersDeceivedDeltas
+  ) async {
     final batch = _db.batch();
     for (var p in _players) {
-      final delta = deltas[p.id] ?? 0;
-      if (delta != 0) {
+      final sDelta = scoreDeltas[p.id] ?? 0;
+      final tfDelta = timesFooledDeltas[p.id] ?? 0;
+      final pdDelta = playersDeceivedDeltas[p.id] ?? 0;
+      if (sDelta != 0 || tfDelta != 0 || pdDelta != 0) {
         final ref = _db.collection('rooms').doc(roomCode).collection('players').doc(p.id);
-        batch.update(ref, {'totalScore': p.totalScore + delta});
+        batch.update(ref, {
+          'totalScore': p.totalScore + sDelta,
+          'timesFooled': p.timesFooled + tfDelta,
+          'playersDeceived': p.playersDeceived + pdDelta,
+        });
       }
     }
     await batch.commit();
@@ -581,6 +594,29 @@ class GameService extends ChangeNotifier {
     int voteDuration = 45;
 
     if (_gameState!.currentPhase == GamePhase.forgery) {
+        // A2: Forgery phase timeout placeholder fill
+        final nextCards = nextState.cards.map((card) {
+          String? holderId;
+          _gameState!.currentCardAssignments.forEach((hId, tId) {
+            if (tId == card.targetPlayerId) {
+              holderId = hId;
+            }
+          });
+          if (holderId != null) {
+            final isSpectator = _players.any((p) => p.id == holderId && p.role == PlayerRole.spectator);
+            if (!isSpectator) {
+              final answer = card.sabotageAnswers[holderId];
+              if (answer == null || answer.trim().isEmpty) {
+                final newSabotage = Map<String, String>.from(card.sabotageAnswers);
+                newSabotage[holderId!] = kMissingAnswerPlaceholder;
+                return card.copyWith(sabotageAnswers: newSabotage);
+              }
+            }
+          }
+          return card;
+        }).toList();
+        nextState = nextState.copyWith(cards: nextCards);
+
         if (_gameState!.currentRotationIndex < _gameState!.sabotageAnswersCount) {
             int nextRot = _gameState!.currentRotationIndex + 1;
             Map<String, String> nextAssignments = _gameState!.rotationPlan[nextRot.toString()]!;
@@ -603,6 +639,18 @@ class GameService extends ChangeNotifier {
             );
         }
     } else if (_gameState!.currentPhase == GamePhase.truth) {
+        // A2: Truth phase timeout placeholder fill
+        final nextCards = nextState.cards.map((card) {
+          final isSpectator = _players.any((p) => p.id == card.targetPlayerId && p.role == PlayerRole.spectator);
+          if (!isSpectator) {
+            if (card.truthAnswer.trim().isEmpty) {
+              return card.copyWith(truthAnswer: kMissingAnswerPlaceholder);
+            }
+          }
+          return card;
+        }).toList();
+        nextState = nextState.copyWith(cards: nextCards);
+
         // Transition to Vote Phase: Randomize player order for card resolution
         var pIds = _players.where((p) => p.role != PlayerRole.spectator).map((p) => p.id).toList();
         pIds.shuffle(Random()); // Randomize resolution order!
@@ -618,7 +666,22 @@ class GameService extends ChangeNotifier {
         // 1. Calculate and apply scores for the current resolved card
         final currentCard = _gameState!.cards.firstWhere((c) => c.targetPlayerId == _gameState!.currentReaderId);
         final deltas = ScoringLogic.calculateScores(state: _gameState!, currentCard: currentCard, playerVotes: currentCard.votes);
-        await applyScoreDeltas(_gameState!.roomCode, deltas);
+        
+        final timesFooledDeltas = <String, int>{};
+        final playersDeceivedDeltas = <String, int>{};
+        currentCard.votes.forEach((voterId, votedForId) {
+          if (votedForId != 'TRUTH' && votedForId != voterId) {
+            timesFooledDeltas[voterId] = (timesFooledDeltas[voterId] ?? 0) + 1;
+            playersDeceivedDeltas[votedForId] = (playersDeceivedDeltas[votedForId] ?? 0) + 1;
+          }
+        });
+        
+        await applyScoresAndStats(
+          _gameState!.roomCode, 
+          deltas, 
+          timesFooledDeltas, 
+          playersDeceivedDeltas
+        );
 
         // 2. Advance Phase
         nextState = nextState.copyWith(

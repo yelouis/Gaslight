@@ -229,7 +229,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
 
   Widget _buildWaitingUI(GameState state, GameService gs, ThemeData theme) {
     int readyCount = state.readyPlayers.values.where((v) => v).length;
-    int unready = gs.players.length - readyCount;
+    final activeCount = gs.players.where((p) => p.role != PlayerRole.spectator).length;
+    int unready = (activeCount - readyCount).clamp(0, activeCount);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

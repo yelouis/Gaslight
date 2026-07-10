@@ -15,7 +15,7 @@ class ScoringLogic {
     Map<String, int> deltas = {};
     
     int p = state.totalPlayers;
-    int s = state.sabotageAnswersCount;
+    int s = currentCard.sabotageAnswers.length;
     int truthReward = ((p - 1) / (s + 1)).ceil();
     
     // Evaluate every single vote

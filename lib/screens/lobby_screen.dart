@@ -148,7 +148,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                             [
                                _highlightItem('Finding Truth: ', 'Points scale based on difficulty. Formula: ceil((Players - 1) / (Forgeries + 1))'),
                                _highlightItem('Successful Forgery: ', 'Get +1 point for every player you successfully trick into voting for your lie.'),
-                              _highlightItem('Believeable Target: ', 'Targets get +1 point for every player who correctly identifies their truth.'),
+                               _highlightItem('Believeable Target: ', 'Targets get +1 point for every player who correctly identifies their truth.'),
+                               _highlightItem('Sharp Eye: ', 'Spot the truth on a card you also faked? Earn +1 bonus point.'),
                             ],
                           ),
                           _buildInstructionSection(

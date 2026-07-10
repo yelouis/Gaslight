@@ -110,6 +110,30 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Problem**: The voting options were presented as a simple vertical scrollable list of rectangular cards, which lacked physical interactivity.
     - **Solution**: Created a custom `CardGrid` widget rendering voting answers in a structured responsive grid of gold-trimmed parchment cards. Implemented local state voting selection displaying a red wax seal monogram stamp overlay when selected, and added a dedicated "CONFIRM VOTE" action button to cast the vote.
 
+26. **Host "PROCEED TO REVEAL" Override Skips Score Application (Resolved - July 10)**:
+    - **Problem**: The "PROCEED TO REVEAL (HOST)" buttons in `phase3_vote.dart` directly updated the phase via `gs.updateGameState`, bypassing `_advanceRotationOrPhase`'s vote→reveal branch. This resulted in the permanent loss of all points earned on the current card.
+    - **Solution**: Replaced the direct state updates with a unified `gs.forceAdvance()` call, ensuring scoring calculations and state resets are consistently applied. Wrapped the action in a user-facing confirmation dialog.
+
+27. **Timeouts Leave Blank/Broken Cards (Resolved - July 10)**:
+    - **Problem**: `forceAdvance()` advanced the phase on timeouts but never submitted placeholder answers for unready players, causing blank "THE TRUTH" options or cards with missing forgery options.
+    - **Solution**: Defined `kMissingAnswerPlaceholder` in `GameService` and updated `_advanceRotationOrPhase` to atomically insert placeholders for any missing forgery answers (during Forgery phase) or missing truth answers (during Truth phase) before executing the phase transition.
+
+28. **Scoring Inflated to Max Reward After Disconnect (Resolved - July 10)**:
+    - **Problem**: Scoring logic used the game-wide `state.sabotageAnswersCount` for the EV denominator `S`. Disconnect handling mutated this configuration field to 0 when collapsing to TRUTH, inflating the truth reward to maximum regardless of actual forgeries present.
+    - **Solution**: Updated `ScoringLogic.calculateScores` to dynamically derive `S` from the specific card's `currentCard.sabotageAnswers.length`, making scoring robust to configuration changes and disconnects.
+
+29. **Waiting/Voting "Unready" Counters Include Spectators (Resolved - July 10)**:
+    - **Problem**: Waiting and voting counters subtracted ready players from total player count, which incorrectly included spectators. Since spectators cannot mark ready, the counters could never hit zero, misleading players.
+    - **Solution**: Filtered the player lists to only count active non-spectators (`p.role != PlayerRole.spectator`) before calculating the remaining unready players count.
+
+30. **Undocumented Saboteur "Found the Truth" Bonus (Resolved - July 10)**:
+    - **Problem**: The game awarded a `+1` bonus to saboteurs who also correctly identified the truth on cards they faked, but this was never documented in the design files or in-app instructions.
+    - **Solution**: Documented the bonus in `design_scoring_and_ui.md` and added a description for the "Sharp Eye" bonus point to the in-app instructions modal in `lobby_screen.dart`.
+
+31. **Meaningful Metric-Based End-Game Honors (Resolved - July 10)**:
+    - **Problem**: End-game honors were based solely on overall score rank, creating duplicate titles in small lobbies and potentially awarding honors (like "Most Gullible") to spectators with 0 points.
+    - **Solution**: Added `timesFooled` and `playersDeceived` tracking to `PlayerState` and aggregated them at reveal scoring time inside `GameService`. Rewrote the honors generation on the game over screen to filter spectators, use actual metrics for Trickster and Most Gullible, and select distinct recipients.
+
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
@@ -160,44 +184,6 @@ Your selection: Proceed with Option A → **overridden to Option D** per your no
 
 ---
 
-### Issue 2: Host "PROCEED TO REVEAL" Override Skips Score Application
-**Status**: ⚠️ Confirmed Unresolved — Verified in `phase3_vote.dart`. The host-only `SecondaryButton('PROCEED TO REVEAL (HOST)')` in both the waiting view (`phase3_vote.dart:168-170`) and the spectator view (`phase3_vote.dart:355-357`) advances the phase with a raw `gs.updateGameState(state.copyWith(currentPhase: GamePhase.reveal))`.
-- The **only** place scores for a card are applied is `GameService._advanceRotationOrPhase()`'s vote→reveal branch (`game_service.dart:616-627`), which calls `ScoringLogic.calculateScores()` + `applyScoreDeltas()`. The reveal screen deliberately does **not** re-apply them (`phase4_reveal.dart:138-139` comment).
-- Because the override bypasses `_advanceRotationOrPhase()`, a host who taps this button **permanently loses all points for that card**. It also fails to reset `readyPlayers` and never records the state in `_advancedStateKeys`, weakening the double-advance guard.
-
-**Option A (recommended)**: **Route the Override Through `forceAdvance()`** — Replace both button `onPressed` bodies with `gs.forceAdvance()`, which already guards via `_advancedStateKeys` and funnels into `_advanceRotationOrPhase()` (applying scores, resetting readiness, clearing the timer).
-  - *Pros*: One-line change per call site; reuses the exact, already-tested advancement path; keeps scoring, readiness reset, and the duplicate-advance guard consistent with the automatic/timer path.
-  - *Cons*: `forceAdvance()` advances even if not everyone has voted (acceptable for an explicit host override, but the button label may warrant a confirmation dialog).
-
-**Option B**: **Remove the Manual Override Entirely** — Delete the button and rely solely on all-ready evaluation + the auto-advance timer.
-  - *Pros*: Eliminates the footgun; fewer code paths to keep in sync.
-  - *Cons*: Removes the host's escape hatch when a player is stuck/AFK and timers are disabled (Casual Mode), risking a hang.
-
-**Validation**: Unit-test that invoking the vote→reveal transition via the override path yields the same `totalScore` deltas as the all-ready path for an identical `votes` map. Manual: in a 4-player game, have the host tap PROCEED TO REVEAL before all votes are in and confirm the reveal chips and `totalScore` still reflect the applied points.
-
-Your selection: Proceed with Option A.
-
----
-
-### Issue 3: `forceAdvance()` Never Submits Placeholder Answers for Unready Players
-**Status**: ⚠️ Confirmed Unresolved — The design promises auto-filled placeholders on timeout, but the code only advances the phase.
-- `master_implementation_plan.md` (line 40): *"An Explicit Auto-Advance Timer will force submit empty/AI responses if players hang the lobby to prevent dead-air."*
-- `design_scoring_and_ui.md` (line 54): *"If the timer expires, the host calls `forceAdvance()` to submit generic placeholders for unready players."*
-- Actual behavior: `forceAdvance()` (`game_service.dart:567-573`) just calls `_advanceRotationOrPhase()`, whose forgery/truth branches (`game_service.dart:583-604`) reset `readyPlayers` and move on **without writing any answer** for players who never submitted.
-- Impact: a card held by an unready forger ends the round with a missing forgery (fewer/zero vote options); a TARGET who never submits during TRUTH advances with an **empty `truthAnswer`**, so the vote screen shows a blank "THE TRUTH" option and the card is effectively unwinnable/confusing.
-
-**Option A (recommended)**: **Fill Placeholders Inside `_advanceRotationOrPhase()` Before Advancing** — For the current forgery rotation and the truth phase, iterate the active players; for anyone missing an answer on their assigned card (`currentCardAssignments`), write a generic placeholder (e.g. `"(No answer submitted)"`) into `sabotageAnswers[playerId]` / `truthAnswer` in the same transaction that advances the phase.
-  - *Pros*: Matches documented behavior; guarantees every card has a full option set; keeps the write atomic with the advance.
-  - *Cons*: Placeholder answers are trivially identifiable during voting (skews scoring slightly); needs a rule for what counts as "missing" (empty string).
-
-**Option B**: **Only Fill the Truth Placeholder; Allow Missing Forgeries** — Guarantee a non-empty `truthAnswer` on advance, but let short-handed cards keep fewer forgeries.
-  - *Pros*: Fixes the worst symptom (blank/unwinnable truth) with minimal logic; fewer "obvious placeholder" tells.
-  - *Cons*: Vote option counts become uneven across cards; the dynamic scoring denominator `S` no longer matches actual option counts (interacts with Issue 5).
-
-**Validation**: Simulate a forgery and a truth phase where one active (non-bot) player never submits, fire the timer, and assert every resulting card has a non-empty `truthAnswer` and the expected number of `sabotageAnswers`. Manual: leave one player idle through a timed TRUTH phase and confirm the vote screen shows no blank option.
-
-Your selection: Proceed with Option A.
-
 ---
 
 ### Issue 4: Readiness Evaluation Isn't Triggered by Room-Document Ready Writes (Advancement Latency)
@@ -219,59 +205,6 @@ Your selection: Proceed with Option A.
 Your selection: Proceed with Option A.
 
 ---
-
-### Issue 5: `sabotageAnswersCount` Is Overloaded as Both Config and the Scoring Denominator `S`, So Forgery-Phase Disconnects Corrupt Scoring
-**Status**: ⚠️ Confirmed Unresolved — The same field feeds the rotation config *and* the scoring denominator `S`, and disconnect handling mutates it.
-- `ScoringLogic.calculateScores()` computes `truthReward = ceil((P-1)/(S+1))` with `S = state.sabotageAnswersCount` (`scoring_logic.dart:19`).
-- `handlePlayerDisconnect()` during FORGERY rewrites this field: it sets `sabotageAnswersCount: 0` when collapsing to TRUTH (`game_service.dart:358`) and `sabotageAnswersCount: remainingRotations` otherwise (`game_service.dart:371`).
-- After a collapse-to-truth, `S = 0` makes `truthReward = ceil((P-1)/1) = P-1` (maximum reward), even though cards may still carry several real forgeries — the scoring EV is badly inflated and no longer matches the actual number of vote options.
-
-**Option A (recommended)**: **Derive `S` Per-Card at Scoring Time** — Compute the denominator from the card's real option count: `S = currentCard.sabotageAnswers.length`, so the reward always matches what voters actually faced. Keep `sabotageAnswersCount` purely as a rotation-config value.
-  - *Pros*: Scoring becomes robust to disconnects, uneven cards (Issue 3), and mid-game rotation changes; a single localized change in `ScoringLogic`.
-  - *Cons*: Slightly changes documented EV semantics (needs a one-line note in `design_scoring_and_ui.md`); per-card rewards may vary across a game.
-
-**Option B**: **Introduce a Separate Immutable `scoringForgeryCount` Field** — Store the original configured `S` at game start and never mutate it; disconnect logic only touches the rotation config.
-  - *Pros*: Preserves a fixed EV across the whole game; clear separation of concerns.
-  - *Cons*: Adds a `GameState` field + Firestore serialization; still mismatches reality when cards end up with fewer forgeries than the original `S`.
-
-**Validation**: Unit-test `calculateScores` for a card with 2 forgeries after `state.sabotageAnswersCount` was forced to 0, asserting `truthReward == ceil((P-1)/3)`, not `P-1`. Simulate a forgery-phase disconnect that collapses to TRUTH and verify final scores are sane.
-
-Your selection: Proceed with Option A.
-
----
-
-### Issue 6: Waiting/Voting "Unready" Counters Include Spectators and the Local Player
-**Status**: ⚠️ Confirmed Unresolved — The counters subtract from `gs.players.length`, which includes spectators (and the already-ready local player), inflating the "waiting for N" figure.
-- FORGERY/TRUTH waiting view: `int unready = gs.players.length - readyCount;` (`phase2_craft.dart:232`).
-- VOTE waiting view: `int unready = gs.players.length - readyCount;` (`phase3_vote.dart:154`).
-- Spectators never appear in `readyPlayers` (their readiness is intentionally ignored), so each spectator inflates `unready` by one; the displayed "Waiting for N players…" can never reach 0 in a game with spectators, misleading players into thinking the game is stuck.
-
-**Option A (recommended)**: **Count Against Active Non-Spectators** — Compute `activeCount = gs.players.where((p) => p.role != PlayerRole.spectator).length;` and `unready = activeCount - readyCount;` (clamped at ≥0). The spectator/vote-progress views already use this exact `totalActive` pattern (`phase2_craft.dart:167`, `phase3_vote.dart:278`) and can be reused.
-  - *Pros*: Accurate counts; matches the readiness logic in `evaluateReadyState()` which also filters spectators; trivial change.
-  - *Cons*: None material.
-
-**Validation**: Widget test with 3 active + 1 spectator, 2 ready, asserting the label reads "Waiting for 1" (not "2"). Manual: join a spectator mid-game and confirm the waiting counter can reach zero.
-
-Your selection: Proceed with Option A.
-
----
-
-### Issue 7: Game Over Honors Include Spectators/Bots and Duplicate in Small Lobbies
-**Status**: ⚠️ Confirmed Unresolved — Honors are derived from the raw `players` list with simplistic index math.
-- `GameOverScreen` sorts *all* `players` by `totalScore` (`game_over_screen.dart:22`), including spectators (who never scored) and bots. "🤡 Most Gullible" = `leaderboard.last` (`game_over_screen.dart:104`), so a score-0 spectator is crowned Most Gullible despite never playing.
-- "🃏 The Trickster" is just the 2nd-highest *total* scorer (`game_over_screen.dart:26`), not the best deceiver — and in a 2-player game `trickster` falls back to `mastermind`, showing the same player under two honors. See the related open clarification in `design_scoring_and_ui.md` about what each honor should semantically measure.
-
-**Option A (recommended)**: **Filter to Active Non-Spectators + Guard Small Lobbies** — Exclude `PlayerRole.spectator` before ranking, and only render an honor card when a distinct eligible player exists (no duplicates, no empty-lobby crash).
-  - *Pros*: Correct, non-duplicated honors; removes the score-0 spectator artifact; small, contained change.
-  - *Cons*: Doesn't make "Trickster/Most Gullible" *semantically* accurate (still score-rank proxies) — that requires the clarification below to define real per-role metrics.
-
-**Option B**: **Compute Honors From Real Per-Role Metrics** — Track cumulative saboteur deception count and times-fooled per player during reveals, and award Trickster/Most Gullible from those.
-  - *Pros*: Honors become meaningful and fun; rewards the intended behaviors.
-  - *Cons*: Requires accumulating per-player stats across cards (new `PlayerState`/aggregation fields); larger change; depends on resolving the design clarification first.
-
-**Validation**: Unit-test honor selection for a 4-player + 1-spectator game asserting the spectator is never selected and no player holds two honors; render the screen for a 2-player game and confirm no duplicate honoree.
-
-Your selection: Proceed with Option A.
 
 ---
 

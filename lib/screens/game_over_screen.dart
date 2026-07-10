@@ -14,16 +14,47 @@ class GameOverScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final players = gs.players;
 
-    if (players.isEmpty) {
+    final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
+
+    if (activePlayers.isEmpty) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // Determine Superlatives natively
-    final sortedByScore = List<PlayerState>.from(players)..sort((a, b) => b.totalScore.compareTo(a.totalScore));
+    // Determine Superlatives by Metric Honors
+    final sortedByScore = List<PlayerState>.from(activePlayers)..sort((a, b) => b.totalScore.compareTo(a.totalScore));
     final mastermind = sortedByScore.first;
-    
-    // Sort logic for other titles could be more complex, but simplified here based on roles/scores
-    final tricksterCard = sortedByScore.length > 2 ? sortedByScore[1] : mastermind;
+    final Set<String> assignedIds = {mastermind.id};
+
+    PlayerState? trickster;
+    final remainingForTrickster = activePlayers.where((p) => !assignedIds.contains(p.id)).toList();
+    if (remainingForTrickster.isNotEmpty) {
+      remainingForTrickster.sort((a, b) {
+        final cmp = b.playersDeceived.compareTo(a.playersDeceived);
+        if (cmp != 0) return cmp;
+        return b.totalScore.compareTo(a.totalScore);
+      });
+      trickster = remainingForTrickster.first;
+      assignedIds.add(trickster.id);
+    }
+
+    PlayerState? gullible;
+    final remainingForGullible = activePlayers.where((p) => !assignedIds.contains(p.id)).toList();
+    if (remainingForGullible.isNotEmpty) {
+      remainingForGullible.sort((a, b) {
+        final cmp = b.timesFooled.compareTo(a.timesFooled);
+        if (cmp != 0) return cmp;
+        return a.totalScore.compareTo(b.totalScore); // Tie broken by lowest score
+      });
+      gullible = remainingForGullible.first;
+      assignedIds.add(gullible.id);
+    }
+
+    PlayerState? runnerUp;
+    final remainingForRunnerUp = activePlayers.where((p) => !assignedIds.contains(p.id)).toList();
+    if (remainingForRunnerUp.isNotEmpty) {
+      runnerUp = sortedByScore.firstWhere((p) => remainingForRunnerUp.any((rp) => rp.id == p.id));
+      assignedIds.add(runnerUp.id);
+    }
 
     return AnimatedLobbyBackground(
       child: Scaffold(
@@ -51,7 +82,7 @@ class GameOverScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 30),
-              _buildHonorCards(theme, mastermind, tricksterCard, sortedByScore),
+              _buildHonorCards(theme, mastermind, trickster, runnerUp, gullible),
               const SizedBox(height: 40),
               ElevatedButton.icon(
                 icon: const Icon(Icons.share),
@@ -87,7 +118,27 @@ class GameOverScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHonorCards(ThemeData theme, PlayerState mastermind, PlayerState trickster, List<PlayerState> leaderboard) {
+  Widget _buildHonorCards(
+    ThemeData theme, 
+    PlayerState mastermind, 
+    PlayerState? trickster, 
+    PlayerState? runnerUp, 
+    PlayerState? gullible
+  ) {
+    List<Widget> cards = [];
+    cards.add(_honorCard(theme, '🏆 The Mastermind', mastermind, theme.colorScheme.secondary));
+    if (trickster != null) {
+      cards.add(_honorCard(theme, '🃏 The Trickster', trickster, theme.colorScheme.tertiary));
+    }
+    if (runnerUp != null) {
+      cards.add(_honorCard(theme, '🥈 Runner Up', runnerUp, Colors.grey.shade400));
+    }
+    if (gullible != null) {
+      cards.add(_honorCard(theme, '🤡 Most Gullible', gullible, Colors.orange));
+    }
+
+    if (cards.isEmpty) return const SizedBox.shrink();
+
     return GridView.count(
       crossAxisCount: 2,
       crossAxisSpacing: 16,
@@ -95,14 +146,7 @@ class GameOverScreen extends StatelessWidget {
       childAspectRatio: 0.85,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      children: [
-        _honorCard(theme, '🏆 The Mastermind', mastermind, theme.colorScheme.secondary),
-        _honorCard(theme, '🃏 The Trickster', trickster, theme.colorScheme.tertiary),
-        if (leaderboard.length > 1) 
-          _honorCard(theme, '🥈 Runner Up', leaderboard[1], Colors.grey.shade400),
-        if (leaderboard.length > 2)
-          _honorCard(theme, '🤡 Most Gullible', leaderboard.last, Colors.orange),
-      ],
+      children: cards,
     );
   }
 

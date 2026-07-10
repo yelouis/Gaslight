@@ -12,6 +12,10 @@ class PlayerState {
   final int avatarIndex; // Reference to a local simple avatar
   final int? lastSeen; // Epoch timestamp for heartbeat
 
+  // Metric Honors Stats
+  final int timesFooled;
+  final int playersDeceived;
+
   PlayerState({
     required this.id,
     required this.name,
@@ -21,6 +25,8 @@ class PlayerState {
     this.colorValue = 0xFF58A6FF,
     this.avatarIndex = 0,
     this.lastSeen,
+    this.timesFooled = 0,
+    this.playersDeceived = 0,
   });
 
   PlayerState copyWith({
@@ -32,6 +38,8 @@ class PlayerState {
     int? colorValue,
     int? avatarIndex,
     int? lastSeen,
+    int? timesFooled,
+    int? playersDeceived,
   }) {
     return PlayerState(
       id: id ?? this.id,
@@ -42,6 +50,8 @@ class PlayerState {
       colorValue: colorValue ?? this.colorValue,
       avatarIndex: avatarIndex ?? this.avatarIndex,
       lastSeen: lastSeen ?? this.lastSeen,
+      timesFooled: timesFooled ?? this.timesFooled,
+      playersDeceived: playersDeceived ?? this.playersDeceived,
     );
   }
 
@@ -55,6 +65,8 @@ class PlayerState {
       'colorValue': colorValue,
       'avatarIndex': avatarIndex,
       'lastSeen': lastSeen,
+      'timesFooled': timesFooled,
+      'playersDeceived': playersDeceived,
     };
   }
 
@@ -71,6 +83,8 @@ class PlayerState {
       colorValue: map['colorValue']?.toInt() ?? 0xFF58A6FF,
       avatarIndex: map['avatarIndex']?.toInt() ?? 0,
       lastSeen: map['lastSeen']?.toInt(),
+      timesFooled: map['timesFooled']?.toInt() ?? 0,
+      playersDeceived: map['playersDeceived']?.toInt() ?? 0,
     );
   }
 }

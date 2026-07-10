@@ -12,44 +12,25 @@ Because player count ($P$) and sabotage counts ($S$) are configurable, Gaslight 
   $$\text{Voter Points} = \left\lceil \frac{P - 1}{S + 1} \right\rceil$$
   * *Example (4 players, 2 sabotages)*: $\lceil 3 / 3 \rceil = 1$ point.
   * *Example (10 players, 2 sabotages)*: $\lceil 9 / 3 \rceil = 3$ points. (Deduction is harder, so reward is higher).
+  * *Note*: $S$ is the number of forgeries actually present on the card being scored, making the math robust to mid-game disconnects or missing answers.
 * **Target Points**: The card's owner (Target) receives `1` point for each player who successfully identifies the Truth.
 * **Saboteur Points**: Saboteurs receive `1` point for every voter they successfully deceive into voting for their fake answer.
+* **Saboteur Insight Bonus**: A saboteur who also correctly votes for the Truth on a card they forged earns `+1` point in addition to the standard voter reward.
 * **Self-Votes Guard**: Players cannot vote for their own sabotage submissions (the option is disabled).
 
 ---
 
-## ❓ Open Clarifications (Needs Product Decision)
-
-> These were surfaced during the July 8 docs/code walkthrough. The code implements behavior the design doc does not describe. Resolve before "fixing", because the fix depends on intent.
+## ❓ Resolved Clarifications
 
 ### Clarification 1: Undocumented Saboteur "Found the Truth" Bonus
-**Question**: `ScoringLogic.calculateScores()` (`scoring_logic.dart:29-32`) grants a saboteur an **extra `+1`** (on top of the standard `truthReward`) whenever that saboteur *also* votes for `TRUTH` on the card they sabotaged. This bonus appears nowhere in the design or the in-app "HOW TO PLAY" manual. Is it intended?
-
-**Impact**: It changes competitive balance. Saboteurs get a strictly higher expected value than pure voters on cards they sabotaged, which may or may not be the desired incentive. Whichever way we go, the code and the docs/manual currently disagree, so one of them is wrong.
-
-**Solutions**:
-- **Option A (recommended)**: Keep the bonus and **document it** — add it to this file and to the lobby manual (`lobby_screen.dart` "SCORING" section). Rationale: rewarding a saboteur who can still identify the truth is a fun, defensible mechanic, and it's already shipped/tested.
-- **Option B**: Remove the bonus (`scoring_logic.dart:29-32`) so scoring matches the documented three rules exactly. Rationale: simplest mental model for players; EV parity between voters.
-
-**Recommended**: Option A — document the shipped behavior unless product wants strict EV parity.
-
-Your selection: Proceed with Option A.
-
----
+* **Decision**: Keep the bonus and document it (Option A). Added to Formulas section and the lobby instructions.
 
 ### Clarification 2: What Should the Game-Over "Honors" Actually Measure?
-**Question**: The design lists honors like "The Mastermind" and "The Trickster" but never defines their metrics. The implementation (`game_over_screen.dart:22-26,101-105`) currently derives all of them from **total score rank** — Mastermind = 1st, Trickster = 2nd, Runner Up = 2nd again, Most Gullible = last. Should Trickster/Most Gullible reflect *actual behavior* (best deceiver / most-often-fooled) instead of raw score position?
-
-**Impact**: Determines whether honors need new per-player stat tracking across reveals (deception count, times-fooled) or can stay as score-rank proxies. Also gates the fix for Issue 7 in `ongoing_general_errors.md` (whether Option A cosmetic filtering suffices, or Option B metric-based honors is required).
-
-**Solutions**:
-- **Option A (recommended)**: Define honors by **dedicated metrics** — Mastermind = highest total score; Trickster = most voters deceived across all cards; Most Gullible = voted for the most forgeries. Requires accumulating counters during each reveal.
-- **Option B**: Keep honors as **score-rank proxies** and simply relabel them to be honest (e.g. "2nd Place" instead of "The Trickster") and filter spectators.
-- **Option C**: Keep names but explicitly document them as score-rank proxies (lowest effort, least meaningful).
-
-**Recommended**: Option A for a satisfying payoff screen; fall back to Option B if scope is tight.
-
-Your selection: Proceed with Option A.
+* **Decision**: Define honors by dedicated metrics (Option A).
+  * **The Mastermind**: highest total score.
+  * **The Trickster**: highest `playersDeceived` (voters deceived across all cards, ties broken by score).
+  * **Most Gullible**: highest `timesFooled` (voted for forgeries, ties broken by fewest points).
+  * Enforced at scoring time and game over screen.
 
 ---
 
