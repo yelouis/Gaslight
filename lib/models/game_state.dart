@@ -10,6 +10,7 @@ class GameState {
   final int totalPlayers;
   final int sabotageAnswersCount;
   final bool isTimerDisabled;
+  final String selectedDeckId;
 
   // Rotation Tracking
   final int currentRotationIndex;
@@ -41,6 +42,7 @@ class GameState {
     this.totalPlayers = 4,
     this.sabotageAnswersCount = 2,
     this.isTimerDisabled = false,
+    this.selectedDeckId = 'the_daily_grind',
     this.currentRotationIndex = 0,
     this.cards = const [],
     this.currentCardAssignments = const {},
@@ -57,6 +59,7 @@ class GameState {
     int? totalPlayers,
     int? sabotageAnswersCount,
     bool? isTimerDisabled,
+    String? selectedDeckId,
     int? currentRotationIndex,
     List<CardModel>? cards,
     Map<String, String>? currentCardAssignments,
@@ -74,6 +77,7 @@ class GameState {
       totalPlayers: totalPlayers ?? this.totalPlayers,
       sabotageAnswersCount: sabotageAnswersCount ?? this.sabotageAnswersCount,
       isTimerDisabled: isTimerDisabled ?? this.isTimerDisabled,
+      selectedDeckId: selectedDeckId ?? this.selectedDeckId,
       currentRotationIndex: currentRotationIndex ?? this.currentRotationIndex,
       cards: cards ?? this.cards,
       currentCardAssignments: currentCardAssignments ?? this.currentCardAssignments,
@@ -92,6 +96,7 @@ class GameState {
       'totalPlayers': totalPlayers,
       'sabotageAnswersCount': sabotageAnswersCount,
       'isTimerDisabled': isTimerDisabled,
+      'selectedDeckId': selectedDeckId,
       'currentRotationIndex': currentRotationIndex,
       'cards': cards.map((c) => c.toMap()).toList(),
       'currentCardAssignments': currentCardAssignments,
@@ -104,8 +109,6 @@ class GameState {
   }
 
   factory GameState.fromMap(Map<String, dynamic> map, String docId) {
-    // Firebase converts Map<int, Object> into Map<String, Object> 
-    // so we handle the rotationPlan cast generically
     Map<String, Map<String, String>> rotMap = {};
     if (map['rotationPlan'] != null) {
       final rawPlan = map['rotationPlan'] as Map<dynamic, dynamic>;
@@ -123,6 +126,7 @@ class GameState {
       totalPlayers: map['totalPlayers']?.toInt() ?? 4,
       sabotageAnswersCount: map['sabotageAnswersCount']?.toInt() ?? 2,
       isTimerDisabled: map['isTimerDisabled'] as bool? ?? false,
+      selectedDeckId: map['selectedDeckId'] as String? ?? 'the_daily_grind',
       currentRotationIndex: map['currentRotationIndex']?.toInt() ?? 0,
       cards: (map['cards'] as List<dynamic>? ?? [])
           .map((c) => CardModel.fromMap(Map<String, dynamic>.from(c as Map)))

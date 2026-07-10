@@ -338,6 +338,76 @@ class GameService extends ChangeNotifier {
     await _db.collection('rooms').doc(roomCode).collection('players').doc(player.id).set(player.toMap(), SetOptions(merge: true));
   }
 
+  Future<void> toggleLobbyReady() async {
+    final p = currentPlayer;
+    final rCode = _gameState?.roomCode;
+    if (p == null || rCode == null || rCode.isEmpty) return;
+    
+    final updated = p.copyWith(lobbyReady: !p.lobbyReady);
+    await updatePlayerState(rCode, updated);
+  }
+
+  Future<void> updateLobbySettings({int? sabotageAnswersCount, bool? isTimerDisabled}) async {
+    if (_gameState == null || currentPlayer?.isHost != true) return;
+    final updated = _gameState!.copyWith(
+      sabotageAnswersCount: sabotageAnswersCount ?? _gameState!.sabotageAnswersCount,
+      isTimerDisabled: isTimerDisabled ?? _gameState!.isTimerDisabled,
+    );
+    await updateGameState(updated);
+  }
+
+  Future<void> sendReaction(String emoji) async {
+    final p = currentPlayer;
+    final rCode = _gameState?.roomCode;
+    if (p == null || rCode == null || rCode.isEmpty) return;
+    
+    final updated = p.copyWith(
+      lastReaction: emoji,
+      lastReactionAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    await updatePlayerState(rCode, updated);
+  }
+
+  Future<void> rerollMyPrompt() async {
+    final p = currentPlayer;
+    final rCode = _gameState?.roomCode;
+    if (p == null || rCode == null || rCode.isEmpty || _gameState == null) return;
+    if (p.hasRerolled) {
+      throw Exception('You have already used your re-roll.');
+    }
+    
+    if (_gameState!.currentPhase != GamePhase.truth) {
+      throw Exception('Can only re-roll during the truth crafting phase.');
+    }
+    
+    final cards = List<CardModel>.from(_gameState!.cards);
+    final cardIndex = cards.indexWhere((c) => c.targetPlayerId == p.id);
+    if (cardIndex == -1) {
+      throw Exception('Could not find active card for player.');
+    }
+    
+    final deckId = _gameState!.selectedDeckId;
+    final currentPrompts = cards.map((c) => c.promptText).toSet();
+    final newPromptText = PromptDecks.drawOneExcluding(deckId, currentPrompts);
+    
+    final oldCard = cards[cardIndex];
+    final updatedCard = CardModel(
+      promptText: newPromptText,
+      targetPlayerId: oldCard.targetPlayerId,
+      truthAnswer: '',
+      sabotageAnswers: oldCard.sabotageAnswers,
+      votes: oldCard.votes,
+    );
+    
+    cards[cardIndex] = updatedCard;
+    
+    final updatedGameState = _gameState!.copyWith(cards: cards);
+    final updatedPlayer = p.copyWith(hasRerolled: true);
+    
+    await updateGameState(updatedGameState);
+    await updatePlayerState(rCode, updatedPlayer);
+  }
+
   Future<void> handlePlayerDisconnect(String disconnectedPlayerId) async {
     if (_gameState == null || currentPlayer?.isHost != true) return;
     
@@ -582,12 +652,13 @@ class GameService extends ChangeNotifier {
 
     await updateGameState(_gameState!.copyWith(
         currentPhase: GamePhase.forgery,
-        totalPlayers: _players.length, // FIX: Sync totalPlayers
+        totalPlayers: _players.length,
+        selectedDeckId: deckId,
         currentRotationIndex: startIdx,
         cards: startingCards,
         currentCardAssignments: initAssignments,
         rotationPlan: stringRotations,
-        readyPlayers: {}, // FIX: Reset readyPlayers in same write
+        readyPlayers: {},
         endTime: endTime,
         clearEndTime: _gameState!.isTimerDisabled,
     ));

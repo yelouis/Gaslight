@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 import '../models/player_state.dart';
 
 class PlayerAvatar extends StatelessWidget {
@@ -32,7 +33,7 @@ class PlayerAvatar extends StatelessWidget {
     required double size,
   }) {
     final chipColor = Color(colorValue);
-    const borderColor = Color(0xFFD4AF37); // Antique Gold
+    final borderColor = AppColors.brass; // Antique Gold
     
     return Container(
       width: size,
@@ -85,10 +86,49 @@ class PlayerAvatar extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        buildChip(
-          colorValue: player.colorValue,
-          avatarIndex: player.avatarIndex,
-          size: size,
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            buildChip(
+              colorValue: player.colorValue,
+              avatarIndex: player.avatarIndex,
+              size: size,
+            ),
+            if (player.lobbyReady)
+              Positioned(
+                right: -4,
+                bottom: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                    color: AppColors.verdigris,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    color: Colors.white,
+                    size: 12,
+                  ),
+                ),
+              ),
+            if (player.isHost)
+              Positioned(
+                left: -4,
+                top: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                    color: AppColors.brass,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.star,
+                    color: Colors.white,
+                    size: 12,
+                  ),
+                ),
+              ),
+          ],
         ),
         if (showName) ...[
           const SizedBox(height: 8),

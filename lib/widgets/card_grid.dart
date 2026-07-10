@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class VotingAnswer {
   final String authorId;
@@ -75,6 +76,19 @@ class CardGrid extends StatelessWidget {
               ),
               child: Stack(
                 children: [
+                  // Faint wax-seal watermark in background
+                  Positioned.fill(
+                    child: Center(
+                      child: Opacity(
+                        opacity: 0.04,
+                        child: const Icon(
+                          Icons.verified,
+                          size: 80,
+                          color: AppColors.oxblood,
+                        ),
+                      ),
+                    ),
+                  ),
                   // Card Content
                   Padding(
                     padding: const EdgeInsets.all(12.0),
@@ -136,9 +150,9 @@ class CardGrid extends StatelessWidget {
                           width: 30,
                           height: 30,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF8B0000), // Dark Red Wax
+                            color: AppColors.oxblood, // Dark Red Wax
                             shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFFD4AF37), width: 1.5), // Gold Seal Ring
+                            border: Border.all(color: AppColors.brass, width: 1.5), // Gold Seal Ring
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.5),
@@ -151,7 +165,7 @@ class CardGrid extends StatelessWidget {
                             child: Icon(
                               Icons.verified,
                               size: 14,
-                              color: Color(0xFFD4AF37), // Gold seal stamp details
+                              color: AppColors.brass, // Gold seal stamp details
                             ),
                           ),
                         ),

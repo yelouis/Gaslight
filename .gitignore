@@ -53,3 +53,13 @@ web_config.txt
 
 # Local ChromeDriver binaries
 chromedriver/
+
+# Desktop / Platform-specific build artifacts
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+macos/Flutter/ephemeral/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+.env
+*.log
+.DS_Store

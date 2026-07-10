@@ -564,5 +564,52 @@ void main() {
       final result = await gs.tryRejoinSession();
       expect(result, isFalse);
     });
+
+    test('rerollMyPrompt swaps prompt and consumes re-roll token', () async {
+      final db = FakeFirestore();
+      final gs = GameService(db: db);
+      SharedPreferences.setMockInitialValues({});
+
+      // Host joins
+      await gs.createRoom('Host', 'host_user', sabotageAnswersCount: 1);
+      await Future.delayed(Duration(milliseconds: 100));
+      final rCode = gs.gameState!.roomCode;
+
+      // Add second player
+      final p2 = PlayerState(id: 'player_2', name: 'Player 2', joinedAt: 100);
+      await db.collection('rooms').doc(rCode).collection('players').doc(p2.id).set(p2.toMap());
+      await gs.updatePlayerState(rCode, p2);
+      await Future.delayed(Duration(milliseconds: 100));
+
+      // Start game
+      await gs.startGame('the_daily_grind');
+      await Future.delayed(Duration(milliseconds: 100));
+
+      // Advance past sabotage round to truth round
+      await gs.setPlayerReady(true, playerId: 'host_user');
+      await gs.setPlayerReady(true, playerId: 'player_2');
+      await gs.evaluateReadyState();
+      await Future.delayed(Duration(milliseconds: 100));
+
+      expect(gs.gameState!.currentPhase, GamePhase.truth);
+
+      // Verify initial prompt
+      final originalCard = gs.gameState!.cards.firstWhere((c) => c.targetPlayerId == 'host_user');
+      final originalPrompt = originalCard.promptText;
+
+      // Call reroll
+      await gs.rerollMyPrompt();
+      await Future.delayed(Duration(milliseconds: 100));
+
+      // Verify hasRerolled is true
+      expect(gs.currentPlayer!.hasRerolled, isTrue);
+
+      // Verify prompt has changed
+      final newCard = gs.gameState!.cards.firstWhere((c) => c.targetPlayerId == 'host_user');
+      expect(newCard.promptText, isNot(originalPrompt));
+
+      // Verify subsequent call fails
+      expect(() => gs.rerollMyPrompt(), throwsA(isA<Exception>()));
+    });
   });
 }

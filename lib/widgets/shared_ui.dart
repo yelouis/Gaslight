@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class CrimsonShadowCard extends StatelessWidget {
   final Widget child;
@@ -19,7 +20,7 @@ class CrimsonShadowCard extends StatelessWidget {
       width: width,
       padding: padding,
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1F1C), // Deep dark coal background
+        color: AppColors.groundRaised, // Deep dark coal background
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: theme.colorScheme.primary.withOpacity(0.8), // Crimson outline

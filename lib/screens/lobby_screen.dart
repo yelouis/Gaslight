@@ -11,6 +11,8 @@ import '../models/game_state.dart';
 import '../models/player_state.dart';
 import '../widgets/shared_ui.dart';
 import '../utils/prompt_decks.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -28,6 +30,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
   bool _isNavigating = false;
   String _selectedDeck = PromptDecks.availableDecks.first;
   bool _isTimerDisabled = false;
+  Set<String> _knownPlayerIds = {};
+  bool _familyFriendlyOnly = false;
 
   @override
   void initState() {
@@ -283,6 +287,35 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final isHost = gs.currentPlayer!.isHost;
     final players = gs.players;
 
+    final currentIds = players.map((p) => p.id).toSet();
+    final newPlayers = players.where((p) => !_knownPlayerIds.contains(p.id)).toList();
+    if (newPlayers.isNotEmpty && _knownPlayerIds.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (var p in newPlayers) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${p.name} has joined the lobby.'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      });
+    }
+    if (_knownPlayerIds.length != currentIds.length) {
+      _knownPlayerIds = currentIds;
+    }
+
+    final availableDecks = PromptDecks.availableDecks.where((d) {
+      if (_familyFriendlyOnly) {
+        return d != 'rated_r_nsfw' && d != 'cah_dark_humor';
+      }
+      return true;
+    }).toList();
+    
+    if (!availableDecks.contains(_selectedDeck)) {
+      _selectedDeck = availableDecks.first;
+    }
+
     final activeCount = players.where((p) => p.role != PlayerRole.spectator).length;
     final rounds = gs.gameState?.sabotageAnswersCount ?? 2;
     final deckSize = PromptDecks.getDeckSize(_selectedDeck);
@@ -295,6 +328,12 @@ class _LobbyScreenState extends State<LobbyScreen> {
     } else if (deckSize < activeCount) {
       startWarning = "Deck too small: selected deck has $deckSize prompts but you have $activeCount active players.";
     }
+
+    final playingPlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
+    final nonHostPlayers = playingPlayers.where((p) => !p.isHost).toList();
+    final readyNonHostsCount = nonHostPlayers.where((p) => p.lobbyReady).length;
+    final totalNonHostsCount = nonHostPlayers.length;
+    final allNonHostsReady = totalNonHostsCount > 0 && readyNonHostsCount == totalNonHostsCount;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -318,7 +357,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            Text('${players.length} Joined (4-8 Ideal)', style: const TextStyle(fontSize: 18, color: Colors.white70)),
+            Text(
+              '${players.length} Joined ($readyNonHostsCount/$totalNonHostsCount Ready)',
+              style: const TextStyle(fontSize: 18, color: Colors.white70, fontFamily: 'Lora'),
+            ),
             const SizedBox(height: 30),
             Expanded(
               child: GridView.builder(
@@ -329,25 +371,125 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 ),
                 itemCount: players.length,
                 itemBuilder: (context, index) {
-                  return PlayerAvatar(player: players[index]);
+                  final player = players[index];
+                  return TweenAnimationBuilder<double>(
+                    key: ValueKey(player.id),
+                    tween: Tween<double>(begin: 0.0, end: 1.0),
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOutBack,
+                    builder: (context, scale, child) {
+                      return Transform.scale(
+                        scale: scale,
+                        child: Opacity(opacity: scale, child: child),
+                      );
+                    },
+                    child: PlayerAvatar(player: player),
+                  );
                 },
               ),
             ),
             if (isHost) ...[
-              const SizedBox(height: 20),
-              DropdownButton<String>(
-                value: _selectedDeck,
-                dropdownColor: theme.colorScheme.surface,
-                style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold),
-                items: PromptDecks.availableDecks.map((deckId) {
-                  return DropdownMenuItem(
-                    value: deckId,
-                    child: Text(PromptDecks.getDeckName(deckId)),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  if (val != null) setState(() => _selectedDeck = val);
-                },
+              const SizedBox(height: 16),
+              CrimsonShadowCard(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'HOUSE RULES',
+                      style: TextStyle(
+                        fontFamily: 'CormorantGaramond',
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.secondary,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Forgery Rounds:',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory),
+                        ),
+                        Row(
+                          children: [1, 2, 3, 4].map((r) {
+                            final isSelected = rounds == r;
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              child: ChoiceChip(
+                                label: Text('$r'),
+                                selected: isSelected,
+                                selectedColor: AppColors.brass,
+                                labelStyle: TextStyle(
+                                  color: isSelected ? AppColors.ink : AppColors.ivory,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    gs.updateLobbySettings(sabotageAnswersCount: r);
+                                  }
+                                },
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      title: const Text(
+                        'Disable Game Timers',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                      ),
+                      value: gs.gameState?.isTimerDisabled ?? false,
+                      activeColor: AppColors.brass,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        gs.updateLobbySettings(isTimerDisabled: val);
+                      },
+                    ),
+                    SwitchListTile(
+                      title: const Text(
+                        'Family-Friendly Decks Only',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                      ),
+                      value: _familyFriendlyOnly,
+                      activeColor: AppColors.brass,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setState(() {
+                          _familyFriendlyOnly = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Prompt Deck:',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory),
+                        ),
+                        DropdownButton<String>(
+                          value: _selectedDeck,
+                          dropdownColor: AppColors.groundRaised,
+                          style: const TextStyle(color: AppColors.brass, fontWeight: FontWeight.bold),
+                          items: availableDecks.map((deckId) {
+                            return DropdownMenuItem(
+                              value: deckId,
+                              child: Text(PromptDecks.getDeckName(deckId)),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) setState(() => _selectedDeck = val);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               if (players.length < 10)
                 Padding(
@@ -367,26 +509,50 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     textAlign: TextAlign.center,
                   ),
                 ),
-              PrimaryButton(
-                text: 'START GAME',
-                onPressed: startWarning == null ? () async {
-                  try {
-                    await gs.startGame(_selectedDeck);
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
-                      );
+              Container(
+                decoration: allNonHostsReady && startWarning == null
+                    ? BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.brass.withOpacity(0.5),
+                            blurRadius: 16,
+                            spreadRadius: 1,
+                          )
+                        ],
+                      )
+                    : null,
+                child: PrimaryButton(
+                  text: 'START GAME',
+                  onPressed: startWarning == null ? () async {
+                    try {
+                      await gs.startGame(_selectedDeck);
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                        );
+                      }
                     }
-                  }
-                } : null,
+                  } : null,
+                ),
               ),
             ],
-            if (!isHost)
+            if (!isHost) ...[
+              const SizedBox(height: 20),
               Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text('Waiting for Host to start...', style: TextStyle(fontStyle: FontStyle.italic, color: theme.colorScheme.secondary)),
-              )
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: PrimaryButton(
+                  text: gs.currentPlayer?.lobbyReady == true ? 'NOT READY' : "I'M READY",
+                  onPressed: () => gs.toggleLobbyReady(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Waiting for Host to start...',
+                style: TextStyle(fontStyle: FontStyle.italic, color: theme.colorScheme.secondary),
+              ),
+            ]
           ],
         ),
       ),

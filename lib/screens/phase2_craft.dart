@@ -10,6 +10,7 @@ import '../widgets/shared_ui.dart';
 import '../widgets/auto_advance_timer.dart';
 import '../utils/prompt_decks.dart';
 import '../utils/semantic_filter.dart';
+import '../theme/app_colors.dart';
 
 
 class Phase2CraftScreen extends StatefulWidget {
@@ -338,6 +339,58 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                     ),
                   ),
                   const SizedBox(height: 28),
+                  if (isTruthRound) ...[
+                    () {
+                      final bool isTimerLast5Sec = state.endTime != null && 
+                          (state.endTime! - DateTime.now().millisecondsSinceEpoch) < 5000;
+                      final bool canReroll = !me.hasRerolled && !isTimerLast5Sec && !_isSubmitting;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: Text(me.hasRerolled ? 'RE-ROLL USED' : 'RE-ROLL PROMPT'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.ground,
+                              foregroundColor: AppColors.brass,
+                              side: BorderSide(
+                                color: canReroll ? AppColors.brass : AppColors.brass.withOpacity(0.3),
+                                width: 1,
+                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: canReroll
+                                ? () async {
+                                    setState(() => _isSubmitting = true);
+                                    try {
+                                      await gs.rerollMyPrompt();
+                                      _answerController.clear();
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Prompt re-rolled successfully!')),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                                        );
+                                      }
+                                    } finally {
+                                      if (mounted) {
+                                        setState(() => _isSubmitting = false);
+                                      }
+                                    }
+                                  }
+                                : null,
+                          ),
+                        ),
+                      );
+                    }(),
+                  ],
                   _isSubmitting
                       ? CircularProgressIndicator(color: theme.colorScheme.primary)
                       : PrimaryButton(

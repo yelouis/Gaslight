@@ -1,12 +1,76 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/game_service.dart';
 import '../models/player_state.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/lobby_background.dart';
+import '../theme/app_colors.dart';
 
-class GameOverScreen extends StatelessWidget {
+class GameOverScreen extends StatefulWidget {
   const GameOverScreen({super.key});
+
+  @override
+  State<GameOverScreen> createState() => _GameOverScreenState();
+}
+
+class _GameOverScreenState extends State<GameOverScreen> {
+  final GlobalKey _globalKey = GlobalKey();
+  bool _isSharing = false;
+
+  Future<void> _shareCaseFile() async {
+    if (_isSharing) return;
+    setState(() => _isSharing = true);
+
+    try {
+      // Small delay to allow setState to build if needed
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final boundary = _globalKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        throw Exception('Could not find render object boundary');
+      }
+
+      final image = await boundary.toImage(pixelRatio: 2.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception('Could not convert image to byte data');
+      }
+      final pngBytes = byteData.buffer.asUint8List();
+
+      if (kIsWeb) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sharing is only supported on mobile devices.')),
+        );
+        return;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final file = await File('${tempDir.path}/gaslight_case_file.png').create();
+      await file.writeAsBytes(pngBytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'image/png')],
+        text: 'Just finished a match of Gaslight! Check out my crew\'s honors.',
+      );
+    } catch (e) {
+      debugPrint('Error sharing case file: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to share: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSharing = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,53 +131,77 @@ class GameOverScreen extends StatelessWidget {
           automaticallyImplyLeading: false,
         ),
         body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'THE CREW\'S HONORS',
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  color: theme.colorScheme.secondary, // Gold
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 3,
-                  shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 10)],
-                ),
-              ),
-              const SizedBox(height: 30),
-              _buildHonorCards(theme, mastermind, trickster, runnerUp, gullible),
-              const SizedBox(height: 40),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.share),
-                label: const Text('Share to Instagram', style: TextStyle(fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary, // Burgundy
-                  foregroundColor: const Color(0xFFF5EEDB), // Ivory
-                  minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: theme.colorScheme.secondary, width: 2), // Gold
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                RepaintBoundary(
+                  key: _globalKey,
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppColors.ground,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.brass, width: 2),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'THE CREW\'S HONORS',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            color: theme.colorScheme.secondary, // Gold
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'CormorantGaramond',
+                            letterSpacing: 3,
+                            shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 10)],
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        _buildHonorCards(theme, mastermind, trickster, runnerUp, gullible),
+                      ],
+                    ),
                   ),
-                  elevation: 8,
                 ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sharing coming soon!')));
-                },
-              ),
-              const SizedBox(height: 20),
-              TextButton(
-                onPressed: () async {
-                  final navigator = Navigator.of(context);
-                  await gs.leaveRoom();
-                  navigator.pushNamedAndRemoveUntil('/', (route) => false);
-                },
-                child: Text('RETURN TO LOBBY', style: TextStyle(color: theme.colorScheme.secondary)),
-              )
-            ],
+                const SizedBox(height: 40),
+                ElevatedButton.icon(
+                  icon: _isSharing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.share),
+                  label: Text(
+                    _isSharing ? 'Generating dossier...' : 'Share Case File',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary, // Burgundy
+                    foregroundColor: const Color(0xFFF5EEDB), // Ivory
+                    minimumSize: const Size(double.infinity, 56),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: theme.colorScheme.secondary, width: 2), // Gold
+                    ),
+                    elevation: 8,
+                  ),
+                  onPressed: _isSharing ? null : _shareCaseFile,
+                ),
+                const SizedBox(height: 20),
+                TextButton(
+                  onPressed: () async {
+                    final navigator = Navigator.of(context);
+                    await gs.leaveRoom();
+                    navigator.pushNamedAndRemoveUntil('/', (route) => false);
+                  },
+                  child: Text('RETURN TO LOBBY', style: TextStyle(color: theme.colorScheme.secondary)),
+                )
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -154,7 +242,7 @@ class GameOverScreen extends StatelessWidget {
     final ivoryColor = const Color(0xFFF5EEDB);
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1F1C), // Deep charcoal background
+        color: AppColors.groundRaised, // Deep charcoal background
         border: Border.all(color: accentColor, width: 2.5),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [

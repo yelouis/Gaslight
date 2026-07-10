@@ -18,6 +18,14 @@ class PlayerState {
 
   // Session metadata
   final int? joinedAt; // Epoch timestamp for join time
+  final bool lobbyReady; // If player is ready in the lobby
+
+  // Emoji Reactions
+  final String? lastReaction;
+  final int? lastReactionAt; // Epoch timestamp in ms
+
+  // Prompt re-roll
+  final bool hasRerolled;
 
   PlayerState({
     required this.id,
@@ -31,6 +39,10 @@ class PlayerState {
     this.timesFooled = 0,
     this.playersDeceived = 0,
     this.joinedAt,
+    this.lobbyReady = false,
+    this.lastReaction,
+    this.lastReactionAt,
+    this.hasRerolled = false,
   });
 
   PlayerState copyWith({
@@ -45,6 +57,10 @@ class PlayerState {
     int? timesFooled,
     int? playersDeceived,
     int? joinedAt,
+    bool? lobbyReady,
+    String? lastReaction,
+    int? lastReactionAt,
+    bool? hasRerolled,
   }) {
     return PlayerState(
       id: id ?? this.id,
@@ -58,6 +74,10 @@ class PlayerState {
       timesFooled: timesFooled ?? this.timesFooled,
       playersDeceived: playersDeceived ?? this.playersDeceived,
       joinedAt: joinedAt ?? this.joinedAt,
+      lobbyReady: lobbyReady ?? this.lobbyReady,
+      lastReaction: lastReaction ?? this.lastReaction,
+      lastReactionAt: lastReactionAt ?? this.lastReactionAt,
+      hasRerolled: hasRerolled ?? this.hasRerolled,
     );
   }
 
@@ -74,6 +94,10 @@ class PlayerState {
       'timesFooled': timesFooled,
       'playersDeceived': playersDeceived,
       'joinedAt': joinedAt,
+      'lobbyReady': lobbyReady,
+      'lastReaction': lastReaction,
+      'lastReactionAt': lastReactionAt,
+      'hasRerolled': hasRerolled,
     };
   }
 
@@ -93,6 +117,10 @@ class PlayerState {
       timesFooled: map['timesFooled']?.toInt() ?? 0,
       playersDeceived: map['playersDeceived']?.toInt() ?? 0,
       joinedAt: map['joinedAt']?.toInt(),
+      lobbyReady: map['lobbyReady'] ?? false,
+      lastReaction: map['lastReaction'],
+      lastReactionAt: map['lastReactionAt']?.toInt(),
+      hasRerolled: map['hasRerolled'] ?? false,
     );
   }
 }

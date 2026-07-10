@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
+import 'theme/app_colors.dart';
 
 // Screens
 import 'screens/lobby_screen.dart';
@@ -45,18 +45,19 @@ class GaslightApp extends StatelessWidget {
       title: 'Gaslight',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor:
-            const Color(0xFF141A17), // Deep dark fantasy tavern/ruins
-        textTheme: GoogleFonts.loraTextTheme(ThemeData.dark().textTheme).apply(
-          bodyColor: const Color(0xFFF5EEDB), // Antique ivory text
-          displayColor: const Color(0xFFD4AF37), // Gold headers
+        scaffoldBackgroundColor: AppColors.ground,
+        fontFamily: 'Lora',
+        textTheme: ThemeData.dark().textTheme.apply(
+          fontFamily: 'Lora',
+          bodyColor: AppColors.ivory,
+          displayColor: AppColors.brass,
         ),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF8B0000), // Deep Burgundy/Crimson
-          secondary: Color(0xFFD4AF37), // Antique Gold
-          tertiary: Color(0xFF1B5E20), // Emerald Green
-          surface: Color(0xFFF4EBD8), // Parchment/Warm wood for cards
-          onSurface: Color(0xFF2C1E16), // Dark brown ink on parchment
+          primary: AppColors.oxblood,
+          secondary: AppColors.brass,
+          tertiary: AppColors.verdigris,
+          surface: AppColors.parchment,
+          onSurface: AppColors.ink,
         ),
         useMaterial3: true,
       ),

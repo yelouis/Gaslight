@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import '../theme/app_colors.dart';
 
 class AnimatedThinkingBackground extends StatefulWidget {
   final Widget child;
@@ -56,9 +57,9 @@ class _AnimatedThinkingBackgroundState extends State<AnimatedThinkingBackground>
               center: Alignment(0, -0.6),
               radius: 1.5,
               colors: [
-                Color(0xFF6A2A18),
-                Color(0xFF141A17),
-                Color(0xFF070A08),
+                Color(0xFF5E2E18),
+                AppColors.ground,
+                Color(0xFF090807),
               ],
               stops: [0.0, 0.6, 1.0],
             ),
@@ -129,10 +130,10 @@ class _ThinkingPainter extends CustomPainter {
       if (currentOpacity < 0) currentOpacity = 0;
 
       final textStyle = TextStyle(
-        color: Colors.amber.withOpacity(currentOpacity), // Amber glowing embers
+        color: AppColors.brass.withOpacity(currentOpacity * 0.4), // Dimmer brass glowing embers
         fontSize: p.size,
         shadows: [
-          Shadow(color: Colors.orange.withOpacity(currentOpacity), blurRadius: p.size / 2)
+          Shadow(color: Colors.orange.withOpacity(currentOpacity * 0.3), blurRadius: p.size / 2)
         ],
       );
       

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 class AnimatedLobbyBackground extends StatefulWidget {
   final Widget child;
@@ -40,9 +41,9 @@ class _AnimatedLobbyBackgroundState extends State<AnimatedLobbyBackground> with 
               center: const Alignment(0, -0.6), // Light from above
               radius: 1.8 * _breathingController.value, // Breathing spotlight
               colors: const [
-                Color(0xFF6A2A18), // Warm ember/lantern glow
-                Color(0xFF141A17), // Deep shadowy tavern/forest
-                Color(0xFF070A08), // Near black edges
+                Color(0xFF5E2E18), // Warm lamplight/ember glow
+                AppColors.ground, // Falls off to warm soot ground
+                Color(0xFF090807), // Dark vignette edges
               ],
               stops: const [0.0, 0.5, 1.0],
             ),

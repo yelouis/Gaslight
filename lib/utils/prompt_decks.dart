@@ -154,4 +154,21 @@ class PromptDecks {
     }
     return results;
   }
+
+  /// Draws a single prompt from [deckId], excluding a set of [excludedPrompts].
+  /// Throws an exception if no unique prompts are left.
+  static String drawOneExcluding(String deckId, Set<String> excludedPrompts) {
+    if (!_decks.containsKey(deckId)) {
+      throw Exception('Failed to load deck: $deckId. Ensure it is defined in PromptDecks.');
+    }
+    
+    final deck = _decks[deckId]!;
+    final available = deck.where((p) => !excludedPrompts.contains(p)).toList();
+    if (available.isEmpty) {
+      throw Exception('No remaining unique prompts in deck "$deckId"');
+    }
+    
+    available.shuffle(Random());
+    return available.first;
+  }
 }
