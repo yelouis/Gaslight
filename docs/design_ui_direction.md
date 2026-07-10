@@ -3,6 +3,8 @@
 A brainstorm for tightening Gaslight's visual identity so every screen feels like it belongs to the *same* world. Written to be reviewed the same way as the issues doc: where a direction is a genuine fork, it ends with **Options** and a `Your selection: _____` line.
 
 > **Deliverable note:** this is a written direction, not code. Nothing here is required to fix a bug — it's about making the game *feel* like its name. If you want, I can also produce a clickable visual mockup of one screen (e.g. the Reveal) so you can see a direction before committing.
+>
+> ✅ **Approved.** The selected directions (§3 warm-neutral, §4 Cormorant + bundled fonts, §5 Option A motif, §7 icon overhaul, plus §6/§8/§9) are turned into a concrete `ThemeData` + widget execution plan in **`docs/implementation_plan_gameplay_and_ui.md` → Wave E**.
 
 ---
 

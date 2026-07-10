@@ -116,7 +116,11 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 > Discovered during a full docs + code-walkthrough of Journeys 1–5 (see `docs/e2e_testing_journeys.md`) on July 8. Each issue below was traced to specific source lines. **These are not yet fixed** — they are documented here for triage. Ordered by severity.
 >
-> ✅ **Selections made.** A step-by-step, player-language implementation & validation plan for the selected options now lives in **`docs/implementation_plan_selected_fixes.md`** (Waves A→C). New findings (Issues 8–11) and fun/gameplay proposals (P1–P6) were added below on July 9 and are awaiting your selection.
+> ✅ **All selections made.** Executable, player-language implementation & validation plans now exist:
+> - **Bug fixes** (Issues 1–11 + Clarifications 1–2): `docs/implementation_plan_selected_fixes.md` (Waves A→C).
+> - **Gameplay features** (Proposals P1–P6, all Option A) **and the visual redesign** (`design_ui_direction.md`): `docs/implementation_plan_gameplay_and_ui.md` (Waves D–E).
+>
+> Issues 8–11 were selected **Option A**; Proposals P1–P6 selected **Option A**. Their plans are folded into the two docs above (Issues 8–10 → Wave B2–B4, Issue 11 → Wave B5, Proposals → Wave D).
 
 ---
 

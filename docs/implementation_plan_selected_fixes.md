@@ -3,6 +3,8 @@
 This document turns the **selected options** in `docs/ongoing_general_errors.md` (Issues 1–7) and `docs/design_scoring_and_ui.md` (Clarifications 1–2) into a concrete, ordered plan another engineer/model can execute. Each item states, in plain language, **what it means for the player**, then the **technical changes** and **how to validate** it.
 
 > **How to read this**: Do the work in the order below. Steps are grouped into three waves so the game becomes correct and pleasant quickly, before the larger security migration. Where a later wave re-homes logic (Wave C moves rules onto a server), the plan flags what must be **mirrored** there so fixes are not lost.
+>
+> **Scope of this doc:** the selected **bug/correctness fixes** — Issues 1–11 and Clarifications 1–2. The selected **new features and visual redesign** (gameplay Proposals P1–P6 and the "Turn Down the Lamps" UI direction) live in the companion plan **`docs/implementation_plan_gameplay_and_ui.md`** (Waves D–E), which is sequenced to run *after* the correctness waves here. Start there only once Wave A is merged.
 
 ---
 
@@ -198,6 +200,29 @@ This document turns the **selected options** in `docs/ongoing_general_errors.md`
 **Validation:**
 - *Automated:* Build a room with host + 2 players + 1 spectator; delete the host; assert the earliest-joined **non-spectator** becomes host.
 - *Manual:* Host leaves mid-game; confirm a playing (not spectating) player takes over and the game continues.
+
+---
+
+## B5 · Issue 11 — Rejoin locks the player out after an identity change
+**Selected: Option A** — stable local player ID decoupled from auth. *Note: the full Option A lands with Wave C (it needs server-side ownership validation); ship an interim guard now.*
+
+**What it means for the player:** A player's seat is tied to their invisible anonymous account. If that account is lost (cleared web storage, reinstall, a failed silent sign-in), the app makes a new identity and the returning player is **locked out of their own seat** — they show up as a stranger who can't edit their record.
+
+**Why this is split across two waves:** today's rules require `request.auth.uid == playerId` to write your own player doc, so a *stable* UUID playerId (Option A's core) can't work until ownership is validated server-side (Wave C). Do the durable fix there; do a small safety guard now so no one hits the silent locked-out state in the meantime.
+
+**Interim (do now, `lib/services/game_service.dart` `tryRejoinSession`):**
+1. After resolving `currentUser?.uid`, compare it to the cached `player_id`. If they differ (identity changed), **do not** silently restore: clear the saved `room_code`/`player_id`, return `false`, and let the lobby show a friendly "Your session expired — please rejoin" `SnackBar`.
+2. This converts a broken, unwritable restored state into a clean restart (Option B's behavior) as a stopgap.
+
+**Durable (do in Wave C, see C1/C2/C3):**
+1. Generate a UUID `playerId` once per device, persist in `SharedPreferences`, keep it stable across auth changes.
+2. Store the current `authUid` on the player doc; server callables validate `context.auth.uid == player.authUid` for ownership instead of `uid == playerId`.
+3. Update `firestore.rules` so ownership no longer keys on `uid == playerId` (functions enforce it).
+4. Add `playerId` + `authUid` to `PlayerState` serialization.
+
+**Validation:**
+- *Interim:* Simulate `currentUser.uid` changing between sessions; assert `tryRejoinSession` returns `false` and clears prefs (no restored, unwritable session). Manual (web): clear site data mid-lobby, reload → land cleanly on the entry screen with the message.
+- *Durable (Wave C):* With the stable-ID model, simulate an auth-uid change and assert the player can still write via callables and keeps their seat/score.
 
 ---
 
