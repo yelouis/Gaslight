@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/game_service.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/lobby_background.dart';
 import '../widgets/lobby_logo.dart';
 import '../models/game_state.dart';
+import '../models/player_state.dart';
 import '../widgets/shared_ui.dart';
 import '../utils/prompt_decks.dart';
 
@@ -32,10 +34,16 @@ class _LobbyScreenState extends State<LobbyScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final gs = context.read<GameService>();
+      final prefs = await SharedPreferences.getInstance();
+      final hasSavedSession = prefs.getString('room_code') != null;
       final rejoining = await gs.tryRejoinSession();
       if (rejoining && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Rejoined active game session!')),
+        );
+      } else if (!rejoining && hasSavedSession && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Your session expired — please rejoin.')),
         );
       }
     });
@@ -275,6 +283,19 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final isHost = gs.currentPlayer!.isHost;
     final players = gs.players;
 
+    final activeCount = players.where((p) => p.role != PlayerRole.spectator).length;
+    final rounds = gs.gameState?.sabotageAnswersCount ?? 2;
+    final deckSize = PromptDecks.getDeckSize(_selectedDeck);
+    
+    String? startWarning;
+    if (activeCount < 2) {
+      startWarning = "Need at least 2 active players to start.";
+    } else if (activeCount <= rounds) {
+      startWarning = "Need more players than forgery rounds ($rounds).";
+    } else if (deckSize < activeCount) {
+      startWarning = "Deck too small: selected deck has $deckSize prompts but you have $activeCount active players.";
+    }
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -336,10 +357,28 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     child: const Text('DEBUG: ADD 9 BOTS', style: TextStyle(color: Colors.white24, fontSize: 10)),
                   ),
                 ),
+
+              if (startWarning != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    startWarning,
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               PrimaryButton(
                 text: 'START GAME',
-                onPressed: players.isNotEmpty ? () {
-                  gs.startGame(_selectedDeck);
+                onPressed: startWarning == null ? () async {
+                  try {
+                    await gs.startGame(_selectedDeck);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                      );
+                    }
+                  }
                 } : null,
               ),
             ],

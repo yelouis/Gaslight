@@ -46,7 +46,7 @@ graph TD
 ### Host Transfer Logic
 If the host player is deleted or disconnects:
 1. The stream listener on remaining active players detects the absence of a host (`!players.any((p) => p.isHost)`).
-2. The remaining player who has been in the room the longest (the first document in the Firestore player list) is automatically designated as the new host.
+2. The remaining active non-spectator player who has been in the room the longest (determined by the smallest `joinedAt` timestamp, falling back to lexicographical ID comparison) is automatically designated as the new host.
 3. The new host writes `isHost: true` to their player document in Firestore and assumes responsibility for evaluating readiness and forcing advancements.
 
 ---

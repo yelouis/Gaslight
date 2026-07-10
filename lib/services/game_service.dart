@@ -29,6 +29,9 @@ class GameService extends ChangeNotifier {
   // Duplicate-advance guards
   final Set<String> _advancedStateKeys = {};
 
+  // Disconnect in-flight guards
+  final Set<String> _disconnectsInFlight = {};
+
   GameState? get gameState => _gameState;
   List<PlayerState> get players => _players;
   String? get currentPlayerId => _currentPlayerId;
@@ -110,6 +113,7 @@ class GameService extends ChangeNotifier {
       colorValue: _getRandomColor(),
       avatarIndex: avatarIndex ?? _getRandomAvatar(),
       lastSeen: DateTime.now().millisecondsSinceEpoch,
+      joinedAt: DateTime.now().millisecondsSinceEpoch,
     );
 
     await _db.collection('rooms').doc(roomCode).set(initialState.toMap());
@@ -147,6 +151,7 @@ class GameService extends ChangeNotifier {
       avatarIndex: avatarIndex ?? _getRandomAvatar(),
       lastSeen: DateTime.now().millisecondsSinceEpoch,
       role: isSpectator ? PlayerRole.spectator : PlayerRole.unassigned,
+      joinedAt: DateTime.now().millisecondsSinceEpoch,
     );
 
     await _db.collection('rooms').doc(roomCode).collection('players').doc(playerId).set(newPlayer.toMap());
@@ -164,6 +169,19 @@ class GameService extends ChangeNotifier {
       final savedRoom = prefs.getString('room_code');
       final savedPlayerId = prefs.getString('player_id');
       if (savedRoom != null && savedPlayerId != null) {
+        String? authUid;
+        try {
+          authUid = FirebaseAuth.instance.currentUser?.uid;
+        } catch (_) {}
+        
+        if (authUid != null && authUid != savedPlayerId) {
+          // Identity mismatch! Clear cache and return false
+          await prefs.remove('room_code');
+          await prefs.remove('player_id');
+          debugPrint('Identity mismatch on rejoin: auth=$authUid, saved=$savedPlayerId. Session cleared.');
+          return false;
+        }
+
         final roomDoc = await _db.collection('rooms').doc(savedRoom).get();
         final playerDoc = await _db.collection('rooms').doc(savedRoom).collection('players').doc(savedPlayerId).get();
         if (roomDoc.exists && playerDoc.exists) {
@@ -244,6 +262,9 @@ class GameService extends ChangeNotifier {
       if (snapshot.exists) {
         _gameState = GameState.fromMap(snapshot.data()!, snapshot.id);
         notifyListeners();
+        if (currentPlayer?.isHost == true) {
+          evaluateReadyState();
+        }
       }
     });
 
@@ -265,10 +286,24 @@ class GameService extends ChangeNotifier {
         _db.collection('rooms').doc(roomCode).collection('players').doc(dp.id).delete().catchError((_) {});
       }
 
-      // HOST TRANSFER LOGIC: If no host exists, promote the first player
+      // HOST TRANSFER LOGIC: If no host exists, promote the earliest joined active player
       if (_players.isNotEmpty && !_players.any((p) => p.isHost)) {
-        final newHost = _players.first;
-        updatePlayerState(roomCode, newHost.copyWith(isHost: true));
+        final candidates = _players.where((p) => p.role != PlayerRole.spectator).toList();
+        if (candidates.isNotEmpty) {
+          candidates.sort((a, b) {
+            final aTime = a.joinedAt ?? 0;
+            final bTime = b.joinedAt ?? 0;
+            if (aTime != bTime) {
+              return aTime.compareTo(bTime);
+            }
+            return a.id.compareTo(b.id);
+          });
+          final newHost = candidates.first;
+          updatePlayerState(roomCode, newHost.copyWith(isHost: true));
+        } else {
+          final newHost = _players.first;
+          updatePlayerState(roomCode, newHost.copyWith(isHost: true));
+        }
       }
       
       notifyListeners();
@@ -285,6 +320,8 @@ class GameService extends ChangeNotifier {
           final cardIds = _gameState!.cards.map((c) => c.targetPlayerId).toSet();
           final disconnected = cardIds.difference(activeIds);
           for (var dpId in disconnected) {
+            if (_disconnectsInFlight.contains(dpId)) continue;
+            _disconnectsInFlight.add(dpId);
             handlePlayerDisconnect(dpId);
           }
         }
@@ -307,91 +344,101 @@ class GameService extends ChangeNotifier {
     final state = _gameState!;
     final phase = state.currentPhase;
     
-    // 1. Remove the disconnected player's card from the list
-    final updatedCards = state.cards.where((c) => c.targetPlayerId != disconnectedPlayerId).toList();
-    
-    // 2. Adjust ready players map
-    final newReadyPlayers = Map<String, bool>.from(state.readyPlayers)..remove(disconnectedPlayerId);
-    
-    // 3. Prune resolutionOrder list if it contains the player
-    final newResolutionOrder = List<String>.from(state.resolutionOrder)..remove(disconnectedPlayerId);
-    
-    GameState nextState = state.copyWith(
-      cards: updatedCards,
-      totalPlayers: _players.where((p) => p.role != PlayerRole.spectator).length,
-      readyPlayers: newReadyPlayers,
-      resolutionOrder: newResolutionOrder,
-    );
-    
-    // 3. Phase-specific adjustments
-    if (phase == GamePhase.forgery) {
-      final assignments = Map<String, String>.from(state.currentCardAssignments);
-      
-      String? holderOfDisconnected;
-      assignments.forEach((holder, target) {
-        if (target == disconnectedPlayerId) {
-          holderOfDisconnected = holder;
-        }
-      });
-      
-      final targetOfDisconnected = assignments[disconnectedPlayerId];
-      assignments.remove(disconnectedPlayerId);
-      
-      if (holderOfDisconnected != null && targetOfDisconnected != null) {
-        assignments[holderOfDisconnected!] = targetOfDisconnected;
-      }
-      
-      final activePlayerIds = _players
-          .where((p) => p.id != disconnectedPlayerId && p.role != PlayerRole.spectator)
-          .map((p) => p.id)
-          .toList();
-          
-      int remainingRotations = state.sabotageAnswersCount;
-      if (activePlayerIds.length <= remainingRotations) {
-        remainingRotations = activePlayerIds.length - 1;
-      }
-      
-      if (remainingRotations <= 0 || state.currentRotationIndex > remainingRotations) {
-        final pIds = activePlayerIds;
-        Map<String, String> truthAssignments = { for (var id in pIds) id : id };
-        nextState = nextState.copyWith(
-          currentPhase: GamePhase.truth,
-          currentCardAssignments: truthAssignments,
-          sabotageAnswersCount: 0,
-          currentRotationIndex: 0,
-          endTime: state.isTimerDisabled ? null : DateTime.now().add(const Duration(seconds: 60)).millisecondsSinceEpoch,
-          clearEndTime: state.isTimerDisabled,
-        );
-      } else {
-        final newRotations = RotationEngine.generateRotations(activePlayerIds, remainingRotations);
-        Map<String, Map<String, String>> stringRotations = {};
-        newRotations.forEach((key, val) => stringRotations[key.toString()] = val);
-        
-        nextState = nextState.copyWith(
-          currentCardAssignments: assignments,
-          rotationPlan: stringRotations,
-          sabotageAnswersCount: remainingRotations,
-        );
-      }
-    } else if (phase == GamePhase.truth) {
-      final assignments = Map<String, String>.from(state.currentCardAssignments)..remove(disconnectedPlayerId);
-      nextState = nextState.copyWith(currentCardAssignments: assignments);
-    } else if (phase == GamePhase.vote || phase == GamePhase.reveal) {
-      if (state.currentReaderId == disconnectedPlayerId) {
-        if (newResolutionOrder.isNotEmpty) {
-          final originalIdx = state.resolutionOrder.indexOf(disconnectedPlayerId);
-          if (originalIdx != -1 && originalIdx < newResolutionOrder.length) {
-            nextState = nextState.copyWith(currentReaderId: newResolutionOrder[originalIdx]);
-          } else {
-            nextState = nextState.copyWith(currentReaderId: newResolutionOrder.first);
-          }
-        } else {
-          nextState = nextState.copyWith(currentPhase: GamePhase.gameOver);
-        }
-      }
+    // Idempotency: early return if the card has already been removed
+    if (!state.cards.any((c) => c.targetPlayerId == disconnectedPlayerId)) {
+      _disconnectsInFlight.remove(disconnectedPlayerId);
+      return;
     }
     
-    await updateGameState(nextState);
+    try {
+      // 1. Remove the disconnected player's card from the list
+      final updatedCards = state.cards.where((c) => c.targetPlayerId != disconnectedPlayerId).toList();
+      
+      // 2. Adjust ready players map
+      final newReadyPlayers = Map<String, bool>.from(state.readyPlayers)..remove(disconnectedPlayerId);
+      
+      // 3. Prune resolutionOrder list if it contains the player
+      final newResolutionOrder = List<String>.from(state.resolutionOrder)..remove(disconnectedPlayerId);
+      
+      GameState nextState = state.copyWith(
+        cards: updatedCards,
+        totalPlayers: _players.where((p) => p.role != PlayerRole.spectator).length,
+        readyPlayers: newReadyPlayers,
+        resolutionOrder: newResolutionOrder,
+      );
+      
+      // 3. Phase-specific adjustments
+      if (phase == GamePhase.forgery) {
+        final assignments = Map<String, String>.from(state.currentCardAssignments);
+        
+        String? holderOfDisconnected;
+        assignments.forEach((holder, target) {
+          if (target == disconnectedPlayerId) {
+            holderOfDisconnected = holder;
+          }
+        });
+        
+        final targetOfDisconnected = assignments[disconnectedPlayerId];
+        assignments.remove(disconnectedPlayerId);
+        
+        if (holderOfDisconnected != null && targetOfDisconnected != null) {
+          assignments[holderOfDisconnected!] = targetOfDisconnected;
+        }
+        
+        final activePlayerIds = _players
+            .where((p) => p.id != disconnectedPlayerId && p.role != PlayerRole.spectator)
+            .map((p) => p.id)
+            .toList();
+            
+        int remainingRotations = state.sabotageAnswersCount;
+        if (activePlayerIds.length <= remainingRotations) {
+          remainingRotations = activePlayerIds.length - 1;
+        }
+        
+        if (remainingRotations <= 0 || state.currentRotationIndex > remainingRotations) {
+          final pIds = activePlayerIds;
+          Map<String, String> truthAssignments = { for (var id in pIds) id : id };
+          nextState = nextState.copyWith(
+            currentPhase: GamePhase.truth,
+            currentCardAssignments: truthAssignments,
+            sabotageAnswersCount: 0,
+            currentRotationIndex: 0,
+            endTime: state.isTimerDisabled ? null : DateTime.now().add(const Duration(seconds: 60)).millisecondsSinceEpoch,
+            clearEndTime: state.isTimerDisabled,
+          );
+        } else {
+          final newRotations = RotationEngine.generateRotations(activePlayerIds, remainingRotations);
+          Map<String, Map<String, String>> stringRotations = {};
+          newRotations.forEach((key, val) => stringRotations[key.toString()] = val);
+          
+          nextState = nextState.copyWith(
+            currentCardAssignments: assignments,
+            rotationPlan: stringRotations,
+            sabotageAnswersCount: remainingRotations,
+          );
+        }
+      } else if (phase == GamePhase.truth) {
+        final assignments = Map<String, String>.from(state.currentCardAssignments)..remove(disconnectedPlayerId);
+        nextState = nextState.copyWith(currentCardAssignments: assignments);
+      } else if (phase == GamePhase.vote || phase == GamePhase.reveal) {
+        if (state.currentReaderId == disconnectedPlayerId) {
+          if (newResolutionOrder.isNotEmpty) {
+            final originalIdx = state.resolutionOrder.indexOf(disconnectedPlayerId);
+            if (originalIdx != -1 && originalIdx < newResolutionOrder.length) {
+              nextState = nextState.copyWith(currentReaderId: newResolutionOrder[originalIdx]);
+            } else {
+              nextState = nextState.copyWith(currentReaderId: newResolutionOrder.first);
+            }
+          } else {
+            nextState = nextState.copyWith(currentPhase: GamePhase.gameOver);
+          }
+        }
+      }
+      
+      await updateGameState(nextState);
+    } finally {
+      _disconnectsInFlight.remove(disconnectedPlayerId);
+    }
   }
 
   /// Atomically updates scores for all players in a room.
@@ -489,23 +536,35 @@ class GameService extends ChangeNotifier {
   // --- PHASE 2: ROTATION ENGINE & GAME LOOP ---
 
   Future<void> startGame(String deckId) async {
-    if (_gameState == null || _players.length < 2) return;
+    if (_gameState == null) {
+      throw Exception("No active game room found.");
+    }
     
-    if (_players.length <= _gameState!.sabotageAnswersCount) {
-        throw Exception("Cannot start: Need more players than sabotage rounds.");
+    final activePlayers = _players.where((p) => p.role != PlayerRole.spectator).toList();
+    if (activePlayers.length < 2) {
+      throw Exception("Cannot start: Need at least 2 active players.");
+    }
+    
+    if (activePlayers.length <= _gameState!.sabotageAnswersCount) {
+      throw Exception("Cannot start: Need more players than forgery rounds.");
+    }
+
+    final deckSize = PromptDecks.getDeckSize(deckId);
+    if (deckSize < activePlayers.length) {
+      throw Exception("Cannot start: Selected deck has $deckSize prompts, but you need at least ${activePlayers.length} prompts for this many players.");
     }
 
     // 0. Maintenance
     SemanticFilter.clearCache();
     
     // 1. Calculate mathematical rotations across S derivations securely natively.
-    var pIds = _players.map((p) => p.id).toList();
+    var pIds = activePlayers.map((p) => p.id).toList();
     var nativeRotations = RotationEngine.generateRotations(pIds, _gameState!.sabotageAnswersCount);
     Map<String, Map<String, String>> stringRotations = {};
     nativeRotations.forEach((key, val) => stringRotations[key.toString()] = val);
 
     // 2. Draw Cards dynamically based on player count
-    var prompts = PromptDecks.drawPrompts(deckId, _players.length);
+    var prompts = PromptDecks.drawPrompts(deckId, activePlayers.length);
     List<CardModel> startingCards = [];
     for (int i = 0; i < pIds.length; i++) {
         startingCards.add(CardModel(
@@ -740,6 +799,7 @@ class GameService extends ChangeNotifier {
           isHost: false,
           colorValue: _getRandomColor(),
           avatarIndex: i % 6,
+          joinedAt: DateTime.now().millisecondsSinceEpoch + i,
         );
         final ref = _db.collection('rooms').doc(rCode).collection('players').doc(botId);
         batch.set(ref, bot.toMap());

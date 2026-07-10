@@ -492,4 +492,77 @@ void main() {
       print('Verified: Unique answer was successfully accepted.');
     });
   });
+
+  group('Wave B Unit Tests', () {
+    test('startGame throws descriptive exceptions for invalid player counts and decks', () async {
+      final db = FakeFirestore();
+      final gs = GameService(db: db);
+      SharedPreferences.setMockInitialValues({});
+
+      await gs.createRoom('Host', 'host_user', sabotageAnswersCount: 2);
+      await Future.delayed(Duration(milliseconds: 100));
+      
+      // Should throw for too few active players (< 2)
+      expect(
+        () => gs.startGame('the_daily_grind'),
+        throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('Need at least 2 active players'))),
+      );
+
+      // Add a second player. Total players: 2, sabotageAnswersCount: 2. Need players > sabotageAnswersCount.
+      await gs.joinRoom(gs.gameState!.roomCode, 'Player 2', 'player_2');
+      await Future.delayed(Duration(milliseconds: 100));
+      
+      expect(
+        () => gs.startGame('the_daily_grind'),
+        throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('Need more players than forgery rounds'))),
+      );
+    });
+
+    test('host transfer logic promotes earliest joined active player', () async {
+      final db = FakeFirestore();
+      final gs = GameService(db: db);
+      SharedPreferences.setMockInitialValues({});
+
+      // Host joins
+      await gs.createRoom('Host', 'host_user', sabotageAnswersCount: 1);
+      await Future.delayed(Duration(milliseconds: 100));
+      final rCode = gs.gameState!.roomCode;
+
+      // Add other players with different joinedAt values
+      final p2 = PlayerState(id: 'player_2', name: 'Player 2', joinedAt: 200);
+      final p3 = PlayerState(id: 'player_3', name: 'Player 3', joinedAt: 100); // earlier
+      final spec = PlayerState(id: 'spec_1', name: 'Spectator', joinedAt: 50, role: PlayerRole.spectator); // earliest but spectator
+
+      await db.collection('rooms').doc(rCode).collection('players').doc(p2.id).set(p2.toMap());
+      await db.collection('rooms').doc(rCode).collection('players').doc(p3.id).set(p3.toMap());
+      await db.collection('rooms').doc(rCode).collection('players').doc(spec.id).set(spec.toMap());
+
+      // Trigger listener update
+      await gs.updatePlayerState(rCode, p2);
+      await gs.updatePlayerState(rCode, p3);
+      await gs.updatePlayerState(rCode, spec);
+      await Future.delayed(Duration(milliseconds: 100));
+
+      // Delete host
+      await db.collection('rooms').doc(rCode).collection('players').doc('host_user').delete();
+      await Future.delayed(Duration(milliseconds: 100));
+
+      // Earliest active (non-spectator) player (player_3) should be promoted
+      final newHost = gs.players.firstWhere((p) => p.isHost);
+      expect(newHost.id, 'player_3');
+    });
+
+    test('tryRejoinSession mismatch clears preferences and returns false', () async {
+      final db = FakeFirestore();
+      final gs = GameService(db: db);
+      // Mock preferences with mismatching player_id
+      SharedPreferences.setMockInitialValues({
+        'room_code': 'ABCD',
+        'player_id': 'saved_player_id_mismatch',
+      });
+
+      final result = await gs.tryRejoinSession();
+      expect(result, isFalse);
+    });
+  });
 }

@@ -16,6 +16,9 @@ class PlayerState {
   final int timesFooled;
   final int playersDeceived;
 
+  // Session metadata
+  final int? joinedAt; // Epoch timestamp for join time
+
   PlayerState({
     required this.id,
     required this.name,
@@ -27,6 +30,7 @@ class PlayerState {
     this.lastSeen,
     this.timesFooled = 0,
     this.playersDeceived = 0,
+    this.joinedAt,
   });
 
   PlayerState copyWith({
@@ -40,6 +44,7 @@ class PlayerState {
     int? lastSeen,
     int? timesFooled,
     int? playersDeceived,
+    int? joinedAt,
   }) {
     return PlayerState(
       id: id ?? this.id,
@@ -52,6 +57,7 @@ class PlayerState {
       lastSeen: lastSeen ?? this.lastSeen,
       timesFooled: timesFooled ?? this.timesFooled,
       playersDeceived: playersDeceived ?? this.playersDeceived,
+      joinedAt: joinedAt ?? this.joinedAt,
     );
   }
 
@@ -67,6 +73,7 @@ class PlayerState {
       'lastSeen': lastSeen,
       'timesFooled': timesFooled,
       'playersDeceived': playersDeceived,
+      'joinedAt': joinedAt,
     };
   }
 
@@ -85,6 +92,7 @@ class PlayerState {
       lastSeen: map['lastSeen']?.toInt(),
       timesFooled: map['timesFooled']?.toInt() ?? 0,
       playersDeceived: map['playersDeceived']?.toInt() ?? 0,
+      joinedAt: map['joinedAt']?.toInt(),
     );
   }
 }

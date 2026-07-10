@@ -123,6 +123,9 @@ class PromptDecks {
     ],
   };
 
+  /// Returns the number of prompts in the deck.
+  static int getDeckSize(String deckId) => _decks[deckId]?.length ?? 0;
+
   /// Returns a list of the available deck IDs.
   static List<String> get availableDecks => _decks.keys.toList();
 

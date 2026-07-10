@@ -134,6 +134,26 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Problem**: End-game honors were based solely on overall score rank, creating duplicate titles in small lobbies and potentially awarding honors (like "Most Gullible") to spectators with 0 points.
     - **Solution**: Added `timesFooled` and `playersDeceived` tracking to `PlayerState` and aggregated them at reveal scoring time inside `GameService`. Rewrote the honors generation on the game over screen to filter spectators, use actual metrics for Trickster and Most Gullible, and select distinct recipients.
 
+32. **Readiness Evaluation Latency / Heartbeat Dead-Air (Resolved - July 10)**:
+    - **Problem**: Hosts only evaluated readiness in response to player collection updates or the 10-second heartbeat, leading to up to 10s of dead air after all players submitted ready room-doc writes.
+    - **Solution**: Triggered `evaluateReadyState()` on the room snapshot listener inside `GameService.listenToRoom()` for hosts, resulting in near-instant phase advancement.
+
+33. **Lobby "Start Game" Silent Failure (Resolved - July 10)**:
+    - **Problem**: When a host tapped "START GAME" with an invalid setup (fewer than 2 players, deck too small, or rounds exceeding players), the service failed silently or threw unhandled exceptions, leaving the host in a confused state.
+    - **Solution**: Refactored `startGame()` in `GameService` to validate setup and throw typed, descriptive exceptions. Updated `LobbyScreen` to catch these errors and show SnackBar messages, and added pre-check warning text with conditional disabling of the start button.
+
+34. **Overlap/Multiple Disconnect Cleanup Calls (Resolved - July 10)**:
+    - **Problem**: Asynchronous and unguarded host-only disconnect cleanups fired multiple times for the same player across overlapping snapshots, corrupting card counts and round rotation math.
+    - **Solution**: Added a `_disconnectsInFlight` set inside `GameService` to filter duplicate disconnect signals, wrapped `handlePlayerDisconnect` in try-finally, and added an early-return check to ensure idempotency.
+
+35. **Random Host Handoff Promoting Spectators (Resolved - July 10)**:
+    - **Problem**: Host handoff promoted `_players.first`, which was based on random Firestore document ID ordering and could promote inactive spectator accounts, halting game progress.
+    - **Solution**: Added a `joinedAt` timestamp to `PlayerState` during room creation and joining, and rewrote the host promotion code to sort candidate non-spectator players by earliest `joinedAt` (with ID fallback).
+
+36. **Losing Anonymous Identity Locks Rejoining Player (Resolved - July 10)**:
+    - **Problem**: If a player's anonymous Firebase UID changed (e.g. storage cleared), tryRejoinSession restored a cached session under the old UID that the rules prevented the new UID from writing to, leaving them locked out.
+    - **Solution**: Implemented an interim mismatch check in `tryRejoinSession` comparing authenticated `uid` to saved `player_id`. If a mismatch is detected, it clears the cached keys, returns `false`, and alerts the player in the lobby via SnackBar to rejoin cleanly.
+
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
@@ -186,105 +206,9 @@ Your selection: Proceed with Option A → **overridden to Option D** per your no
 
 ---
 
-### Issue 4: Readiness Evaluation Isn't Triggered by Room-Document Ready Writes (Advancement Latency)
-**Status**: ⚠️ Confirmed Unresolved — `readyPlayers` lives in the **room** document, but the host only re-evaluates readiness from the **players-collection** listener.
-- The room snapshot listener (`game_service.dart:241-246`) updates `_gameState` and calls `notifyListeners()` but **does not** call `evaluateReadyState()`.
-- `evaluateReadyState()` is invoked only from the players listener (`game_service.dart:276`) and from the acting host's own submit (`phase2_craft.dart:72`).
-- Consequently, when a non-host player marks ready (a *room*-doc write), the host does not immediately evaluate. It only advances on the next players-collection change — in practice the 10-second heartbeat (`game_service.dart:182`). This adds up to ~10s of dead time after the last player is ready and, if heartbeats are ever throttled/disabled, risks a stall. (Note: `debugSimulateBotResponses()` masks this in tests by also writing an unused `isReady` field to player docs at `game_service.dart:736`, which forces the players listener to fire.)
-
-**Option A (recommended)**: **Call `evaluateReadyState()` From the Room Listener Too** — In the room snapshot handler, after updating `_gameState`, invoke `evaluateReadyState()` when the host and the phase is advanceable. The existing `_advancedStateKeys` guard already makes this idempotent.
-  - *Pros*: Near-instant advancement the moment the last ready write lands; reuses the existing idempotency guard; one small addition.
-  - *Cons*: Slightly more frequent evaluation calls (all cheap, all guarded); must ensure `currentPlayer` is resolved before evaluating on early snapshots.
-
-**Option B**: **Remove the Unused `isReady` Player-Doc Field and Rely on Heartbeat Only** — Accept heartbeat-driven evaluation and drop the dead `isReady` write.
-  - *Pros*: Simplest; removes misleading dead code.
-  - *Cons*: Leaves the ~10s latency in place; poor feel, especially in Casual Mode.
-
-**Validation**: With two `GameService` instances, mark all players ready and assert the phase advances within one event loop tick (no heartbeat wait). Manual: on two devices, confirm the phase flips immediately after the last submit rather than after a visible pause.
-
-Your selection: Proceed with Option A.
-
 ---
 
----
 
-## 🆕 Newly Discovered Issues (July 9) — Awaiting Selection
-
-> Found in a second, deeper pass over the game loop, lobby, and disconnect/host-transfer logic. Same format as above. Each describes what it means for the player first.
-
----
-
-### Issue 8: Tapping "Start Game" Can Silently Do Nothing
-**Status**: ⚠️ Confirmed Unresolved — Verified in `game_service.dart` `startGame` (line 478) and `lobby_screen.dart` (line 340).
-- **What it means for the player:** The host taps **START GAME** and… nothing happens. No message, no game, no explanation. This occurs when there are too few players, when the host chose more forgery rounds than there are players, or when the chosen deck doesn't have enough prompts for the player count.
-- **Root cause:** `startGame` bails silently on `_players.length < 2` (`return;` with no feedback) and `throw`s for `players <= rounds` / deck-too-small — but the lobby calls it fire-and-forget (`gs.startGame(_selectedDeck)` at `lobby_screen.dart:341`, not awaited, no `try/catch`), so the exception is swallowed and the host sees nothing. The button is enabled whenever `players.isNotEmpty` (even with 1 player).
-
-**Option A (recommended)**: **Surface Every Failure + Gate the Button** — Make `startGame` throw a descriptive error for all failure modes; in the lobby, `await` it in a `try/catch` and show a `SnackBar`. Additionally disable/annotate START until `players.length >= 2` and `players.length > selectedRounds`, and warn when the deck is too small for the player count.
-  - *Pros*: Host always understands why they can't start; prevents dead-button confusion; cheap.
-  - *Cons*: Requires threading the deck-capacity check into the lobby (small).
-
-**Option B**: **Auto-Correct Instead of Erroring** — Clamp rounds to `players - 1` and auto-swap to a large-enough deck silently.
-  - *Pros*: "Just works," never blocks the host.
-  - *Cons*: Hidden behavior changes the host's chosen settings without consent; can surprise players.
-
-**Validation**: Unit — `startGame` throws for 1 player, for `rounds >= players`, and for deck-too-small. Widget — lobby shows a SnackBar on each. Manual — try starting with 1 player and with 5 rounds/3 players; confirm a clear message.
-
-Your selection: Option A.
-
----
-
-### Issue 9: A Player Who Leaves Can Be "Cleaned Up" Several Times at Once
-**Status**: ⚠️ Confirmed Unresolved — Verified in `game_service.dart` `listenToRoom` disconnect loop (lines 284–286) and `handlePlayerDisconnect` (line 302). No in-flight/idempotency guard.
-- **What it means for the player:** When someone drops out mid-game, the recovery routine can fire **multiple times for the same person before the first finishes**. That can double-remove cards, shrink the number of rounds more than once, or scramble who-writes-for-whom — occasionally corrupting the game right after a disconnect.
-- **Root cause:** The players listener recomputes `disconnected = cardIds.difference(activeIds)` and calls `handlePlayerDisconnect(dpId)` on *every* snapshot until the room write lands. Because that write is async and unguarded, overlapping snapshots (e.g. a heartbeat tick) start a second, third handler for the same id, each reading the same stale state and re-applying mutations.
-
-**Option A (recommended)**: **In-Flight Guard + Idempotency** — Track ids currently being processed in a `Set` and skip duplicates; also early-return if the player's card is already gone, so a late duplicate is a harmless no-op. (Fully resolved later when disconnect handling becomes an atomic server transaction under Issue 1 / Wave C.)
-  - *Pros*: Stops double-application; minimal change; composes with the eventual server migration.
-  - *Cons*: In-memory guard only protects a single client (acceptable — only the host runs this today).
-
-**Validation**: Fire disconnect detection twice synchronously for one player; assert `cards` shrinks by exactly one and `sabotageAnswersCount` decrements at most once. Manual — kill a bot mid-forgery; confirm exactly one card removed and rotations sane.
-
-Your selection: Option A.
-
----
-
-### Issue 10: Host Handoff Picks a Semi-Random Player — Possibly a Spectator
-**Status**: ⚠️ Confirmed Unresolved — Verified in `game_service.dart` host-transfer block (`_players.first`, line 268). Contradicts `design_database_and_security.md` "longest-in-room" rule.
-- **What it means for the player:** If the host leaves, the game is supposed to promote the longest-standing player to run things. Instead it promotes an essentially **random** player — and it can even hand the host role to a **spectator who isn't playing**, which can stall the match because that person has no reason (or ability) to drive it forward.
-- **Root cause:** Firestore returns the players collection ordered by document ID (the random auth-uid/uuid), not by join time, so `_players.first` is not the oldest joiner. There is also no `role != spectator` filter before promotion.
-
-**Option A (recommended)**: **Promote Earliest-Joined Active Player** — Add a `joinedAt` timestamp to `PlayerState` on create; on host loss, promote the non-spectator with the smallest `joinedAt` (fallback to smallest id for legacy docs).
-  - *Pros*: Matches documented intent; never hands control to a spectator; deterministic.
-  - *Cons*: Adds one field + serialization.
-
-**Option B**: **Any Active Player, First to Detect Wins** — Skip join-order; simply promote the first *non-spectator* in the list.
-  - *Pros*: Smaller change (no new field).
-  - *Cons*: Still non-deterministic ordering; two clients could momentarily both claim host.
-
-**Validation**: Room with host + 2 players + 1 spectator; delete host; assert earliest-joined non-spectator becomes host. Manual — host leaves mid-game; a playing player takes over and the game continues.
-
-Your selection: Option A.
-
----
-
-### Issue 11: Rejoining After the App Loses Its Anonymous Identity Locks the Player Out
-**Status**: ⚠️ Confirmed Unresolved — Verified against `main.dart` `signInAnonymously()`, `lobby_screen.dart` `_getPlayerId()` (uses `currentUser.uid`), and `firestore.rules` `isOwner(playerId)`.
-- **What it means for the player:** A player's identity is their anonymous Firebase account. If that account is lost — cleared browser storage on web, reinstall, or a failed silent sign-in — the app makes a **brand-new** identity on next launch. The saved "rejoin" info still points at the old identity, so the returning player can't edit their own record and effectively shows up as a stranger locked out of their seat.
-- **Root cause:** `player_id` is cached as the auth `uid`, but the rules require `request.auth.uid == playerId` for a player to write their own doc. After an identity change, cached `playerId != new uid`, so `tryRejoinSession` restores a session the player can no longer write to.
-
-**Option A (recommended)**: **Stable Local Player ID Decoupled from Auth** — Generate and persist a UUID `playerId` once per device (SharedPreferences) and keep it stable across auth changes; treat the anonymous `uid` purely as the auth credential. Adjust rules to map ownership via a server/function check rather than `uid == playerId` (naturally handled when Issue 1 / Wave C moves writes server-side and validates `uid` against the player's recorded `authUid`).
-  - *Pros*: Rejoin survives storage/identity loss; cleaner identity model; composes with the server-authoritative migration.
-  - *Cons*: Requires storing an `authUid` alongside `playerId` and validating server-side; interim rules can't express this without a function.
-
-**Option B**: **Detect Mismatch and Restart Cleanly** — On rejoin, if cached `playerId != currentUser.uid`, clear the session and send the player to the entry screen with a friendly "please rejoin" message instead of a broken restored state.
-  - *Pros*: Small; avoids the silent locked-out state.
-  - *Cons*: Player loses their seat/score on identity loss (mid-game they'd rejoin as a spectator).
-
-**Validation**: Simulate `currentUser.uid` changing between sessions; assert rejoin either keeps a stable id (Option A) or cleanly resets (Option B) rather than restoring an unwritable session. Manual (web) — clear site data mid-lobby, reload, confirm graceful behavior.
-
-Your selection: Option A.
-
----
 
 ## 💡 Gameplay & Fun Improvement Proposals (July 9) — Awaiting Selection
 
