@@ -202,17 +202,46 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 Your selection: Proceed with Option A → **overridden to Option D** per your note ("industry standard for security using Firebase; scalable App Store game").
 **Decision (July 9):** Implement **Option D (server-authoritative Cloud Functions)** as the production target — see `docs/implementation_plan_selected_fixes.md` **Wave C**. Optional interim: the Option A host-authoritative shim if a friend playtest is needed before the backend exists (Wave C5).
 
----
+**Verification (July 10):** Waves A, B, D and the visual foundation (palette tokens, bundled fonts, lamp-pool background) are implemented and compile cleanly (`flutter analyze`: 0 errors, lint-only warnings). **Issue 1 (Wave C) is the only remaining unresolved bug** (plus the durable half of Issue 11, which rides with it). Next-step instructions for the implementing model are in the rewritten `docs/agent_execution_guide.md`.
 
 ---
 
+### Issue 12: Emoji Reactions Call `setState` During `build` (P3 runtime defect)
+**Status**: ⚠️ Confirmed Unresolved — Introduced by the Proposal P3 implementation. Verified in `lib/screens/phase4_reveal.dart`.
+- **What it means for the player:** When someone taps an emoji during the Reveal, the app can throw a runtime error the moment a *new* reaction arrives from another player — which can stop reactions from appearing and (in debug) paints red error frames over the screen.
+- **Root cause:** `build()` calls `_checkForNewReactions(gs.players)` synchronously (`phase4_reveal.dart:255`); when it detects a newer `lastReactionAt` it calls `_triggerFloatingReaction` → `setState(...)` **during the build phase**, which Flutter forbids ("setState() called during build"). Reactions arrive via the players stream (which triggers a rebuild), so this fires exactly when a reaction lands.
+
+**Option A (recommended)**: **Defer detection to after the frame** — move the `_checkForNewReactions` call out of `build` into a `WidgetsBinding.instance.addPostFrameCallback`, so the `setState` runs after the build completes.
+  - *Pros*: Standard Flutter fix; keeps the floating-emoji UX; tiny localized change.
+  - *Cons*: One imperceptible extra frame before an emoji appears.
+
+**Option B**: **Drive reactions from a dedicated listener** — subscribe to `GameService` in `initState` and enqueue reactions there instead of in `build`.
+  - *Pros*: Cleanly separates rendering from side-effects; no build-phase mutation.
+  - *Cons*: A little more wiring (add/remove the listener in `dispose`).
+
+**Validation**: Widget test — pump a player-doc update carrying a newer `lastReactionAt` while the Reveal is mounted; assert no `FlutterError` is thrown and exactly one floating emoji spawns. Manual — two devices; fire reactions rapidly and confirm no red error frames.
+
+Your selection: Proceed with Option A.
+
+---
+
+## 💡 Gameplay & Fun Proposals — ✅ Delivered (July 10)
+
+All six selected proposals (all Option A) were implemented and compile. Detailed specs remain in `docs/implementation_plan_gameplay_and_ui.md` (Wave D); the original brainstorm entries are retained below for reference.
+- **P1 Running leaderboard** — standings strip on the Reveal (`phase4_reveal.dart`): non-spectators ranked by score, per-card `▲ +N` delta, tabular figures.
+- **P2 Reveal drama** — staggered `_revealStage` sequence, card-flip unmasking (`FlippingRevealCard`), Truth revealed last, "Best Forgery of the Round" banner.
+- **P3 Emoji reactions** — reaction tray + floating overlay + `GameService.sendReaction` (own-doc write, rules-safe now). ⚠️ **Has a runtime defect — see Issue 12 above.**
+- **P4 Prompt re-roll** — `GameService.rerollMyPrompt` + Truth-phase button, once-per-game via `hasRerolled`. Note: writes the room doc, so for **non-host** players it only lands once **Issue 1 / Wave C** is complete.
+- **P5 Lobby warmth** — live roster, `toggleLobbyReady` ready-check, `updateLobbySettings` house rules.
+- **P6 Case File share** — `RepaintBoundary` → PNG → `share_plus`, with a web fallback.
+
 ---
 
 
 
-## 💡 Gameplay & Fun Improvement Proposals (July 9) — Awaiting Selection
+## 💡 Gameplay & Fun Proposal Specs (reference — all delivered, see summary above)
 
-> Not bugs — ideas to make Gaslight more fun, sticky, and satisfying. Same option/selection format so you can pick what to build. Ordered roughly by impact-to-effort.
+> Original brainstorm entries retained for reference. All were selected Option A and are now implemented (P3 has a follow-up defect: Issue 12).
 
 ---
 

@@ -252,7 +252,11 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
       _isNavigating = false;
     }
 
-    _checkForNewReactions(gs.players);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _checkForNewReactions(gs.players);
+      }
+    });
 
     final currentTargetId = state.currentReaderId;
     CardModel? currentCard;

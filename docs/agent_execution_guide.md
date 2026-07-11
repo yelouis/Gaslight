@@ -1,137 +1,121 @@
-# Agent Execution Guide — How to Resolve Bugs & Build Features in Gaslight
+# Agent Execution Guide — Remaining Work (post-verification, July 10)
 
-**You are an engineering agent picking up planned work on Gaslight (a Flutter + Firebase party game).** All the work has already been triaged, decided, and specified. Your job is to execute it faithfully, validate each change, and keep the docs honest. This guide tells you **where the plans are** and **the exact loop to follow**.
-
----
-
-## 1. Where everything lives (the doc map)
-
-Read these in this priority order. Paths are relative to the repo root.
-
-| Purpose | Doc | When to read |
-|---|---|---|
-| **Required context** (what the game is, architecture, file map, the write-path constraint, build order) | `docs/implementation_plan_gameplay_and_ui.md` → **Section 0** | **First, once.** Applies to all work. |
-| **The bug/fix plan** (Issues 1–11 + Clarifications 1–2; Waves A–C) | `docs/implementation_plan_selected_fixes.md` | Before doing any fix |
-| **The feature + visual-redesign plan** (Proposals P1–P6; the UI identity; Waves D–E) | `docs/implementation_plan_gameplay_and_ui.md` | Before doing any feature/UI work |
-| **Why each item exists** (triage, root cause, the user's chosen option) | `docs/ongoing_general_errors.md` | When you need the rationale behind a fix |
-| **System design (source of truth for behavior)** | `docs/design_*.md` (`design_game_state_and_models.md`, `design_rotation_engine.md`, `design_scoring_and_ui.md`, `design_semantic_integrity.md`, `design_database_and_security.md`, `design_prompt_system.md`, `design_ui_direction.md`) | When an item names one; update it if behavior/looks change |
-| **How to test flows manually** | `docs/e2e_testing_journeys.md` | For manual validation |
-| **Doc/commit conventions you must follow** | `.agents/skills/` (see §2) | Throughout |
-
-**Do not invent work.** Every task is already written as a numbered item (A1, A2 … B5, C0–C5, D1–D6, E1–E8) with file paths, steps, and validation. Execute those items.
+**You are an engineering agent picking up Gaslight (Flutter + Firebase party game) after a verification pass.** Most of the planned work is already done and verified. This guide tells you **exactly what remains**, in priority order, and the loop to follow. Do **not** re-do finished work.
 
 ---
 
-## 2. Project conventions (follow these skills)
+## 1. Current state (verified July 10)
 
-The repo defines its own working rules under `.agents/skills/`. Load and obey them:
-- **`bug_documentation_guidelines/SKILL.md`** — the exact format for the Resolved / Unresolved sections in `ongoing_general_errors.md`. Use it whenever you edit that file.
-- **`issue_resolution/SKILL.md`** — the workflow for taking an issue from Unresolved → implemented → Resolved. This guide's loop is built on it.
-- **`resolved_issue_cleanup/SKILL.md`** — after a fix, verify it in code and fold behavior changes into the relevant `design_*.md`.
-- **`commit_message_guidelines/SKILL.md`** — Conventional Commits (`fix:`, `feat:`, `docs:`, `refactor:`, …) with a "why"-focused body. Use for every commit.
-- **`fixing_ui_issues/SKILL.md`** — principles for the Wave E visual work (use `Theme.of(context)` tokens, match the existing design language).
+A code + compile verification (`flutter analyze`: 0 errors, lint-only warnings) confirmed the following is **DONE and correct**:
 
----
+- **Bug fixes Issues 2–11 + Clarifications 1–2** — all implemented; moved to the Resolved section of `docs/ongoing_general_errors.md` (entries 26–36). Includes per-card scoring, timeout placeholders, instant readiness, spectator-safe counters/honors, metric-based honors, start-game feedback, disconnect idempotency, join-order host handoff, and the interim rejoin-identity guard.
+- **Gameplay Proposals P1–P6** — implemented (leaderboard, reveal drama + card-flip, reactions, re-roll, lobby warmth, share). See the "Delivered" summary in `ongoing_general_errors.md`.
+- **UI foundation** — palette tokens (`lib/theme/app_colors.dart`), bundled fonts (Cormorant + Lora), lamp-pool background (`lib/widgets/atmosphere_background.dart`), and the concealment/card-flip reveal motif.
 
-## 3. Prime directives (guardrails — violating these causes regressions)
+**What REMAINS (your job):**
 
-1. **Follow the build order.** Bug **Wave A** → bug **Wave B** → features **Waves D–E** → bug **Wave C** (server migration) last. Within a wave, top to bottom. The order encodes real dependencies.
-2. **Respect the write-path constraint** (`gameplay_and_ui.md` §0.5). Until Wave C ships, a **non-host client cannot write the room document.** Do **not** build a non-host room write before Wave C. Features that write only a player's **own** doc are fine now — each item is tagged ✅/⛔.
-3. **Honor cross-item dependencies.** Notably: the metric-honor stats (bug plan **A6**) must exist before **D2** (Best-Forgery honor) and **D6** (share card). Each item lists its dependencies — check them first.
-4. **Mirror rule changes into Wave C.** Any game-rule fix in Waves A/B (scoring, placeholders, honors) and any new mutation in Wave D must be re-implemented in the Cloud Functions during Wave C. Both plans have a "mirror into Wave C" checklist — keep it current.
-5. **Preserve existing regression guards.** E.g. the `_advancedStateKeys` double-advance guard in `game_service.dart` (see Resolved issue #1 in `ongoing_general_errors.md`). Don't remove guards to make a change "simpler".
-6. **Mind the testing blind spot.** Existing tests drive the game as **host + bots on a `FakeFirestore` that does not enforce security rules.** That path hides multiplayer/permission bugs. For anything touching multiplayer or writes, add a test that exercises a **non-host** path and, for Wave C, a **rules-enforcing emulator**.
-7. **One item per change.** Don't batch unrelated items into one commit. Small, validated, reversible steps.
+| # | Remaining work | Where it's specified | Size |
+|---|---|---|---|
+| **R1** | **Issue 12** — fix the P3 reactions `setState`-during-`build` runtime error | `ongoing_general_errors.md` → Issue 12 | Small |
+| **R2** | **Issue 1 (+ durable Issue 11)** — the server-authoritative Cloud Functions migration | `implementation_plan_selected_fixes.md` → **Wave C** | Large |
+| **R3** | **UI polish** — finish Wave E items not yet done (icons confirmed missing; audit the rest) | `implementation_plan_gameplay_and_ui.md` → **Wave E** (E5–E8) | Medium |
+
+Do them **in this order** (R1 → R2 → R3). R1 is a quick correctness win; R2 is the last real blocker for multiplayer and must be done before shipping; R3 is polish.
 
 ---
 
-## 4. THE LOOP (repeat until the wave is done)
+## 2. Where the docs are (read as needed)
+
+| Purpose | Doc |
+|---|---|
+| **Required context** (game, architecture, file map, the write-path constraint) | `docs/implementation_plan_gameplay_and_ui.md` → **Section 0** — read first |
+| The remaining bug (Issue 12) + the still-open Issue 1 | `docs/ongoing_general_errors.md` (Unresolved section) |
+| The server-migration plan | `docs/implementation_plan_selected_fixes.md` → **Wave C** |
+| The UI polish plan | `docs/implementation_plan_gameplay_and_ui.md` → **Wave E** |
+| System behavior (source of truth) | `docs/design_*.md` |
+| Manual test flows | `docs/e2e_testing_journeys.md` |
+| Doc/commit conventions | `.agents/skills/` (`bug_documentation_guidelines`, `issue_resolution`, `resolved_issue_cleanup`, `commit_message_guidelines`, `fixing_ui_issues`) |
+
+---
+
+## 3. The remaining work, in detail
+
+### R1 — Fix Issue 12 (P3 reactions crash) · do first
+- **Problem:** `_checkForNewReactions(gs.players)` is called inside `build()` in `lib/screens/phase4_reveal.dart` (~line 255) and calls `setState` when a new reaction arrives → "setState() called during build" error.
+- **Do:** implement **Option A** from Issue 12 — move the detection into `WidgetsBinding.instance.addPostFrameCallback` (or a `GameService` listener registered in `initState`) so the `setState` runs after the frame.
+- **Validate:** widget test that pumps a player-doc update with a newer `lastReactionAt` while the Reveal is mounted; assert no `FlutterError` and one floating emoji appears. Manual: two clients, fire reactions rapidly, no red frames.
+- **On success:** move Issue 12 to the Resolved section (issue_resolution format) and commit `fix(reveal): defer reaction detection out of build`.
+
+### R2 — Wave C: server-authoritative migration (Issue 1 + durable Issue 11) · the big one
+Follow `implementation_plan_selected_fixes.md` **Wave C** (C0–C5) exactly. Summary of what it entails:
+- **C0** scaffold Cloud Functions (TypeScript) + Firebase Emulator Suite (Auth+Firestore+Functions); move the Gemini key server-side.
+- **C1** port the room mutations to callable functions (`submitAnswer`, `castVote`, `setReady`, `advancePhase`, `startGame`, `handleDisconnect`) and port `rotation_engine.dart` + `scoring_logic.dart` to TS.
+- **C2** lock down `firestore.rules`: deny client writes to `/rooms/{code}`; players may write only cosmetic self-fields.
+- **C3** refactor `GameService` mutation methods into thin callable wrappers; keep the read/stream path unchanged.
+- **C4** validation: **two-client emulator integration test** (host + joiner both submit/vote/ready and the game advances) + rules unit tests proving a client cannot tamper with `totalScore`/other players/room.
+- **C5** durable **Issue 11**: stable per-device UUID `playerId` + `authUid` on the player doc, validated server-side (replaces the interim rejoin guard).
+
+**CRITICAL — mirror the already-shipped rules into the functions** (they currently live in the Dart client and must be reproduced server-side, or they'll be lost):
+- Per-card `S` scoring + saboteur "Sharp Eye" bonus (from `scoring_logic.dart`).
+- Timeout placeholder fill (`kMissingAnswerPlaceholder`).
+- Honor-stat accumulation (`timesFooled`, `playersDeceived`) in the scoring step.
+- Disconnect idempotency; join-order host handoff.
+- The P3 `sendReaction` and P4 `rerollMyPrompt` mutations (decide: keep `sendReaction` as an own-doc write, move `rerollMyPrompt` to a callable — it writes the room doc, so **P4 is non-functional for non-host players until this lands**).
+
+### R3 — UI polish: finish Wave E (E5–E8)
+Audit against `implementation_plan_gameplay_and_ui.md` **Wave E** and finish what's missing. Confirmed status:
+- **E6 (icons) — NOT done.** Stock Material icons remain (`Icons.remove_red_eye`, `Icons.timer`, `Icons.vpn_key`, `Icons.casino`, `Icons.lightbulb_outline` in `phase2_craft.dart`, `phase3_vote.dart`, `auto_advance_timer.dart`, `player_avatar.dart`). Replace with the thematic set per E6.
+- **E5 / E7 / E8 — verify each sub-item** (button stamp feel, avatar bevel + active-reader halo, timer lamp flicker, sound/haptics + mute toggle, contrast/tabular-figures audit) and implement any not present. Reduce-motion is already honored in the card flip — extend the same guard to any new animation.
+
+---
+
+## 4. THE LOOP (repeat per work item)
 
 ```
-        ┌────────────────────────────────────────────────────────────┐
-        │  ORIENT (once per session):                                 │
-        │  • Read gameplay_and_ui.md §0  • Skim both plan docs         │
-        │  • flutter pub get  • flutter test  → confirm a green base   │
-        └───────────────────────────┬────────────────────────────────┘
-                                     ▼
-   ┌───────────────────────────────────────────────────────────────────┐
-   │ (1) SELECT the next item in build order (A→B→D/E→C; top to bottom).│
-   ├───────────────────────────────────────────────────────────────────┤
-   │ (2) STUDY it: read the item's full spec + the design_*.md it       │
-   │     references + the actual source files it names. Confirm its     │
-   │     dependencies are already done and its write-path is allowed.   │
-   ├───────────────────────────────────────────────────────────────────┤
-   │ (3) IMPLEMENT exactly as specified. Use Theme tokens, match        │
-   │     surrounding code style, keep existing guards intact.           │
-   ├───────────────────────────────────────────────────────────────────┤
-   │ (4) VALIDATE (all three, in order):                                │
-   │     a. Write/run the item's automated validation (unit/widget).    │
-   │     b. Run `flutter analyze` and `flutter test` → must be green.   │
-   │     c. Do the item's manual check (see e2e_testing_journeys.md).   │
-   ├───────────────────────────────────────────────────────────────────┤
-   │ (5) BLOCKED? If the spec is wrong, impossible, or has bad side     │
-   │     effects: STOP. Document the finding in ongoing_general_errors  │
-   │     .md (per bug_documentation_guidelines) and ASK THE USER.       │
-   │     Do not silently improvise a different design.                  │
-   ├───────────────────────────────────────────────────────────────────┤
-   │ (6) RECORD on success:                                             │
-   │     • Bugs: move the issue Unresolved → Resolved in                │
-   │       ongoing_general_errors.md (issue_resolution format).         │
-   │     • Features/UI: mark the proposal/section delivered in          │
-   │       ongoing_general_errors.md / design_ui_direction.md.          │
-   │     • If behavior or visuals changed, update the matching          │
-   │       design_*.md (resolved_issue_cleanup).                        │
-   │     • If a new mutation was added, update the Wave C mirror list.  │
-   ├───────────────────────────────────────────────────────────────────┤
-   │ (7) COMMIT (Conventional Commits; explain the WHY in the body).    │
-   └───────────────────────────────┬───────────────────────────────────┘
-                                    ▼
-                    More items in the wave?  ──yes──▶ back to (1)
-                                    │no
-                                    ▼
-        Wave complete → run the wave's Definition of Done checklist,
-        report status to the user, then proceed to the next wave.
-```
-
-### Step details
-
-**(1) Select** — Take the next unfinished item in order. Never skip ahead across waves.
-
-**(2) Study** — An item is only "ready" if its dependencies are done and its write-path is permitted *now*. If not, skip to the next *eligible* item in the same wave and note why (don't jump waves).
-
-**(3) Implement** — Change only what the item specifies. Reuse existing widgets/utilities (`shared_ui.dart`, `PlayerAvatar`, `RotationEngine`, `ScoringLogic`). For Wave E, centralize colors in `lib/theme/app_colors.dart` (E1) before touching other visual items.
-
-**(4) Validate** — A change is not done until: its own test passes, the full suite passes, `flutter analyze` is clean, and you've eyeballed the behavior. If the item says "two-client / emulator" (Wave C), that specific test is mandatory — a `FakeFirestore` pass is not sufficient.
-
-**(5) Blocked** — Genuine conflicts get documented and escalated, not worked around. Add an entry under `## ⚠️ Unresolved Issues & Suggestions` describing the conflict + options, and ask.
-
-**(6) Record** — The docs must always reflect reality. A fix isn't finished until the issue is moved to Resolved and any design doc it changed is updated.
-
-**(7) Commit** — One item = one commit. Example:
-```
-fix(scoring): derive S from per-card forgery count
-
-- Issue 5: scoring inflated to max reward after a forgery-phase
-  disconnect because sabotageAnswersCount was mutated to 0.
-- ScoringLogic now reads S = currentCard.sabotageAnswers.length so the
-  truth reward always matches the options voters actually faced.
-- sabotageAnswersCount stays a pure rotation-config value.
+   ORIENT once: read gameplay_and_ui.md §0 · flutter pub get · flutter analyze (confirm 0 errors baseline)
+        │
+        ▼
+  (1) SELECT the next item in priority order: R1 → R2 (C0…C5) → R3.
+  (2) STUDY its spec + the design_*.md it touches + the named source files.
+  (3) IMPLEMENT exactly as specified. Reuse tokens (app_colors.dart), keep existing
+      guards (_advancedStateKeys, _disconnectsInFlight). For Wave C, mirror the shipped
+      Dart rules into the functions — do not drop them.
+  (4) VALIDATE: write/run the item's test → `flutter analyze` + `flutter test` green →
+      manual check. For Wave C, the two-client EMULATOR test is mandatory (a FakeFirestore
+      pass does NOT count — that harness hides the exact permission bug being fixed).
+  (5) BLOCKED / spec wrong / impossible? STOP. Document it in ongoing_general_errors.md
+      (bug_documentation_guidelines format, with options) and ASK THE USER. Don't improvise.
+  (6) RECORD: move the resolved item Unresolved → Resolved with a what-was-solved note;
+      update the matching design_*.md if behavior/looks changed.
+  (7) COMMIT (Conventional Commits; explain WHY in the body). One item = one commit.
+        │
+        ▼
+   More items? → back to (1).  Wave/priority done? → run its Definition of Done, report to user.
 ```
 
 ---
 
-## 5. Definition of Done (per wave)
-
-Each plan doc ends with a **Definition of Done** checklist for its waves — run it before declaring a wave complete. Baseline for every wave:
-- `flutter analyze` clean; `flutter test` green; new tests added per item.
-- Docs updated: issues moved to Resolved / proposals marked delivered; changed `design_*.md` files updated.
-- No non-host room writes introduced before Wave C; own-doc-only features verified against current `firestore.rules`.
-- Wave A/B/D rule changes and new mutations reflected in the Wave C mirror checklist.
+## 5. Guardrails
+1. **Order matters:** R1 (quick) → R2 (unblocks real multiplayer) → R3 (polish).
+2. **The write-path constraint is still live until R2 lands.** Today only the host can write the room doc; non-host humans still get `PERMISSION_DENIED` on submit/vote/ready. This is exactly what R2 fixes. Until then, do not assume non-host multiplayer works.
+3. **Mirror, don't drop.** Every game-rule fix already shipped in Dart (scoring, placeholders, honors, disconnect, host handoff) must be reproduced in the Cloud Functions during R2.
+4. **Beat the testing blind spot.** Existing tests run host + bots on a `FakeFirestore` that ignores security rules. For R2, add rules-enforcing **emulator** tests with a real non-host client — that path is the one that has never been exercised.
+5. **Preserve guards.** Don't remove `_advancedStateKeys` (double-advance) or `_disconnectsInFlight` (disconnect idempotency) to simplify code.
+6. **Ask when it's genuinely the user's call** (e.g., latency/cost trade-offs in the Functions design, or a spec that turns out wrong) — file a bug with options rather than guessing.
 
 ---
 
-## 6. Quick-start (TL;DR)
+## 6. Definition of Done (remaining work)
+- [ ] **R1:** Issue 12 fixed; reactions animate with no build-phase `setState`; moved to Resolved.
+- [ ] **R2:** two-client emulator test proves a non-host can submit/vote/ready and the game advances; rules unit tests prove clients can't tamper with scores/other players/room; all shipped Dart rules mirrored in functions; Gemini key server-side; durable Issue 11 (stable ID) in place. Issue 1 + Issue 11 moved to Resolved.
+- [ ] **R3:** Wave E audit complete; E6 icons replaced; remaining E5/E7/E8 items done or explicitly deferred with a note; reduce-motion honored everywhere.
+- [ ] `flutter analyze` clean; `flutter test` green; docs updated (issues moved, design docs synced); commits are one-item Conventional Commits.
+
+---
+
+## 7. Quick-start (TL;DR)
 1. Read `docs/implementation_plan_gameplay_and_ui.md` **§0**.
-2. Open `docs/implementation_plan_selected_fixes.md`, start at **Wave A, item A1**.
-3. Run the loop in §4 for each item, in order, across the waves (A → B → D/E → C).
-4. When blocked, stop and ask. When done, update the docs and commit.
+2. **R1:** fix Issue 12 (defer reactions out of `build`).
+3. **R2:** execute `implementation_plan_selected_fixes.md` **Wave C** (C0→C5), mirroring the shipped rules and adding the two-client emulator test.
+4. **R3:** finish Wave E polish (start with E6 icons).
+5. Run the loop in §4 per item; when blocked, stop and ask; when done, update docs and commit.
