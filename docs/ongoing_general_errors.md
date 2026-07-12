@@ -231,7 +231,7 @@ Your selection: Proceed with Option A → **overridden to Option D** per your no
 
 **Validation**: A single emulator test calling the deployed `submitAnswer` would fail today; after the fix, the Issue 15 two-client emulator loop (submit → vote → ready → advance, zero internal errors) is the acceptance gate.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -250,7 +250,7 @@ Your selection: _____
 
 **Validation**: Widget test with a stubbed callable that throws → SnackBar appears and the button becomes tappable again. Manual (after Issue 13, on the emulator): submit a near-duplicate answer → "too similar" message shows, field stays editable.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -269,7 +269,7 @@ Your selection: _____
 
 **Validation**: The suite is the validation. Acceptance: `firebase emulators:exec` green including the two-client full-game test; a rules test proves `PERMISSION_DENIED` for a client writing `totalScore` or the room doc.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -287,7 +287,7 @@ Your selection: _____
 
 **Validation**: Emulator test — create a room, simulate a new auth uid with the same stored `playerId`, rejoin → assert the player doc's `authUid` updated and seat/score retained. Manual (web): clear only auth storage mid-lobby, reload, seat survives.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -306,7 +306,7 @@ Your selection: _____
 
 **Validation**: With rules enforced (emulator): ADD 9 BOTS populates the lobby, BOTS SUBMIT advances the phase, and the same calls are rejected for a room without the debug flag.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -320,7 +320,7 @@ Your selection: _____
 
 **Validation**: Unit test asserting `sendReaction` issues an update containing only the two reaction keys. Manual (emulator): react immediately after a reveal begins and confirm the emoji still broadcasts.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
