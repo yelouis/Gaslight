@@ -63,3 +63,12 @@ macos/Flutter/ephemeral/
 .env
 *.log
 .DS_Store
+
+# Cloud Functions build and dependencies
+functions/node_modules/
+functions/lib/
+
+# Local test outputs
+test_output.txt
+
+

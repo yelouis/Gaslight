@@ -35,7 +35,6 @@ class _FloatingReaction {
 
 class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
   bool _isInit = false;
-  Map<String, int> _latestDeltas = {};
   bool _isNavigating = false;
   
   late final int _mountTime;
@@ -62,6 +61,21 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
   void initState() {
     super.initState();
     _mountTime = DateTime.now().millisecondsSinceEpoch;
+    context.read<GameService>().addListener(_onGameServiceUpdate);
+  }
+
+  @override
+  void dispose() {
+    try {
+      context.read<GameService>().removeListener(_onGameServiceUpdate);
+    } catch (_) {}
+    super.dispose();
+  }
+
+  void _onGameServiceUpdate() {
+    if (!mounted) return;
+    final gs = context.read<GameService>();
+    _checkForNewReactions(gs.players);
   }
 
   void _triggerFloatingReaction(String playerName, String emoji) {
@@ -192,42 +206,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
     );
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_isInit) {
-      final gs = context.read<GameService>();
-      if (gs.gameState != null && gs.players.isNotEmpty) {
-        _calculateAndShowResults(gs);
-        _isInit = true;
-      }
-    }
-  }
 
-  void _calculateAndShowResults(GameService gs) async {
-    final state = gs.gameState!;
-    
-    final currentTargetId = state.currentReaderId;
-    CardModel? currentCard;
-    if (currentTargetId != null) {
-      try {
-        currentCard = state.cards.firstWhere((c) => c.targetPlayerId == currentTargetId);
-      } catch (_) {}
-    }
-    
-    if (currentCard == null) return;
-
-    // Use ScoringLogic just to locally determine what to show in the UI tooltips/highlights
-    final scoreDeltas = ScoringLogic.calculateScores(
-      state: state,
-      currentCard: currentCard,
-      playerVotes: currentCard.votes,
-    );
-
-    if (mounted) {
-      setState(() => _latestDeltas = scoreDeltas);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -252,11 +231,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
       _isNavigating = false;
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _checkForNewReactions(gs.players);
-      }
-    });
+
 
     final currentTargetId = state.currentReaderId;
     CardModel? currentCard;
@@ -265,6 +240,14 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
         currentCard = state.cards.firstWhere((c) => c.targetPlayerId == currentTargetId);
       } catch (_) {}
     }
+
+    final _latestDeltas = currentCard != null
+        ? ScoringLogic.calculateScores(
+            state: state,
+            currentCard: currentCard,
+            playerVotes: currentCard.votes,
+          )
+        : <String, int>{};
 
     if (currentTargetId != _previousTargetId) {
       _previousTargetId = currentTargetId;

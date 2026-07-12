@@ -11,11 +11,28 @@ import '../utils/rotation_engine.dart';
 import '../models/card_model.dart';
 import '../utils/scoring_logic.dart';
 import '../utils/semantic_filter.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:uuid/uuid.dart';
 
 class GameService extends ChangeNotifier {
   final FirebaseFirestore _db;
+  final FirebaseFunctions _functions;
   
-  GameService({FirebaseFirestore? db}) : _db = db ?? FirebaseFirestore.instance;
+  GameService({FirebaseFirestore? db, FirebaseFunctions? functions})
+      : _db = db ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance {
+    final useEmulator = const bool.fromEnvironment('USE_EMULATOR', defaultValue: false) || (dotenv.isInitialized && dotenv.env['USE_EMULATOR'] == 'true');
+    if (useEmulator) {
+      try {
+        _db.useFirestoreEmulator('localhost', 8080);
+        _functions.useFunctionsEmulator('localhost', 5001);
+        FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
+      } catch (e) {
+        debugPrint('Emulator already initialized: $e');
+      }
+    }
+  }
   
   GameState? _gameState;
   List<PlayerState> _players = [];
@@ -77,7 +94,6 @@ class GameService extends ChangeNotifier {
 
   int _getRandomColor() {
     final rng = Random();
-    // Try to pick a color not already used if possible
     final usedColors = _players.map((p) => p.colorValue).toSet();
     final available = _playerColors.where((c) => !usedColors.contains(c)).toList();
     if (available.isNotEmpty) {
@@ -90,52 +106,53 @@ class GameService extends ChangeNotifier {
     return Random().nextInt(6); // 6 different icon types
   }
 
-  Future<void> createRoom(String playerName, String playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex, bool isTimerDisabled = false}) async {
-    final roomCode = _generateRoomCode();
-    _currentPlayerId = playerId;
-    print('DEBUG: createRoom playerId = $playerId');
-    String? authUid;
+  Future<void> ensureAuthenticated() async {
     try {
-      authUid = FirebaseAuth.instance.currentUser?.uid;
-    } catch (_) {}
-    print('DEBUG: FirebaseAuth UID = $authUid');
+      if (FirebaseAuth.instance.currentUser == null) {
+        await FirebaseAuth.instance.signInAnonymously();
+      }
+    } catch (e) {
+      debugPrint('Firebase Auth not available (failing open): $e');
+    }
+  }
 
-    final initialState = GameState(
-      roomCode: roomCode, 
-      totalPlayers: totalPlayers,
-      sabotageAnswersCount: sabotageAnswersCount,
-      isTimerDisabled: isTimerDisabled,
-    );
-    final initialPlayer = PlayerState(
-      id: playerId,
-      name: playerName,
-      isHost: true,
-      colorValue: _getRandomColor(),
-      avatarIndex: avatarIndex ?? _getRandomAvatar(),
-      lastSeen: DateTime.now().millisecondsSinceEpoch,
-      joinedAt: DateTime.now().millisecondsSinceEpoch,
-    );
+  Future<String> getOrCreateStablePlayerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? storedId = prefs.getString('stable_device_player_id');
+    if (storedId == null) {
+      storedId = const Uuid().v4();
+      await prefs.setString('stable_device_player_id', storedId);
+    }
+    return storedId;
+  }
 
-    await _db.collection('rooms').doc(roomCode).set(initialState.toMap());
-    await _db.collection('rooms').doc(roomCode).collection('players').doc(playerId).set(initialPlayer.toMap());
+  Future<void> createRoom(String playerName, String? playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex, bool isTimerDisabled = false}) async {
+    await ensureAuthenticated();
+    final resolvedPlayerId = playerId ?? await getOrCreateStablePlayerId();
+
+    final result = await _functions.httpsCallable('createRoom').call({
+      'playerName': playerName,
+      'playerId': resolvedPlayerId,
+      'colorValue': _getRandomColor(),
+      'avatarIndex': avatarIndex ?? _getRandomAvatar(),
+      'sabotageAnswersCount': sabotageAnswersCount,
+      'isTimerDisabled': isTimerDisabled,
+    });
+
+    final roomCode = result.data['roomCode'] as String;
+    _currentPlayerId = resolvedPlayerId;
     
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('room_code', roomCode);
-    await prefs.setString('player_id', playerId);
+    await prefs.setString('player_id', resolvedPlayerId);
 
     listenToRoom(roomCode);
   }
 
-  Future<void> joinRoom(String roomCode, String playerName, String playerId, {int? avatarIndex}) async {
-    final doc = await _db.collection('rooms').doc(roomCode).get();
-    if (!doc.exists) throw Exception('Room not found');
+  Future<void> joinRoom(String roomCode, String playerName, String? playerId, {int? avatarIndex}) async {
+    await ensureAuthenticated();
+    final resolvedPlayerId = playerId ?? await getOrCreateStablePlayerId();
 
-    final roomState = GameState.fromMap(doc.data()!, doc.id);
-    final isSpectator = roomState.currentPhase != GamePhase.lobby;
-
-    _currentPlayerId = playerId;
-    
-    // In order to pick a unique color, we need the current players, but we haven't listened yet
     final playersSnap = await _db.collection('rooms').doc(roomCode).collection('players').get();
     final existingColors = playersSnap.docs.map((d) => d.data()['colorValue'] as int? ?? 0).toSet();
     final available = _playerColors.where((c) => !existingColors.contains(c)).toList();
@@ -144,21 +161,19 @@ class GameService extends ChangeNotifier {
         ? available[Random().nextInt(available.length)] 
         : _playerColors[Random().nextInt(_playerColors.length)];
 
-    final newPlayer = PlayerState(
-      id: playerId,
-      name: playerName,
-      colorValue: selectedColor,
-      avatarIndex: avatarIndex ?? _getRandomAvatar(),
-      lastSeen: DateTime.now().millisecondsSinceEpoch,
-      role: isSpectator ? PlayerRole.spectator : PlayerRole.unassigned,
-      joinedAt: DateTime.now().millisecondsSinceEpoch,
-    );
+    await _functions.httpsCallable('joinRoom').call({
+      'roomCode': roomCode,
+      'playerName': playerName,
+      'playerId': resolvedPlayerId,
+      'colorValue': selectedColor,
+      'avatarIndex': avatarIndex ?? _getRandomAvatar(),
+    });
 
-    await _db.collection('rooms').doc(roomCode).collection('players').doc(playerId).set(newPlayer.toMap());
+    _currentPlayerId = resolvedPlayerId;
     
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('room_code', roomCode);
-    await prefs.setString('player_id', playerId);
+    await prefs.setString('player_id', resolvedPlayerId);
 
     listenToRoom(roomCode);
   }
@@ -175,7 +190,6 @@ class GameService extends ChangeNotifier {
         } catch (_) {}
         
         if (authUid != null && authUid != savedPlayerId) {
-          // Identity mismatch! Clear cache and return false
           await prefs.remove('room_code');
           await prefs.remove('player_id');
           debugPrint('Identity mismatch on rejoin: auth=$authUid, saved=$savedPlayerId. Session cleared.');
@@ -225,14 +239,12 @@ class GameService extends ChangeNotifier {
 
     if (roomCode != null && playerId != null) {
       try {
-        await _db.collection('rooms').doc(roomCode).collection('players').doc(playerId).delete();
-
-        final playersSnap = await _db.collection('rooms').doc(roomCode).collection('players').get();
-        if (playersSnap.docs.isEmpty) {
-          await _db.collection('rooms').doc(roomCode).delete();
-        }
+        await _functions.httpsCallable('handleDisconnect').call({
+          'roomCode': roomCode,
+          'disconnectedPlayerId': playerId,
+        });
       } catch (e) {
-        debugPrint('Error cleaning up Firestore on leave: $e');
+        debugPrint('Error calling handleDisconnect on leave: $e');
       }
     }
 
@@ -283,32 +295,15 @@ class GameService extends ChangeNotifier {
       }).toList();
 
       for (var dp in deadPlayers) {
-        _db.collection('rooms').doc(roomCode).collection('players').doc(dp.id).delete().catchError((_) {});
+        _functions.httpsCallable('handleDisconnect').call({
+          'roomCode': roomCode,
+          'disconnectedPlayerId': dp.id,
+        }).catchError((_) {});
       }
 
-      // HOST TRANSFER LOGIC: If no host exists, promote the earliest joined active player
-      if (_players.isNotEmpty && !_players.any((p) => p.isHost)) {
-        final candidates = _players.where((p) => p.role != PlayerRole.spectator).toList();
-        if (candidates.isNotEmpty) {
-          candidates.sort((a, b) {
-            final aTime = a.joinedAt ?? 0;
-            final bTime = b.joinedAt ?? 0;
-            if (aTime != bTime) {
-              return aTime.compareTo(bTime);
-            }
-            return a.id.compareTo(b.id);
-          });
-          final newHost = candidates.first;
-          updatePlayerState(roomCode, newHost.copyWith(isHost: true));
-        } else {
-          final newHost = _players.first;
-          updatePlayerState(roomCode, newHost.copyWith(isHost: true));
-        }
-      }
-      
       notifyListeners();
       
-      // If Host, evaluate ready state whenever players update (e.g. someone joins/leaves/marks ready)
+      // If Host, evaluate ready state and handle disconnects
       if (currentPlayer?.isHost == true) {
         evaluateReadyState();
 
@@ -349,11 +344,11 @@ class GameService extends ChangeNotifier {
 
   Future<void> updateLobbySettings({int? sabotageAnswersCount, bool? isTimerDisabled}) async {
     if (_gameState == null || currentPlayer?.isHost != true) return;
-    final updated = _gameState!.copyWith(
-      sabotageAnswersCount: sabotageAnswersCount ?? _gameState!.sabotageAnswersCount,
-      isTimerDisabled: isTimerDisabled ?? _gameState!.isTimerDisabled,
-    );
-    await updateGameState(updated);
+    await _functions.httpsCallable('updateLobbySettings').call({
+      'roomCode': _gameState!.roomCode,
+      'sabotageAnswersCount': sabotageAnswersCount,
+      'isTimerDisabled': isTimerDisabled,
+    });
   }
 
   Future<void> sendReaction(String emoji) async {
@@ -372,486 +367,87 @@ class GameService extends ChangeNotifier {
     final p = currentPlayer;
     final rCode = _gameState?.roomCode;
     if (p == null || rCode == null || rCode.isEmpty || _gameState == null) return;
-    if (p.hasRerolled) {
-      throw Exception('You have already used your re-roll.');
-    }
     
-    if (_gameState!.currentPhase != GamePhase.truth) {
-      throw Exception('Can only re-roll during the truth crafting phase.');
-    }
-    
-    final cards = List<CardModel>.from(_gameState!.cards);
-    final cardIndex = cards.indexWhere((c) => c.targetPlayerId == p.id);
-    if (cardIndex == -1) {
-      throw Exception('Could not find active card for player.');
-    }
-    
-    final deckId = _gameState!.selectedDeckId;
-    final currentPrompts = cards.map((c) => c.promptText).toSet();
-    final newPromptText = PromptDecks.drawOneExcluding(deckId, currentPrompts);
-    
-    final oldCard = cards[cardIndex];
-    final updatedCard = CardModel(
-      promptText: newPromptText,
-      targetPlayerId: oldCard.targetPlayerId,
-      truthAnswer: '',
-      sabotageAnswers: oldCard.sabotageAnswers,
-      votes: oldCard.votes,
-    );
-    
-    cards[cardIndex] = updatedCard;
-    
-    final updatedGameState = _gameState!.copyWith(cards: cards);
-    final updatedPlayer = p.copyWith(hasRerolled: true);
-    
-    await updateGameState(updatedGameState);
-    await updatePlayerState(rCode, updatedPlayer);
+    await _functions.httpsCallable('rerollPrompt').call({
+      'roomCode': rCode,
+      'playerId': p.id,
+    });
   }
 
   Future<void> handlePlayerDisconnect(String disconnectedPlayerId) async {
-    if (_gameState == null || currentPlayer?.isHost != true) return;
-    
-    final state = _gameState!;
-    final phase = state.currentPhase;
-    
-    // Idempotency: early return if the card has already been removed
-    if (!state.cards.any((c) => c.targetPlayerId == disconnectedPlayerId)) {
-      _disconnectsInFlight.remove(disconnectedPlayerId);
-      return;
-    }
-    
+    if (_gameState == null) return;
     try {
-      // 1. Remove the disconnected player's card from the list
-      final updatedCards = state.cards.where((c) => c.targetPlayerId != disconnectedPlayerId).toList();
-      
-      // 2. Adjust ready players map
-      final newReadyPlayers = Map<String, bool>.from(state.readyPlayers)..remove(disconnectedPlayerId);
-      
-      // 3. Prune resolutionOrder list if it contains the player
-      final newResolutionOrder = List<String>.from(state.resolutionOrder)..remove(disconnectedPlayerId);
-      
-      GameState nextState = state.copyWith(
-        cards: updatedCards,
-        totalPlayers: _players.where((p) => p.role != PlayerRole.spectator).length,
-        readyPlayers: newReadyPlayers,
-        resolutionOrder: newResolutionOrder,
-      );
-      
-      // 3. Phase-specific adjustments
-      if (phase == GamePhase.forgery) {
-        final assignments = Map<String, String>.from(state.currentCardAssignments);
-        
-        String? holderOfDisconnected;
-        assignments.forEach((holder, target) {
-          if (target == disconnectedPlayerId) {
-            holderOfDisconnected = holder;
-          }
-        });
-        
-        final targetOfDisconnected = assignments[disconnectedPlayerId];
-        assignments.remove(disconnectedPlayerId);
-        
-        if (holderOfDisconnected != null && targetOfDisconnected != null) {
-          assignments[holderOfDisconnected!] = targetOfDisconnected;
-        }
-        
-        final activePlayerIds = _players
-            .where((p) => p.id != disconnectedPlayerId && p.role != PlayerRole.spectator)
-            .map((p) => p.id)
-            .toList();
-            
-        int remainingRotations = state.sabotageAnswersCount;
-        if (activePlayerIds.length <= remainingRotations) {
-          remainingRotations = activePlayerIds.length - 1;
-        }
-        
-        if (remainingRotations <= 0 || state.currentRotationIndex > remainingRotations) {
-          final pIds = activePlayerIds;
-          Map<String, String> truthAssignments = { for (var id in pIds) id : id };
-          nextState = nextState.copyWith(
-            currentPhase: GamePhase.truth,
-            currentCardAssignments: truthAssignments,
-            sabotageAnswersCount: 0,
-            currentRotationIndex: 0,
-            endTime: state.isTimerDisabled ? null : DateTime.now().add(const Duration(seconds: 60)).millisecondsSinceEpoch,
-            clearEndTime: state.isTimerDisabled,
-          );
-        } else {
-          final newRotations = RotationEngine.generateRotations(activePlayerIds, remainingRotations);
-          Map<String, Map<String, String>> stringRotations = {};
-          newRotations.forEach((key, val) => stringRotations[key.toString()] = val);
-          
-          nextState = nextState.copyWith(
-            currentCardAssignments: assignments,
-            rotationPlan: stringRotations,
-            sabotageAnswersCount: remainingRotations,
-          );
-        }
-      } else if (phase == GamePhase.truth) {
-        final assignments = Map<String, String>.from(state.currentCardAssignments)..remove(disconnectedPlayerId);
-        nextState = nextState.copyWith(currentCardAssignments: assignments);
-      } else if (phase == GamePhase.vote || phase == GamePhase.reveal) {
-        if (state.currentReaderId == disconnectedPlayerId) {
-          if (newResolutionOrder.isNotEmpty) {
-            final originalIdx = state.resolutionOrder.indexOf(disconnectedPlayerId);
-            if (originalIdx != -1 && originalIdx < newResolutionOrder.length) {
-              nextState = nextState.copyWith(currentReaderId: newResolutionOrder[originalIdx]);
-            } else {
-              nextState = nextState.copyWith(currentReaderId: newResolutionOrder.first);
-            }
-          } else {
-            nextState = nextState.copyWith(currentPhase: GamePhase.gameOver);
-          }
-        }
-      }
-      
-      await updateGameState(nextState);
+      await _functions.httpsCallable('handleDisconnect').call({
+        'roomCode': _gameState!.roomCode,
+        'disconnectedPlayerId': disconnectedPlayerId,
+      });
     } finally {
       _disconnectsInFlight.remove(disconnectedPlayerId);
     }
-  }
-
-  /// Atomically updates scores for all players in a room.
-  /// Resolves the 'Sequential Write' bottleneck identified for 10-player games.
-  Future<void> applyScoresAndStats(
-    String roomCode, 
-    Map<String, int> scoreDeltas, 
-    Map<String, int> timesFooledDeltas, 
-    Map<String, int> playersDeceivedDeltas
-  ) async {
-    final batch = _db.batch();
-    for (var p in _players) {
-      final sDelta = scoreDeltas[p.id] ?? 0;
-      final tfDelta = timesFooledDeltas[p.id] ?? 0;
-      final pdDelta = playersDeceivedDeltas[p.id] ?? 0;
-      if (sDelta != 0 || tfDelta != 0 || pdDelta != 0) {
-        final ref = _db.collection('rooms').doc(roomCode).collection('players').doc(p.id);
-        batch.update(ref, {
-          'totalScore': p.totalScore + sDelta,
-          'timesFooled': p.timesFooled + tfDelta,
-          'playersDeceived': p.playersDeceived + pdDelta,
-        });
-      }
-    }
-    await batch.commit();
   }
 
   // --- PHASE 2: ROTATION ENGINE & GAME LOOP ---
   
   Future<void> submitCardAnswer(String targetCardId, String authorId, String text, bool isTruth) async {
     if (_gameState == null) return;
-    
-    final roomRef = _db.collection('rooms').doc(_gameState!.roomCode);
-    
-    await _db.runTransaction((transaction) async {
-      final snapshot = await transaction.get(roomRef);
-      if (!snapshot.exists) return;
-      
-      final data = snapshot.data()!;
-      final currentState = GameState.fromMap(data, snapshot.id);
-      
-      final cardIdx = currentState.cards.indexWhere((c) => c.targetPlayerId == targetCardId);
-      if (cardIdx == -1) return;
-      
-      final card = currentState.cards[cardIdx];
-      CardModel updatedCard;
-      if (isTruth) {
-         updatedCard = card.copyWith(truthAnswer: text);
-      } else {
-         final sabs = Map<String, String>.from(card.sabotageAnswers);
-         sabs[authorId] = text;
-         updatedCard = card.copyWith(sabotageAnswers: sabs);
-      }
-      
-      final newCards = List<CardModel>.from(currentState.cards);
-      newCards[cardIdx] = updatedCard;
-      
-      transaction.update(roomRef, {
-         'cards': newCards.map((c) => c.toMap()).toList()
-      });
+    await _functions.httpsCallable('submitAnswer').call({
+      'roomCode': _gameState!.roomCode,
+      'targetCardId': targetCardId,
+      'authorId': authorId,
+      'text': text,
+      'isTruth': isTruth,
     });
   }
 
   Future<void> castVote(String targetCardId, String voterId, String votedForId) async {
     if (_gameState == null) return;
-    
-    final roomRef = _db.collection('rooms').doc(_gameState!.roomCode);
-    
-    await _db.runTransaction((transaction) async {
-      final snapshot = await transaction.get(roomRef);
-      if (!snapshot.exists) return;
-      
-      final data = snapshot.data()!;
-      final currentState = GameState.fromMap(data, snapshot.id);
-      
-      final cardIdx = currentState.cards.indexWhere((c) => c.targetPlayerId == targetCardId);
-      if (cardIdx == -1) return;
-      
-      final card = currentState.cards[cardIdx];
-      final newVotes = Map<String, String>.from(card.votes);
-      newVotes[voterId] = votedForId;
-      
-      final updatedCard = card.copyWith(votes: newVotes);
-      final newCards = List<CardModel>.from(currentState.cards);
-      newCards[cardIdx] = updatedCard;
-      
-      transaction.update(roomRef, {
-         'cards': newCards.map((c) => c.toMap()).toList()
-      });
+    await _functions.httpsCallable('castVote').call({
+      'roomCode': _gameState!.roomCode,
+      'targetCardId': targetCardId,
+      'voterId': voterId,
+      'votedForId': votedForId,
     });
-    
-    await setPlayerReady(true, playerId: voterId);
   }
-
-  // --- PHASE 2: ROTATION ENGINE & GAME LOOP ---
 
   Future<void> startGame(String deckId) async {
     if (_gameState == null) {
       throw Exception("No active game room found.");
     }
-    
-    final activePlayers = _players.where((p) => p.role != PlayerRole.spectator).toList();
-    if (activePlayers.length < 2) {
-      throw Exception("Cannot start: Need at least 2 active players.");
-    }
-    
-    if (activePlayers.length <= _gameState!.sabotageAnswersCount) {
-      throw Exception("Cannot start: Need more players than forgery rounds.");
-    }
-
-    final deckSize = PromptDecks.getDeckSize(deckId);
-    if (deckSize < activePlayers.length) {
-      throw Exception("Cannot start: Selected deck has $deckSize prompts, but you need at least ${activePlayers.length} prompts for this many players.");
-    }
-
-    // 0. Maintenance
-    SemanticFilter.clearCache();
-    
-    // 1. Calculate mathematical rotations across S derivations securely natively.
-    var pIds = activePlayers.map((p) => p.id).toList();
-    var nativeRotations = RotationEngine.generateRotations(pIds, _gameState!.sabotageAnswersCount);
-    Map<String, Map<String, String>> stringRotations = {};
-    nativeRotations.forEach((key, val) => stringRotations[key.toString()] = val);
-
-    // 2. Draw Cards dynamically based on player count
-    var prompts = PromptDecks.drawPrompts(deckId, activePlayers.length);
-    List<CardModel> startingCards = [];
-    for (int i = 0; i < pIds.length; i++) {
-        startingCards.add(CardModel(
-           targetPlayerId: pIds[i],
-           promptText: prompts[i]
-        ));
-    }
-
-    // 3. Initiate first rotation
-    int startIdx = 1;
-    Map<String, String> initAssignments = stringRotations[startIdx.toString()]!;
-
-    // Set end time for forgery phase (60 seconds)
-    final endTime = _gameState!.isTimerDisabled ? null : DateTime.now().add(const Duration(seconds: 60)).millisecondsSinceEpoch;
-
-    await updateGameState(_gameState!.copyWith(
-        currentPhase: GamePhase.forgery,
-        totalPlayers: _players.length,
-        selectedDeckId: deckId,
-        currentRotationIndex: startIdx,
-        cards: startingCards,
-        currentCardAssignments: initAssignments,
-        rotationPlan: stringRotations,
-        readyPlayers: {},
-        endTime: endTime,
-        clearEndTime: _gameState!.isTimerDisabled,
-    ));
+    await _functions.httpsCallable('startGame').call({
+      'roomCode': _gameState!.roomCode,
+      'selectedDeckId': deckId,
+    });
   }
   
   Future<void> setPlayerReady(bool ready, {String? playerId}) async {
     final targetId = playerId ?? _currentPlayerId;
     if (_gameState == null || targetId == null) return;
-    
-    final roomRef = _db.collection('rooms').doc(_gameState!.roomCode);
-    
-    await _db.runTransaction((transaction) async {
-      final snapshot = await transaction.get(roomRef);
-      if (!snapshot.exists) return;
-      
-      final data = snapshot.data()!;
-      final currentState = GameState.fromMap(data, snapshot.id);
-      
-      final newReadyMap = Map<String, bool>.from(currentState.readyPlayers);
-      newReadyMap[targetId] = ready;
-      
-      transaction.update(roomRef, {'readyPlayers': newReadyMap});
+    await _functions.httpsCallable('setReady').call({
+      'roomCode': _gameState!.roomCode,
+      'playerId': targetId,
+      'ready': ready,
     });
   }
 
   Future<void> evaluateReadyState() async {
     if (_gameState == null) return;
-    
-    // Triggered often by listeners. If Host, evaluate.
-    if (currentPlayer?.isHost != true) return;
-    
-    final phase = _gameState!.currentPhase;
-    if (phase != GamePhase.forgery && phase != GamePhase.truth && phase != GamePhase.vote) {
-      return;
-    }
-
-    final key = _currentStateKey();
-    if (_advancedStateKeys.contains(key)) return;
-    
-    final activePlayers = _players.where((p) => p.role != PlayerRole.spectator).toList();
-    bool allReady = activePlayers.every((p) => _gameState!.readyPlayers[p.id] == true);
-    
-    if (allReady && activePlayers.isNotEmpty) {
-       _advancedStateKeys.add(key);
-       await _advanceRotationOrPhase();
-    }
+    await _functions.httpsCallable('advancePhase').call({
+      'roomCode': _gameState!.roomCode,
+    });
   }
 
   Future<void> forceAdvance() async {
     if (_gameState == null || currentPlayer?.isHost != true) return;
-    final key = _currentStateKey();
-    if (_advancedStateKeys.contains(key)) return;
-    _advancedStateKeys.add(key);
-    await _advanceRotationOrPhase();
-  }
-
-  Future<void> _advanceRotationOrPhase() async {
-    if (_gameState == null) return;
-
-    GameState nextState = _gameState!.copyWith(readyPlayers: {});
-    int forgeryDuration = 60;
-    int truthDuration = 60;
-    int voteDuration = 45;
-
-    if (_gameState!.currentPhase == GamePhase.forgery) {
-        // A2: Forgery phase timeout placeholder fill
-        final nextCards = nextState.cards.map((card) {
-          String? holderId;
-          _gameState!.currentCardAssignments.forEach((hId, tId) {
-            if (tId == card.targetPlayerId) {
-              holderId = hId;
-            }
-          });
-          if (holderId != null) {
-            final isSpectator = _players.any((p) => p.id == holderId && p.role == PlayerRole.spectator);
-            if (!isSpectator) {
-              final answer = card.sabotageAnswers[holderId];
-              if (answer == null || answer.trim().isEmpty) {
-                final newSabotage = Map<String, String>.from(card.sabotageAnswers);
-                newSabotage[holderId!] = kMissingAnswerPlaceholder;
-                return card.copyWith(sabotageAnswers: newSabotage);
-              }
-            }
-          }
-          return card;
-        }).toList();
-        nextState = nextState.copyWith(cards: nextCards);
-
-        if (_gameState!.currentRotationIndex < _gameState!.sabotageAnswersCount) {
-            int nextRot = _gameState!.currentRotationIndex + 1;
-            Map<String, String> nextAssignments = _gameState!.rotationPlan[nextRot.toString()]!;
-            nextState = nextState.copyWith(
-                currentRotationIndex: nextRot,
-                currentCardAssignments: nextAssignments,
-                endTime: _gameState!.isTimerDisabled ? null : DateTime.now().add(Duration(seconds: forgeryDuration)).millisecondsSinceEpoch,
-                clearEndTime: _gameState!.isTimerDisabled,
-            );
-        } else {
-            // Transition to Truth Phase: Every player gets their own card back
-            var pIds = _players.where((p) => p.role != PlayerRole.spectator).map((p) => p.id).toList();
-            Map<String, String> truthAssignments = { for (var id in pIds) id : id };
-            
-            nextState = nextState.copyWith(
-                currentPhase: GamePhase.truth,
-                currentCardAssignments: truthAssignments,
-                endTime: _gameState!.isTimerDisabled ? null : DateTime.now().add(Duration(seconds: truthDuration)).millisecondsSinceEpoch,
-                clearEndTime: _gameState!.isTimerDisabled,
-            );
-        }
-    } else if (_gameState!.currentPhase == GamePhase.truth) {
-        // A2: Truth phase timeout placeholder fill
-        final nextCards = nextState.cards.map((card) {
-          final isSpectator = _players.any((p) => p.id == card.targetPlayerId && p.role == PlayerRole.spectator);
-          if (!isSpectator) {
-            if (card.truthAnswer.trim().isEmpty) {
-              return card.copyWith(truthAnswer: kMissingAnswerPlaceholder);
-            }
-          }
-          return card;
-        }).toList();
-        nextState = nextState.copyWith(cards: nextCards);
-
-        // Transition to Vote Phase: Randomize player order for card resolution
-        var pIds = _players.where((p) => p.role != PlayerRole.spectator).map((p) => p.id).toList();
-        pIds.shuffle(Random()); // Randomize resolution order!
-        nextState = nextState.copyWith(
-            currentPhase: GamePhase.vote,
-            currentReaderId: pIds.isNotEmpty ? pIds.first : null,
-            resolutionOrder: pIds,
-            endTime: _gameState!.isTimerDisabled ? null : DateTime.now().add(Duration(seconds: voteDuration)).millisecondsSinceEpoch,
-            clearEndTime: _gameState!.isTimerDisabled,
-        );
-    } else if (_gameState!.currentPhase == GamePhase.vote) {
-        // Transition to Reveal for the CURRENT reader
-        // 1. Calculate and apply scores for the current resolved card
-        final currentCard = _gameState!.cards.firstWhere((c) => c.targetPlayerId == _gameState!.currentReaderId);
-        final deltas = ScoringLogic.calculateScores(state: _gameState!, currentCard: currentCard, playerVotes: currentCard.votes);
-        
-        final timesFooledDeltas = <String, int>{};
-        final playersDeceivedDeltas = <String, int>{};
-        currentCard.votes.forEach((voterId, votedForId) {
-          if (votedForId != 'TRUTH' && votedForId != voterId) {
-            timesFooledDeltas[voterId] = (timesFooledDeltas[voterId] ?? 0) + 1;
-            playersDeceivedDeltas[votedForId] = (playersDeceivedDeltas[votedForId] ?? 0) + 1;
-          }
-        });
-        
-        await applyScoresAndStats(
-          _gameState!.roomCode, 
-          deltas, 
-          timesFooledDeltas, 
-          playersDeceivedDeltas
-        );
-
-        // 2. Advance Phase
-        nextState = nextState.copyWith(
-            currentPhase: GamePhase.reveal,
-            clearEndTime: true,
-        );
-    }
-    
-    await updateGameState(nextState);
+    await _functions.httpsCallable('advancePhase').call({
+      'roomCode': _gameState!.roomCode,
+    });
   }
 
   Future<void> advanceToNextResolution() async {
     if (_gameState == null || currentPlayer?.isHost != true) return;
-    
-    final key = _currentStateKey();
-    if (_advancedStateKeys.contains(key)) return;
-    _advancedStateKeys.add(key);
-
-    final order = _gameState!.resolutionOrder;
-    final currentIdx = order.indexOf(_gameState!.currentReaderId ?? '');
-    
-    if (currentIdx != -1 && currentIdx < order.length - 1) {
-        // Move to next player's card
-        await updateGameState(_gameState!.copyWith(
-            currentPhase: GamePhase.vote,
-            currentReaderId: order[currentIdx + 1],
-            readyPlayers: {},
-            endTime: _gameState!.isTimerDisabled ? null : DateTime.now().add(const Duration(seconds: 45)).millisecondsSinceEpoch,
-            clearEndTime: _gameState!.isTimerDisabled,
-        ));
-    } else {
-        // All cards resolved -> Game Over
-        await _advanceToGameOver();
-    }
-  }
-
-  Future<void> _advanceToGameOver() async {
-    await updateGameState(_gameState!.copyWith(
-        currentPhase: GamePhase.gameOver,
-    ));
+    await _functions.httpsCallable('advanceToNextResolution').call({
+      'roomCode': _gameState!.roomCode,
+    });
   }
 
   // --- SIMULATION HELPERS (DEBUG ONLY) ---

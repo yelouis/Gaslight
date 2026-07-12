@@ -7,6 +7,7 @@ import '../lib/services/game_service.dart';
 import '../lib/models/game_state.dart';
 import '../lib/utils/semantic_filter.dart';
 import 'simulation_test.dart';
+import 'fake_functions.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +19,7 @@ void main() {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
       mockDb = FakeFirestore();
-      gameService = GameService(db: mockDb);
+      gameService = GameService(db: mockDb, functions: FakeFirebaseFunctions(mockDb));
     });
 
     testWidgets('Standard Happy Path E2E Journey', (WidgetTester tester) async {

@@ -6,42 +6,29 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Helper function to check if the requesting user's UID matches the player ID
-    function isOwner(playerId) {
-      return isAuthenticated() && request.auth.uid == playerId;
-    }
-
-    // Helper to check if a room document exists
-    function roomExists(roomCode) {
-      return exists(/databases/$(database)/documents/rooms/$(roomCode));
-    }
-
-    // Helper to check if the requesting user is the host of the room
-    function isRoomHost(roomCode) {
-      return isAuthenticated() && 
-             exists(/databases/$(database)/documents/rooms/$(roomCode)/players/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/rooms/$(roomCode)/players/$(request.auth.uid)).data.isHost == true;
-    }
-
     match /rooms/{roomCode} {
-      // Anyone can read rooms (needed to fetch room state before or after joining)
+      // Anyone can read rooms to fetch game state
       allow read: if true;
       
-      // Creating a room is allowed if the user is authenticated
-      allow create: if isAuthenticated();
-      
-      // Updates/Deletes to the room itself (like phase changes, card assignments, rotations) must be done by the host
-      allow update, delete: if isRoomHost(roomCode);
+      // All writes to rooms must be done via Admin SDK (Cloud Functions)
+      allow write: if false;
 
       match /players/{playerId} {
-        // Anyone can read the player list of a room
+        // Anyone can read the player list
         allow read: if true;
         
-        // A player can only create their own player document in a room, or the host can create it (needed for bots)
-        allow create: if isAuthenticated() && (request.auth.uid == playerId || isRoomHost(roomCode));
+        // Creation is handled by createRoom and joinRoom callables
+        allow create: if false;
         
-        // A player can update their own document, or the host can update/delete it (e.g. to handle disconnects)
-        allow update, delete: if isOwner(playerId) || isRoomHost(roomCode);
+        // Players can update only cosmetic/heartbeat/reaction fields on their own document.
+        // Critical game fields like score, role, host status, and rejoin identifiers are locked to server writes.
+        allow update: if isAuthenticated() 
+                      && resource.data.authUid == request.auth.uid
+                      && !request.resource.data.diff(resource.data).affectedKeys()
+                        .hasAny(['role', 'totalScore', 'timesFooled', 'playersDeceived', 'isHost', 'joinedAt', 'hasRerolled', 'authUid', 'id']);
+        
+        // Deletions and host handoffs are handled server-side by handleDisconnect callable
+        allow delete: if false;
       }
     }
   }

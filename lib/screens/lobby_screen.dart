@@ -380,7 +380,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     builder: (context, scale, child) {
                       return Transform.scale(
                         scale: scale,
-                        child: Opacity(opacity: scale, child: child),
+                        child: Opacity(opacity: scale.clamp(0.0, 1.0), child: child),
                       );
                     },
                     child: PlayerAvatar(player: player),
@@ -438,31 +438,37 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    SwitchListTile(
-                      title: const Text(
-                        'Disable Game Timers',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                    Material(
+                      color: Colors.transparent,
+                      child: SwitchListTile(
+                        title: const Text(
+                          'Disable Game Timers',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                        ),
+                        value: gs.gameState?.isTimerDisabled ?? false,
+                        activeColor: AppColors.brass,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (val) {
+                          gs.updateLobbySettings(isTimerDisabled: val);
+                        },
                       ),
-                      value: gs.gameState?.isTimerDisabled ?? false,
-                      activeColor: AppColors.brass,
-                      contentPadding: EdgeInsets.zero,
-                      onChanged: (val) {
-                        gs.updateLobbySettings(isTimerDisabled: val);
-                      },
                     ),
-                    SwitchListTile(
-                      title: const Text(
-                        'Family-Friendly Decks Only',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                    Material(
+                      color: Colors.transparent,
+                      child: SwitchListTile(
+                        title: const Text(
+                          'Family-Friendly Decks Only',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                        ),
+                        value: _familyFriendlyOnly,
+                        activeColor: AppColors.brass,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (val) {
+                          setState(() {
+                            _familyFriendlyOnly = val;
+                          });
+                        },
                       ),
-                      value: _familyFriendlyOnly,
-                      activeColor: AppColors.brass,
-                      contentPadding: EdgeInsets.zero,
-                      onChanged: (val) {
-                        setState(() {
-                          _familyFriendlyOnly = val;
-                        });
-                      },
                     ),
                     const SizedBox(height: 8),
                     Row(

@@ -7,6 +7,7 @@ import '../lib/models/player_state.dart';
 import '../lib/models/card_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../lib/utils/semantic_filter.dart';
+import 'fake_functions.dart';
 
 // Minimal manual mock for Firestore
 class FakeFirestore extends Fake implements FirebaseFirestore {
@@ -50,7 +51,10 @@ class FakeCollectionReference extends Fake implements CollectionReference<Map<St
   }
 
   @override
-  Stream<QuerySnapshot<Map<String, dynamic>>> snapshots({bool includeMetadataChanges = false}) async* {
+  Stream<QuerySnapshot<Map<String, dynamic>>> snapshots({
+    bool includeMetadataChanges = false,
+    ListenSource source = ListenSource.defaultSource,
+  }) async* {
     if (firestore.data.entries.any((e) => e.key.startsWith('$path/'))) {
       final docs = firestore.data.entries
           .where((e) => e.key.startsWith('$path/'))
@@ -102,7 +106,10 @@ class FakeDocumentReference<T extends Object?> extends Fake implements DocumentR
   }
 
   @override
-  Stream<DocumentSnapshot<T>> snapshots({bool includeMetadataChanges = false}) async* {
+  Stream<DocumentSnapshot<T>> snapshots({
+    bool includeMetadataChanges = false,
+    ListenSource source = ListenSource.defaultSource,
+  }) async* {
     if (firestore.data.containsKey(path)) {
       yield FakeDocumentSnapshot(path, Map<String, dynamic>.from(firestore.data[path]!)) as DocumentSnapshot<T>;
     }
@@ -229,7 +236,7 @@ void main() {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
       mockDb = FakeFirestore();
-      gameService = GameService(db: mockDb);
+      gameService = GameService(db: mockDb, functions: FakeFirebaseFunctions(mockDb));
     });
 
     test('Full Game Loop for 10 Players', () async {
@@ -348,7 +355,7 @@ void main() {
       print('Game started. Phase: Sabotage Round 1');
 
       // 4. Spectator Joins mid-game
-      final specService = GameService(db: mockDb);
+      final specService = GameService(db: mockDb, functions: FakeFirebaseFunctions(mockDb));
       await specService.joinRoom(roomCode, 'Spectator User', 'spectator_user');
       await Future.delayed(Duration(milliseconds: 200));
       
@@ -496,7 +503,7 @@ void main() {
   group('Wave B Unit Tests', () {
     test('startGame throws descriptive exceptions for invalid player counts and decks', () async {
       final db = FakeFirestore();
-      final gs = GameService(db: db);
+      final gs = GameService(db: db, functions: FakeFirebaseFunctions(db));
       SharedPreferences.setMockInitialValues({});
 
       await gs.createRoom('Host', 'host_user', sabotageAnswersCount: 2);
@@ -520,7 +527,7 @@ void main() {
 
     test('host transfer logic promotes earliest joined active player', () async {
       final db = FakeFirestore();
-      final gs = GameService(db: db);
+      final gs = GameService(db: db, functions: FakeFirebaseFunctions(db));
       SharedPreferences.setMockInitialValues({});
 
       // Host joins
@@ -554,7 +561,7 @@ void main() {
 
     test('tryRejoinSession mismatch clears preferences and returns false', () async {
       final db = FakeFirestore();
-      final gs = GameService(db: db);
+      final gs = GameService(db: db, functions: FakeFirebaseFunctions(db));
       // Mock preferences with mismatching player_id
       SharedPreferences.setMockInitialValues({
         'room_code': 'ABCD',
@@ -567,7 +574,7 @@ void main() {
 
     test('rerollMyPrompt swaps prompt and consumes re-roll token', () async {
       final db = FakeFirestore();
-      final gs = GameService(db: db);
+      final gs = GameService(db: db, functions: FakeFirebaseFunctions(db));
       SharedPreferences.setMockInitialValues({});
 
       // Host joins
