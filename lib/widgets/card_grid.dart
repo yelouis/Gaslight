@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import '../theme/app_colors.dart';
 
 class VotingAnswer {
@@ -89,6 +90,30 @@ class CardGrid extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (isSelfAnswer)
+                    Positioned(
+                      top: 8,
+                      left: -20,
+                      child: Transform.rotate(
+                        angle: -math.pi / 4,
+                        child: Container(
+                          width: 80,
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          color: AppColors.oxblood.withOpacity(0.85),
+                          child: const Center(
+                            child: Text(
+                              'SEALED',
+                              style: TextStyle(
+                                color: AppColors.ivory,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   // Card Content
                   Padding(
                     padding: const EdgeInsets.all(12.0),

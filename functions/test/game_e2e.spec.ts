@@ -1,0 +1,294 @@
+import { expect } from 'chai';
+import admin from 'firebase-admin';
+
+process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+try {
+  admin.initializeApp({
+    projectId: process.env.GCLOUD_PROJECT || 'demo-no-project'
+  });
+} catch (e) {
+  // Already initialized
+}
+
+const db = admin.firestore();
+
+// Helper to create an anonymous user using the Auth emulator REST endpoint
+async function createAnonUser(): Promise<{ idToken: string; localId: string }> {
+  const url = `http://localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ returnSecureToken: true })
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to create anon user: ${res.statusText}`);
+  }
+  const data = await res.json() as any;
+  return {
+    idToken: data.idToken,
+    localId: data.localId
+  };
+}
+
+// Helper to call an HTTPS Callable Function using the local emulator HTTP endpoint
+async function callFn(name: string, idToken: string, data: any): Promise<any> {
+  const projectId = process.env.GCLOUD_PROJECT || 'demo-no-project';
+  const url = `http://127.0.0.1:5001/${projectId}/us-central1/${name}`;
+  console.log(`DEBUG callFn: url=${url}, projectId=${projectId}`);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${idToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ data })
+  });
+
+  let json: any;
+  try {
+    json = await res.json();
+  } catch (e) {
+    // Response not JSON
+  }
+
+  if (json && json.error) {
+    const err = new Error(json.error.message || 'Callable error');
+    (err as any).status = json.error.status;
+    throw err;
+  }
+
+  if (!res.ok) {
+    console.log(`DEBUG callFn failure: status=${res.status}, url=${url}`);
+    throw new Error(`HTTP Error ${res.status} calling function ${name}`);
+  }
+  return json.result;
+}
+
+describe('Gaslight E2E Game Emulator Tests', () => {
+  beforeEach(async () => {
+    // Clear Firestore database before each test
+    const projectId = process.env.GCLOUD_PROJECT || 'demo-no-project';
+    const clearUrl = `http://127.0.0.1:8080/emulator/v1/projects/${projectId}/databases/(default)/documents`;
+    const res = await fetch(clearUrl, { method: 'DELETE' });
+    if (!res.ok) {
+      throw new Error(`Failed to clear firestore emulator: ${res.statusText}`);
+    }
+  });
+
+  it('should run a full 2-player game loop successfully', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+
+    // 1. Create Room (debugEnabled = true)
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+    expect(roomCode).to.be.a('string').and.have.lengthOf(4);
+
+    // 2. Join Room
+    const joinRes = await callFn('joinRoom', guestUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest'
+    });
+    expect(joinRes.role).to.equal('unassigned');
+
+    // 3. Start Game
+    await callFn('startGame', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'the_daily_grind'
+    });
+
+    // Verify room has entered forgery phase
+    const roomRef = db.collection('rooms').doc(roomCode);
+    let roomSnap = await roomRef.get();
+    let roomState = roomSnap.data() as any;
+    expect(roomState.currentPhase).to.equal('forgery');
+    expect(roomState.cards).to.have.lengthOf(2);
+
+    // Get assignments
+    const assignments = roomState.currentCardAssignments;
+    const hostTarget = assignments['p_host'];
+    const guestTarget = assignments['p_guest'];
+    expect(hostTarget).to.be.ok;
+    expect(guestTarget).to.be.ok;
+
+    // 4. Submit Forgeries (R1 test)
+    const hostSub = await callFn('submitAnswer', hostUser.idToken, {
+      roomCode,
+      targetCardId: hostTarget,
+      authorId: 'p_host',
+      text: 'Alice Forged Sabotage',
+      isTruth: false
+    });
+    expect(hostSub.success).to.be.true;
+
+    // Verify host is ready
+    roomSnap = await roomRef.get();
+    roomState = roomSnap.data() as any;
+    expect(roomState.readyPlayers['p_host']).to.be.true;
+
+    // Guest submits forgery, triggers auto-advance to truth
+    const guestSub = await callFn('submitAnswer', guestUser.idToken, {
+      roomCode,
+      targetCardId: guestTarget,
+      authorId: 'p_guest',
+      text: 'Bob Forged Sabotage',
+      isTruth: false
+    });
+    expect(guestSub.success).to.be.true;
+
+    // Verify auto-advance to truth phase
+    roomSnap = await roomRef.get();
+    roomState = roomSnap.data() as any;
+    expect(roomState.currentPhase).to.equal('truth');
+
+    // 5. Submit Truths
+    await callFn('submitAnswer', hostUser.idToken, {
+      roomCode,
+      targetCardId: 'p_host',
+      authorId: 'p_host',
+      text: 'Alice Real Truth',
+      isTruth: true
+    });
+    await callFn('submitAnswer', guestUser.idToken, {
+      roomCode,
+      targetCardId: 'p_guest',
+      authorId: 'p_guest',
+      text: 'Bob Real Truth',
+      isTruth: true
+    });
+
+    // Verify auto-advance to vote phase
+    roomSnap = await roomRef.get();
+    roomState = roomSnap.data() as any;
+    expect(roomState.currentPhase).to.equal('vote');
+    expect(roomState.resolutionOrder).to.have.lengthOf(2);
+
+    // 6. Voting
+    const currentReader = roomState.currentReaderId;
+    const voter = currentReader === 'p_host' ? 'p_guest' : 'p_host';
+    const voterToken = voter === 'p_guest' ? guestUser.idToken : hostUser.idToken;
+    const readerToken = currentReader === 'p_host' ? hostUser.idToken : guestUser.idToken;
+
+    // Voter casts vote
+    const voteRes = await callFn('castVote', voterToken, {
+      roomCode,
+      targetCardId: currentReader,
+      voterId: voter,
+      votedForId: 'TRUTH'
+    });
+    expect(voteRes.success).to.be.true;
+
+    // Reader sets ready
+    await callFn('setReady', readerToken, {
+      roomCode,
+      playerId: currentReader,
+      ready: true
+    });
+
+    // Verify auto-advance to reveal phase
+    roomSnap = await roomRef.get();
+    roomState = roomSnap.data() as any;
+    expect(roomState.currentPhase).to.equal('reveal');
+
+    // Host advances to next resolution
+    await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+
+    // Verify it advanced to next reader or game over
+    roomSnap = await roomRef.get();
+    roomState = roomSnap.data() as any;
+    expect(roomState.currentPhase).to.be.oneOf(['vote', 'gameOver']);
+  });
+
+  it('should deny unauthorized gameplay requests', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guestUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest'
+    });
+
+    // Guest tries to start game (should fail)
+    try {
+      await callFn('startGame', guestUser.idToken, {
+        roomCode,
+        selectedDeckId: 'the_daily_grind'
+      });
+      expect.fail('Guest started the game but should have been blocked');
+    } catch (err: any) {
+      expect(err.message).to.contain('host');
+    }
+
+    // Guest tries to submit a vote with self-vote (should fail)
+    try {
+      await callFn('castVote', guestUser.idToken, {
+        roomCode,
+        targetCardId: 'p_host',
+        voterId: 'p_guest',
+        votedForId: 'p_guest'
+      });
+      expect.fail('Self-vote succeeded but should have failed');
+    } catch (err: any) {
+      expect(err.message).to.contain('Self-voting');
+    }
+  });
+
+  it('should recover a player seat and re-bind authUid on credential reset', async () => {
+    const hostUser = await createAnonUser();
+    const guestUserOld = await createAnonUser();
+
+    // 1. Host creates room
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    // 2. Guest joins room with a stable playerId
+    await callFn('joinRoom', guestUserOld.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest'
+    });
+
+    // Verify initial authUid is guestUserOld.localId
+    const playerRef = db.collection('rooms').doc(roomCode).collection('players').doc('p_guest');
+    let playerSnap = await playerRef.get();
+    expect(playerSnap.data()?.authUid).to.equal(guestUserOld.localId);
+
+    // 3. Guest simulates app reinstall/credential reset, gets a new token
+    const guestUserNew = await createAnonUser();
+    expect(guestUserNew.localId).to.not.equal(guestUserOld.localId);
+
+    // 4. Guest rejoins with the same stable playerId
+    const rejoinRes = await callFn('joinRoom', guestUserNew.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest'
+    });
+    expect(rejoinRes.role).to.equal('unassigned');
+
+    // 5. Verify the guest's seat has been recovered and authUid is updated to guestUserNew.localId
+    playerSnap = await playerRef.get();
+    expect(playerSnap.data()?.authUid).to.equal(guestUserNew.localId);
+    expect(playerSnap.data()?.name).to.equal('Bob');
+  });
+});

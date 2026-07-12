@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../lib/main.dart';
-import '../lib/services/game_service.dart';
-import '../lib/models/game_state.dart';
-import '../lib/utils/semantic_filter.dart';
+import 'package:gaslight/main.dart';
+import 'package:gaslight/services/game_service.dart';
+import 'package:gaslight/utils/semantic_filter.dart';
 import 'simulation_test.dart';
 import 'fake_functions.dart';
 
@@ -177,6 +176,71 @@ void main() {
       // Verify reset back to starting screen
       expect(find.text('CREATE ROOM'), findsOneWidget);
       print('--- UI E2E WIDGET TEST PASSED SUCCESSFULLY ---');
+    });
+
+    testWidgets('Callable Error Handling & Spinner Recovery', (WidgetTester tester) async {
+      print('--- STARTING UI ERROR HANDLER WIDGET TEST ---');
+      tester.view.physicalSize = const Size(1200, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      Future<void> tick([int ms = 200]) async {
+        final steps = (ms / 50).round();
+        for (int i = 0; i < steps; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        await tester.pump();
+      }
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: const GaslightApp(),
+        ),
+      );
+      await tick(200);
+
+      // Create room
+      await tester.enterText(find.byType(TextField).first, 'Alice');
+      await tester.tap(find.text('CREATE ROOM'));
+      await tick(500);
+
+      // Lobby: start game
+      await gameService.debugAddBots();
+      await tick(200);
+      await gameService.startGame('the_daily_grind');
+      await tick(600);
+
+      // Verify forgery phase
+      expect(find.text('FORGERY'), findsOneWidget);
+
+      // Try submitting a similarity failure text (contains "trigger_error")
+      final craftField = find.byType(TextField).first;
+      await tester.enterText(craftField, 'This is a trigger_error answer');
+      await tick(100);
+
+      await tester.tap(find.text('SUBMIT'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 750));
+
+      // Verify SnackBar shown and spinner reset
+      expect(find.byType(SnackBar), findsOneWidget);
+      final SnackBar snackBar = tester.widget(find.byType(SnackBar));
+      final Text textWidget = snackBar.content as Text;
+      expect(textWidget.data, contains('Too similar'));
+      
+      // Text field should not be cleared upon failure
+      final textAfterError = (tester.widget(find.byType(TextField).first) as TextField).controller?.text;
+      expect(textAfterError, 'This is a trigger_error answer');
+
+      // Clean up game room session to stop the periodic heartbeat timer
+      await gameService.leaveRoom();
+      await tick(100);
+
+      print('--- UI ERROR HANDLER WIDGET TEST PASSED SUCCESSFULLY ---');
     });
   });
 }

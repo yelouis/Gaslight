@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import '../theme/app_icons.dart';
 
 class AutoAdvanceTimer extends StatefulWidget {
   final int? endTime;
@@ -89,8 +90,8 @@ class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.timer,
+          ThematicIcon(
+            type: ThematicIconType.timer,
             color: isLowTime ? theme.colorScheme.error : theme.colorScheme.secondary,
             size: 20,
           ),

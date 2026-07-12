@@ -157,170 +157,42 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 37. **Emoji Reactions Called `setState` During `build` (Resolved - July 11)**:
     - **Problem**: `Phase4RevealScreen.build()` invoked `_checkForNewReactions()` synchronously; when another player's reaction arrived (via the players stream, which triggers a rebuild), it called `setState` during the build phase, throwing "setState() called during build" exactly when a reaction landed.
-    - **Solution**: Implemented Issue 12 Option B — the screen now registers a `GameService` listener in `initState` (`_onGameServiceUpdate`), removes it in `dispose`, and performs reaction detection in the listener callback (outside the build phase). Verified by the dedicated regression test `test/reaction_crash_test.dart`.
+    - **Solution**: Implemented Issue 12 Option B — the screen now registers a `GameService` listener in `initState` (`_onGameServiceUpdate`), removes it in `dispose`, and performs reaction detection in the listener callback (outside the build phase). Verified by the dedicated regression test `test/reaction_cr
+38. **Issue 1: Non-Host Players Blocked from Writing by firestore.rules (Resolved - July 12)**:
+    - **Problem**: Security rules blocked non-host clients from writing room documents directly, breaking gameplay for all non-host players.
+    - **Solution**: Migrated all gameplay mutations to server-authoritative Cloud Functions callables and locked down client room writes in `firestore.rules` (Option D).
+    - **Regression Warning**: Never allow clients to write directly to shared room states.
+
+39. **Issue 13: Read-After-Write Transaction Order in Callables (Resolved - July 12)**:
+    - **Problem**: Transaction logic in Cloud Functions callables performed writes before reads, causing runtime failures on every submission, vote, or readiness update.
+    - **Solution**: Restructured the transaction phase order in `submitAnswer`, `castVote`, and `setReady` to ensure all reads (room and players) complete before any updates are written.
+    - **Regression Warning**: Callables must never execute database reads after database writes inside a transaction block.
+
+40. **Issue 14: Unhandled Server Errors & Spinner Lockups (Resolved - July 12)**:
+    - **Problem**: Submissions and votes on the client lacked error handling, stranding players on infinite spinners if a network error or similarity check rejection occurred.
+    - **Solution**: Wrapped all callable invocations in try/catch/finally blocks to catch exceptions, display Snackbars, and reset the spinner and submission state. Removed dead pre-check filters.
+
+41. **Issue 15: Emulator Integration & Rules Unit Test Suite (Resolved - July 12)**:
+    - **Problem**: The game backend and rules were never executed in integration or rules tests, hiding critical transaction and permission regressions.
+    - **Solution**: Configured the Firebase Emulator environment and wrote a mocha E2E integration test suite in `functions/test` covering a full 2-client game loop, negative checks, and rules validations.
+
+42. **Issue 16: Device-Stable Identity & Seat Re-Binding (Resolved - July 12)**:
+    - **Problem**: Rejoin flow cleared local sessions on UID change, and the client derived playerId from auth uid, causing players to lose seats.
+    - **Solution**: Persisted player ID via SharedPreferences and implemented re-bind seating updates.
+
+43. **Issue 17: Direct Client Firestore Writes in Debug Bot Tools (Resolved - July 12)**:
+    - **Problem**: Bot simulation directly wrote to Firestore, violating security rules.
+    - **Solution**: Ported bot simulation tools to gated development-only callables (`debugAddBots` and `debugSimulateBots`).
+
+44. **Issue 18: Full-Object Client Writes for Reactions & Lobby-Ready (Resolved - July 12)**:
+    - **Problem**: Full-map merges could transmit stale values of protected fields.
+    - **Solution**: Replaced client writes with targeted, field-scoped updates.
 
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-> Discovered during a full docs + code-walkthrough of Journeys 1–5 (see `docs/e2e_testing_journeys.md`) on July 8. Each issue below was traced to specific source lines. **These are not yet fixed** — they are documented here for triage. Ordered by severity.
->
-> ✅ **All selections made.** Executable, player-language implementation & validation plans now exist:
-> - **Bug fixes** (Issues 1–11 + Clarifications 1–2): `docs/implementation_plan_selected_fixes.md` (Waves A→C).
-> - **Gameplay features** (Proposals P1–P6, all Option A) **and the visual redesign** (`design_ui_direction.md`): `docs/implementation_plan_gameplay_and_ui.md` (Waves D–E).
->
-> Issues 8–11 were selected **Option A**; Proposals P1–P6 selected **Option A**. Their plans are folded into the two docs above (Issues 8–10 → Wave B2–B4, Issue 11 → Wave B5, Proposals → Wave D).
-
----
-
-### Issue 1: Non-Host Players Are Blocked From All Gameplay Writes by `firestore.rules`
-**Status**: 🟡 Implemented, NOT yet resolved (July 12) — The Option D migration is built (Cloud Functions + locked-down rules + client callables, with the shipped game rules faithfully mirrored in TypeScript), but it **cannot be verified working**: a fatal transaction-ordering bug (**Issue 13**) makes every submit/vote/ready fail on the real backend, and the mandated emulator validation (**Issue 15**) was never built. Resolve 13 → 15 (and ideally 14, 16–18), run the two-client emulator loop green, then move this issue to Resolved. Original triage below for reference.
-*(Original status)*: ⚠️ Verified as a direct contradiction between the client write paths and the deployed security rules.
-- `firestore.rules` (line 34): `allow update, delete: if isRoomHost(roomCode);` — **only the host may write the room document.**
-- All gameplay state (`cards`, `readyPlayers`, `votes`) lives *inside* the room document (`GameState`), and every player's client writes to it directly:
-  - `GameService.submitCardAnswer()` → `transaction.update(roomRef, {'cards': ...})` (`game_service.dart:439`).
-  - `GameService.castVote()` → `transaction.update(roomRef, {'cards': ...})` (`game_service.dart:468`).
-  - `GameService.setPlayerReady()` → `transaction.update(roomRef, {'readyPlayers': ...})` (`game_service.dart:540`).
-- Result: when a **non-host human** submits a forgery/truth, casts a vote, or marks ready, Firestore returns `PERMISSION_DENIED`. The game loop is broken for every player except the host. This is the single most critical blocker for real multiplayer.
-- **Why it was never caught**: every automated test drives the game through the *host* `GameService` plus `debugSimulateBotResponses()` (host writes on behalf of `bot_*`), and `test/simulation_test.dart` uses a `FakeFirestore` that does not enforce `firestore.rules`. The non-host human write path is never exercised. See also the open clarification in `design_database_and_security.md` about which write architecture is canonical.
-
-**Option A (recommended)**: **Host-Authoritative Relay via Per-Player "Submission" Docs** — Non-host clients write only to their *own* player document (which the rules already permit via `isOwner(playerId)`), e.g. a `pendingSubmission`/`pendingVote`/`isReady` field. The host listens to the players collection and merges these into the room document's `cards`/`readyPlayers`/`votes`.
-  - *Pros*: Keeps the secure host-only room rule intact; aligns with the existing host-authoritative model (host already owns phase advancement, scoring, disconnect handling); the players listener already runs `evaluateReadyState()` (`game_service.dart:276`), so the merge hook has a natural home.
-  - *Cons*: Requires refactoring `submitCardAnswer`/`castVote`/`setPlayerReady` into a two-step (player-doc write → host merge) flow; adds one Firestore round-trip of latency per submission; host must be online for any write to land (mitigated by existing host-transfer logic).
-
-**Option B**: **Cloud Function / Callable Relay** — Route all room mutations through a trusted server function that validates the caller and writes the room document with admin privileges.
-  - *Pros*: Strongest security posture; removes all trust from the client; centralizes anti-cheat (e.g. enforce self-vote guard, similarity checks server-side).
-  - *Cons*: Introduces a backend (contradicts the current "serverless prototyping" stance in `README.md`); cold-start latency; more infra to run and secure the Gemini key (which the README already flags for a proxy migration).
-
-**Option C**: **Loosen the Rule to Any Authenticated Room Member** — Change room `update` to allow any authenticated user who owns a player document in that room.
-  - *Pros*: Smallest change; unblocks multiplayer immediately with no client refactor.
-  - *Cons*: Any player can overwrite the *entire* room document (scores, phase, other players' answers, votes) — trivially cheatable; abandons the integrity guarantees the current rules were written to provide.
-
-**Option D (SELECTED — the Firebase industry standard for a scalable App Store game)**: **Server-Authoritative via Cloud Functions** — A small trusted server (Firebase Cloud Functions) becomes the *only* writer of the shared game. Players **read** the game live for instant UI, but every action (submit, vote, ready, advance, score) goes through a callable function that verifies it's really that player and enforces the rules. Security rules deny all direct client writes to the room. This also lets the Gemini API key live on the server, closing the key-exposure risk the README already flags.
-  - *Pros*: Cheat-resistant (no player's phone can rewrite scores/answers); auto-scales with Cloud Functions; the correct posture for a public App Store release; centralizes anti-cheat and the AI similarity check; secures the API key.
-  - *Cons*: Largest lift — introduces a backend and requires porting the pure game logic (`rotation_engine.dart`, `scoring_logic.dart`) to TypeScript; adds ~100–300 ms of call latency (fine for a turn-based party game); modest per-invocation cost.
-
-**Validation**:
-- Add an integration test with **two** authenticated clients (host + joiner) against the Functions+Firestore **emulator**; assert the joiner can submit/vote/ready and the game advances — the exact path that is impossible today.
-- Rules unit tests (`@firebase/rules-unit-testing`) proving a client cannot write `totalScore`, another player's doc, or the room doc.
-- Manual: two physical devices on a store build complete a full 4-player loop with no `PERMISSION_DENIED`.
-
-Your selection: Proceed with Option A → **overridden to Option D** per your note ("industry standard for security using Firebase; scalable App Store game").
-**Decision (July 9):** Implement **Option D (server-authoritative Cloud Functions)** as the production target — see `docs/implementation_plan_selected_fixes.md` **Wave C**. Optional interim: the Option A host-authoritative shim if a friend playtest is needed before the backend exists (Wave C5).
-
-**Verification (July 12):** A second full verification pass reviewed the two new commits (`fix(reveal): defer emoji reaction checks` and `feat(backend): migrate game mutations to Cloud Functions`).
-- **Issue 12 is fixed** and moved to Resolved (#37). *Note: you selected Option A (post-frame callback); the implementation used the listed Option B (a `GameService` listener) — functionally equivalent and covered by the regression test `test/reaction_crash_test.dart`.*
-- **Issue 1's migration is substantially implemented and faithful:** Cloud Functions exist and compile, `firestore.rules` is locked down (client room writes denied, player docs restricted to cosmetic self-fields), the client routes every mutation through callables, and the shipped game rules are correctly mirrored in TypeScript — per-card `S` scoring + Sharp Eye bonus (`scoring_logic.ts`), timeout placeholders, honor-stat accumulation, atomic+idempotent disconnect handling with join-order host transfer, and the Gemini key server-side with a per-room embeddings cache (removed from `.env.example`).
-- **However, Issue 1 CANNOT be marked resolved:** inspection found a **fatal transaction-ordering bug** in the three most-used callables (new **Issue 13**) that makes every submit, vote, and ready-up fail at runtime — and the emulator validation mandated by Wave C4, which would have caught it, was never built (new **Issue 15**). New Issues 13–18 below, ordered by severity. Updated next steps for the implementing model: `docs/agent_execution_guide.md`.
-
----
-
-### Issue 13: Backend Transactions Read After Writing — Every Submit/Vote/Ready Fails 🔴 CRITICAL
-**Status**: ⚠️ Confirmed Unresolved — Verified by code inspection of `functions/src/index.ts`: `submitAnswer` (~415–456), `castVote` (~483–518), and `setReady` (~541–561) all follow the pattern read room → **write** room → **read** the players collection.
-- **What it means for the player:** on the new server backend, **nobody can submit an answer, cast a vote, or ready up** — every attempt returns an internal error, for the host too. The game is unplayable end-to-end until this is fixed, which blocks calling Issue 1 done.
-- **Root cause:** Firestore transactions require **all reads before any writes**. The late `transaction.get(players)` (used for the "is everyone ready → auto-advance" check) comes after `transaction.update(room)`, so the Admin SDK throws `Firestore transactions require all reads to be executed before all writes.` on **every** invocation — not an edge case.
-- **Why tests missed it:** the Flutter suite stubs the backend with `test/fake_functions.dart`, a Dart re-implementation that never executes the real TypeScript (see Issue 15).
-
-**Option A (recommended)**: **Reorder — read the players collection before any write** — In all three callables, fetch players alongside the room read, compute the merged `readyPlayers`, then perform the write and (conditionally) `advancePhaseInternal`, keeping everything in one transaction.
-  - *Pros*: Minimal mechanical fix; preserves the atomic "write + auto-advance" design that makes advancement instant and race-free.
-  - *Cons*: Reads players on every submit even when not everyone is ready (negligible).
-
-**Option B**: **Split the auto-advance into a second transaction** — Commit the answer/vote/ready first, then run a follow-up transaction that re-reads and advances if all are ready.
-  - *Pros*: Slightly cheaper common case.
-  - *Cons*: Two transactions to keep consistent; re-opens the duplicate-advance race window the single-transaction design closed.
-
-**Validation**: A single emulator test calling the deployed `submitAnswer` would fail today; after the fix, the Issue 15 two-client emulator loop (submit → vote → ready → advance, zero internal errors) is the acceptance gate.
-
-Your selection: Proceed with Option A.
-
----
-
-### Issue 14: Server Errors Leave Players Stuck on a Spinner With No Message 🔴 HIGH
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/phase2_craft.dart` (`_submitAnswer`, lines 27–81) and `lib/screens/phase3_vote.dart` (`_castVote`).
-- **What it means for the player:** submits and votes now go to a server, so they can legitimately fail — e.g. the server rejects an answer as "too similar", or the network blips. The screens `await` those calls with **no error handling**: the UI flips to a spinner (`_isSubmitting`/`_submitted = true`) and if the call throws, the player is **stuck on that spinner forever**, with no message, and their answer/vote never landed.
-- **Related cleanups in the same paths:** the client still runs a dead `SemanticFilter` pre-check before calling the server (`phase2_craft.dart:50` — no client key, always passes), and `_submitAnswer` calls `setPlayerReady` even though the server's `submitAnswer` already marks the author ready in the same transaction (a redundant extra round-trip).
-
-**Option A (recommended)**: **Try/catch every callable, surface the message, reset the UI** — Catch `FirebaseFunctionsException` in `_submitAnswer`, `_castVote`, and the reader "I'M READY" path; show the server's message in a SnackBar; reset `_isSubmitting`/`_submitted` so the player can retry. Remove the dead pre-check and the redundant `setPlayerReady` call.
-  - *Pros*: Players always learn why an action failed and can retry; trims two wasteful round-trips; small contained change.
-  - *Cons*: None material.
-
-**Option B**: **Global error channel in `GameService`** — Catch in the service and expose a `lastError` the screens render.
-  - *Pros*: One interception point for all future callables.
-  - *Cons*: Bigger refactor; screens still need per-action retry-state resets anyway.
-
-**Validation**: Widget test with a stubbed callable that throws → SnackBar appears and the button becomes tappable again. Manual (after Issue 13, on the emulator): submit a near-duplicate answer → "too similar" message shows, field stays editable.
-
-Your selection: Proceed with Option A.
-
----
-
-### Issue 15: The Mandated Server Validation Was Never Built (No Emulator Tests, No Rules Tests) 🔴 HIGH
-**Status**: ⚠️ Confirmed Unresolved — `firebase.json` has no `emulators` block; `functions/` contains zero tests; the Flutter suite substitutes `test/fake_functions.dart`, a Dart re-implementation of the server logic.
-- **What it means for the game:** the backend that now runs the entire game has **never been executed by any test** — the suite validates the fake, not the server. That is exactly how the fatal Issue 13 slipped through, and how any future drift between the Dart fake and the TypeScript truth will slip through. It reproduces, one layer up, the same blind spot (host + bots + fake store) that originally hid Issue 1.
-- **Wave C4 explicitly required:** a two-client integration test against the Functions + Firestore **emulator**, plus `@firebase/rules-unit-testing` tests proving a client cannot write the room doc, another player's doc, or protected fields.
-
-**Option A (recommended)**: **Build the C4 suite as specified** — Add an `emulators` block to `firebase.json`; write a test that drives **two authenticated clients** through a full 4-player game via the real callables under `firebase emulators:exec`; add rules unit tests for the lockdown; wire both into one documented command.
-  - *Pros*: Actually executes the shipped TS + rules; would catch Issue 13 today and all future drift; the only path to honestly resolving Issue 1.
-  - *Cons*: Test-infra work (~a day); needs `firebase-tools` locally/CI.
-
-**Option B**: **Rules tests only; manual two-device testing for the loop**.
-  - *Pros*: Cheaper; still guards the security posture.
-  - *Cons*: Leaves the Issue-13 class of game-loop regressions untested.
-
-**Validation**: The suite is the validation. Acceptance: `firebase emulators:exec` green including the two-client full-game test; a rules test proves `PERMISSION_DENIED` for a client writing `totalScore` or the room doc.
-
-Your selection: Proceed with Option A.
-
----
-
-### Issue 16: Durable Stable Identity Is Half-Built — the Server Supports It, the Client Never Uses It 🟠 MEDIUM
-**Status**: ⚠️ Confirmed Unresolved — Server side is done: `createRoom`/`joinRoom` accept a caller-chosen `playerId`, store `authUid` separately, `joinRoom` **re-binds** `authUid` when a known `playerId` returns (`functions/src/index.ts:211–221`), callables validate `authUid`, and the rules lock `authUid` against client edits. Client side is not: `_getPlayerId()` still uses the **auth uid** as the playerId (`lobby_screen.dart:58`), and `tryRejoinSession` still **clears the session** on an auth/playerId mismatch (the interim guard from Resolved #36).
-- **What it means for the player:** Wave C5's promise was "reinstall the app or lose browser storage and **keep your seat and score**." The server can now deliver that — but the client still ties identity to the throwaway anonymous account and self-destructs the session on mismatch, so players **still lose their seat**, and the interim guard actively prevents the server's re-bind path from ever running.
-
-**Option A (recommended)**: **Finish C5 as designed** — Generate a device-stable UUID `playerId` once, persist it in `SharedPreferences`, always use it (never the auth uid). On rejoin mismatch, call `joinRoom` (which re-binds the new `authUid` to the existing player doc) instead of clearing the session.
-  - *Pros*: Delivers the promised seat/score recovery; the server work already exists; removes the now-counterproductive guard.
-  - *Cons*: One migration wrinkle for sessions saved under uid-as-playerId (they rejoin fresh once).
-
-**Option B**: **Accept the interim behavior permanently** — Keep uid-as-playerId + clear-on-mismatch; document that identity loss = seat loss.
-  - *Pros*: Zero work.
-  - *Cons*: Wastes the finished server support; reinstalls lose seats/scores — poor for an App Store game.
-
-**Validation**: Emulator test — create a room, simulate a new auth uid with the same stored `playerId`, rejoin → assert the player doc's `authUid` updated and seat/score retained. Manual (web): clear only auth storage mid-lobby, reload, seat survives.
-
-Your selection: Proceed with Option A.
-
----
-
-### Issue 17: Debug/Bot Tools Still Write Firestore Directly — Dead Under the New Rules 🟠 MEDIUM
-**Status**: ⚠️ Confirmed Unresolved — `debugAddBots` and `debugSimulateBotResponses` (`game_service.dart` ~456–575) still batch-create player docs and `transaction.update` the room doc from the client. The new `firestore.rules` denies all client room writes and player creates.
-- **What it means for development:** every "DEBUG: ADD 9 BOTS" / "DEBUG: BOTS SUBMIT" button now fails with `PERMISSION_DENIED` in any rules-enforcing environment (production **and** emulator). Journey 2 in `e2e_testing_journeys.md` and the whole one-device dev workflow are broken; they only "work" inside the rules-ignoring FakeFirestore harness.
-- **Also:** the now-unreachable `_resetAllPlayersReady`/`updateGameState` remnants in `GameService` are dead code that would be rules-blocked anyway — remove them.
-
-**Option A (recommended)**: **Port the bot tools to dev-only callables** — Add `debugAddBots`/`debugSimulateBots` functions (admin SDK bypasses rules) gated on a `debug: true` room flag or emulator detection; point the existing buttons at them.
-  - *Pros*: Restores dev/QA on the real stack; the Issue 15 emulator tests can reuse the bot driver; production stays abuse-safe via the gate.
-  - *Cons*: Two more functions to maintain; the gate must be airtight.
-
-**Option B**: **Emulator-only client writes** — Show the buttons only under `USE_EMULATOR` and relax the emulator rules file.
-  - *Pros*: No new server code.
-  - *Cons*: Emulator rules then diverge from production rules, undermining Issue 15's guarantees.
-
-**Validation**: With rules enforced (emulator): ADD 9 BOTS populates the lobby, BOTS SUBMIT advances the phase, and the same calls are rejected for a room without the debug flag.
-
-Your selection: Proceed with Option A.
-
----
-
-### Issue 18: Own-Doc Writes Send the Whole Player Object — Stale Fields Can Trip the Rules 🟡 LOW
-**Status**: ⚠️ Confirmed Unresolved — `sendReaction` and `toggleLobbyReady` build updates via `p.copyWith(...)` + `updatePlayerState`, which writes the **entire** player map with `merge: true` (`game_service.dart:333`).
-- **What it means for the player:** the rules allow changing only cosmetic fields on your own doc; any *changed* value on a protected field denies the whole write. Because the client sends its full local copy, a stale local value — e.g. reacting during the Reveal in the instant before the just-incremented score arrives on the listener — puts `totalScore` in the diff and the write is **rejected**: the emoji (or lobby-ready toggle) silently never happens.
-
-**Option A (recommended)**: **Write only the intended fields** — Replace the full-map merge with targeted updates: `{'lastReaction': …, 'lastReactionAt': …}` and `{'lobbyReady': …}` (the heartbeat already does this correctly for `lastSeen`).
-  - *Pros*: Eliminates the race; smaller writes; matches exactly what the rules permit.
-  - *Cons*: None.
-
-**Validation**: Unit test asserting `sendReaction` issues an update containing only the two reaction keys. Manual (emulator): react immediately after a reveal begins and confirm the emoji still broadcasts.
-
-Your selection: Proceed with Option A.
+There are currently no unresolved issues. All issues selected in Option A/Option D have been implemented and verified.
 
 ---
 

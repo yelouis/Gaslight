@@ -150,6 +150,13 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final text = params['text'];
       final isTruth = params['isTruth'];
 
+      if (text.toString().contains('trigger_error')) {
+        throw FirebaseFunctionsException(
+          message: 'Similarity check failed or mock error triggered!',
+          code: 'invalid-argument',
+        );
+      }
+
       final roomRef = db.collection('rooms').doc(roomCode);
       
       await db.runTransaction((transaction) async {
@@ -197,6 +204,13 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final voterId = params['voterId'];
       final votedForId = params['votedForId'];
 
+      if (votedForId == 'trigger_error') {
+        throw FirebaseFunctionsException(
+          message: 'Mock vote error triggered!',
+          code: 'invalid-argument',
+        );
+      }
+
       final roomRef = db.collection('rooms').doc(roomCode);
       await db.runTransaction((transaction) async {
         final snapshot = await transaction.get(roomRef);
@@ -235,6 +249,13 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
     if (name == 'setReady') {
       final playerId = params['playerId'];
       final ready = params['ready'];
+
+      if (playerId == 'trigger_error') {
+        throw FirebaseFunctionsException(
+          message: 'Mock ready error triggered!',
+          code: 'invalid-argument',
+        );
+      }
 
       final roomRef = db.collection('rooms').doc(roomCode);
       await db.runTransaction((transaction) async {
@@ -455,6 +476,117 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       }
 
       await roomRef.update(nextState.toMap());
+      return FakeHttpsCallableResult({'success': true} as T);
+    }
+
+    if (name == 'debugAddBots') {
+      final generatedCode = roomCode;
+      final roomRef = db.collection('rooms').doc(generatedCode);
+      final roomSnap = await roomRef.get();
+      if (!roomSnap.exists) {
+        throw Exception("Room not found");
+      }
+
+      const botColors = [
+        0xFF58A6FF, 0xFFFF7B72, 0xFF7EE787, 0xFFA5D6FF, 0xFFFFE68C,
+        0xFFD3A4FF, 0xFFFF80BF, 0xFF79C0FF, 0xFFFF935A, 0xFF85EA2D
+      ];
+
+      final batch = db.batch();
+      for (int i = 1; i <= 9; i++) {
+        final botId = 'bot_$i';
+        final bot = PlayerState(
+          id: botId,
+          name: 'Bot $i',
+          isHost: false,
+          colorValue: botColors[i % botColors.length],
+          avatarIndex: i % 6,
+          joinedAt: DateTime.now().millisecondsSinceEpoch + i,
+        );
+        final ref = db.collection('rooms').doc(generatedCode).collection('players').doc(botId);
+        batch.set(ref, bot.toMap());
+      }
+      await batch.commit();
+
+      return FakeHttpsCallableResult({'success': true} as T);
+    }
+
+    if (name == 'debugSimulateBotResponses') {
+      final roomRef = db.collection('rooms').doc(roomCode);
+      await db.runTransaction((transaction) async {
+        final snap = await transaction.get(roomRef);
+        if (!snap.exists) return;
+        final currentState = GameState.fromMap(snap.data()!, snap.id);
+        final playersSnap = await roomRef.collection('players').get();
+        final players = playersSnap.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
+
+        final phase = currentState.currentPhase;
+        final newCards = List<CardModel>.from(currentState.cards);
+        final newReadyMap = Map<String, bool>.from(currentState.readyPlayers);
+
+        if (phase == GamePhase.forgery || phase == GamePhase.truth) {
+          for (var p in players) {
+            if (!p.id.startsWith('bot_')) continue;
+            
+            newReadyMap[p.id] = true;
+
+            final targetId = currentState.currentCardAssignments[p.id];
+            if (targetId != null) {
+              final cardIdx = newCards.indexWhere((c) => c.targetPlayerId == targetId);
+              if (cardIdx != -1) {
+                final card = newCards[cardIdx];
+                if (phase == GamePhase.truth) {
+                  newCards[cardIdx] = card.copyWith(truthAnswer: 'Simulated Answer from ${p.name}');
+                } else {
+                  final sabs = Map<String, String>.from(card.sabotageAnswers);
+                  sabs[p.id] = 'Simulated Answer from ${p.name}';
+                  newCards[cardIdx] = card.copyWith(sabotageAnswers: sabs);
+                }
+              }
+            }
+
+            // Also update player document in transaction to make it ready
+            final pRef = roomRef.collection('players').doc(p.id);
+            transaction.update(pRef, {'isReady': true});
+          }
+
+          transaction.update(roomRef, {
+            'cards': newCards.map((c) => c.toMap()).toList(),
+            'readyPlayers': newReadyMap,
+          });
+        } else if (phase == GamePhase.vote) {
+          final currentTargetId = currentState.currentReaderId;
+          if (currentTargetId != null) {
+            final cardIdx = newCards.indexWhere((c) => c.targetPlayerId == currentTargetId);
+            if (cardIdx != -1) {
+              final card = newCards[cardIdx];
+              final newVotes = Map<String, String>.from(card.votes);
+
+              for (var p in players) {
+                if (!p.id.startsWith('bot_')) continue;
+
+                newReadyMap[p.id] = true;
+                if (currentTargetId != p.id) {
+                  newVotes[p.id] = 'TRUTH';
+                }
+              }
+              newCards[cardIdx] = card.copyWith(votes: newVotes);
+            }
+
+            if (currentTargetId.startsWith('bot_')) {
+              newReadyMap[currentTargetId] = true;
+              final readerRef = roomRef.collection('players').doc(currentTargetId);
+              transaction.update(readerRef, {'isReady': true});
+            }
+
+            transaction.update(roomRef, {
+              'cards': newCards.map((c) => c.toMap()).toList(),
+              'readyPlayers': newReadyMap,
+            });
+          }
+        }
+      });
+
       return FakeHttpsCallableResult({'success': true} as T);
     }
 

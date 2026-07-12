@@ -21,6 +21,7 @@ export interface GameState {
   readyPlayers: Record<string, boolean>;
   endTime: number | null;
   resolutionOrder: string[];
+  debugEnabled?: boolean;
 }
 
 export class ScoringLogic {

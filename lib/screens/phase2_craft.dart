@@ -13,6 +13,8 @@ import '../utils/semantic_filter.dart';
 import '../theme/app_colors.dart';
 
 
+import '../theme/app_icons.dart';
+
 class Phase2CraftScreen extends StatefulWidget {
   const Phase2CraftScreen({super.key});
 
@@ -34,46 +36,38 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     final state = gs.gameState!;
     final me = gs.currentPlayer!;
     
-    // 1. Semantic Similarity Check
     final targetId = state.currentCardAssignments[me.id];
     if (targetId == null) {
       setState(() => _isSubmitting = false);
       return;
     }
 
-    final targetCard = state.cards.firstWhere((c) => c.targetPlayerId == targetId);
-    final comparisonAnswers = [
-      targetCard.truthAnswer,
-      ...targetCard.sabotageAnswers.values
-    ].where((a) => a.isNotEmpty).toList();
-
-    final isUnique = await SemanticFilter.isAnswerUnique(text, comparisonAnswers);
-    
-    if (!isUnique) {
+    try {
+      bool isTruth = state.currentPhase == GamePhase.truth;
+      await gs.submitCardAnswer(targetId, me.id, text, isTruth);
       if (mounted) {
+        _answerController.clear();
+      }
+    } catch (e) {
+      debugPrint('EXCEPTION CAUGHT ON SUBMIT: $e, mounted=$mounted');
+      if (mounted) {
+        String msg = e.toString();
+        if (msg.contains('similar') || msg.contains('Similarity')) {
+          msg = 'Too similar to an existing answer! Be more creative.';
+        }
+        debugPrint('SHOWING SNACKBAR WITH MSG: $msg');
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Too similar to an existing answer! Be more creative.'),
+            content: Text(msg),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
+      }
+    } finally {
+      if (mounted) {
         setState(() => _isSubmitting = false);
       }
-      return;
-    }
-
-    // 2. Proceed with submission
-    bool isTruth = state.currentPhase == GamePhase.truth;
-    await gs.submitCardAnswer(targetId, me.id, text, isTruth);
-    
-    await gs.setPlayerReady(true);
-    
-    
-    if (mounted) {
-      setState(() {
-        _isSubmitting = false;
-        _answerController.clear();
-      });
     }
   }
 
@@ -165,7 +159,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.remove_red_eye_outlined, size: 64, color: theme.colorScheme.secondary),
+        ThematicIcon(type: ThematicIconType.observe, size: 64, color: theme.colorScheme.secondary),
         const SizedBox(height: 24),
         Text(
           'SPECTATOR MODE',

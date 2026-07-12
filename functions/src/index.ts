@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { RotationEngine } from "./rotation_engine";
 import { ScoringLogic, GameState, CardModel } from "./scoring_logic";
@@ -111,6 +112,7 @@ export const createRoom = onCall(async (request) => {
   const sabotageAnswersCount = (data.sabotageAnswersCount as number) || 2;
   const isTimerDisabled = (data.isTimerDisabled as boolean) || false;
   const selectedDeckId = (data.selectedDeckId as string) || "the_daily_grind";
+  const debugEnabled = (data.debugEnabled as boolean) || false;
 
   if (!playerName || !playerId) {
     throw new HttpsError("invalid-argument", "playerName and playerId are required.");
@@ -148,7 +150,8 @@ export const createRoom = onCall(async (request) => {
     rotationPlan: {},
     readyPlayers: {},
     endTime: null,
-    resolutionOrder: []
+    resolutionOrder: [],
+    debugEnabled
   };
 
   const playerState = {
@@ -417,6 +420,7 @@ export const submitAnswer = onCall(async (request) => {
     if (!roomSnap.exists) {
       throw new HttpsError("not-found", "Game room not found.");
     }
+    const playersSnap = await transaction.get(roomRef.collection("players"));
 
     const room = roomSnap.data() as GameState;
     const cardIdx = room.cards.findIndex(c => c.targetPlayerId === targetCardId);
@@ -438,15 +442,13 @@ export const submitAnswer = onCall(async (request) => {
 
     const newReadyMap: Record<string, boolean> = { ...room.readyPlayers, [authorId]: true };
 
+    const activePlayers = playersSnap.docs.map(doc => doc.data() as PlayerState).filter(p => p.role !== "spectator");
+    const allReady = activePlayers.every(p => newReadyMap[p.id] === true);
+
     transaction.update(roomRef, {
       cards: newCards,
       readyPlayers: newReadyMap
     });
-
-    // Check automatic phase advance inside transaction
-    const playersSnap = await transaction.get(roomRef.collection("players"));
-    const activePlayers = playersSnap.docs.map(doc => doc.data() as PlayerState).filter(p => p.role !== "spectator");
-    const allReady = activePlayers.every(p => newReadyMap[p.id] === true);
 
     if (allReady && activePlayers.length > 0) {
       await advancePhaseInternal(transaction, roomRef, room, activePlayers, newCards);
@@ -485,6 +487,7 @@ export const castVote = onCall(async (request) => {
     if (!roomSnap.exists) {
       throw new HttpsError("not-found", "Game room not found.");
     }
+    const playersSnap = await transaction.get(roomRef.collection("players"));
 
     const room = roomSnap.data() as GameState;
     const cardIdx = room.cards.findIndex(c => c.targetPlayerId === targetCardId);
@@ -500,15 +503,13 @@ export const castVote = onCall(async (request) => {
 
     const newReadyMap: Record<string, boolean> = { ...room.readyPlayers, [voterId]: true };
 
+    const activePlayers = playersSnap.docs.map(doc => doc.data() as PlayerState).filter(p => p.role !== "spectator");
+    const allReady = activePlayers.every(p => newReadyMap[p.id] === true);
+
     transaction.update(roomRef, {
       cards: newCards,
       readyPlayers: newReadyMap
     });
-
-    // Check automatic phase advance
-    const playersSnap = await transaction.get(roomRef.collection("players"));
-    const activePlayers = playersSnap.docs.map(doc => doc.data() as PlayerState).filter(p => p.role !== "spectator");
-    const allReady = activePlayers.every(p => newReadyMap[p.id] === true);
 
     if (allReady && activePlayers.length > 0) {
       await advancePhaseInternal(transaction, roomRef, room, activePlayers, newCards);
@@ -543,15 +544,15 @@ export const setReady = onCall(async (request) => {
     if (!roomSnap.exists) {
       throw new HttpsError("not-found", "Game room not found.");
     }
+    const playersSnap = await transaction.get(roomRef.collection("players"));
 
     const room = roomSnap.data() as GameState;
     const newReadyMap: Record<string, boolean> = { ...room.readyPlayers, [playerId]: ready };
 
-    transaction.update(roomRef, { readyPlayers: newReadyMap });
-
-    const playersSnap = await transaction.get(roomRef.collection("players"));
     const activePlayers = playersSnap.docs.map(doc => doc.data() as PlayerState).filter(p => p.role !== "spectator");
     const allReady = activePlayers.every(p => newReadyMap[p.id] === true);
+
+    transaction.update(roomRef, { readyPlayers: newReadyMap });
 
     if (allReady && activePlayers.length > 0) {
       await advancePhaseInternal(transaction, roomRef, room, activePlayers, room.cards);
@@ -808,7 +809,8 @@ export const handleDisconnect = onCall(async (request) => {
   });
 });
 
-// Inner helper to execute phase advancement inside a transaction block
+// Inner helper to execute phase advancement inside a transaction block.
+// INVARIANT: must never call transaction.get — callers complete all reads first.
 async function advancePhaseInternal(
   transaction: admin.firestore.Transaction,
   roomRef: admin.firestore.DocumentReference,
@@ -924,9 +926,9 @@ async function advancePhaseInternal(
         if (sDelta !== 0 || tfDelta !== 0 || pdDelta !== 0) {
           const pRef = roomRef.collection("players").doc(p.id);
           transaction.update(pRef, {
-            totalScore: admin.firestore.FieldValue.increment(sDelta),
-            timesFooled: admin.firestore.FieldValue.increment(tfDelta),
-            playersDeceived: admin.firestore.FieldValue.increment(pdDelta)
+            totalScore: FieldValue.increment(sDelta),
+            timesFooled: FieldValue.increment(tfDelta),
+            playersDeceived: FieldValue.increment(pdDelta)
           });
         }
       }
@@ -1021,6 +1023,160 @@ export const advanceToNextResolution = onCall(async (request) => {
     } else {
       transaction.update(roomRef, {
         currentPhase: "gameOver"
+      });
+    }
+
+    return { success: true };
+  });
+});
+
+// 12. Debug Add Bots
+export const debugAddBots = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+  const { roomCode } = request.data;
+  if (!roomCode) {
+    throw new HttpsError("invalid-argument", "roomCode is required.");
+  }
+
+  const roomRef = db.collection("rooms").doc(roomCode);
+  const roomSnap = await roomRef.get();
+  if (!roomSnap.exists) {
+    throw new HttpsError("not-found", "Room not found.");
+  }
+  const room = roomSnap.data() as GameState;
+  if (!room.debugEnabled) {
+    throw new HttpsError("permission-denied", "Debug commands are only allowed when debugEnabled is true.");
+  }
+
+  const botColors = [
+    0xFF58A6FF, 0xFFFF7B72, 0xFF7EE787, 0xFFA5D6FF, 0xFFFFE68C,
+    0xFFD3A4FF, 0xFFFF80BF, 0xFF79C0FF, 0xFFFF935A, 0xFF85EA2D
+  ];
+
+  const batch = db.batch();
+  for (let i = 1; i <= 9; i++) {
+    const botId = `bot_${i}`;
+    const botState = {
+      id: botId,
+      name: `Bot ${i}`,
+      isHost: false,
+      colorValue: botColors[i % botColors.length],
+      avatarIndex: i % 6,
+      joinedAt: Date.now() + i,
+      lobbyReady: false,
+      totalScore: 0,
+      role: "unassigned",
+      isReady: false,
+      timesFooled: 0,
+      playersDeceived: 0,
+      lastSeen: Date.now(),
+      lastReaction: null,
+      lastReactionAt: null,
+      hasRerolled: false,
+      authUid: `bot_auth_${botId}`
+    };
+    const playerRef = roomRef.collection("players").doc(botId);
+    batch.set(playerRef, botState);
+  }
+  await batch.commit();
+  return { success: true };
+});
+
+// 13. Debug Simulate Bot Responses
+export const debugSimulateBotResponses = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+  const { roomCode } = request.data;
+  if (!roomCode) {
+    throw new HttpsError("invalid-argument", "roomCode is required.");
+  }
+
+  const roomRef = db.collection("rooms").doc(roomCode);
+
+  return await db.runTransaction(async (transaction) => {
+    const roomSnap = await transaction.get(roomRef);
+    if (!roomSnap.exists) {
+      throw new HttpsError("not-found", "Room not found.");
+    }
+    const room = roomSnap.data() as GameState;
+    if (!room.debugEnabled) {
+      throw new HttpsError("permission-denied", "Debug commands are only allowed when debugEnabled is true.");
+    }
+
+    const playersSnap = await transaction.get(roomRef.collection("players"));
+    const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
+
+    const phase = room.currentPhase;
+    const cards = room.cards ? [...room.cards] : [];
+    const readyPlayers = room.readyPlayers ? { ...room.readyPlayers } : {};
+
+    if (phase === "forgery" || phase === "truth") {
+      for (const p of players) {
+        if (!p.id.startsWith("bot_")) continue;
+
+        readyPlayers[p.id] = true;
+
+        const targetId = room.currentCardAssignments?.[p.id];
+        if (targetId) {
+          const cardIdx = cards.findIndex(c => c.targetPlayerId === targetId);
+          if (cardIdx !== -1) {
+            const card = { ...cards[cardIdx] };
+            if (phase === "truth") {
+              card.truthAnswer = `Simulated Answer from ${p.name}`;
+            } else {
+              const sabotageAnswers = card.sabotageAnswers ? { ...card.sabotageAnswers } : {};
+              sabotageAnswers[p.id] = `Simulated Answer from ${p.name}`;
+              card.sabotageAnswers = sabotageAnswers;
+            }
+            cards[cardIdx] = card;
+          }
+        }
+
+        // Also update player document in transaction to make it ready
+        const pRef = roomRef.collection("players").doc(p.id);
+        transaction.update(pRef, { isReady: true });
+      }
+
+      transaction.update(roomRef, {
+        cards,
+        readyPlayers
+      });
+    } else if (phase === "vote") {
+      const currentTargetId = room.currentReaderId;
+      if (!currentTargetId) {
+        throw new HttpsError("failed-precondition", "No current reader.");
+      }
+
+      const cardIdx = cards.findIndex(c => c.targetPlayerId === currentTargetId);
+      if (cardIdx !== -1) {
+        const card = { ...cards[cardIdx] };
+        const votes = card.votes ? { ...card.votes } : {};
+
+        for (const p of players) {
+          if (!p.id.startsWith("bot_")) continue;
+
+          readyPlayers[p.id] = true;
+          if (currentTargetId !== p.id) {
+            votes[p.id] = "TRUTH";
+          }
+        }
+        card.votes = votes;
+        cards[cardIdx] = card;
+      }
+
+      // If the current reader is a bot, mark them ready as well
+      if (currentTargetId.startsWith("bot_")) {
+        readyPlayers[currentTargetId] = true;
+        const readerRef = roomRef.collection("players").doc(currentTargetId);
+        transaction.update(readerRef, { isReady: true });
+      }
+
+      transaction.update(roomRef, {
+        cards,
+        readyPlayers
       });
     }
 

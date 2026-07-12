@@ -36,6 +36,9 @@ class GameState {
   // Randomized card resolution order
   final List<String> resolutionOrder;
 
+  // Gated debug capabilities
+  final bool debugEnabled;
+
   GameState({
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
@@ -51,6 +54,7 @@ class GameState {
     this.readyPlayers = const {},
     this.endTime,
     this.resolutionOrder = const [],
+    this.debugEnabled = false,
   });
 
   GameState copyWith({
@@ -68,6 +72,7 @@ class GameState {
     Map<String, bool>? readyPlayers,
     int? endTime,
     List<String>? resolutionOrder,
+    bool? debugEnabled,
     bool clearReaderId = false,
     bool clearEndTime = false,
   }) {
@@ -86,6 +91,7 @@ class GameState {
       readyPlayers: readyPlayers ?? this.readyPlayers,
       endTime: clearEndTime ? null : (endTime ?? this.endTime),
       resolutionOrder: resolutionOrder ?? this.resolutionOrder,
+      debugEnabled: debugEnabled ?? this.debugEnabled,
     );
   }
 
@@ -105,6 +111,7 @@ class GameState {
       'readyPlayers': readyPlayers,
       'endTime': endTime,
       'resolutionOrder': resolutionOrder,
+      'debugEnabled': debugEnabled,
     };
   }
 
@@ -137,6 +144,7 @@ class GameState {
       readyPlayers: Map<String, bool>.from(map['readyPlayers'] ?? {}),
       endTime: map['endTime']?.toInt(),
       resolutionOrder: List<String>.from(map['resolutionOrder'] ?? []),
+      debugEnabled: map['debugEnabled'] as bool? ?? false,
     );
   }
 

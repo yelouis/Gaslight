@@ -126,7 +126,7 @@ class GameService extends ChangeNotifier {
     return storedId;
   }
 
-  Future<void> createRoom(String playerName, String? playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex, bool isTimerDisabled = false}) async {
+  Future<void> createRoom(String playerName, String? playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex, bool isTimerDisabled = false, bool debugEnabled = false}) async {
     await ensureAuthenticated();
     final resolvedPlayerId = playerId ?? await getOrCreateStablePlayerId();
 
@@ -137,6 +137,7 @@ class GameService extends ChangeNotifier {
       'avatarIndex': avatarIndex ?? _getRandomAvatar(),
       'sabotageAnswersCount': sabotageAnswersCount,
       'isTimerDisabled': isTimerDisabled,
+      'debugEnabled': debugEnabled,
     });
 
     final roomCode = result.data['roomCode'] as String;
@@ -184,25 +185,33 @@ class GameService extends ChangeNotifier {
       final savedRoom = prefs.getString('room_code');
       final savedPlayerId = prefs.getString('player_id');
       if (savedRoom != null && savedPlayerId != null) {
-        String? authUid;
-        try {
-          authUid = FirebaseAuth.instance.currentUser?.uid;
-        } catch (_) {}
-        
-        if (authUid != null && authUid != savedPlayerId) {
-          await prefs.remove('room_code');
-          await prefs.remove('player_id');
-          debugPrint('Identity mismatch on rejoin: auth=$authUid, saved=$savedPlayerId. Session cleared.');
-          return false;
-        }
-
         final roomDoc = await _db.collection('rooms').doc(savedRoom).get();
         final playerDoc = await _db.collection('rooms').doc(savedRoom).collection('players').doc(savedPlayerId).get();
         if (roomDoc.exists && playerDoc.exists) {
-          _currentPlayerId = savedPlayerId;
-          _gameState = GameState.fromMap(roomDoc.data()!, roomDoc.id);
-          listenToRoom(savedRoom);
-          return true;
+          final pData = playerDoc.data()!;
+          final name = pData['name'] as String? ?? 'Player';
+          final avatarIndex = pData['avatarIndex'] as int? ?? 0;
+          final colorValue = pData['colorValue'] as int? ?? 0xFF58A6FF;
+
+          try {
+            await ensureAuthenticated();
+            await _functions.httpsCallable('joinRoom').call({
+              'roomCode': savedRoom,
+              'playerName': name,
+              'playerId': savedPlayerId,
+              'avatarIndex': avatarIndex,
+              'colorValue': colorValue,
+            });
+            
+            _currentPlayerId = savedPlayerId;
+            _gameState = GameState.fromMap(roomDoc.data()!, roomDoc.id);
+            listenToRoom(savedRoom);
+            return true;
+          } catch (e) {
+            debugPrint('Error re-binding session during rejoin: $e');
+            await prefs.remove('room_code');
+            await prefs.remove('player_id');
+          }
         }
       }
     } catch (e) {
@@ -319,22 +328,14 @@ class GameService extends ChangeNotifier {
     });
   }
 
-  Future<void> updateGameState(GameState state) async {
-    if (state.roomCode.isEmpty) return;
-    await _db.collection('rooms').doc(state.roomCode).update(state.toMap());
-  }
-
-  Future<void> updatePlayerState(String roomCode, PlayerState player) async {
-    await _db.collection('rooms').doc(roomCode).collection('players').doc(player.id).set(player.toMap(), SetOptions(merge: true));
-  }
-
   Future<void> toggleLobbyReady() async {
     final p = currentPlayer;
     final rCode = _gameState?.roomCode;
     if (p == null || rCode == null || rCode.isEmpty) return;
     
-    final updated = p.copyWith(lobbyReady: !p.lobbyReady);
-    await updatePlayerState(rCode, updated);
+    await _db.collection('rooms').doc(rCode).collection('players').doc(p.id).update({
+      'lobbyReady': !p.lobbyReady,
+    });
   }
 
   Future<void> updateLobbySettings({int? sabotageAnswersCount, bool? isTimerDisabled}) async {
@@ -351,11 +352,10 @@ class GameService extends ChangeNotifier {
     final rCode = _gameState?.roomCode;
     if (p == null || rCode == null || rCode.isEmpty) return;
     
-    final updated = p.copyWith(
-      lastReaction: emoji,
-      lastReactionAt: DateTime.now().millisecondsSinceEpoch,
-    );
-    await updatePlayerState(rCode, updated);
+    await _db.collection('rooms').doc(rCode).collection('players').doc(p.id).update({
+      'lastReaction': emoji,
+      'lastReactionAt': DateTime.now().millisecondsSinceEpoch,
+    });
   }
 
   Future<void> rerollMyPrompt() async {
@@ -451,129 +451,18 @@ class GameService extends ChangeNotifier {
   Future<void> debugAddBots() async {
     if (_gameState == null) return;
     final rCode = _gameState!.roomCode;
-    final batch = _db.batch();
-    
-    for (int i = 1; i <= 9; i++) {
-        final botId = 'bot_$i';
-        final bot = PlayerState(
-          id: botId,
-          name: 'Bot $i',
-          isHost: false,
-          colorValue: _getRandomColor(),
-          avatarIndex: i % 6,
-          joinedAt: DateTime.now().millisecondsSinceEpoch + i,
-        );
-        final ref = _db.collection('rooms').doc(rCode).collection('players').doc(botId);
-        batch.set(ref, bot.toMap());
-    }
-    await batch.commit();
+    await _functions.httpsCallable('debugAddBots').call({
+      'roomCode': rCode,
+    });
   }
 
   /// Auto-submits answers for all bots in the current phase.
   Future<void> debugSimulateBotResponses() async {
     if (_gameState == null) return;
-    final state = _gameState!;
-    final phase = state.currentPhase;
-    final roomRef = _db.collection('rooms').doc(state.roomCode);
-
-    if (phase == GamePhase.forgery || phase == GamePhase.truth) {
-      // 1. Update all bot card answers and readyPlayers in a single transaction
-      await _db.runTransaction((transaction) async {
-        final snap = await transaction.get(roomRef);
-        if (!snap.exists) return;
-        final currentState = GameState.fromMap(snap.data()!, snap.id);
-        final newCards = List<CardModel>.from(currentState.cards);
-        final newReadyMap = Map<String, bool>.from(currentState.readyPlayers);
-
-        for (var p in _players) {
-          if (!p.id.startsWith('bot_')) continue;
-          
-          // Mark bot ready in the room document
-          newReadyMap[p.id] = true;
-
-          final targetId = currentState.currentCardAssignments[p.id];
-          if (targetId != null) {
-            final cardIdx = newCards.indexWhere((c) => c.targetPlayerId == targetId);
-            if (cardIdx != -1) {
-              final card = newCards[cardIdx];
-              if (phase == GamePhase.truth) {
-                newCards[cardIdx] = card.copyWith(truthAnswer: 'Simulated Answer from ${p.name}');
-              } else {
-                final sabs = Map<String, String>.from(card.sabotageAnswers);
-                sabs[p.id] = 'Simulated Answer from ${p.name}';
-                newCards[cardIdx] = card.copyWith(sabotageAnswers: sabs);
-              }
-            }
-          }
-        }
-        transaction.update(roomRef, {
-          'cards': newCards.map((c) => c.toMap()).toList(),
-          'readyPlayers': newReadyMap,
-        });
-      });
-
-      // 2. Set all bots to ready in a batch write for players collection
-      final batch = _db.batch();
-      for (var p in _players) {
-        if (!p.id.startsWith('bot_')) continue;
-        final pRef = _db.collection('rooms').doc(state.roomCode).collection('players').doc(p.id);
-        batch.update(pRef, {'isReady': true});
-      }
-      await batch.commit();
-
-    } else if (phase == GamePhase.vote) {
-      final currentTargetId = state.currentReaderId!;
-
-      // 1. Update all bot votes and readyPlayers in a single transaction
-      await _db.runTransaction((transaction) async {
-        final snap = await transaction.get(roomRef);
-        if (!snap.exists) return;
-        final currentState = GameState.fromMap(snap.data()!, snap.id);
-        final newCards = List<CardModel>.from(currentState.cards);
-        final newReadyMap = Map<String, bool>.from(currentState.readyPlayers);
-
-        final cardIdx = newCards.indexWhere((c) => c.targetPlayerId == currentTargetId);
-        if (cardIdx != -1) {
-          final card = newCards[cardIdx];
-          final newVotes = Map<String, String>.from(card.votes);
-
-          for (var p in _players) {
-            if (!p.id.startsWith('bot_')) continue;
-            
-            // Mark bot ready in the room document
-            newReadyMap[p.id] = true;
-
-            if (currentTargetId != p.id) {
-              newVotes[p.id] = 'TRUTH';
-            }
-          }
-          newCards[cardIdx] = card.copyWith(votes: newVotes);
-        }
-        
-        // If the current reader is a bot, mark them ready as well
-        if (currentTargetId.startsWith('bot_')) {
-          newReadyMap[currentTargetId] = true;
-        }
-
-        transaction.update(roomRef, {
-          'cards': newCards.map((c) => c.toMap()).toList(),
-          'readyPlayers': newReadyMap,
-        });
-      });
-
-      // 2. If the current reader/target is a bot, mark them ready in players collection
-      if (currentTargetId.startsWith('bot_')) {
-        await _db.collection('rooms').doc(state.roomCode).collection('players').doc(currentTargetId).update({
-          'isReady': true,
-        });
-      }
-    }
-  }
-
-  Future<void> _resetAllPlayersReady() async {
-    if (_gameState == null) return;
-    // Single write instead of P writes!
-    await updateGameState(_gameState!.copyWith(readyPlayers: {}));
+    final rCode = _gameState!.roomCode;
+    await _functions.httpsCallable('debugSimulateBotResponses').call({
+      'roomCode': rCode,
+    });
   }
 
   @override

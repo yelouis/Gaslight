@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_icons.dart';
 import '../models/player_state.dart';
+import '../services/game_service.dart';
 
 class PlayerAvatar extends StatelessWidget {
   final PlayerState player;
@@ -14,33 +17,34 @@ class PlayerAvatar extends StatelessWidget {
     this.showName = true,
   });
 
-  static const List<IconData> thematicIcons = [
-    Icons.local_fire_department, // Flame
-    Icons.visibility,            // Eye / Paranoid
-    Icons.vpn_key,               // Key / Secret
-    Icons.casino,                // Dice / Gambling
-    Icons.dark_mode,             // Moon / Night
-    Icons.lightbulb_outline,     // Light / Idea
-  ];
-
-  static IconData getIconForIndex(int index) {
-    return thematicIcons[index % thematicIcons.length];
-  }
-
   static Widget buildChip({
     required int colorValue,
     required int avatarIndex,
     required double size,
+    bool isActiveReader = false,
   }) {
     final chipColor = Color(colorValue);
     final borderColor = AppColors.brass; // Antique Gold
     
+    final sigilTypes = [
+      ThematicIconType.flame,
+      ThematicIconType.moth,
+      ThematicIconType.key,
+      ThematicIconType.raven,
+      ThematicIconType.moon,
+      ThematicIconType.hourglass,
+    ];
+    final sigilType = sigilTypes[avatarIndex % sigilTypes.length];
+
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: borderColor, width: max(3.0, size / 12)),
+        border: Border.all(
+          color: borderColor,
+          width: isActiveReader ? max(4.0, size / 10) : max(3.0, size / 12),
+        ),
         gradient: RadialGradient(
           colors: [
             chipColor.withOpacity(0.4),
@@ -50,11 +54,18 @@ class PlayerAvatar extends StatelessWidget {
           stops: const [0.2, 0.7, 1.0],
         ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.7),
-            blurRadius: 8,
-            offset: const Offset(2, 6),
-          )
+          if (isActiveReader)
+            BoxShadow(
+              color: AppColors.brass.withOpacity(0.8),
+              blurRadius: 12,
+              spreadRadius: 3,
+            )
+          else
+            BoxShadow(
+              color: Colors.black.withOpacity(0.7),
+              blurRadius: 8,
+              offset: const Offset(2, 6),
+            )
         ]
       ),
       child: Container(
@@ -64,17 +75,10 @@ class PlayerAvatar extends StatelessWidget {
           border: Border.all(color: borderColor.withOpacity(0.5), width: 1.5),
         ),
         child: Center(
-          child: Icon(
-            getIconForIndex(avatarIndex),
-            color: borderColor,
+          child: ThematicIcon(
+            type: sigilType,
             size: size * 0.45,
-            shadows: [
-              Shadow(
-                color: Colors.black.withOpacity(0.8),
-                blurRadius: 4,
-                offset: const Offset(1, 1),
-              )
-            ],
+            color: borderColor,
           ),
         ),
       ),
@@ -83,6 +87,12 @@ class PlayerAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    bool isActiveReader = false;
+    try {
+      final gameService = context.watch<GameService>();
+      isActiveReader = gameService.gameState?.currentReaderId == player.id;
+    } catch (_) {}
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -93,6 +103,7 @@ class PlayerAvatar extends StatelessWidget {
               colorValue: player.colorValue,
               avatarIndex: player.avatarIndex,
               size: size,
+              isActiveReader: isActiveReader,
             ),
             if (player.lobbyReady)
               Positioned(

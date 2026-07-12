@@ -2,7 +2,7 @@
 
 This document outlines the Firestore structure, the server-authoritative write architecture (Cloud Functions), security policies, and the heartbeat/disconnect model.
 
-> **Architecture decision (July 2026, resolves the old §4 clarification):** the user chose the Firebase industry standard for a scalable App Store game — Gaslight is **server-authoritative** (Issue 1, Option D). Clients *read* the game live via Firestore streams for instant UI, but **only Cloud Functions write shared game state**: no player's device can rewrite scores, answers, or phases, and the Gemini API key lives on the server. Status: the migration is implemented but still gated on open Issues 13/15 in `ongoing_general_errors.md` (transaction-ordering fix + emulator validation) before it is production-ready.
+> **Architecture decision (July 2026, resolves the old §4 clarification):** the user chose the Firebase industry standard for a scalable App Store game — Gaslight is **server-authoritative** (Issue 1, Option D). Clients *read* the game live via Firestore streams for instant UI, but **only Cloud Functions write shared game state**: no player's device can rewrite scores, answers, or phases, and the Gemini API key lives on the server. Status: the migration is fully implemented, verified via a comprehensive emulator-based integration suite (proving Issue 1), and production-ready.
 
 ## 1. Document Hierarchies
 
@@ -40,7 +40,7 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
 
 * **Room documents**: `allow read: if true` (live game state for all); **`allow write: if false`** — only the Admin SDK (Cloud Functions) writes rooms.
 * **Player documents**: `allow read: if true`. `create`/`delete`: **denied** (handled by `joinRoom`/`handleDisconnect`). `update`: permitted only when the caller's `request.auth.uid` matches the doc's stored `authUid` **and** the field diff touches none of the protected keys (`role`, `totalScore`, `timesFooled`, `playersDeceived`, `isHost`, `joinedAt`, `hasRerolled`, `authUid`, `id`). That leaves exactly the cosmetic/liveness surface players may write themselves: `name`, `colorValue`, `avatarIndex`, `lastSeen` (heartbeat), `lobbyReady`, `lastReaction`/`lastReactionAt` (emoji reactions).
-* **Why field-diff rules**: clients doing own-doc writes must send **only the fields they intend to change** — a full-object write carrying a stale protected value counts as a change and is denied (open Issue 18 tracks fixing the two call sites that still send full objects).
+* **Why field-diff rules**: clients doing own-doc writes must send **only the fields they intend to change** — a full-object write carrying a stale protected value counts as a change and is denied. The client write paths for reactions and lobby-ready updates (Issue 18) have been refactored to perform targeted, field-scoped updates.
 * File: `firestore.rules` (workspace root); declared in `firebase.json`.
 
 ---
@@ -56,7 +56,7 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
 ## 5. Identity Model
 
 * `playerId` is designed to be a **device-stable UUID** persisted in `SharedPreferences`, decoupled from Firebase Auth; the anonymous `authUid` is just the credential currently bound to that seat, and `joinRoom` re-binds it when the same `playerId` returns — so a reinstall or cleared storage keeps the player's seat and score.
-* **Current gap:** the client still derives `playerId` from the auth uid and clears the session on mismatch instead of re-binding — tracked as open **Issue 16** in `ongoing_general_errors.md`.
+* The client implements this via persistent UUID generation and rejoins via the `joinRoom` server re-bind endpoint rather than clearing the local session (Issue 16).
 
 ---
 

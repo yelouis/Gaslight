@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,6 +14,7 @@ import '../widgets/shared_ui.dart';
 import '../utils/prompt_decks.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../theme/app_icons.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -67,15 +69,15 @@ class _LobbyScreenState extends State<LobbyScreen> {
     if (name.isEmpty) return;
 
     final gameService = context.read<GameService>();
-    final playerId = _getPlayerId();
-
     try {
+      final playerId = await gameService.getOrCreateStablePlayerId();
       await gameService.createRoom(
         name,
         playerId,
         sabotageAnswersCount: _selectedRounds,
         avatarIndex: _selectedAvatarIndex,
         isTimerDisabled: _isTimerDisabled,
+        debugEnabled: kDebugMode,
       );
     } catch (e) {
       debugPrint('Error creating room: $e');
@@ -92,9 +94,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
     if (name.isEmpty || roomCode.length != 4) return;
 
     final gameService = context.read<GameService>();
-    final playerId = _getPlayerId();
-
     try {
+      final playerId = await gameService.getOrCreateStablePlayerId();
       await gameService.joinRoom(roomCode, name, playerId, avatarIndex: _selectedAvatarIndex);
     } catch (e) {
       if (mounted) {
@@ -674,7 +675,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                     Expanded(
                                       child: Row(
                                         children: [
-                                          Icon(Icons.timer_off, color: crimsonColor.withOpacity(0.8), size: 20),
+                                          ThematicIcon(type: ThematicIconType.hourglass, color: crimsonColor.withOpacity(0.8), size: 20),
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
@@ -711,7 +712,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                 spacing: 10,
                                 runSpacing: 10,
                                 alignment: WrapAlignment.center,
-                                children: List.generate(PlayerAvatar.thematicIcons.length, (index) {
+                                children: List.generate(6, (index) {
                                   final isSelected = _selectedAvatarIndex == index;
                                   return GestureDetector(
                                     onTap: () => setState(() => _selectedAvatarIndex = index),
@@ -779,7 +780,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                   ),
                                   filled: true,
                                   fillColor: Colors.black.withOpacity(0.5),
-                                  prefixIcon: Icon(Icons.vpn_key, color: crimsonColor.withOpacity(0.8)),
+                                   prefixIcon: Padding(
+                                     padding: const EdgeInsets.all(12.0),
+                                     child: ThematicIcon(type: ThematicIconType.secret, color: crimsonColor.withOpacity(0.8), size: 20),
+                                   ),
                                   counterText: '',
                                 ),
                                 textCapitalization: TextCapitalization.characters,

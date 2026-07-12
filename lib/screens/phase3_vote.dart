@@ -12,6 +12,8 @@ import '../widgets/auto_advance_timer.dart';
 import '../widgets/card_grid.dart';
 
 
+import '../theme/app_icons.dart';
+
 class Phase3VoteScreen extends StatefulWidget {
   const Phase3VoteScreen({super.key});
 
@@ -61,8 +63,19 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
     
     setState(() => _submitted = true);
     
-    // Service handles readiness update internally
-    await gs.castVote(currentTargetId, me.id, votedForId);
+    try {
+      await gs.castVote(currentTargetId, me.id, votedForId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        setState(() => _submitted = false);
+      }
+    }
   }
 
 
@@ -211,7 +224,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.remove_red_eye, size: 80, color: theme.colorScheme.secondary),
+          ThematicIcon(type: ThematicIconType.observe, size: 80, color: theme.colorScheme.secondary),
           const SizedBox(height: 24),
           Text(
             'THEY ARE VOTING ON YOUR CARD...',
@@ -228,7 +241,19 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             text: 'I\'M READY',
             onPressed: () async {
               setState(() => _submitted = true);
-              await context.read<GameService>().setPlayerReady(true);
+              try {
+                await context.read<GameService>().setPlayerReady(true);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString()),
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                  );
+                  setState(() => _submitted = false);
+                }
+              }
             },
           ),
           if (context.read<GameService>().currentPlayer!.isHost)
@@ -309,7 +334,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.remove_red_eye_outlined, size: 64, color: theme.colorScheme.secondary),
+            ThematicIcon(type: ThematicIconType.observe, size: 64, color: theme.colorScheme.secondary),
             const SizedBox(height: 24),
             Text(
               'SPECTATING VOTE',

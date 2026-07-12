@@ -543,11 +543,6 @@ void main() {
       await db.collection('rooms').doc(rCode).collection('players').doc(p2.id).set(p2.toMap());
       await db.collection('rooms').doc(rCode).collection('players').doc(p3.id).set(p3.toMap());
       await db.collection('rooms').doc(rCode).collection('players').doc(spec.id).set(spec.toMap());
-
-      // Trigger listener update
-      await gs.updatePlayerState(rCode, p2);
-      await gs.updatePlayerState(rCode, p3);
-      await gs.updatePlayerState(rCode, spec);
       await Future.delayed(Duration(milliseconds: 100));
 
       // Disconnect host
@@ -585,7 +580,6 @@ void main() {
       // Add second player
       final p2 = PlayerState(id: 'player_2', name: 'Player 2', joinedAt: 100);
       await db.collection('rooms').doc(rCode).collection('players').doc(p2.id).set(p2.toMap());
-      await gs.updatePlayerState(rCode, p2);
       await Future.delayed(Duration(milliseconds: 100));
 
       // Start game
