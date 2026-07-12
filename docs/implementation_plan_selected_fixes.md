@@ -275,8 +275,10 @@ If you need multiplayer working within a day for informal playtests, implement t
 ---
 
 ## Definition of Done (all waves)
-- [ ] Waves A & B merged; `flutter test` green; new unit/widget tests added per item.
-- [ ] Two-client emulator integration test passes (proves non-host multiplayer works).
-- [ ] Rules unit tests prove clients cannot tamper with scores/other players/room.
-- [ ] Wave A/B rule changes verified **mirrored** in the Cloud Functions.
-- [ ] `docs/ongoing_general_errors.md` issues moved to the Resolved section per the `resolved_issue_cleanup` skill; design docs updated where behavior changed.
+- [x] Waves A & B merged; `flutter test` green; new unit/widget tests added per item. *(verified July 10–12)*
+- [ ] Two-client emulator integration test passes (proves non-host multiplayer works). *(NOT built — open Issue 15)*
+- [ ] Rules unit tests prove clients cannot tamper with scores/other players/room. *(NOT built — open Issue 15)*
+- [x] Wave A/B rule changes verified **mirrored** in the Cloud Functions. *(verified July 12 — scoring, placeholders, honors, disconnect, host transfer all present in `functions/src/`)*
+- [ ] `docs/ongoing_general_errors.md` issues moved to the Resolved section per the `resolved_issue_cleanup` skill; design docs updated where behavior changed. *(done for Issues 2–12; Issue 1 stays open pending Issues 13 + 15)*
+
+> **Wave C verification status (July 12):** implemented but NOT done. The callables `submitAnswer`/`castVote`/`setReady` contain a fatal read-after-write transaction-ordering bug (**Issue 13** in `ongoing_general_errors.md`) that makes the backend unplayable, and the C4 validation above was skipped (**Issue 15**). See `docs/agent_execution_guide.md` for the remediation order (R1/R2 first).

@@ -274,9 +274,6 @@ class GameService extends ChangeNotifier {
       if (snapshot.exists) {
         _gameState = GameState.fromMap(snapshot.data()!, snapshot.id);
         notifyListeners();
-        if (currentPlayer?.isHost == true) {
-          evaluateReadyState();
-        }
       }
     });
 
@@ -303,10 +300,8 @@ class GameService extends ChangeNotifier {
 
       notifyListeners();
       
-      // If Host, evaluate ready state and handle disconnects
+      // If Host, handle disconnects
       if (currentPlayer?.isHost == true) {
-        evaluateReadyState();
-
         // Disconnect detection: compare actual active players to cards in gameState
         if (_gameState != null && 
             _gameState!.currentPhase != GamePhase.lobby && 

@@ -88,7 +88,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
 
       await db.collection('rooms').doc(roomCode).collection('players').doc(playerId).set(newPlayer.toMap());
       await db.collection('rooms').doc(roomCode).update({
-        'totalPlayers': FieldValue.increment(isSpectator ? 0 : 1),
+        'totalPlayers': roomState.totalPlayers + (isSpectator ? 0 : 1),
       });
 
       return FakeHttpsCallableResult({'role': newPlayer.role.name} as T);
@@ -102,6 +102,17 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final playersSnap = await roomRef.collection('players').get();
       final players = playersSnap.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
       final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
+
+      if (activePlayers.length < 2) {
+        throw Exception("Cannot start: Need at least 2 active players.");
+      }
+      if (activePlayers.length <= roomState.sabotageAnswersCount) {
+        throw Exception("Cannot start: Need more players than forgery rounds.");
+      }
+      final deckSize = PromptDecks.getDeckSize(roomState.selectedDeckId);
+      if (deckSize < activePlayers.length) {
+        throw Exception("Cannot start: Selected deck has $deckSize prompts, but you need at least ${activePlayers.length} prompts.");
+      }
 
       var pIds = activePlayers.map((p) => p.id).toList();
       var nativeRotations = RotationEngine.generateRotations(pIds, roomState.sabotageAnswersCount);
@@ -170,9 +181,11 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final playersSnap = await roomRef.collection('players').get();
         final players = playersSnap.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
         final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
+        print('DEBUG submitAnswer: activePlayers=${activePlayers.map((p) => p.id)}, newReadyMap=$newReadyMap');
         bool allReady = activePlayers.every((p) => newReadyMap[p.id] == true);
+        print('DEBUG submitAnswer: allReady=$allReady');
         if (allReady && activePlayers.isNotEmpty) {
-          await advancePhaseInternal(transaction, roomRef, currentState.copyWith(cards: newCards, readyPlayers: newReadyMap), players);
+          await advancePhaseInternal(transaction, roomRef, currentState.copyWith(cards: newCards, readyPlayers: newReadyMap), players, 'submitAnswer');
         }
       });
 
@@ -210,8 +223,9 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final players = playersSnap.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
         final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
         bool allReady = activePlayers.every((p) => newReadyMap[p.id] == true);
+        print('DEBUG castVote: allReady=$allReady');
         if (allReady && activePlayers.isNotEmpty) {
-          await advancePhaseInternal(transaction, roomRef, currentState.copyWith(cards: newCards, readyPlayers: newReadyMap), players);
+          await advancePhaseInternal(transaction, roomRef, currentState.copyWith(cards: newCards, readyPlayers: newReadyMap), players, 'castVote');
         }
       });
 
@@ -235,9 +249,11 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final playersSnap = await roomRef.collection('players').get();
         final players = playersSnap.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
         final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
+        print('DEBUG setReady: activePlayers=${activePlayers.map((p) => p.id)}, newReadyMap=$newReadyMap');
         bool allReady = activePlayers.every((p) => newReadyMap[p.id] == true);
+        print('DEBUG setReady: allReady=$allReady');
         if (allReady && activePlayers.isNotEmpty) {
-          await advancePhaseInternal(transaction, roomRef, currentState.copyWith(readyPlayers: newReadyMap), players);
+          await advancePhaseInternal(transaction, roomRef, currentState.copyWith(readyPlayers: newReadyMap), players, 'setReady');
         }
       });
 
@@ -252,7 +268,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final playersSnap = await roomRef.collection('players').get();
         final players = playersSnap.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
 
-        await advancePhaseInternal(transaction, roomRef, currentState, players);
+        await advancePhaseInternal(transaction, roomRef, currentState, players, 'advancePhase');
       });
 
       return FakeHttpsCallableResult({'success': true} as T);
@@ -305,6 +321,13 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final snapshot = await transaction.get(roomRef);
         final currentState = GameState.fromMap(snapshot.data()!, snapshot.id);
 
+        final playerSnap = await transaction.get(roomRef.collection('players').doc(playerId));
+        final player = PlayerState.fromMap(playerSnap.data()!, playerSnap.id);
+
+        if (player.hasRerolled) {
+          throw Exception("Prompt already re-rolled once this game.");
+        }
+
         final cards = List<CardModel>.from(currentState.cards);
         final cardIndex = cards.indexWhere((c) => c.targetPlayerId == playerId);
         final oldCard = cards[cardIndex];
@@ -332,12 +355,32 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final snapshot = await roomRef.get();
       final state = GameState.fromMap(snapshot.data()!, snapshot.id);
 
-      if (!state.cards.any((c) => c.targetPlayerId == disconnectedPlayerId)) {
-        await roomRef.collection('players').doc(disconnectedPlayerId).delete();
-        return FakeHttpsCallableResult({'success': true} as T);
+      PlayerState? disconnectedPlayer;
+      for (var p in players) {
+        if (p.id == disconnectedPlayerId) {
+          disconnectedPlayer = p;
+          break;
+        }
       }
 
       await roomRef.collection('players').doc(disconnectedPlayerId).delete();
+
+      final remaining = players.where((p) => p.id != disconnectedPlayerId).toList();
+      final remainingActive = remaining.where((p) => p.role != PlayerRole.spectator).toList();
+
+      if (disconnectedPlayer != null && disconnectedPlayer.isHost && remainingActive.isNotEmpty) {
+        remainingActive.sort((a, b) {
+          final aTime = a.joinedAt ?? 0;
+          final bTime = b.joinedAt ?? 0;
+          if (aTime != bTime) return aTime.compareTo(bTime);
+          return a.id.compareTo(b.id);
+        });
+        await roomRef.collection('players').doc(remainingActive.first.id).update({'isHost': true});
+      }
+
+      if (!state.cards.any((c) => c.targetPlayerId == disconnectedPlayerId)) {
+        return FakeHttpsCallableResult({'success': true} as T);
+      }
 
       final updatedCards = state.cards.where((c) => c.targetPlayerId != disconnectedPlayerId).toList();
       final newReadyPlayers = Map<String, bool>.from(state.readyPlayers)..remove(disconnectedPlayerId);
@@ -412,20 +455,6 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       }
 
       await roomRef.update(nextState.toMap());
-
-      PlayerState? disconnectedPlayer;
-      for (var p in players) {
-        if (p.id == disconnectedPlayerId) {
-          disconnectedPlayer = p;
-          break;
-        }
-      }
-      final remaining = players.where((p) => p.id != disconnectedPlayerId).toList();
-      if (disconnectedPlayer != null && disconnectedPlayer.isHost && remaining.isNotEmpty) {
-        remaining.sort((a, b) => (a.joinedAt ?? 0).compareTo(b.joinedAt ?? 0));
-        await roomRef.collection('players').doc(remaining.first.id).update({'isHost': true});
-      }
-
       return FakeHttpsCallableResult({'success': true} as T);
     }
 
@@ -437,8 +466,10 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
     DocumentReference<Map<String, dynamic>> roomRef,
     GameState state,
     List<PlayerState> players,
+    String caller,
   ) async {
     final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
+    print('DEBUG advancePhaseInternal (caller=$caller): phase=${state.currentPhase}, activePlayers=${activePlayers.map((p) => p.id)}, readyPlayers=${state.readyPlayers}');
     GameState nextState = state.copyWith(readyPlayers: {});
 
     if (state.currentPhase == GamePhase.forgery) {

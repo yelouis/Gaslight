@@ -97,6 +97,11 @@ void main() {
       await tester.tap(find.text('SUBMIT'));
       await tick(400); // Allow host submit to completely finish and write to readyPlayers!
 
+      print('DEBUG: currentPlayerId: ${gameService.currentPlayer?.id}');
+      print('DEBUG: readyPlayers: ${gameService.gameState?.readyPlayers}');
+      print('DEBUG: currentPhase: ${gameService.gameState?.currentPhase}');
+      print('DEBUG: cards status: ${gameService.gameState?.cards.map((c) => 'target:${c.targetPlayerId}, truth:${c.truthAnswer.isNotEmpty}, sabs:${c.sabotageAnswers.keys}')}');
+      
       // Verify waiting screen
       expect(find.text('HOLDING TIGHT...'), findsOneWidget);
       print('Host submission locked. Waiting screen displayed.');

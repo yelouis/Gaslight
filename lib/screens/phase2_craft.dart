@@ -68,10 +68,6 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     
     await gs.setPlayerReady(true);
     
-    // Evaluate if host
-    if (me.isHost) {
-      await gs.evaluateReadyState();
-    }
     
     if (mounted) {
       setState(() {

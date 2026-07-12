@@ -550,8 +550,8 @@ void main() {
       await gs.updatePlayerState(rCode, spec);
       await Future.delayed(Duration(milliseconds: 100));
 
-      // Delete host
-      await db.collection('rooms').doc(rCode).collection('players').doc('host_user').delete();
+      // Disconnect host
+      await gs.handlePlayerDisconnect('host_user');
       await Future.delayed(Duration(milliseconds: 100));
 
       // Earliest active (non-spectator) player (player_3) should be promoted
@@ -595,7 +595,6 @@ void main() {
       // Advance past sabotage round to truth round
       await gs.setPlayerReady(true, playerId: 'host_user');
       await gs.setPlayerReady(true, playerId: 'player_2');
-      await gs.evaluateReadyState();
       await Future.delayed(Duration(milliseconds: 100));
 
       expect(gs.gameState!.currentPhase, GamePhase.truth);

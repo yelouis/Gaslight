@@ -1,67 +1,65 @@
 # Database Structure & Security Rules
 
-This document outlines the Firestore structure, security policies, and client-side heartbeat manager.
+This document outlines the Firestore structure, the server-authoritative write architecture (Cloud Functions), security policies, and the heartbeat/disconnect model.
+
+> **Architecture decision (July 2026, resolves the old §4 clarification):** the user chose the Firebase industry standard for a scalable App Store game — Gaslight is **server-authoritative** (Issue 1, Option D). Clients *read* the game live via Firestore streams for instant UI, but **only Cloud Functions write shared game state**: no player's device can rewrite scores, answers, or phases, and the Gemini API key lives on the server. Status: the migration is implemented but still gated on open Issues 13/15 in `ongoing_general_errors.md` (transaction-ordering fix + emulator validation) before it is production-ready.
 
 ## 1. Document Hierarchies
 
-Firestore is structured into two primary levels:
-* `/rooms/{roomCode}`: Stores the root `GameState` document.
-* `/rooms/{roomCode}/players/{playerId}`: Stores individual `PlayerState` documents.
+* `/rooms/{roomCode}`: the root `GameState` document (phase, cards, votes, readiness, rotation plan).
+* `/rooms/{roomCode}/players/{playerId}`: individual `PlayerState` documents. `playerId` is a client-chosen stable ID; the document stores `authUid` (the Firebase anonymous UID currently bound to that seat) for server-side ownership checks.
+* `/rooms/{roomCode}/embeddings/{answerHash}`: server-managed cache of Gemini embedding vectors (md5 of the normalized answer text → vector) for the semantic-similarity filter. No client rule → default deny; server-only.
 
 ---
 
-## 2. Security Rules (`firestore.rules`)
+## 2. Write Architecture: Cloud Functions Callables
 
-To protect room data and prevent malicious clients from mutating other players' documents or scores, access control is enforced via Firebase Auth and document properties:
+All game mutations are `onCall` Cloud Functions (`functions/src/index.ts`) that validate `request.auth.uid` against the player's stored `authUid` (or the host's, for host-only actions) and write with the Admin SDK:
 
-### Policies
-* **General Read Access**: Rooms and players can be read by any client (`allow read: if true`).
-* **Room Modifications**: Creating, updating, or deleting a room document is restricted to authenticated users who are marked as the room's host (`isRoomHost(roomCode)`).
-* **Player Document Ownership**: A player can only write/create their own document if their authenticated user ID matches the player ID (`request.auth.uid == playerId`).
-* **Host Overrides**: The host is permitted to update or delete player documents to facilitate mid-game disconnect handling and role redistribution.
+| Callable | Replaces (old client method) | Guard / behavior |
+|---|---|---|
+| `createRoom` | `GameService.createRoom` | authenticated |
+| `joinRoom` | `GameService.joinRoom` | authenticated; **re-binds `authUid`** when a known `playerId` rejoins (seat recovery) |
+| `startGame` | `GameService.startGame` | host only; validates player count, rounds, deck size with descriptive errors |
+| `submitAnswer` | `submitCardAnswer` | seat owner; server-side semantic-similarity check; marks author ready; auto-advances when all active players are ready |
+| `castVote` | `castVote` | seat owner; enforces the self-vote guard; marks voter ready; auto-advances |
+| `setReady` | `setPlayerReady` | seat owner; auto-advances when all ready |
+| `advancePhase` | `forceAdvance`/`evaluateReadyState` | host only; applies timeout placeholders, per-card scoring, honor stats |
+| `advanceToNextResolution` | `advanceToNextResolution` | host only; steps the vote→reveal card sequence / game over |
+| `rerollPrompt` | `rerollMyPrompt` | seat owner; once per game (`hasRerolled`), truth phase only |
+| `updateLobbySettings` | `updateLobbySettings` | host only |
+| `handleDisconnect` | `handlePlayerDisconnect` | host, self, or anyone for a heartbeat-dead player; idempotent; card pruning, assignment bridging, reader re-indexing, **host transfer** |
 
-### Rules File
-* File: `firestore.rules` (located in the workspace root).
+Game logic mirrored in TypeScript: `functions/src/rotation_engine.ts`, `scoring_logic.ts` (per-card `S`, Sharp Eye bonus), `prompt_decks.ts`. **Regression rule: any change to a game rule must land in both the Dart client (display math) and the TS functions (authoritative math) — the functions are the source of truth.**
 
----
-
-## 3. Heartbeat & Host Transfer
-
-To keep player lists clean and prevent games from freezing if a player disconnects, `GameService` runs a heartbeat cycle:
-
-### Flow
-```mermaid
-graph TD
-  Start[Heartbeat Timer Fires every 5s] --> UpdateLastSeen[Update local player lastSeen in DB]
-  UpdateLastSeen --> CheckHost{Is current player Host?}
-  CheckHost -- Yes --> ScanPlayers[Scan all player documents in Room]
-  ScanPlayers --> Inactive{Is lastSeen > 15s ago?}
-  Inactive -- Yes --> DeletePlayer[Delete inactive player from DB]
-  DeletePlayer --> TriggerDisconnect[Trigger handlePlayerDisconnect]
-  CheckHost -- No --> End[End Heartbeat Cycle]
-  Inactive -- No --> End
-  TriggerDisconnect --> End
-```
-
-### Host Transfer Logic
-If the host player is deleted or disconnects:
-1. The stream listener on remaining active players detects the absence of a host (`!players.any((p) => p.isHost)`).
-2. The remaining active non-spectator player who has been in the room the longest (determined by the smallest `joinedAt` timestamp, falling back to lexicographical ID comparison) is automatically designated as the new host.
-3. The new host writes `isHost: true` to their player document in Firestore and assumes responsibility for evaluating readiness and forcing advancements.
+The Flutter client (`GameService`) is a thin wrapper: each mutation method calls its callable; reads remain live `snapshots()` listeners on the room and players. Setting `USE_EMULATOR=true` (dart-define or `.env`) points the client at local Auth/Firestore/Functions emulators.
 
 ---
 
-## 4. ❓ Open Clarification: Who Is Allowed to Write the Room Document?
+## 3. Security Rules (`firestore.rules`)
 
-**Question**: The security model and the client data-flow currently contradict each other. `firestore.rules` restricts room-document `update`/`delete` to the host (`isRoomHost`, line 34), but **every** player's client writes gameplay state directly into the room document — forgeries/truths/votes into `cards` and readiness into `readyPlayers` (`GameService.submitCardAnswer`/`castVote`/`setPlayerReady`). Which is canonical: **(a)** the room document is host-authoritative and non-hosts must submit via their own player docs for the host to merge, or **(b)** any authenticated room member may write the room document and the rules should be loosened?
+* **Room documents**: `allow read: if true` (live game state for all); **`allow write: if false`** — only the Admin SDK (Cloud Functions) writes rooms.
+* **Player documents**: `allow read: if true`. `create`/`delete`: **denied** (handled by `joinRoom`/`handleDisconnect`). `update`: permitted only when the caller's `request.auth.uid` matches the doc's stored `authUid` **and** the field diff touches none of the protected keys (`role`, `totalScore`, `timesFooled`, `playersDeceived`, `isHost`, `joinedAt`, `hasRerolled`, `authUid`, `id`). That leaves exactly the cosmetic/liveness surface players may write themselves: `name`, `colorValue`, `avatarIndex`, `lastSeen` (heartbeat), `lobbyReady`, `lastReaction`/`lastReactionAt` (emoji reactions).
+* **Why field-diff rules**: clients doing own-doc writes must send **only the fields they intend to change** — a full-object write carrying a stale protected value counts as a change and is denied (open Issue 18 tracks fixing the two call sites that still send full objects).
+* File: `firestore.rules` (workspace root); declared in `firebase.json`.
 
-**Impact**: This is the deciding factor for the top-priority blocker (**Issue 1** in `ongoing_general_errors.md`): under the current rules, non-host humans get `PERMISSION_DENIED` on every submit/vote/ready, so real multiplayer is non-functional. The answer determines whether we refactor the client (option a) or the rules (option b) — and how much anti-cheat we retain.
+---
 
-**Solutions**:
-- **Option A (recommended)**: **Host-authoritative** — non-hosts write only their own player document; the host merges submissions into the room document. Preserves the secure host-only room rule and matches the existing host-driven phase/scoring/disconnect model.
-- **Option B**: **Server relay** — a Cloud Function performs room writes with admin rights; clients never write the room directly. Strongest integrity, but adds backend infrastructure that the README currently avoids.
-- **Option C**: **Loosen the rule** — allow any authenticated room member to update the room document. Unblocks immediately but lets any client overwrite scores/phase/other players' answers (trivially cheatable).
+## 4. Heartbeat, Disconnects & Host Transfer
 
-**Recommended**: Option A — keeps the current trust model and requires no backend, at the cost of a client-side submission refactor.
+* Every client updates **only** `lastSeen` on its own player doc every 10 seconds (permitted by the rules).
+* Any client that observes a player with `lastSeen` older than 30 s calls the `handleDisconnect` callable. The function verifies staleness/authority itself, so duplicate or racing calls are safe (idempotent: if the player's card is already gone, it just deletes the doc). Client-side deletes no longer exist.
+* `handleDisconnect` performs, in one transaction: card removal, readiness/resolution-order pruning, forgery-phase assignment bridging + rotation regeneration (collapsing to TRUTH when too few players remain), vote/reveal reader re-indexing, and — if the departed player was the host — **host transfer to the earliest-joined non-spectator** (smallest `joinedAt`, ID tiebreak). Rationale: join order is deterministic, and spectators must never inherit the host role (they aren't playing and would stall the game).
 
-Your selection: Proceed with Option A. I don't understand this system design but the goal of this app is to be an Apple app store game app that is scalable to a lot of people. Go with the option or create a new option that is the industry standard for security using Firebase.
+---
+
+## 5. Identity Model
+
+* `playerId` is designed to be a **device-stable UUID** persisted in `SharedPreferences`, decoupled from Firebase Auth; the anonymous `authUid` is just the credential currently bound to that seat, and `joinRoom` re-binds it when the same `playerId` returns — so a reinstall or cleared storage keeps the player's seat and score.
+* **Current gap:** the client still derives `playerId` from the auth uid and clears the session on mismatch instead of re-binding — tracked as open **Issue 16** in `ongoing_general_errors.md`.
+
+---
+
+## 6. Historical Note: the Resolved Write-Architecture Clarification
+
+The original design had `firestore.rules` restricting room writes to the host while every client wrote the room directly — a contradiction that made non-host multiplayer non-functional (Issue 1). The clarification offered host-authoritative (A), server relay (B), and loosened rules (C); the user directed us to the industry standard, recorded as **Option D: server-authoritative Cloud Functions**, which is the architecture described above.
