@@ -39,6 +39,9 @@ class GameState {
   // Gated debug capabilities
   final bool debugEnabled;
 
+  // Unmask deadline for revenge guesses
+  final int? unmaskDeadline;
+
   GameState({
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
@@ -55,6 +58,7 @@ class GameState {
     this.endTime,
     this.resolutionOrder = const [],
     this.debugEnabled = false,
+    this.unmaskDeadline,
   });
 
   GameState copyWith({
@@ -73,8 +77,10 @@ class GameState {
     int? endTime,
     List<String>? resolutionOrder,
     bool? debugEnabled,
+    int? unmaskDeadline,
     bool clearReaderId = false,
     bool clearEndTime = false,
+    bool clearUnmaskDeadline = false,
   }) {
     return GameState(
       roomCode: roomCode ?? this.roomCode,
@@ -92,6 +98,7 @@ class GameState {
       endTime: clearEndTime ? null : (endTime ?? this.endTime),
       resolutionOrder: resolutionOrder ?? this.resolutionOrder,
       debugEnabled: debugEnabled ?? this.debugEnabled,
+      unmaskDeadline: clearUnmaskDeadline ? null : (unmaskDeadline ?? this.unmaskDeadline),
     );
   }
 
@@ -112,6 +119,7 @@ class GameState {
       'endTime': endTime,
       'resolutionOrder': resolutionOrder,
       'debugEnabled': debugEnabled,
+      'unmaskDeadline': unmaskDeadline,
     };
   }
 
@@ -145,6 +153,7 @@ class GameState {
       endTime: map['endTime']?.toInt(),
       resolutionOrder: List<String>.from(map['resolutionOrder'] ?? []),
       debugEnabled: map['debugEnabled'] as bool? ?? false,
+      unmaskDeadline: map['unmaskDeadline']?.toInt(),
     );
   }
 

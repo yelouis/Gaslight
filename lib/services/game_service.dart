@@ -338,12 +338,25 @@ class GameService extends ChangeNotifier {
     });
   }
 
-  Future<void> updateLobbySettings({int? sabotageAnswersCount, bool? isTimerDisabled}) async {
+  Future<void> updateLobbySettings({int? sabotageAnswersCount, bool? isTimerDisabled, String? selectedDeckId}) async {
     if (_gameState == null || currentPlayer?.isHost != true) return;
     await _functions.httpsCallable('updateLobbySettings').call({
       'roomCode': _gameState!.roomCode,
       'sabotageAnswersCount': sabotageAnswersCount,
       'isTimerDisabled': isTimerDisabled,
+      'selectedDeckId': selectedDeckId,
+    });
+  }
+
+  Future<void> submitUnmaskGuess(String guessedAuthorId) async {
+    final p = currentPlayer;
+    final rCode = _gameState?.roomCode;
+    if (p == null || rCode == null || rCode.isEmpty) return;
+
+    await _functions.httpsCallable('submitUnmaskGuess').call({
+      'roomCode': rCode,
+      'guesserId': p.id,
+      'guessedAuthorId': guessedAuthorId,
     });
   }
 
@@ -355,6 +368,16 @@ class GameService extends ChangeNotifier {
     await _db.collection('rooms').doc(rCode).collection('players').doc(p.id).update({
       'lastReaction': emoji,
       'lastReactionAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> updatePlayerCustomPrompts(List<String> prompts) async {
+    final p = currentPlayer;
+    final rCode = _gameState?.roomCode;
+    if (p == null || rCode == null || rCode.isEmpty) return;
+
+    await _db.collection('rooms').doc(rCode).collection('players').doc(p.id).update({
+      'customPrompts': prompts,
     });
   }
 

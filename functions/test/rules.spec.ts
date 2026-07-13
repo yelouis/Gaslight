@@ -105,4 +105,29 @@ describe('Firestore Security Rules', () => {
     const playerRef = doc(userContext.firestore(), 'rooms/TEST/players/alice_id');
     await assertFails(updateDoc(playerRef, { name: 'Bob Changing Name' }));
   });
+
+  it('should allow writing customPrompts by owner and deny modifications to protected fields alongside it', async () => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+      const adminPlayerRef = doc(adminContext.firestore(), 'rooms/TEST/players/alice_id');
+      await setDoc(adminPlayerRef, {
+        id: 'alice_id',
+        name: 'Alice',
+        authUid: 'alice',
+        totalScore: 10,
+        role: 'unassigned',
+        lobbyReady: false
+      });
+    });
+
+    const userContext = testEnv.authenticatedContext('alice');
+    const playerRef = doc(userContext.firestore(), 'rooms/TEST/players/alice_id');
+
+    await assertSucceeds(updateDoc(playerRef, { customPrompts: ['Prompt 1', 'Prompt 2'] }));
+
+    await assertFails(updateDoc(playerRef, { customPrompts: ['Prompt 3'], totalScore: 20 }));
+
+    const bobContext = testEnv.authenticatedContext('bob');
+    const bobPlayerRef = doc(bobContext.firestore(), 'rooms/TEST/players/alice_id');
+    await assertFails(updateDoc(bobPlayerRef, { customPrompts: ['Bob prompt'] }));
+  });
 });

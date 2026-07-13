@@ -6,6 +6,7 @@ class CardModel {
   final String truthAnswer;
   final Map<String, String> sabotageAnswers;
   final Map<String, String> votes; // VoterId -> VotedForId
+  final Map<String, String> unmaskGuesses; // GuesserId -> GuessedAuthorId
 
   CardModel({
     required this.targetPlayerId,
@@ -13,6 +14,7 @@ class CardModel {
     this.truthAnswer = '',
     this.sabotageAnswers = const {},
     this.votes = const {},
+    this.unmaskGuesses = const {},
   });
 
   CardModel copyWith({
@@ -21,6 +23,7 @@ class CardModel {
     String? truthAnswer,
     Map<String, String>? sabotageAnswers,
     Map<String, String>? votes,
+    Map<String, String>? unmaskGuesses,
   }) {
     return CardModel(
       targetPlayerId: targetPlayerId ?? this.targetPlayerId,
@@ -28,6 +31,7 @@ class CardModel {
       truthAnswer: truthAnswer ?? this.truthAnswer,
       sabotageAnswers: sabotageAnswers ?? this.sabotageAnswers,
       votes: votes ?? this.votes,
+      unmaskGuesses: unmaskGuesses ?? this.unmaskGuesses,
     );
   }
 
@@ -38,6 +42,7 @@ class CardModel {
       'truthAnswer': truthAnswer,
       'sabotageAnswers': sabotageAnswers,
       'votes': votes,
+      'unmaskGuesses': unmaskGuesses,
     };
   }
 
@@ -48,6 +53,7 @@ class CardModel {
       truthAnswer: map['truthAnswer'] ?? '',
       sabotageAnswers: Map<String, String>.from(map['sabotageAnswers'] ?? {}),
       votes: Map<String, String>.from(map['votes'] ?? {}),
+      unmaskGuesses: Map<String, String>.from(map['unmaskGuesses'] ?? {}),
     );
   }
 }

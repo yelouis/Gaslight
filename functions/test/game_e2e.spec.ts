@@ -291,4 +291,403 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(playerSnap.data()?.authUid).to.equal(guestUserNew.localId);
     expect(playerSnap.data()?.name).to.equal('Bob');
   });
+
+  it('should add bots with lastSeen set to null', async () => {
+    const hostUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('debugAddBots', hostUser.idToken, { roomCode });
+
+    const botRef = db.collection('rooms').doc(roomCode).collection('players').doc('bot_1');
+    const botSnap = await botRef.get();
+    expect(botSnap.exists).to.be.true;
+    expect(botSnap.data()?.lastSeen).to.be.null;
+  });
+
+  it('should advance phase when host submits first then bots simulate', async () => {
+    const hostUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('debugAddBots', hostUser.idToken, { roomCode });
+
+    await callFn('startGame', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'the_daily_grind'
+    });
+
+    const roomRef = db.collection('rooms').doc(roomCode);
+    let roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+    expect(roomSnap.data()?.currentRotationIndex).to.equal(1);
+
+    const assignments = roomSnap.data()?.currentCardAssignments;
+    const targetId = assignments['p_host'];
+
+    await callFn('submitAnswer', hostUser.idToken, {
+      roomCode,
+      targetCardId: targetId,
+      authorId: 'p_host',
+      text: 'Host answer',
+      isTruth: false
+    });
+
+    roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+
+    await callFn('debugSimulateBotResponses', hostUser.idToken, { roomCode });
+
+    roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('truth');
+  });
+
+  it('should handle timeout and fill missing slots with placeholder', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guestUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest'
+    });
+
+    await callFn('startGame', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'the_daily_grind'
+    });
+
+    const roomRef = db.collection('rooms').doc(roomCode);
+    let roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+
+    const assignments = roomSnap.data()?.currentCardAssignments;
+    const guestCardTarget = assignments['p_host'];
+
+    await callFn('submitAnswer', hostUser.idToken, {
+      roomCode,
+      targetCardId: guestCardTarget,
+      authorId: 'p_host',
+      text: 'Host lie',
+      isTruth: false
+    });
+
+    await callFn('advancePhase', hostUser.idToken, { roomCode });
+
+    roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('truth');
+
+    const cards = roomSnap.data()?.cards as any[];
+    const hostCard = cards.find(c => c.targetPlayerId === 'p_host');
+    expect(hostCard.sabotageAnswers['p_guest']).to.equal('THE SOUL IS SILENT');
+
+    const guestCard = cards.find(c => c.targetPlayerId === 'p_guest');
+    expect(guestCard.sabotageAnswers['p_host']).to.equal('Host lie');
+
+    await callFn('submitAnswer', hostUser.idToken, {
+      roomCode,
+      targetCardId: 'p_host',
+      authorId: 'p_host',
+      text: 'Host truth',
+      isTruth: true
+    });
+
+    await callFn('advancePhase', hostUser.idToken, { roomCode });
+
+    roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('vote');
+
+    const cardsAfterTruth = roomSnap.data()?.cards as any[];
+    const guestCardAfterTruth = cardsAfterTruth.find(c => c.targetPlayerId === 'p_guest');
+    expect(guestCardAfterTruth.truthAnswer).to.equal('THE SOUL IS SILENT');
+
+    const hostCardAfterTruth = cardsAfterTruth.find(c => c.targetPlayerId === 'p_host');
+    expect(hostCardAfterTruth.truthAnswer).to.equal('Host truth');
+  });
+
+  it('should handle submitUnmaskGuess E2E revenge guesses and scoring', async () => {
+    const hostUser = await createAnonUser();
+    const guest1User = await createAnonUser();
+    const guest2User = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guest1User.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest1'
+    });
+
+    await callFn('joinRoom', guest2User.idToken, {
+      roomCode,
+      playerName: 'Charlie',
+      playerId: 'p_guest2'
+    });
+
+    await callFn('startGame', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'the_daily_grind'
+    });
+
+    await callFn('submitAnswer', hostUser.idToken, {
+      roomCode,
+      targetCardId: 'p_guest1',
+      authorId: 'p_host',
+      text: 'Alice forgery for Bob',
+      isTruth: false
+    });
+    await callFn('submitAnswer', guest1User.idToken, {
+      roomCode,
+      targetCardId: 'p_guest2',
+      authorId: 'p_guest1',
+      text: 'Bob forgery for Charlie',
+      isTruth: false
+    });
+    await callFn('submitAnswer', guest2User.idToken, {
+      roomCode,
+      targetCardId: 'p_host',
+      authorId: 'p_guest2',
+      text: 'Charlie forgery for Alice',
+      isTruth: false
+    });
+
+    await callFn('submitAnswer', hostUser.idToken, {
+      roomCode,
+      targetCardId: 'p_host',
+      authorId: 'p_host',
+      text: 'Alice truth',
+      isTruth: true
+    });
+    await callFn('submitAnswer', guest1User.idToken, {
+      roomCode,
+      targetCardId: 'p_guest1',
+      authorId: 'p_guest1',
+      text: 'Bob truth',
+      isTruth: true
+    });
+    await callFn('submitAnswer', guest2User.idToken, {
+      roomCode,
+      targetCardId: 'p_guest2',
+      authorId: 'p_guest2',
+      text: 'Charlie truth',
+      isTruth: true
+    });
+
+    const roomRef = db.collection('rooms').doc(roomCode);
+    let roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('vote');
+    const readerId = roomSnap.data()?.currentReaderId;
+
+    let forgerId = '';
+    let voterId = '';
+    let voterToken = '';
+    let forgerToken = '';
+    let readerToken = '';
+
+    if (readerId === 'p_host') {
+      forgerId = 'p_guest2';
+      voterId = 'p_guest1';
+      voterToken = guest1User.idToken;
+      forgerToken = guest2User.idToken;
+      readerToken = hostUser.idToken;
+    } else if (readerId === 'p_guest1') {
+      forgerId = 'p_host';
+      voterId = 'p_guest2';
+      voterToken = guest2User.idToken;
+      forgerToken = hostUser.idToken;
+      readerToken = guest1User.idToken;
+    } else {
+      forgerId = 'p_guest1';
+      voterId = 'p_host';
+      voterToken = hostUser.idToken;
+      forgerToken = guest1User.idToken;
+      readerToken = guest2User.idToken;
+    }
+
+    await callFn('castVote', voterToken, {
+      roomCode,
+      targetCardId: readerId,
+      voterId: voterId,
+      votedForId: forgerId
+    });
+
+    await callFn('castVote', forgerToken, {
+      roomCode,
+      targetCardId: readerId,
+      voterId: forgerId,
+      votedForId: 'TRUTH'
+    });
+
+    await callFn('setReady', readerToken, {
+      roomCode,
+      playerId: readerId,
+      ready: true
+    });
+
+    roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+    expect(roomSnap.data()?.unmaskDeadline).to.be.a('number');
+
+    const voterRef = roomRef.collection('players').doc(voterId);
+    const forgerRef = roomRef.collection('players').doc(forgerId);
+
+    let voterSnap = await voterRef.get();
+    let forgerSnap = await forgerRef.get();
+    const initialVoterScore = voterSnap.data()?.totalScore || 0;
+    const initialForgerScore = forgerSnap.data()?.totalScore || 0;
+
+    let rejected = false;
+    try {
+      await callFn('submitUnmaskGuess', voterToken, {
+        roomCode,
+        guesserId: voterId,
+        guessedAuthorId: voterId
+      });
+    } catch (e: any) {
+      rejected = true;
+      expect(e.status).to.equal('INVALID_ARGUMENT');
+    }
+    expect(rejected).to.be.true;
+
+    await callFn('submitUnmaskGuess', voterToken, {
+      roomCode,
+      guesserId: voterId,
+      guessedAuthorId: forgerId
+    });
+
+    voterSnap = await voterRef.get();
+    forgerSnap = await forgerRef.get();
+    expect(voterSnap.data()?.totalScore).to.equal(initialVoterScore + 1);
+    expect(forgerSnap.data()?.totalScore).to.equal(initialForgerScore - 1);
+
+    roomSnap = await roomRef.get();
+    const cards = roomSnap.data()?.cards as any[];
+    const readerCard = cards.find(c => c.targetPlayerId === readerId);
+    expect(readerCard.unmaskGuesses[voterId]).to.equal(forgerId);
+
+    rejected = false;
+    try {
+      await callFn('submitUnmaskGuess', voterToken, {
+        roomCode,
+        guesserId: voterId,
+        guessedAuthorId: forgerId
+      });
+    } catch (e: any) {
+      rejected = true;
+      expect(e.status).to.equal('FAILED_PRECONDITION');
+    }
+    expect(rejected).to.be.true;
+
+    rejected = false;
+    try {
+      await callFn('submitUnmaskGuess', forgerToken, {
+        roomCode,
+        guesserId: forgerId,
+        guessedAuthorId: voterId
+      });
+    } catch (e: any) {
+      rejected = true;
+      expect(e.status).to.equal('FAILED_PRECONDITION');
+    }
+    expect(rejected).to.be.true;
+  });
+
+  it('should handle custom deck prompt selection, top-ups, and reroll fallback', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guestUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest'
+    });
+
+    const roomRef = db.collection('rooms').doc(roomCode);
+
+    let rejected = false;
+    try {
+      await callFn('updateLobbySettings', guestUser.idToken, {
+        roomCode,
+        selectedDeckId: 'custom'
+      });
+    } catch (e: any) {
+      rejected = true;
+      expect(e.status).to.equal('PERMISSION_DENIED');
+    }
+    expect(rejected).to.be.true;
+
+    await callFn('updateLobbySettings', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'custom'
+    });
+
+    let roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.selectedDeckId).to.equal('custom');
+
+    await roomRef.collection('players').doc('p_host').update({
+      customPrompts: ['Alice prompt 1', 'Alice prompt 2']
+    });
+    await roomRef.collection('players').doc('p_guest').update({
+      customPrompts: ['Bob prompt 1']
+    });
+
+    await callFn('startGame', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'custom'
+    });
+
+    roomSnap = await roomRef.get();
+    const cards = roomSnap.data()?.cards as any[];
+    const aliceCard = cards.find(c => c.targetPlayerId === 'p_host');
+    const bobCard = cards.find(c => c.targetPlayerId === 'p_guest');
+
+    expect(aliceCard.promptText).to.equal('Bob prompt 1');
+    expect(['Alice prompt 1', 'Alice prompt 2']).to.include(bobCard.promptText);
+
+    await callFn('rerollPrompt', hostUser.idToken, {
+      roomCode,
+      playerId: 'p_host'
+    });
+
+    roomSnap = await roomRef.get();
+    const cardsAfterReroll = roomSnap.data()?.cards as any[];
+    const aliceCardAfterReroll = cardsAfterReroll.find(c => c.targetPlayerId === 'p_host');
+    expect(aliceCardAfterReroll.promptText).to.not.equal('Bob prompt 1');
+    expect(aliceCardAfterReroll.promptText).to.not.equal('Alice prompt 1');
+    expect(aliceCardAfterReroll.promptText).to.not.equal('Alice prompt 2');
+  });
 });

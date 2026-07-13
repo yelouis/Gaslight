@@ -11,6 +11,7 @@ import '../widgets/shared_ui.dart';
 import '../theme/app_colors.dart';
 import 'dart:ui';
 import 'dart:math';
+import 'dart:async';
 import 'package:uuid/uuid.dart';
 
 class Phase4RevealScreen extends StatefulWidget {
@@ -42,18 +43,39 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
   final List<_FloatingReaction> _floatingReactions = [];
   int _lastReactionSentTime = 0;
 
-  int _revealStage = 0;
+  int _revealStage = 1;
   String? _previousTargetId;
+  Timer? _countdownTimer;
 
-  void _advanceRevealSequence(int forgeryCount) {
-    Future.delayed(const Duration(milliseconds: 1500), () {
+  void _advanceRevealSequence() {
+    _revealStage = 1;
+    // Beat 1 -> Beat 2
+    Future.delayed(const Duration(milliseconds: 1800), () {
       if (!mounted) return;
-      if (_revealStage <= forgeryCount + 1) {
+      setState(() {
+        _revealStage = 2;
+      });
+      // Beat 2 -> Beat 3
+      Future.delayed(const Duration(milliseconds: 1800), () {
+        if (!mounted) return;
         setState(() {
-          _revealStage++;
+          _revealStage = 3;
         });
-        _advanceRevealSequence(forgeryCount);
-      }
+        // Beat 3 -> Beat 4
+        Future.delayed(const Duration(milliseconds: 1800), () {
+          if (!mounted) return;
+          setState(() {
+            _revealStage = 4;
+          });
+          // Beat 4 -> Beat 5
+          Future.delayed(const Duration(milliseconds: 1800), () {
+            if (!mounted) return;
+            setState(() {
+              _revealStage = 5;
+            });
+          });
+        });
+      });
     });
   }
 
@@ -62,10 +84,16 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
     super.initState();
     _mountTime = DateTime.now().millisecondsSinceEpoch;
     context.read<GameService>().addListener(_onGameServiceUpdate);
+    _countdownTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     try {
       context.read<GameService>().removeListener(_onGameServiceUpdate);
     } catch (_) {}
@@ -251,9 +279,9 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
 
     if (currentTargetId != _previousTargetId) {
       _previousTargetId = currentTargetId;
-      _revealStage = 0;
+      _revealStage = 1;
       if (currentCard != null) {
-        _advanceRevealSequence(currentCard.sabotageAnswers.length);
+        _advanceRevealSequence();
       }
     }
 
@@ -290,160 +318,178 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                 },
                 child: Padding(
                   padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        currentTargetId != null
-                            ? 'RESOLVING ${gs.players.firstWhere((p) => p.id == currentTargetId, orElse: () => PlayerState(id: '', name: 'Unknown')).name.toUpperCase()}\'S CARD'
-                            : 'RESOLVING CARD',
-                        style: TextStyle(
-                          color: theme.colorScheme.secondary,
-                          fontFamily: 'Lora',
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      if (currentCard != null) ...[
-                        const SizedBox(height: 10),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                         Text(
-                          currentCard.promptText,
+                          currentTargetId != null
+                              ? 'RESOLVING ${gs.players.firstWhere((p) => p.id == currentTargetId, orElse: () => PlayerState(id: '', name: 'Unknown')).name.toUpperCase()}\'S CARD'
+                              : 'RESOLVING CARD',
                           style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: theme.colorScheme.onSurface,
+                            color: theme.colorScheme.secondary,
                             fontFamily: 'Lora',
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2,
                           ),
                         ),
-                        const SizedBox(height: 24),
-                        
-                        // Options & Votes List
-                        ...[
-                          _buildOptionRow('TRUTH', currentCard.truthAnswer, currentCard, gs, theme, isTruth: true),
-                          ...currentCard.sabotageAnswers.entries.map((e) => 
-                            _buildOptionRow(e.key, e.value, currentCard!, gs, theme)
-                          ),
-                        ],
-
-                        if (_latestDeltas.isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          Text(
-                            'POINTS AWARDED THIS CARD', 
-                            style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1.5),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 8,
-                            alignment: WrapAlignment.center,
-                            children: _latestDeltas.entries.where((e) => e.value > 0).map((e) {
-                              final player = gs.players.firstWhere((p) => p.id == e.key, orElse: () => PlayerState(id: e.key, name: 'Unknown'));
-                              return Chip(
-                                avatar: PlayerAvatar(player: player, size: 20, showName: false),
-                                label: Text('${player.name}: +${e.value}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
-                                backgroundColor: theme.colorScheme.secondary.withOpacity(0.2),
-                                side: BorderSide(color: theme.colorScheme.secondary),
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                        // Best Forgery Banner
-                        if (_revealStage > currentCard.sabotageAnswers.length + 1) ...[
-                          () {
-                            final banner = _buildBestForgeryBanner(currentCard!, gs);
-                            if (banner != null) {
-                              return banner;
-                            }
-                            return const SizedBox.shrink();
-                          }(),
-                        ],
-                        // D1 Running Leaderboard Strip
-                        if (gs.players.isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          Text(
-                            'STANDINGS',
-                            style: TextStyle(
-                              fontFamily: 'Lora',
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.brass.withOpacity(0.7),
-                              letterSpacing: 2,
-                            ),
-                          ),
+                        if (currentCard != null) ...[
                           const SizedBox(height: 10),
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: (gs.players.where((p) => p.role != PlayerRole.spectator).toList()
-                                    ..sort((a, b) => b.totalScore.compareTo(a.totalScore)))
-                                  .map((player) {
-                                    final delta = _latestDeltas[player.id] ?? 0;
-                                    return Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.groundRaised,
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: AppColors.brass.withOpacity(0.3),
-                                            width: 1,
+                          Text(
+                            currentCard.promptText,
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: theme.colorScheme.onSurface,
+                              fontFamily: 'Lora',
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          
+                          // Options & Votes List
+                          if (_revealStage >= 2) ...[
+                            _buildOptionRow('TRUTH', currentCard.truthAnswer, currentCard, gs, theme, isTruth: true),
+                            ...currentCard.sabotageAnswers.entries.map((e) => 
+                              _buildOptionRow(e.key, e.value, currentCard!, gs, theme)
+                            ),
+                          ],
+
+                          // Revenge Guess Tray
+                          if (_revealStage == 5)
+                            _buildRevengeGuessTray(state, currentCard, gs, theme),
+
+                          if (_revealStage >= 4) ...[
+                            if (_latestDeltas.isNotEmpty) ...[
+                              const SizedBox(height: 24),
+                              Text(
+                                'POINTS AWARDED THIS CARD', 
+                                style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1.5),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.center,
+                                children: _latestDeltas.entries.where((e) => e.value > 0).map((e) {
+                                  final player = gs.players.firstWhere((p) => p.id == e.key, orElse: () => PlayerState(id: e.key, name: 'Unknown'));
+                                  return Chip(
+                                    avatar: PlayerAvatar(player: player, size: 20, showName: false),
+                                    label: Text('${player.name}: +${e.value}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+                                    backgroundColor: theme.colorScheme.secondary.withOpacity(0.2),
+                                    side: BorderSide(color: theme.colorScheme.secondary),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                            
+                            // Best Forgery Banner
+                            () {
+                              final banner = _buildBestForgeryBanner(currentCard!, gs);
+                              if (banner != null) {
+                                return banner;
+                              }
+                              return const SizedBox.shrink();
+                            }(),
+                          ],
+                          
+                          // D1 Running Leaderboard Strip
+                          if (gs.players.isNotEmpty) ...[
+                            const SizedBox(height: 24),
+                            Text(
+                              'STANDINGS',
+                              style: TextStyle(
+                                fontFamily: 'Lora',
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.brass.withOpacity(0.7),
+                                letterSpacing: 2,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: (gs.players.where((p) => p.role != PlayerRole.spectator).toList()
+                                      ..sort((a, b) => b.totalScore.compareTo(a.totalScore)))
+                                    .map((player) {
+                                      final delta = _revealStage >= 4 ? (_latestDeltas[player.id] ?? 0) : 0;
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.groundRaised,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: AppColors.brass.withOpacity(0.3),
+                                              width: 1,
+                                            ),
                                           ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            PlayerAvatar(player: player, size: 24, showName: false),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              player.name,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                                color: AppColors.ivory,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              '${player.totalScore}',
-                                              style: const TextStyle(
-                                                fontFeatures: [FontFeature.tabularFigures()],
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 14,
-                                                color: AppColors.brass,
-                                              ),
-                                            ),
-                                            if (delta > 0) ...[
-                                              const SizedBox(width: 4),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              PlayerAvatar(player: player, size: 24, showName: false),
+                                              const SizedBox(width: 6),
                                               Text(
-                                                '▲+$delta',
+                                                player.name,
                                                 style: const TextStyle(
-                                                  fontSize: 12,
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppColors.verdigris,
+                                                  fontSize: 13,
+                                                  color: AppColors.ivory,
                                                 ),
                                               ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                '${player.totalScore}',
+                                                style: const TextStyle(
+                                                  fontFeatures: [FontFeature.tabularFigures()],
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 14,
+                                                  color: AppColors.brass,
+                                                ),
+                                              ),
+                                              if (delta > 0) ...[
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  '▲+$delta',
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.verdigris,
+                                                  ),
+                                                ),
+                                              ],
                                             ],
-                                          ],
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  }).toList(),
+                                      );
+                                    }).toList(),
+                              ),
                             ),
+                          ],
+                        ],
+                        const SizedBox(height: 40),
+                        if (gs.currentPlayer?.isHost == true) ...[
+                          const SizedBox(height: 20),
+                          Builder(
+                            builder: (context) {
+                              final now = DateTime.now().millisecondsSinceEpoch;
+                              final isTimerActive = state.unmaskDeadline != null && now < state.unmaskDeadline!;
+                              return Opacity(
+                                opacity: !isTimerActive ? 1.0 : 0.4,
+                                child: PrimaryButton(
+                                  text: 'CONTINUE',
+                                  onPressed: !isTimerActive ? () => gs.advanceToNextResolution() : null,
+                                ),
+                              );
+                            }
                           ),
                         ],
                       ],
-                      const SizedBox(height: 40),
-                      if (gs.currentPlayer?.isHost == true) ...[
-                        const SizedBox(height: 20),
-                        PrimaryButton(
-                          text: 'CONTINUE',
-                          onPressed: () => gs.advanceToNextResolution(),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -498,11 +544,250 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
     );
   }
 
+  Widget _buildRevengeGuessTray(GameState state, CardModel card, GameService gs, ThemeData theme) {
+    final me = gs.currentPlayer;
+    if (me == null) return const SizedBox.shrink();
+
+    final isFooled = card.votes[me.id] != null && card.votes[me.id] != 'TRUTH';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final isTimerActive = state.unmaskDeadline != null && now < state.unmaskDeadline!;
+    
+    final remainingMs = state.unmaskDeadline != null ? state.unmaskDeadline! - now : 0;
+    final remainingSec = (remainingMs / 1000).clamp(0, 20).ceil();
+    final isLowTime = isTimerActive && remainingSec <= 5;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutBack,
+      builder: (context, scale, child) {
+        return Transform.scale(
+          scale: scale,
+          child: child,
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 20),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.groundRaised,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isLowTime ? Colors.redAccent : AppColors.brass,
+            width: 2.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isLowTime ? Colors.redAccent.withOpacity(0.3) : AppColors.brass.withOpacity(0.15),
+              blurRadius: 15,
+              spreadRadius: 2,
+            )
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      isFooled ? Icons.gavel : Icons.hourglass_empty,
+                      color: isLowTime ? Colors.redAccent : AppColors.brass,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isFooled ? 'REVENGE UNMASKING!' : 'UNMASKING IN PROGRESS...',
+                      style: TextStyle(
+                        fontFamily: 'CormorantGaramond',
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isLowTime ? Colors.redAccent : AppColors.brass,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+                if (isTimerActive)
+                  AnimatedScale(
+                    scale: isLowTime ? 1.2 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isLowTime ? Colors.redAccent.withOpacity(0.2) : AppColors.ground,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isLowTime ? Colors.redAccent : AppColors.brass.withOpacity(0.5),
+                        ),
+                      ),
+                      child: Text(
+                        '${remainingSec}s',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isLowTime ? Colors.redAccent : AppColors.ivory,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (isFooled) ...[
+              () {
+                final submittedGuessId = card.unmaskGuesses[me.id];
+                if (submittedGuessId != null) {
+                  final guessedPlayer = gs.players.firstWhere(
+                    (p) => p.id == submittedGuessId,
+                    orElse: () => PlayerState(id: '', name: 'Unknown'),
+                  );
+                  if (isTimerActive) {
+                    return Text(
+                      'You accused ${guessedPlayer.name}! Waiting for the timer to reveal results...',
+                      style: const TextStyle(color: AppColors.ivory, fontSize: 14, fontStyle: FontStyle.italic),
+                      textAlign: TextAlign.center,
+                    );
+                  } else {
+                    final actualForgerId = card.votes[me.id];
+                    final isCorrect = submittedGuessId == actualForgerId;
+                    return Column(
+                      children: [
+                        Text(
+                          isCorrect ? 'REVENGE SUCCESSFUL!' : 'REVENGE FAILED!',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isCorrect ? AppColors.verdigris : Colors.redAccent,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          isCorrect
+                              ? 'You correctly accused ${guessedPlayer.name}! (+1 Point to you, -1 to forger)'
+                              : 'You accused ${guessedPlayer.name}, but the real forger was ${gs.players.firstWhere((p) => p.id == actualForgerId, orElse: () => PlayerState(id: '', name: 'Unknown')).name}!',
+                          style: const TextStyle(color: AppColors.ivory, fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    );
+                  }
+                } else {
+                  if (isTimerActive) {
+                    final candidates = gs.players
+                        .where((p) => p.id != me.id && p.role != PlayerRole.spectator)
+                        .toList();
+                    return Column(
+                      children: [
+                        const Text(
+                          'Accuse the player who wrote the forgery you voted for:',
+                          style: TextStyle(color: AppColors.ivory, fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: candidates.map((cand) {
+                            return OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: AppColors.brass),
+                                foregroundColor: AppColors.ivory,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await gs.submitUnmaskGuess(cand.id);
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(e.toString())),
+                                    );
+                                  }
+                                }
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  PlayerAvatar(player: cand, size: 20, showName: false),
+                                  const SizedBox(width: 6),
+                                  Text(cand.name.toUpperCase()),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    );
+                  } else {
+                    return const Text(
+                      'Time is up! You failed to submit a guess in time.',
+                      style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold),
+                    );
+                  }
+                }
+              }(),
+            ] else ...[
+              () {
+                final fooledPlayers = gs.players.where((p) =>
+                  card.votes[p.id] != null && card.votes[p.id] != 'TRUTH'
+                ).toList();
+                if (fooledPlayers.isEmpty) {
+                  return const Text(
+                    'Nobody was fooled! Skipping revenge phase.',
+                    style: TextStyle(color: AppColors.ivory, fontStyle: FontStyle.italic),
+                  );
+                }
+                return Column(
+                  children: [
+                    const Text(
+                      'Fooled players are trying to unmask their forgers:',
+                      style: TextStyle(color: AppColors.ivory, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: fooledPlayers.map((p) {
+                        final hasGuessed = card.unmaskGuesses[p.id] != null;
+                        return Chip(
+                          avatar: PlayerAvatar(player: p, size: 18, showName: false),
+                          label: Text(
+                            '${p.name}: ${hasGuessed ? 'Accused!' : 'Thinking...'}',
+                            style: TextStyle(
+                              color: hasGuessed ? AppColors.verdigris : AppColors.brass,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          backgroundColor: AppColors.ground,
+                          side: BorderSide(
+                            color: hasGuessed ? AppColors.verdigris.withOpacity(0.5) : AppColors.brass.withOpacity(0.3),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                );
+              }(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildOptionRow(String authorId, String text, CardModel card, GameService gs, ThemeData theme, {bool isTruth = false}) {
-    final voters = gs.players.where((p) => card.votes[p.id] == authorId).toList();
+    final voters = _revealStage >= 3
+        ? gs.players.where((p) => card.votes[p.id] == authorId).toList()
+        : <PlayerState>[];
     final cardColor = AppColors.groundRaised;
-    final truthBorderColor = theme.colorScheme.tertiary; // Emerald Green for Truth
-    final forgeryBorderColor = theme.colorScheme.primary; // Crimson for Forgery
+    final truthBorderColor = theme.colorScheme.tertiary;
+    final forgeryBorderColor = theme.colorScheme.primary;
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -539,11 +824,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                   Row(
                     children: [
                       () {
-                        final forgeryAuthors = card.sabotageAnswers.keys.toList();
-                        final int authorIndex = forgeryAuthors.indexOf(authorId);
-                        final bool isRevealed = isTruth 
-                            ? _revealStage > forgeryAuthors.length 
-                            : (authorIndex != -1 && _revealStage > authorIndex);
+                        final bool isRevealed = _revealStage >= 4;
 
                         return FlippingRevealCard(
                           isRevealed: isRevealed,

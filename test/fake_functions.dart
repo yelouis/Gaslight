@@ -109,17 +109,108 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       if (activePlayers.length <= roomState.sabotageAnswersCount) {
         throw Exception("Cannot start: Need more players than forgery rounds.");
       }
-      final deckSize = PromptDecks.getDeckSize(roomState.selectedDeckId);
-      if (deckSize < activePlayers.length) {
-        throw Exception("Cannot start: Selected deck has $deckSize prompts, but you need at least ${activePlayers.length} prompts.");
+      List<String> prompts = [];
+      if (roomState.selectedDeckId == 'custom') {
+        final pool = <Map<String, String>>[];
+        final seen = <String>{};
+
+        for (var p in activePlayers) {
+          for (var promptText in p.customPrompts) {
+            final trimmed = promptText.trim();
+            if (trimmed.isNotEmpty && trimmed.length <= 200) {
+              final lower = trimmed.toLowerCase();
+              if (!seen.contains(lower)) {
+                seen.add(lower);
+                pool.add({'text': trimmed, 'authorId': p.id});
+              }
+            }
+          }
+        }
+
+        const fallbackDeckId = 'the_daily_grind';
+        int topUpNeeded = activePlayers.length - pool.length;
+        if (topUpNeeded > 0) {
+          final fallbackPrompts = PromptDecks.drawPrompts(fallbackDeckId, activePlayers.length * 2);
+          for (var fp in fallbackPrompts) {
+            if (topUpNeeded <= 0) break;
+            final fpLower = fp.toLowerCase();
+            if (!seen.contains(fpLower)) {
+              seen.add(fpLower);
+              pool.add({'text': fp, 'authorId': 'fallback'});
+              topUpNeeded--;
+            }
+          }
+        }
+
+        pool.shuffle(Random());
+
+        final assigned = <String, String>{};
+        final usedIndices = <int>{};
+
+        for (var player in activePlayers) {
+          int assignedIdx = -1;
+          for (int i = 0; i < pool.length; i++) {
+            if (usedIndices.contains(i)) continue;
+            if (pool[i]['authorId'] != player.id) {
+              assignedIdx = i;
+              break;
+            }
+          }
+
+          if (assignedIdx != -1) {
+            assigned[player.id] = pool[assignedIdx]['text']!;
+            usedIndices.add(assignedIdx);
+          } else {
+            bool swapDone = false;
+            final stuckPromptIdx = pool.indexWhere((p) => !usedIndices.contains(pool.indexOf(p)) && p['authorId'] == player.id);
+            if (stuckPromptIdx != -1) {
+              final stuckPrompt = pool[stuckPromptIdx];
+              for (var entry in assigned.entries) {
+                final otherPlayerId = entry.key;
+                final otherPromptText = entry.value;
+                final otherPromptIdx = pool.indexWhere((p) => p['text'] == otherPromptText);
+                if (otherPromptIdx != -1) {
+                  final otherPrompt = pool[otherPromptIdx];
+                  if (stuckPrompt['authorId'] != otherPlayerId && otherPrompt['authorId'] != player.id) {
+                    assigned[otherPlayerId] = stuckPrompt['text']!;
+                    assigned[player.id] = otherPrompt['text']!;
+                    usedIndices.add(stuckPromptIdx);
+                    swapDone = true;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (!swapDone) {
+              final fallbackPrompts = PromptDecks.drawPrompts(fallbackDeckId, activePlayers.length * 2);
+              String freshFP = '';
+              for (var fp in fallbackPrompts) {
+                final fpLower = fp.toLowerCase();
+                if (!seen.contains(fpLower)) {
+                  seen.add(fpLower);
+                  freshFP = fp;
+                  break;
+                }
+              }
+              assigned[player.id] = freshFP;
+            }
+          }
+        }
+
+        prompts = activePlayers.map((p) => assigned[p.id]!).toList();
+      } else {
+        final deckSize = PromptDecks.getDeckSize(roomState.selectedDeckId);
+        if (deckSize < activePlayers.length) {
+          throw Exception("Cannot start: Selected deck has $deckSize prompts, but you need at least ${activePlayers.length} prompts.");
+        }
+        prompts = PromptDecks.drawPrompts(roomState.selectedDeckId, activePlayers.length);
       }
 
       var pIds = activePlayers.map((p) => p.id).toList();
       var nativeRotations = RotationEngine.generateRotations(pIds, roomState.sabotageAnswersCount);
       Map<String, Map<String, String>> stringRotations = {};
       nativeRotations.forEach((key, val) => stringRotations[key.toString()] = val);
-
-      var prompts = PromptDecks.drawPrompts(roomState.selectedDeckId, activePlayers.length);
       List<CardModel> startingCards = [];
       for (int i = 0; i < pIds.length; i++) {
         startingCards.add(CardModel(
@@ -308,10 +399,12 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
           currentPhase: GamePhase.vote,
           currentReaderId: order[currentIdx + 1],
           readyPlayers: {},
+          clearUnmaskDeadline: true,
         ).toMap());
       } else {
         await roomRef.update(currentState.copyWith(
           currentPhase: GamePhase.gameOver,
+          clearUnmaskDeadline: true,
         ).toMap());
       }
 
@@ -321,6 +414,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
     if (name == 'updateLobbySettings') {
       final sabotageAnswersCount = params['sabotageAnswersCount'];
       final isTimerDisabled = params['isTimerDisabled'];
+      final selectedDeckId = params['selectedDeckId'];
 
       final roomRef = db.collection('rooms').doc(roomCode);
       final snapshot = await roomRef.get();
@@ -329,6 +423,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       await roomRef.update(currentState.copyWith(
         sabotageAnswersCount: sabotageAnswersCount ?? currentState.sabotageAnswersCount,
         isTimerDisabled: isTimerDisabled ?? currentState.isTimerDisabled,
+        selectedDeckId: selectedDeckId ?? currentState.selectedDeckId,
       ).toMap());
 
       return FakeHttpsCallableResult({'success': true} as T);
@@ -353,7 +448,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final cardIndex = cards.indexWhere((c) => c.targetPlayerId == playerId);
         final oldCard = cards[cardIndex];
 
-        final deckId = currentState.selectedDeckId;
+        final deckId = currentState.selectedDeckId == 'custom' ? 'the_daily_grind' : currentState.selectedDeckId;
         final currentPrompts = cards.map((c) => c.promptText).toSet();
         final newPromptText = PromptDecks.drawOneExcluding(deckId, currentPrompts);
 
@@ -502,6 +597,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
           colorValue: botColors[i % botColors.length],
           avatarIndex: i % 6,
           joinedAt: DateTime.now().millisecondsSinceEpoch + i,
+          lastSeen: null,
         );
         final ref = db.collection('rooms').doc(generatedCode).collection('players').doc(botId);
         batch.set(ref, bot.toMap());
@@ -550,10 +646,18 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
             transaction.update(pRef, {'isReady': true});
           }
 
-          transaction.update(roomRef, {
-            'cards': newCards.map((c) => c.toMap()).toList(),
-            'readyPlayers': newReadyMap,
-          });
+          final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
+          final allReady = activePlayers.isNotEmpty && activePlayers.every((p) => newReadyMap[p.id] == true);
+          final updatedState = currentState.copyWith(cards: newCards, readyPlayers: newReadyMap);
+
+          if (allReady) {
+            await advancePhaseInternal(transaction, roomRef, updatedState, players, 'debugSimulateBotResponses');
+          } else {
+            transaction.update(roomRef, {
+              'cards': newCards.map((c) => c.toMap()).toList(),
+              'readyPlayers': newReadyMap,
+            });
+          }
         } else if (phase == GamePhase.vote) {
           final currentTargetId = currentState.currentReaderId;
           if (currentTargetId != null) {
@@ -579,10 +683,91 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
               transaction.update(readerRef, {'isReady': true});
             }
 
-            transaction.update(roomRef, {
-              'cards': newCards.map((c) => c.toMap()).toList(),
-              'readyPlayers': newReadyMap,
-            });
+            final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
+            final allReady = activePlayers.isNotEmpty && activePlayers.every((p) => newReadyMap[p.id] == true);
+            final updatedState = currentState.copyWith(cards: newCards, readyPlayers: newReadyMap);
+
+            if (allReady) {
+              await advancePhaseInternal(transaction, roomRef, updatedState, players, 'debugSimulateBotResponses');
+            } else {
+              transaction.update(roomRef, {
+                'cards': newCards.map((c) => c.toMap()).toList(),
+                'readyPlayers': newReadyMap,
+              });
+            }
+          }
+        }
+      });
+
+      return FakeHttpsCallableResult({'success': true} as T);
+    }
+
+    if (name == 'submitUnmaskGuess') {
+      final guesserId = params['guesserId'];
+      final guessedAuthorId = params['guessedAuthorId'];
+
+      final roomRef = db.collection('rooms').doc(roomCode);
+      await db.runTransaction((transaction) async {
+        final snap = await transaction.get(roomRef);
+        if (!snap.exists) return;
+        final currentState = GameState.fromMap(snap.data()!, snap.id);
+
+        if (currentState.currentPhase != GamePhase.reveal) {
+          throw Exception("Unmask guesses are only allowed during reveal phase.");
+        }
+
+        final deadline = currentState.unmaskDeadline;
+        if (deadline == null || DateTime.now().millisecondsSinceEpoch > deadline) {
+          throw Exception("Unmask guess deadline has passed or is inactive.");
+        }
+
+        final cards = List<CardModel>.from(currentState.cards);
+        final cardIdx = cards.indexWhere((c) => c.targetPlayerId == currentState.currentReaderId);
+        if (cardIdx == -1) {
+          throw Exception("Current reader card not found.");
+        }
+
+        final card = cards[cardIdx];
+        if (card.votes[guesserId] == null) {
+          throw Exception("Player did not cast a vote for this card.");
+        }
+
+        if (card.votes[guesserId] == 'TRUTH') {
+          throw Exception("Only players who fell for a forgery can make an unmask guess.");
+        }
+
+        if (card.unmaskGuesses[guesserId] != null) {
+          throw Exception("Player has already submitted an unmask guess.");
+        }
+
+        if (guessedAuthorId == guesserId) {
+          throw Exception("Cannot guess yourself as the author.");
+        }
+
+        final newUnmasks = Map<String, String>.from(card.unmaskGuesses);
+        newUnmasks[guesserId] = guessedAuthorId;
+        cards[cardIdx] = card.copyWith(unmaskGuesses: newUnmasks);
+
+        transaction.update(roomRef, {
+          'cards': cards.map((c) => c.toMap()).toList(),
+        });
+
+        final actualForgerId = card.votes[guesserId];
+        final isCorrect = guessedAuthorId == actualForgerId;
+        if (isCorrect) {
+          final guesserRef = roomRef.collection('players').doc(guesserId);
+          final forgerRef = roomRef.collection('players').doc(actualForgerId);
+
+          final guesserSnap = await transaction.get(guesserRef);
+          final forgerSnap = await transaction.get(forgerRef);
+
+          if (guesserSnap.exists) {
+            final gp = PlayerState.fromMap(guesserSnap.data()!, guesserId);
+            transaction.update(guesserRef, {'totalScore': gp.totalScore + 1});
+          }
+          if (forgerSnap.exists && actualForgerId != null) {
+            final fp = PlayerState.fromMap(forgerSnap.data()!, actualForgerId);
+            transaction.update(forgerRef, {'totalScore': fp.totalScore - 1});
           }
         }
       });
@@ -690,8 +875,12 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         }
       }
 
+      final hasFooled = currentCard.votes.values.any((v) => v != 'TRUTH');
+      final unmaskDeadline = hasFooled ? DateTime.now().millisecondsSinceEpoch + 20000 : null;
+
       nextState = nextState.copyWith(
         currentPhase: GamePhase.reveal,
+        unmaskDeadline: unmaskDeadline,
       );
     }
 

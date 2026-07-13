@@ -4,6 +4,7 @@ export interface CardModel {
   truthAnswer: string;
   sabotageAnswers: Record<string, string>;
   votes: Record<string, string>;
+  unmaskGuesses?: Record<string, string>;
 }
 
 export interface GameState {
@@ -22,6 +23,7 @@ export interface GameState {
   endTime: number | null;
   resolutionOrder: string[];
   debugEnabled?: boolean;
+  unmaskDeadline?: number | null;
 }
 
 export class ScoringLogic {

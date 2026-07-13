@@ -85,7 +85,7 @@ class ParchmentCard extends StatelessWidget {
   }
 }
 
-class PrimaryButton extends StatelessWidget {
+class PrimaryButton extends StatefulWidget {
   final String text;
   final VoidCallback? onPressed;
   final double fontSize;
@@ -100,42 +100,123 @@ class PrimaryButton extends StatelessWidget {
   });
 
   @override
+  State<PrimaryButton> createState() => _PrimaryButtonState();
+}
+
+class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _flashAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.94).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+    _flashAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.linear),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.primary.withOpacity(0.4),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: theme.colorScheme.primary, // Burgundy
-          foregroundColor: const Color(0xFFF5EEDB), // Ivory
-          minimumSize: const Size(double.infinity, 58),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5), width: 1.5), // Crimson
-          ),
-          elevation: 6,
-          shadowColor: Colors.black.withOpacity(0.5),
-        ),
-        onPressed: onPressed,
-        child: icon == null
-            ? Text(text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize, letterSpacing: 2))
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  icon!,
-                  const SizedBox(width: 8),
-                  Text(text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize, letterSpacing: 2)),
-                ],
-              ),
+    final isEnabled = widget.onPressed != null;
+
+    return Listener(
+      onPointerDown: (event) {
+        if (isEnabled) _controller.forward();
+      },
+      onPointerUp: (event) {
+        if (isEnabled) _controller.reverse();
+      },
+      onPointerCancel: (event) {
+        if (isEnabled) _controller.reverse();
+      },
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _scaleAnimation.value,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: isEnabled
+                        ? [
+                            BoxShadow(
+                              color: theme.colorScheme.primary.withOpacity(0.4 * (1.0 - _flashAnimation.value)),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            )
+                          ]
+                        : null,
+                  ),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: const Color(0xFFF5EEDB),
+                      minimumSize: const Size(double.infinity, 58),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: isEnabled
+                              ? Color.lerp(
+                                  theme.colorScheme.primary.withOpacity(0.5),
+                                  theme.colorScheme.secondary,
+                                  _flashAnimation.value,
+                                )!
+                              : Colors.transparent,
+                          width: isEnabled ? (1.5 + 1.0 * _flashAnimation.value) : 1.0,
+                        ),
+                      ),
+                      elevation: isEnabled ? 6 : 0,
+                      shadowColor: Colors.black.withOpacity(0.5),
+                    ),
+                    onPressed: widget.onPressed,
+                    child: widget.icon == null
+                        ? Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2))
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              widget.icon!,
+                              const SizedBox(width: 8),
+                              Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2)),
+                            ],
+                          ),
+                  ),
+                ),
+                if (isEnabled && _flashAnimation.value > 0)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.colorScheme.secondary.withOpacity(0.3 * _flashAnimation.value),
+                            width: 3.0 * _flashAnimation.value,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

@@ -265,8 +265,10 @@ void main() {
       await gameService.setPlayerReady(true); // Host ready
       await gameService.debugSimulateBotResponses();
       await Future.delayed(Duration(milliseconds: 100));
-      await gameService.evaluateReadyState(); // Advance manually as host
-      await Future.delayed(Duration(milliseconds: 100));
+      if (gameService.gameState!.currentRotationIndex == 1) {
+        await gameService.evaluateReadyState(); // Advance manually as host
+        await Future.delayed(Duration(milliseconds: 100));
+      }
       
       expect(gameService.gameState!.currentRotationIndex, 2);
       print('Phase: Sabotage Round 2');
@@ -275,8 +277,10 @@ void main() {
       await gameService.setPlayerReady(true);
       await gameService.debugSimulateBotResponses();
       await Future.delayed(Duration(milliseconds: 100));
-      await gameService.evaluateReadyState();
-      await Future.delayed(Duration(milliseconds: 100));
+      if (gameService.gameState!.currentPhase == GamePhase.forgery) {
+        await gameService.evaluateReadyState();
+        await Future.delayed(Duration(milliseconds: 100));
+      }
       
       expect(gameService.gameState!.currentPhase, GamePhase.truth);
       print('Phase: Truth Round');
@@ -285,8 +289,10 @@ void main() {
       await gameService.setPlayerReady(true);
       await gameService.debugSimulateBotResponses();
       await Future.delayed(Duration(milliseconds: 100));
-      await gameService.evaluateReadyState();
-      await Future.delayed(Duration(milliseconds: 100));
+      if (gameService.gameState!.currentPhase == GamePhase.truth) {
+        await gameService.evaluateReadyState();
+        await Future.delayed(Duration(milliseconds: 100));
+      }
       
       expect(gameService.gameState!.currentPhase, GamePhase.vote);
       print('Phase: Voting (Card 1/10)');
@@ -300,8 +306,10 @@ void main() {
         await gameService.setPlayerReady(true);
         await gameService.debugSimulateBotResponses();
         await Future.delayed(Duration(milliseconds: 100));
-        await gameService.evaluateReadyState();
-        await Future.delayed(Duration(milliseconds: 100));
+        if (gameService.gameState!.currentPhase == GamePhase.vote) {
+          await gameService.evaluateReadyState();
+          await Future.delayed(Duration(milliseconds: 100));
+        }
         
         expect(gameService.gameState!.currentPhase, GamePhase.reveal);
         
@@ -309,8 +317,10 @@ void main() {
         await gameService.setPlayerReady(true);
         await gameService.debugSimulateBotResponses();
         await Future.delayed(Duration(milliseconds: 100));
-        await gameService.evaluateReadyState();
-        await Future.delayed(Duration(milliseconds: 100));
+        if (gameService.gameState!.currentPhase == GamePhase.reveal) {
+          await gameService.evaluateReadyState();
+          await Future.delayed(Duration(milliseconds: 100));
+        }
         
         // Advance to next resolution
         await gameService.advanceToNextResolution();
@@ -368,8 +378,10 @@ void main() {
       await gameService.setPlayerReady(true); // Host ready
       await gameService.debugSimulateBotResponses();
       await Future.delayed(Duration(milliseconds: 100));
-      await gameService.evaluateReadyState(); // Advance manually as host
-      await Future.delayed(Duration(milliseconds: 100));
+      if (gameService.gameState!.currentRotationIndex == 1) {
+        await gameService.evaluateReadyState(); // Advance manually as host
+        await Future.delayed(Duration(milliseconds: 100));
+      }
       
       // Verify transitioned to sabotage round 2, without needing spectator ready
       expect(gameService.gameState!.currentRotationIndex, 2);
@@ -392,8 +404,10 @@ void main() {
       await gameService.setPlayerReady(true);
       await gameService.debugSimulateBotResponses();
       await Future.delayed(Duration(milliseconds: 100));
-      await gameService.evaluateReadyState();
-      await Future.delayed(Duration(milliseconds: 100));
+      if (gameService.gameState!.currentPhase == GamePhase.forgery) {
+        await gameService.evaluateReadyState();
+        await Future.delayed(Duration(milliseconds: 100));
+      }
       
       expect(gameService.gameState!.currentPhase, GamePhase.truth);
       print('Phase: Truth Round');
@@ -402,8 +416,10 @@ void main() {
       await gameService.setPlayerReady(true);
       await gameService.debugSimulateBotResponses();
       await Future.delayed(Duration(milliseconds: 100));
-      await gameService.evaluateReadyState();
-      await Future.delayed(Duration(milliseconds: 100));
+      if (gameService.gameState!.currentPhase == GamePhase.truth) {
+        await gameService.evaluateReadyState();
+        await Future.delayed(Duration(milliseconds: 100));
+      }
       
       expect(gameService.gameState!.currentPhase, GamePhase.vote);
       print('Phase: Voting (9 active cards remaining)');
@@ -418,8 +434,10 @@ void main() {
         await gameService.setPlayerReady(true);
         await gameService.debugSimulateBotResponses();
         await Future.delayed(Duration(milliseconds: 100));
-        await gameService.evaluateReadyState();
-        await Future.delayed(Duration(milliseconds: 100));
+        if (gameService.gameState!.currentPhase == GamePhase.vote) {
+          await gameService.evaluateReadyState();
+          await Future.delayed(Duration(milliseconds: 100));
+        }
         
         expect(gameService.gameState!.currentPhase, GamePhase.reveal);
         
@@ -427,8 +445,10 @@ void main() {
         await gameService.setPlayerReady(true);
         await gameService.debugSimulateBotResponses();
         await Future.delayed(Duration(milliseconds: 100));
-        await gameService.evaluateReadyState();
-        await Future.delayed(Duration(milliseconds: 100));
+        if (gameService.gameState!.currentPhase == GamePhase.reveal) {
+          await gameService.evaluateReadyState();
+          await Future.delayed(Duration(milliseconds: 100));
+        }
         
         // Advance to next resolution
         await gameService.advanceToNextResolution();

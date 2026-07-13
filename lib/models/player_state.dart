@@ -27,6 +27,9 @@ class PlayerState {
   // Prompt re-roll
   final bool hasRerolled;
 
+  // Custom Prompts contribution
+  final List<String> customPrompts;
+
   PlayerState({
     required this.id,
     required this.name,
@@ -43,6 +46,7 @@ class PlayerState {
     this.lastReaction,
     this.lastReactionAt,
     this.hasRerolled = false,
+    this.customPrompts = const [],
   });
 
   PlayerState copyWith({
@@ -61,6 +65,7 @@ class PlayerState {
     String? lastReaction,
     int? lastReactionAt,
     bool? hasRerolled,
+    List<String>? customPrompts,
   }) {
     return PlayerState(
       id: id ?? this.id,
@@ -78,6 +83,7 @@ class PlayerState {
       lastReaction: lastReaction ?? this.lastReaction,
       lastReactionAt: lastReactionAt ?? this.lastReactionAt,
       hasRerolled: hasRerolled ?? this.hasRerolled,
+      customPrompts: customPrompts ?? this.customPrompts,
     );
   }
 
@@ -98,6 +104,7 @@ class PlayerState {
       'lastReaction': lastReaction,
       'lastReactionAt': lastReactionAt,
       'hasRerolled': hasRerolled,
+      'customPrompts': customPrompts,
     };
   }
 
@@ -121,6 +128,7 @@ class PlayerState {
       lastReaction: map['lastReaction'],
       lastReactionAt: map['lastReactionAt']?.toInt(),
       hasRerolled: map['hasRerolled'] ?? false,
+      customPrompts: List<String>.from(map['customPrompts'] ?? []),
     );
   }
 }

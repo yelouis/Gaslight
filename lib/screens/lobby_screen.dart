@@ -26,6 +26,7 @@ class LobbyScreen extends StatefulWidget {
 class _LobbyScreenState extends State<LobbyScreen> {
   final _nameController = TextEditingController();
   final _roomCodeController = TextEditingController();
+  final _customPromptController = TextEditingController();
   bool _nameError = false;
   int _selectedRounds = 1;
   int _selectedAvatarIndex = 0;
@@ -306,20 +307,25 @@ class _LobbyScreenState extends State<LobbyScreen> {
       _knownPlayerIds = currentIds;
     }
 
-    final availableDecks = PromptDecks.availableDecks.where((d) {
-      if (_familyFriendlyOnly) {
-        return d != 'rated_r_nsfw' && d != 'cah_dark_humor';
-      }
-      return true;
-    }).toList();
+    final availableDecks = [
+      ...PromptDecks.availableDecks.where((d) {
+        if (_familyFriendlyOnly) {
+          return d != 'rated_r_nsfw' && d != 'cah_dark_humor';
+        }
+        return true;
+      }),
+      'custom',
+    ];
     
-    if (!availableDecks.contains(_selectedDeck)) {
-      _selectedDeck = availableDecks.first;
-    }
+    final selectedDeckId = availableDecks.contains(gs.gameState?.selectedDeckId)
+        ? gs.gameState!.selectedDeckId!
+        : availableDecks.first;
 
     final activeCount = players.where((p) => p.role != PlayerRole.spectator).length;
     final rounds = gs.gameState?.sabotageAnswersCount ?? 2;
-    final deckSize = PromptDecks.getDeckSize(_selectedDeck);
+    final deckSize = selectedDeckId == 'custom'
+        ? activeCount
+        : PromptDecks.getDeckSize(selectedDeckId);
     
     String? startWarning;
     if (activeCount < 2) {
@@ -389,6 +395,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 },
               ),
             ),
+            if (selectedDeckId == 'custom') ...[
+              const SizedBox(height: 16),
+              _buildCustomPromptsSection(theme, gs),
+            ],
             if (isHost) ...[
               const SizedBox(height: 16),
               CrimsonShadowCard(
@@ -480,7 +490,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                           style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory),
                         ),
                         DropdownButton<String>(
-                          value: _selectedDeck,
+                          value: selectedDeckId,
                           dropdownColor: AppColors.groundRaised,
                           style: const TextStyle(color: AppColors.brass, fontWeight: FontWeight.bold),
                           items: availableDecks.map((deckId) {
@@ -490,7 +500,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
                             );
                           }).toList(),
                           onChanged: (val) {
-                            if (val != null) setState(() => _selectedDeck = val);
+                            if (val != null) {
+                              gs.updateLobbySettings(selectedDeckId: val);
+                            }
                           },
                         ),
                       ],
@@ -834,10 +846,161 @@ class _LobbyScreenState extends State<LobbyScreen> {
     );
   }
 
+  Widget _buildCustomPromptsSection(ThemeData theme, GameService gs) {
+    final me = gs.currentPlayer;
+    if (me == null) return const SizedBox.shrink();
+
+    final myPrompts = me.customPrompts;
+    
+    int totalContributions = 0;
+    final activeCount = gs.players.where((p) => p.role != PlayerRole.spectator).length;
+    for (var p in gs.players) {
+      if (p.role != PlayerRole.spectator) {
+        totalContributions += p.customPrompts.length;
+      }
+    }
+
+    return CrimsonShadowCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'YOUR CUSTOM PROMPTS',
+                style: TextStyle(
+                  fontFamily: 'CormorantGaramond',
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.secondary,
+                  letterSpacing: 2,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.ground,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.brass.withOpacity(0.5)),
+                ),
+                child: Text(
+                  'Lobby Total: $totalContributions/$activeCount',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brass,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Write prompts that other players will receive! Ex: "What is your biggest regret from high school?"',
+            style: TextStyle(color: Colors.white70, fontSize: 12, fontStyle: FontStyle.italic),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _customPromptController,
+                  maxLength: 200,
+                  style: const TextStyle(color: AppColors.ivory, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Enter a custom prompt...',
+                    hintStyle: const TextStyle(color: Colors.white30),
+                    counterText: '',
+                    filled: true,
+                    fillColor: Colors.black26,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: AppColors.brass.withOpacity(0.3)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.brass),
+                    ),
+                  ),
+                  onSubmitted: (_) => _addCustomPrompt(gs, myPrompts),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.add_circle, color: AppColors.brass, size: 36),
+                onPressed: () => _addCustomPrompt(gs, myPrompts),
+              ),
+            ],
+          ),
+          if (myPrompts.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 120),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: myPrompts.length,
+                itemBuilder: (context, idx) {
+                  final prompt = myPrompts[idx];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6.0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black12,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              prompt,
+                              style: const TextStyle(color: AppColors.ivory, fontSize: 13),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.redAccent, size: 18),
+                            onPressed: () {
+                              final updated = List<String>.from(myPrompts)..removeAt(idx);
+                              gs.updatePlayerCustomPrompts(updated);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _addCustomPrompt(GameService gs, List<String> myPrompts) {
+    final text = _customPromptController.text.trim();
+    if (text.isEmpty) return;
+    if (text.length > 200) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Prompt cannot exceed 200 characters.')),
+      );
+      return;
+    }
+    
+    final updated = List<String>.from(myPrompts)..add(text);
+    gs.updatePlayerCustomPrompts(updated);
+    _customPromptController.clear();
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
     _roomCodeController.dispose();
+    _customPromptController.dispose();
     super.dispose();
   }
 }

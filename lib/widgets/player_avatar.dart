@@ -99,12 +99,15 @@ class PlayerAvatar extends StatelessWidget {
         Stack(
           clipBehavior: Clip.none,
           children: [
-            buildChip(
-              colorValue: player.colorValue,
-              avatarIndex: player.avatarIndex,
-              size: size,
-              isActiveReader: isActiveReader,
-            ),
+            () {
+              final chip = buildChip(
+                colorValue: player.colorValue,
+                avatarIndex: player.avatarIndex,
+                size: size,
+                isActiveReader: isActiveReader,
+              );
+              return isActiveReader ? _PulsingHalo(size: size, child: chip) : childChipWrapper(chip);
+            }(),
             if (player.lobbyReady)
               Positioned(
                 right: -4,
@@ -155,6 +158,65 @@ class PlayerAvatar extends StatelessWidget {
           ),
         ]
       ],
+    );
+  }
+
+  Widget childChipWrapper(Widget chip) {
+    return chip;
+  }
+}
+
+class _PulsingHalo extends StatefulWidget {
+  final Widget child;
+  final double size;
+
+  const _PulsingHalo({required this.child, required this.size});
+
+  @override
+  State<_PulsingHalo> createState() => _PulsingHaloState();
+}
+
+class _PulsingHaloState extends State<_PulsingHalo> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _glowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    _glowAnimation = Tween<double>(begin: 0.3, end: 0.85).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _glowAnimation,
+      builder: (context, child) {
+        return Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.brass.withOpacity(_glowAnimation.value),
+                blurRadius: 10 + 6 * _glowAnimation.value,
+                spreadRadius: 2 + 2 * _glowAnimation.value,
+              )
+            ],
+          ),
+          child: widget.child,
+        );
+      },
     );
   }
 }

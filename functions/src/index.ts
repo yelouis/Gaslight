@@ -305,9 +305,108 @@ export const startGame = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "Cannot start: Need more players than forgery rounds.");
     }
 
-    const deckSize = PromptDecks.getDeckSize(selectedDeckId);
-    if (deckSize < activePlayers.length) {
-      throw new HttpsError("failed-precondition", `Cannot start: Selected deck has ${deckSize} prompts, but you need at least ${activePlayers.length} prompts.`);
+    let prompts: string[] = [];
+    if (selectedDeckId === "custom") {
+      interface PromptItem {
+        text: string;
+        authorId: string;
+      }
+      const pool: PromptItem[] = [];
+      const seen = new Set<string>();
+
+      for (const p of activePlayers) {
+        const pPrompts = (p as any).customPrompts || [];
+        for (const promptText of pPrompts) {
+          const trimmed = promptText.trim();
+          if (trimmed.length > 0 && trimmed.length <= 200) {
+            const lower = trimmed.toLowerCase();
+            if (!seen.has(lower)) {
+              seen.add(lower);
+              pool.push({ text: trimmed, authorId: p.id });
+            }
+          }
+        }
+      }
+
+      const fallbackDeckId = "the_daily_grind";
+      let topUpNeeded = activePlayers.length - pool.length;
+      if (topUpNeeded > 0) {
+        const fallbackPrompts = PromptDecks.drawPrompts(fallbackDeckId, activePlayers.length * 2);
+        for (const fp of fallbackPrompts) {
+          if (topUpNeeded <= 0) break;
+          const fpLower = fp.toLowerCase();
+          if (!seen.has(fpLower)) {
+            seen.add(fpLower);
+            pool.push({ text: fp, authorId: "fallback" });
+            topUpNeeded--;
+          }
+        }
+      }
+
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+
+      const assigned: Record<string, string> = {};
+      const usedIndices = new Set<number>();
+
+      for (const player of activePlayers) {
+        let assignedIdx = -1;
+        for (let i = 0; i < pool.length; i++) {
+          if (usedIndices.has(i)) continue;
+          if (pool[i].authorId !== player.id) {
+            assignedIdx = i;
+            break;
+          }
+        }
+
+        if (assignedIdx !== -1) {
+          assigned[player.id] = pool[assignedIdx].text;
+          usedIndices.add(assignedIdx);
+        } else {
+          let swapDone = false;
+          const stuckPromptIdx = pool.findIndex((p, idx) => !usedIndices.has(idx) && p.authorId === player.id);
+          if (stuckPromptIdx !== -1) {
+            const stuckPrompt = pool[stuckPromptIdx];
+            for (const [otherPlayerId, otherPromptText] of Object.entries(assigned)) {
+              const otherPromptIdx = pool.findIndex(p => p.text === otherPromptText);
+              if (otherPromptIdx !== -1) {
+                const otherPrompt = pool[otherPromptIdx];
+                if (stuckPrompt.authorId !== otherPlayerId && otherPrompt.authorId !== player.id) {
+                  assigned[otherPlayerId] = stuckPrompt.text;
+                  assigned[player.id] = otherPrompt.text;
+                  usedIndices.add(stuckPromptIdx);
+                  swapDone = true;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (!swapDone) {
+            const fallbackPrompts = PromptDecks.drawPrompts(fallbackDeckId, activePlayers.length * 2);
+            let freshFP = "";
+            for (const fp of fallbackPrompts) {
+              const fpLower = fp.toLowerCase();
+              if (!seen.has(fpLower)) {
+                seen.add(fpLower);
+                freshFP = fp;
+                break;
+              }
+            }
+            assigned[player.id] = freshFP;
+          }
+        }
+      }
+
+      prompts = activePlayers.map(p => assigned[p.id]);
+    } else {
+      const deckSize = PromptDecks.getDeckSize(selectedDeckId);
+      if (deckSize < activePlayers.length) {
+        throw new HttpsError("failed-precondition", `Cannot start: Selected deck has ${deckSize} prompts, but you need at least ${activePlayers.length} prompts.`);
+      }
+      prompts = PromptDecks.drawPrompts(selectedDeckId, activePlayers.length);
     }
 
     const pIds = activePlayers.map(p => p.id);
@@ -316,8 +415,6 @@ export const startGame = onCall(async (request) => {
     for (const [key, val] of Object.entries(nativeRotations)) {
       stringRotations[key] = val;
     }
-
-    const prompts = PromptDecks.drawPrompts(selectedDeckId, activePlayers.length);
     const startingCards: CardModel[] = pIds.map((pid, idx) => ({
       targetPlayerId: pid,
       promptText: prompts[idx],
@@ -640,7 +737,8 @@ export const rerollPrompt = onCall(async (request) => {
     }
 
     const excluded = new Set(room.cards.map(c => c.promptText));
-    const newPrompt = PromptDecks.drawOneExcluding(room.selectedDeckId, excluded);
+    const deckId = room.selectedDeckId === "custom" ? "the_daily_grind" : room.selectedDeckId;
+    const newPrompt = PromptDecks.drawOneExcluding(deckId, excluded);
 
     const updatedCard = { ...room.cards[cardIdx], promptText: newPrompt };
     const newCards = [...room.cards];
@@ -904,13 +1002,16 @@ async function advancePhaseInternal(
   } else if (room.currentPhase === "vote") {
     // Tally scores and advance to Reveal
     const currentCard = currentCards.find(c => c.targetPlayerId === room.currentReaderId);
+    let hasFooled = false;
     if (currentCard) {
-      const deltas = ScoringLogic.calculateScores(room, currentCard, currentCard.votes);
+      const votes = currentCard.votes || {};
+      hasFooled = Object.values(votes).some(v => v !== "TRUTH");
+      const deltas = ScoringLogic.calculateScores(room, currentCard, votes);
 
       const timesFooledDeltas: Record<string, number> = {};
       const playersDeceivedDeltas: Record<string, number> = {};
 
-      for (const [voterId, votedForId] of Object.entries(currentCard.votes)) {
+      for (const [voterId, votedForId] of Object.entries(votes)) {
         if (votedForId !== "TRUTH" && votedForId !== voterId) {
           timesFooledDeltas[voterId] = (timesFooledDeltas[voterId] || 0) + 1;
           playersDeceivedDeltas[votedForId] = (playersDeceivedDeltas[votedForId] || 0) + 1;
@@ -934,10 +1035,13 @@ async function advancePhaseInternal(
       }
     }
 
+    const unmaskDeadline = hasFooled ? Date.now() + 20000 : null;
+
     transaction.update(roomRef, {
       currentPhase: "reveal",
       readyPlayers: nextReadyPlayers,
-      endTime: null
+      endTime: null,
+      unmaskDeadline
     });
   }
 }
@@ -948,7 +1052,7 @@ export const updateLobbySettings = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
   }
   const callerUid = request.auth.uid;
-  const { roomCode, sabotageAnswersCount, isTimerDisabled } = request.data;
+  const { roomCode, sabotageAnswersCount, isTimerDisabled, selectedDeckId } = request.data;
   if (!roomCode) {
     throw new HttpsError("invalid-argument", "roomCode is required.");
   }
@@ -972,7 +1076,8 @@ export const updateLobbySettings = onCall(async (request) => {
     const data = roomSnap.data() as GameState;
     transaction.update(roomRef, {
       sabotageAnswersCount: sabotageAnswersCount !== undefined ? sabotageAnswersCount : data.sabotageAnswersCount,
-      isTimerDisabled: isTimerDisabled !== undefined ? isTimerDisabled : data.isTimerDisabled
+      isTimerDisabled: isTimerDisabled !== undefined ? isTimerDisabled : data.isTimerDisabled,
+      selectedDeckId: selectedDeckId !== undefined ? selectedDeckId : (data.selectedDeckId || "the_daily_grind")
     });
 
     return { success: true };
@@ -1018,11 +1123,13 @@ export const advanceToNextResolution = onCall(async (request) => {
         currentPhase: "vote",
         currentReaderId: nextReaderId,
         readyPlayers: {},
-        endTime: endTime
+        endTime: endTime,
+        unmaskDeadline: null
       });
     } else {
       transaction.update(roomRef, {
-        currentPhase: "gameOver"
+        currentPhase: "gameOver",
+        unmaskDeadline: null
       });
     }
 
@@ -1030,7 +1137,94 @@ export const advanceToNextResolution = onCall(async (request) => {
   });
 });
 
-// 12. Debug Add Bots
+// 12. Submit Unmask Guess
+export const submitUnmaskGuess = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+
+  const callerUid = request.auth.uid;
+  const { roomCode, guesserId, guessedAuthorId } = request.data;
+  if (!roomCode || !guesserId || !guessedAuthorId) {
+    throw new HttpsError("invalid-argument", "roomCode, guesserId, and guessedAuthorId are required.");
+  }
+
+  const roomRef = db.collection("rooms").doc(roomCode);
+  const playerRef = roomRef.collection("players").doc(guesserId);
+
+  const playerSnap = await playerRef.get();
+  if (!playerSnap.exists || (playerSnap.data() as PlayerState).authUid !== callerUid) {
+    throw new HttpsError("permission-denied", "User does not own this player document.");
+  }
+
+  return await db.runTransaction(async (transaction) => {
+    const roomSnap = await transaction.get(roomRef);
+    if (!roomSnap.exists) {
+      throw new HttpsError("not-found", "Room not found.");
+    }
+    const room = roomSnap.data() as GameState;
+
+    if (room.currentPhase !== "reveal") {
+      throw new HttpsError("failed-precondition", "Unmask guesses are only allowed during reveal phase.");
+    }
+
+    if (!room.unmaskDeadline || Date.now() > room.unmaskDeadline) {
+      throw new HttpsError("failed-precondition", "Unmask guess deadline has passed or is inactive.");
+    }
+
+    const currentCardIdx = room.cards.findIndex(c => c.targetPlayerId === room.currentReaderId);
+    if (currentCardIdx === -1) {
+      throw new HttpsError("failed-precondition", "Current reader card not found.");
+    }
+    const currentCard = room.cards[currentCardIdx];
+
+    const voterId = guesserId;
+    const votedForId = currentCard.votes?.[voterId];
+    if (!votedForId) {
+      throw new HttpsError("failed-precondition", "Player did not cast a vote for this card.");
+    }
+
+    if (votedForId === "TRUTH") {
+      throw new HttpsError("failed-precondition", "Only players who fell for a forgery can make an unmask guess.");
+    }
+
+    if (currentCard.unmaskGuesses?.[voterId]) {
+      throw new HttpsError("failed-precondition", "Player has already submitted an unmask guess.");
+    }
+
+    if (guessedAuthorId === voterId) {
+      throw new HttpsError("invalid-argument", "Cannot guess yourself as the author.");
+    }
+
+    const unmaskGuesses = currentCard.unmaskGuesses ? { ...currentCard.unmaskGuesses } : {};
+    unmaskGuesses[voterId] = guessedAuthorId;
+
+    const newCards = [...room.cards];
+    newCards[currentCardIdx] = {
+      ...currentCard,
+      unmaskGuesses
+    };
+
+    transaction.update(roomRef, { cards: newCards });
+
+    const isCorrect = guessedAuthorId === votedForId;
+    if (isCorrect) {
+      const guesserRef = roomRef.collection("players").doc(voterId);
+      const forgerRef = roomRef.collection("players").doc(votedForId);
+
+      transaction.update(guesserRef, {
+        totalScore: FieldValue.increment(1)
+      });
+      transaction.update(forgerRef, {
+        totalScore: FieldValue.increment(-1)
+      });
+    }
+
+    return { success: true };
+  });
+});
+
+// 13. Debug Add Bots
 export const debugAddBots = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
@@ -1071,7 +1265,7 @@ export const debugAddBots = onCall(async (request) => {
       isReady: false,
       timesFooled: 0,
       playersDeceived: 0,
-      lastSeen: Date.now(),
+      lastSeen: null,
       lastReaction: null,
       lastReactionAt: null,
       hasRerolled: false,
@@ -1144,6 +1338,12 @@ export const debugSimulateBotResponses = onCall(async (request) => {
         cards,
         readyPlayers
       });
+
+      const activePlayers = players.filter(p => p.role !== "spectator");
+      const allReady = activePlayers.length > 0 && activePlayers.every(p => readyPlayers[p.id] === true);
+      if (allReady) {
+        await advancePhaseInternal(transaction, roomRef, room, activePlayers, cards);
+      }
     } else if (phase === "vote") {
       const currentTargetId = room.currentReaderId;
       if (!currentTargetId) {
@@ -1178,6 +1378,12 @@ export const debugSimulateBotResponses = onCall(async (request) => {
         cards,
         readyPlayers
       });
+
+      const activePlayers = players.filter(p => p.role !== "spectator");
+      const allReady = activePlayers.length > 0 && activePlayers.every(p => readyPlayers[p.id] === true);
+      if (allReady) {
+        await advancePhaseInternal(transaction, roomRef, room, activePlayers, cards);
+      }
     }
 
     return { success: true };

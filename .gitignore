@@ -71,4 +71,7 @@ functions/lib/
 # Local test outputs
 test_output.txt
 
+# Gemini IDE
+.gemini/
+
 

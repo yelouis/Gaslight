@@ -16,13 +16,22 @@ class AutoAdvanceTimer extends StatefulWidget {
   State<AutoAdvanceTimer> createState() => _AutoAdvanceTimerState();
 }
 
-class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> {
+class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> with SingleTickerProviderStateMixin {
   Timer? _timer;
   int _secondsRemaining = 0;
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
     _startTimer();
   }
 
@@ -67,6 +76,7 @@ class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> {
   @override
   void dispose() {
     _timer?.cancel();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -77,10 +87,20 @@ class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> {
     final theme = Theme.of(context);
     final isLowTime = _secondsRemaining <= 10;
 
-    return Container(
+    if (isLowTime) {
+      if (!_pulseController.isAnimating) {
+        _pulseController.repeat(reverse: true);
+      }
+    } else {
+      if (_pulseController.isAnimating) {
+        _pulseController.stop();
+      }
+    }
+
+    final timerWidget = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: isLowTime ? theme.colorScheme.error.withOpacity(0.1) : theme.colorScheme.secondary.withOpacity(0.1),
+        color: isLowTime ? theme.colorScheme.error.withOpacity(0.15) : theme.colorScheme.secondary.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isLowTime ? theme.colorScheme.error : theme.colorScheme.secondary,
@@ -108,5 +128,20 @@ class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> {
         ],
       ),
     );
+
+    if (isLowTime) {
+      return AnimatedBuilder(
+        animation: _pulseAnimation,
+        builder: (context, child) {
+          return Opacity(
+            opacity: _pulseAnimation.value,
+            child: child,
+          );
+        },
+        child: timerWidget,
+      );
+    }
+
+    return timerWidget;
   }
 }

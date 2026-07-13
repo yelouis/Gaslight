@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gaslight/main.dart';
 import 'package:gaslight/services/game_service.dart';
+import 'package:gaslight/models/game_state.dart';
 import 'package:gaslight/utils/semantic_filter.dart';
 import 'simulation_test.dart';
 import 'fake_functions.dart';
@@ -108,7 +109,9 @@ void main() {
       // Complete forgery round 1
       await gameService.debugSimulateBotResponses();
       await tick(200);
-      await gameService.evaluateReadyState();
+      if (gameService.gameState!.currentPhase == GamePhase.forgery) {
+        await gameService.evaluateReadyState();
+      }
       await tick(600);
 
       // 6. Verify transition directly to TRUTH phase (as 1 round was configured)
@@ -125,7 +128,9 @@ void main() {
       // Complete Truth round
       await gameService.debugSimulateBotResponses();
       await tick(200);
-      await gameService.evaluateReadyState();
+      if (gameService.gameState!.currentPhase == GamePhase.truth) {
+        await gameService.evaluateReadyState();
+      }
       await tick(600);
 
       // 7. Verify transition to VOTE phase and resolve all 10 cards
@@ -150,11 +155,14 @@ void main() {
 
         await gameService.debugSimulateBotResponses();
         await tick(200);
-        await gameService.evaluateReadyState();
+        if (gameService.gameState!.currentPhase == GamePhase.vote) {
+          await gameService.evaluateReadyState();
+        }
         await tick(600);
 
         // Verify transition to REVEAL phase
         expect(find.text('THE REVEAL'), findsOneWidget);
+        await tick(6000); // Wait for the beats sequence to reveal points and unmask tray
         final currentTargetName = gameService.players.firstWhere((p) => p.id == gameService.gameState!.currentReaderId).name.toUpperCase();
         expect(find.text("RESOLVING ${currentTargetName}'S CARD"), findsOneWidget);
         expect(find.text('POINTS AWARDED THIS CARD'), findsOneWidget);
