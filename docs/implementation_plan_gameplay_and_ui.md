@@ -219,10 +219,13 @@ Full rationale: `docs/design_ui_direction.md`. North star: **a gas-lit Victorian
 
 ## E7 · Motion, sound & feel (§8 — approved) — restraint
 1. Concentrate motion into **orchestrated moments**: wax-stamp on commit; card-flip on reveal (E4); lamp-flicker on low timer and phase transitions.
-2. Optional high-impact: a few **bundled sounds** (quill scratch on submit, wax *thunk* on vote, low swell on Truth reveal) + **haptics** on commit/reveal, behind a **mute toggle**. (Needs licensed assets + `audioplayers`/`just_audio` dep.)
+2. Optional high-impact: a few **bundled sounds** (quill scratch on submit, wax *thunk* on vote, low swell on Truth reveal) + **haptics** on commit/reveal, behind a **mute toggle**.
+   > [!NOTE]
+   > **Sound Assets Deferral Note (July 13)**: The implementation of bundled sound effects (quill scratch, wax thunk, low swell) and the `audioplayers` dependency has been explicitly deferred because no licensed audio assets (.mp3/.wav files) have been provided in the repository.
+   > **Haptics**: `HapticFeedback.mediumImpact()` is triggered on commit/reveal events.
 3. Add a **"reduce motion" setting** and honor the OS accessibility flag; every animation (E4/D2/D3) checks it and degrades to the final state.
 
-**Validation:** Manual — animations feel intentional, not scattered; mute + reduce-motion toggles work; no motion when reduce-motion is on.
+**Validation:** Manual — animations feel intentional, not scattered; reduce-motion toggles/OS settings work; no motion when reduce-motion is on.
 
 ## E8 · Accessibility & polish (§9 — approved)
 1. Parchment answer text at full-strength `ink`; don't carry meaning by dim opacity alone — the disabled self vote-card uses the **ribbon** (E5) + dimming together.

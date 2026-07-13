@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/game_service.dart';
 import '../models/game_state.dart';
@@ -1098,6 +1099,7 @@ class _FlippingRevealCardState extends State<FlippingRevealCard> with SingleTick
     if (widget.isRevealed != oldWidget.isRevealed) {
       if (widget.isRevealed) {
         _controller.forward();
+        HapticFeedback.mediumImpact();
       } else {
         _controller.reverse();
       }

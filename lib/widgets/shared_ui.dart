@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 
 class CrimsonShadowCard extends StatelessWidget {
@@ -186,7 +187,12 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
                       elevation: isEnabled ? 6 : 0,
                       shadowColor: Colors.black.withOpacity(0.5),
                     ),
-                    onPressed: widget.onPressed,
+                    onPressed: widget.onPressed == null
+                        ? null
+                        : () {
+                            HapticFeedback.mediumImpact();
+                            widget.onPressed!();
+                          },
                     child: widget.icon == null
                         ? Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2))
                         : Row(
@@ -257,7 +263,12 @@ class SecondaryButton extends StatelessWidget {
           ),
           elevation: 6,
         ),
-        onPressed: onPressed,
+        onPressed: onPressed == null
+            ? null
+            : () {
+                HapticFeedback.lightImpact();
+                onPressed!();
+              },
         child: Text(
           text, 
           style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5),

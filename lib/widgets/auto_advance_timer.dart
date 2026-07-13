@@ -87,7 +87,8 @@ class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> with SingleTickerPr
     final theme = Theme.of(context);
     final isLowTime = _secondsRemaining <= 10;
 
-    if (isLowTime) {
+    final prefersReducedMotion = MediaQuery.of(context).accessibleNavigation;
+    if (isLowTime && !prefersReducedMotion) {
       if (!_pulseController.isAnimating) {
         _pulseController.repeat(reverse: true);
       }
@@ -129,7 +130,7 @@ class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> with SingleTickerPr
       ),
     );
 
-    if (isLowTime) {
+    if (isLowTime && !prefersReducedMotion) {
       return AnimatedBuilder(
         animation: _pulseAnimation,
         builder: (context, child) {
