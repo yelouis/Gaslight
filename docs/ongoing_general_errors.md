@@ -192,7 +192,106 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-There are currently no unresolved issues. All issues selected in Option A/Option D have been implemented and verified.
+> Found during the July 13 verification pass of the R1–R7 delivery. The backend migration itself is verified solid (9/9 emulator tests, 12/12 Flutter tests, 0 analyzer errors) — both new issues below are defects in the ported **debug/bot tooling** (Issue 17's implementation), not in the player-facing game.
+
+---
+
+### Issue 19: Debug Bots Get Pruned as "Disconnected" 30 Seconds Into the Game
+**Status**: ⚠️ Confirmed Unresolved — Verified in `functions/src/index.ts` `debugAddBots` (bot docs created with `lastSeen: Date.now()`) against the client dead-player detector in `game_service.dart` (~line 296).
+- **What it means for you (the developer):** You add 9 bots to test a game solo, start playing, and about 30 seconds in the bots start vanishing one by one — cards get removed, rotations recalculate, and the debug game collapses, exactly as if 9 real players all rage-quit at once.
+- **Root cause:** Bots are created with a `lastSeen` timestamp but never send heartbeats. The client prunes any player whose `lastSeen` is older than 30 seconds by calling the `handleDisconnect` callable — which succeeds, because its authorization explicitly allows removing stale players. The original R5 spec called for `lastSeen: null` on bot docs precisely because the client detector skips players with a null `lastSeen`.
+
+**Option A (recommended)**: **Create bots with `lastSeen: null`** — one-line change in `debugAddBots`. The client's dead-player check (`if (lastSeen == null) return false;`) then permanently ignores bots.
+  - *Pros*: Matches the original spec; single line; no client change; bots become immune to pruning.
+  - *Cons*: None material (bots are debug-only and removed with the room).
+
+**Option B**: **Client-side skip for `bot_` ids** — add `if (p.id.startsWith('bot_')) return false;` to the dead-player filter.
+  - *Pros*: Also works; keeps a real timestamp on bot docs.
+  - *Cons*: Encodes the bot naming convention in the client; needs a client release; Option A is strictly simpler.
+
+**Validation**: Emulator — create a debug room, `debugAddBots`, wait >30s with the app open (or unit-test the dead-player filter against a bot doc), assert no `handleDisconnect` fires for bots and all 9 remain. Manual — Journey 2: play with bots for 2+ minutes including an idle pause; bots must persist.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 20: "BOTS SUBMIT" Never Advances the Phase if the Host Already Submitted
+**Status**: ⚠️ Confirmed Unresolved — Verified in `functions/src/index.ts` `debugSimulateBotResponses`: it merges bot answers/votes and marks bots ready, but never runs the all-ready → advance check that `submitAnswer`/`castVote`/`setReady` perform.
+- **What it means for you (the developer):** In a solo debug game, if you submit your own answer *first* and then tap "DEBUG: BOTS SUBMIT", everyone is marked ready but nothing re-evaluates readiness — the game just sits there. (The documented order — bots first, then your answer — works, because your own submission triggers the check.)
+- **Root cause:** The server advances phases only inside the three gameplay callables. The debug callable updates `readyPlayers` directly without the trailing `allReady → advancePhaseInternal` step, so a readiness state reached *via the debug path* is never acted upon.
+
+**Option A (recommended)**: **Add the all-ready check to `debugSimulateBotResponses`** — after merging bot responses into `newCards`/`newReadyMap`, compute `allReady` over active players and call `advancePhaseInternal(...)` when true, exactly as the gameplay callables do. The callable's reads already all precede its writes, so the R1 transaction invariant holds.
+  - *Pros*: Debug flow becomes order-independent; reuses the existing, tested advance path; ~10 lines.
+  - *Cons*: Must pass the merged `newCards` (not stale `room.cards`) into `advancePhaseInternal` — same care as `submitAnswer`.
+
+**Option B**: **Document the required order** (tap BOTS SUBMIT before submitting your own answer) in `e2e_testing_journeys.md` and leave the code as-is.
+  - *Pros*: Zero code.
+  - *Cons*: A stall trap remains for anyone who forgets; the host's escape hatch (force advance) also fills placeholders unnecessarily when all real answers exist.
+
+**Validation**: Emulator test — host submits first, then invoke `debugSimulateBotResponses`; assert the phase advances without any further call. Repeat in the vote phase with a bot reader. Manual — Journey 2 in both orderings.
+
+Your selection: Proceed with Option A.
+
+---
+
+## 💡 New Gameplay & Fun Proposals (July 13) — ✅ Selections Made
+
+> **Outcome (July 13):** **P8 (Unmask the Forger)** and **P10 (Custom Decks)** selected — both Option A; detailed implementation + validation specs live in `docs/agent_execution_guide.md` (items **N5** and **N6**). **P7, P9, and P11 declined** — do not implement. Original proposals retained below for reference.
+
+---
+
+### Proposal P7: Confidence Wager — "Seal It in Blood"
+**What it adds:** When voting, you can optionally **double-or-nothing** your vote: seal it in blood-red wax instead of plain wax. Right = double points; wrong = you *lose* the base reward you'd have earned. Every card becomes a personal risk decision, and the reveal gets a second layer of drama ("Bob went ALL IN on a forgery!"). This is the single cheapest way to add tension to every round.
+
+**Options:**
+- **Option A (recommended)**: A "Seal in Blood" toggle on the vote confirmation. Wager doubles your gain if correct; if wrong you score `-truthReward` (floor at 0 total for the card). Wagered votes get a distinct blood-seal marker in the reveal.
+- **Option B**: Fixed side-bet of exactly 1 point (win +1 / lose −1) — gentler math, less dramatic.
+
+*Effort:* Low–Medium (one boolean per vote, one scoring branch, seal art). Your selection: Don't do this.
+
+---
+
+### Proposal P8: Unmask the Forger — the Revenge Guess
+**What it adds:** If you got fooled, the reveal isn't over for you: you get **one guess at WHO wrote the lie you fell for**. Guess right and you steal a point back from the forger. Suddenly being fooled isn't just a loss — it starts a grudge match, and forgers must write lies that don't *sound like them*. This deepens exactly the skill the game is about: knowing your friends.
+
+**Options:**
+- **Option A (recommended)**: Fooled voters get a 15-second "Unmask" prompt during the reveal (avatar grid of eligible authors). Correct = +1 to you, −1 to the forger; wrong = nothing. Results shown as a mini second reveal.
+- **Option B**: Same guess, but purely for bragging rights (a "🔍 Sharp Instincts" tally, no points) — zero scoring disruption.
+
+*Effort:* Medium (new reveal sub-step, one callable, scoring tweak). Your selection: Yes, proceed with Option A. I like this idea.
+
+---
+
+### Proposal P9: House Cards — Round Modifiers
+**What it adds:** Some cards come up "marked by the house": a modifier revealed when voting starts. Examples: **Double Stakes** (all points ×2 this card), **Blackout** (answers visible for 12 seconds, then vote from memory), **Crowded Table** (an extra AI-written decoy answer appears). Modifiers break routine in longer games and create "oh no, THIS card" moments.
+
+**Options:**
+- **Option A (recommended)**: Host toggle in the lobby ("House Rules: ON"); ~25% of cards get a random modifier from the three above. Modifier announced with a card-flip flourish at vote start.
+- **Option B**: Ship only **Double Stakes** (pure scoring, no UI mechanics) as a first taste.
+
+*Effort:* Medium–High for the full set; Low for Option B. Your selection: No, this doesn't add much. Don't do this.
+
+---
+
+### Proposal P10: Custom Decks — Write Your Own Prompts
+**What it adds:** The host (or everyone in the lobby) writes their own prompts before the game — inside jokes, workplace themes, family-safe versions. Custom prompts are what make a party game *yours*; it's the #1 replayability feature this genre has.
+
+**Options:**
+- **Option A (recommended)**: Lobby "Custom Deck" builder — every player secretly contributes 2–3 prompts while waiting (great use of lobby dead time); the game shuffles them with a fallback deck if too few. Prompts written by you are never assigned to your own card.
+- **Option B**: Host-only paste-a-list editor (simpler, one writer).
+
+*Effort:* Medium (lobby UI + prompts stored on the room doc + draw logic server-side). Your selection: Yes, proceed with Option A.
+
+---
+
+### Proposal P11: The Final Gambit — Comeback Round
+**What it adds:** The last card of the game is announced as **The Final Gambit**: all points doubled, and every player more than 5 points behind the leader gets their forgery bonus tripled on that card. Trailing players stay engaged to the very end ("I can still win this"), and the finale actually feels like one.
+
+**Options:**
+- **Option A (recommended)**: Double points on the final card + underdog forgery bonus, with a dramatic "FINAL GAMBIT" banner before it starts.
+- **Option B**: Double points only (no underdog rule) — simpler to explain.
+
+*Effort:* Low–Medium (scoring branch keyed on last `resolutionOrder` entry + banner). Your selection: Don't do this.
 
 ---
 

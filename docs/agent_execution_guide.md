@@ -1,222 +1,202 @@
-# Agent Execution Guide — Remaining Work (selections locked, July 12)
+# Agent Execution Guide — Remaining Work (all selections locked, July 13)
 
-**You are an engineering agent picking up Gaslight (Flutter + Firebase party game).** The server-authoritative backend (Cloud Functions) is built but has a **fatal transaction bug** and **no real tests**. The user has selected **Option A for every open issue (13–18)** in `docs/ongoing_general_errors.md` — nothing is awaiting a decision. This guide is the detailed implementation spec: follow it item by item, in order, with the validation attached to each.
+**You are an engineering agent picking up Gaslight (Flutter + Firebase party game).** The server-authoritative backend is done and proven (see §1). Everything below is user-approved and unblocked: two debug-tool bug fixes (Issues 19/20, Option A), one test-coverage gap, **two new gameplay features (P8 "Unmask the Forger" and P10 "Custom Decks", both Option A — N5/N6 below)**, and the visual-polish tail. Proposals **P7, P9, and P11 were declined — do not implement them.**
 
-Read first, once: `docs/implementation_plan_gameplay_and_ui.md` **Section 0** (game, architecture, file map) and `docs/design_database_and_security.md` (the shipped server architecture: callables table, locked-down rules, identity model).
-
-**State right now (verified July 12):** Issues 2–12 + all gameplay proposals + the UI foundation are done and green (`flutter test`: 11/11 pass; `flutter analyze`: 0 errors in `lib/`, 2 known errors in the stale `integration_test/fake_firestore.dart`). Cloud Functions compile (`cd functions && npm run build`). The client no longer calls `evaluateReadyState` from listeners — the **server** auto-advances phases when the last player readies (once R1 fixes the transaction bug). Do not re-do finished work.
+Context read (once): `docs/implementation_plan_gameplay_and_ui.md` **Section 0** (game, architecture, file map) and `docs/design_database_and_security.md` (the shipped server-authoritative architecture).
 
 ---
 
-## Work queue (all selections = Option A)
+## 1. Verified state (July 13 — trust this, don't re-verify)
 
-| # | Issue | One-line goal | Size |
+- **Backend (Issues 1, 13–18): DONE and proven.** `npm --prefix functions test` = **9/9** (full two-client game over real callables, negative auth checks, credential-reset seat re-bind, six rules tests). `flutter test` 12/12; `flutter analyze` **0 errors**; `cd functions && npm run build` clean. Resolved entries #38–44 are legitimate.
+- **Gameplay P1–P6, UI foundation, E6 icons: DONE** (procedural `ThematicIcon`s in `lib/theme/app_icons.dart`; "SEALED" self-card ribbon in `card_grid.dart`).
+- **Accepted deviation — do not "fix":** `_getPlayerId()` derives from the auth uid rather than a persisted UUID; the rejoin **re-bind** flow (emulator-proven) covers seat recovery.
+
+## 2. Work queue
+
+| # | Item | Status | Size |
 |---|---|---|---|
-| **R1** | Issue 13 🔴 | Reorder transaction reads before writes in 3 callables | Small |
-| **R2** | Issue 15 🔴 | Build the emulator integration + rules test suite | ~1 day |
-| **R3** | Issue 14 🔴 | Surface callable errors; unstick the submit/vote spinners | Small |
-| **R4** | Issue 16 🟠 | Device-stable playerId + rejoin re-bind (keep your seat) | Small–Med |
-| **R5** | Issue 17 🟠 | Port debug/bot tools to gated dev callables | Medium |
-| **R6** | Issue 18 🟡 | Field-scoped own-doc writes for reactions/lobby-ready | Tiny |
-| **R7** | Wave E | UI polish: icons (E6), components (E5), sound (E7), a11y (E8) | Medium |
+| **N1** | Issue 19 — bots pruned as disconnected after 30s | ✅ Option A — build | 1 line + tests |
+| **N2** | Issue 20 — BOTS SUBMIT doesn't advance when host submitted first | ✅ Option A — build | ~15 lines + tests |
+| **N3** | Emulator-suite gap: force-advance/placeholder scenario | proceed | Small |
+| **N5** | Feature P8 — "Unmask the Forger" revenge guess | ✅ Option A — build | Medium |
+| **N6** | Feature P10 — Custom Decks (lobby-written prompts) | ✅ Option A — build | Medium |
+| **N4** | Wave E tail: E5 components, E7 sound/motion, E8 a11y | proceed (last) | Medium |
+| — | Proposals P7, P9, P11 | ⛔ **declined — do NOT implement** | — |
 
-When **R1 + R2** are both green: move **Issues 1, 13, and 15** to the Resolved section (the two-client emulator test is the proof Issue 1 was waiting for) and update the status note at the top of `design_database_and_security.md`.
+Execute in this order: **N1 → N2 → N3 → N5 → N6 → N4.** Bug fixes and the coverage test first (N3's scenario also protects N5/N6 regressions), then features, polish last.
 
 ---
 
-## R1 · Issue 13 — Fix the read-after-write transaction ordering (DO FIRST)
+## N1 · Issue 19 — Bots created with a live timestamp get pruned (Option A)
 
-**Problem recap:** Firestore transactions require *all reads before any writes*. In `functions/src/index.ts`, `submitAnswer`, `castVote`, and `setReady` each do: `transaction.get(roomRef)` → `transaction.update(roomRef, …)` → `transaction.get(roomRef.collection("players"))` (to check "all ready → auto-advance"). The Admin SDK throws `Firestore transactions require all reads to be executed before all writes.` on that late read — on **every** call. Nobody can submit, vote, or ready.
+**Change** — `functions/src/index.ts` → `debugAddBots`, inside the `botState` object literal: replace `lastSeen: Date.now()` with `lastSeen: null`.
 
-**Implementation (Option A — reorder, keep one atomic transaction):**
-For each of the three callables, restructure the transaction body to this exact phase order:
+**Why this works:** bots never heartbeat. The client dead-player detector (`lib/services/game_service.dart` ~line 296) treats `lastSeen == null` as "never prune" (`if (lastSeen == null) return false;`), so a null-timestamp bot is permanently exempt. Server side is consistent too: `handleDisconnect`'s `isDead` check (`disconnectedPlayer.lastSeen && (Date.now() - lastSeen) > 30000`) evaluates falsy for null — no behavior change for real players. The TS `PlayerState` interface already types `lastSeen: number | null`, so no type change is needed.
 
-1. **Read phase (all `transaction.get` calls, nothing else):**
-   - `const roomSnap = await transaction.get(roomRef);` (throw `not-found` if missing).
-   - `const playersSnap = await transaction.get(roomRef.collection("players"));` — moved UP from below the write.
-2. **Compute phase (pure logic, no transaction calls):**
-   - Parse `room`, find the card (`submitAnswer`/`castVote`) and validate (`not-found` if the card is missing).
-   - Build `newCards` (answer merged / vote merged) and `newReadyMap = { ...room.readyPlayers, [playerId]: true }` (for `setReady`, use the passed `ready` value).
-   - `const activePlayers = playersSnap.docs.map(d => d.data() as PlayerState).filter(p => p.role !== "spectator");`
-   - `const allReady = activePlayers.length > 0 && activePlayers.every(p => newReadyMap[p.id] === true);`
-3. **Write phase (all writes, no reads after this point):**
-   - `transaction.update(roomRef, { cards: newCards, readyPlayers: newReadyMap });` (`setReady` updates only `readyPlayers`).
-   - `if (allReady) await advancePhaseInternal(transaction, roomRef, room, activePlayers, newCards);` — pass the **already-fetched** `activePlayers` and the **merged** `newCards` so `advancePhaseInternal` needs no reads. Audit `advancePhaseInternal` to confirm it performs **only** `transaction.update` calls (it does today — keep it that way; add a comment stating the invariant: *"must never call transaction.get — callers complete all reads first"*).
+**Also mirror the fake:** `test/fake_functions.dart` implements a fake `debugAddBots` — make its bot docs use `lastSeen: null` too, so Flutter widget tests model the same data.
+
+**Validation:**
+1. Emulator test (add to `functions/test/game_e2e.spec.ts`): create a room with `debugEnabled: true`, call `debugAddBots`, read `bot_1`'s doc via the Admin SDK, assert `lastSeen === null`.
+2. Dart unit test: run the dead-player predicate (extract or replicate the filter logic) against a bot map with `lastSeen: null` and `now = anything` → assert not selected for pruning.
+3. Manual (Journey 2): debug game with bots, idle 2+ minutes mid-forgery — all 9 bots persist, no `handleDisconnect` traffic in the emulator log.
+4. `npm run build` clean; full suites green.
+
+## N2 · Issue 20 — Debug bot submissions never trigger the phase advance (Option A)
+
+**Where:** `functions/src/index.ts` → `debugSimulateBotResponses`. Current structure (verified July 13): one transaction; reads first (`roomSnap`, then `playersSnap` — both before any write, so the R1 invariant already holds); two branches (`forgery`/`truth` and `vote`) that each build local `cards` + `readyPlayers` copies and end with `transaction.update(roomRef, { cards, readyPlayers })`.
+
+**Change — mirror the gameplay-callable pattern exactly** (see `submitAnswer` for the reference): in **each** branch, immediately **after** its existing `transaction.update(roomRef, { cards, readyPlayers })`, append:
+
+1. `const activePlayers = players.filter(p => p.role !== "spectator");` — `players` is already in scope from the read phase; do not re-read.
+2. `const allReady = activePlayers.length > 0 && activePlayers.every(p => readyPlayers[p.id] === true);` — use the **merged** local `readyPlayers`, never `room.readyPlayers`.
+3. `if (allReady) { await advancePhaseInternal(transaction, roomRef, room, activePlayers, cards); }` — pass the **merged** local `cards` (this is what makes placeholder-fill and vote-scoring see the bot submissions). Passing `room` (pre-merge) is correct: `advancePhaseInternal` reads only phase/rotation/plan/assignment/timer fields, none of which the debug merge touches.
 
 Notes:
-- The per-player ownership check (`playerRef.get()` comparing `authUid`) currently runs **before** the transaction in all three callables — leave it there; it does not violate the ordering rule and avoids enlarging the transaction's read set.
-- There is a subtle interaction with `advancePhaseInternal`'s vote branch: it writes score/honor increments to player docs via `transaction.update(pRef, …)` — writes are fine; just ensure no new `transaction.get` sneaks in.
-- After editing: `cd functions && npm run build` must pass.
+- Issuing `advancePhaseInternal`'s room update after the branch's own update is the established pattern (`submitAnswer` does the same); later writes to the same doc override the earlier fields within the transaction.
+- The legacy `transaction.update(pRef, { isReady: true })` player-doc writes in this callable are harmless leftovers — leave or remove, but if removed, confirm nothing reads `isReady` (grep first).
+- `advancePhaseInternal` must remain read-free (invariant comment at its definition).
+- **Mirror the fake:** update the fake `debugSimulateBotResponses` in `test/fake_functions.dart` to perform the same all-ready→advance step, or Flutter widget tests will behave differently from production.
 
 **Validation:**
-- The definitive proof is R2's emulator suite. As an immediate smoke check before R2 exists: start the emulators (`firebase emulators:start --only auth,functions,firestore` after R2's config, or a minimal ad-hoc config), sign in anonymously via the Auth emulator REST API, call `createRoom` → `joinRoom` → `startGame` → one `submitAnswer`, and assert it returns `{success: true}` instead of an internal error. Today that single `submitAnswer` call fails; after R1 it must pass.
-- Regression guard: R2's integration test covers all three callables through a full game.
+1. Emulator test — order-independence (the bug): host `submitAnswer` FIRST, then call `debugSimulateBotResponses`; assert `currentPhase` advanced (rotation incremented or moved to `truth`) with **no further calls**. Before this fix that assertion fails.
+2. Emulator test — vote phase with a **bot reader**: humans vote, then `debugSimulateBotResponses`; assert phase flips to `reveal` and score/honor increments landed (proves the merged `cards` reached the scoring path).
+3. Regression: the documented order (bots first, host last) still advances — covered by re-running the existing full-game flow after the change.
+4. Manual: Journey 2 both orderings; `npm run build`; all suites green.
+
+**On completion of N1+N2:** move Issues 19 and 20 to the Resolved section (what-was-solved format, per `bug_documentation_guidelines`); note in `e2e_testing_journeys.md` Journey 2 that tap order no longer matters.
+
+## N3 · Coverage gap — force-advance/placeholder scenario (proceed now)
+
+The delivered emulator suite lacks the timeout/force-advance path. Add one `it(...)` to `functions/test/game_e2e.spec.ts` (reuse `createAnonUser`/`callFn` helpers, same describe block):
+1. Two players; start; during forgery rotation 1 only ONE submits.
+2. Host calls `advancePhase`.
+3. Assert the phase advanced AND the missing forgery slot equals the placeholder constant (assert the exact string used in `functions/src/index.ts` — `kMissingAnswerPlaceholder` — so copy drift breaks the test).
+4. Continue to truth: one player never submits; host force-advances; assert that card's `truthAnswer` is the placeholder and the vote phase presents a full option set.
+
+**Validation:** `npm --prefix functions test` → 10+ passing including the new scenario.
 
 ---
 
-## R2 · Issue 15 — Build the real emulator + rules test suite
+## N5 · Feature P8 — "Unmask the Forger" (Option A)
 
-**Problem recap:** the backend has never been executed by a test. `test/fake_functions.dart` re-implements the game logic in Dart, so the Flutter suite validates the fake, not the TypeScript. The Wave C4 mandate (two-client emulator test + rules unit tests) was skipped — which is exactly how Issue 13 shipped.
+**What it is (player view):** After the Truth is revealed, every player who fell for a lie gets a 15-second window to guess **who wrote the lie they voted for**. Correct guess: +1 to the guesser, −1 to that forger. Then the forgery authors are unmasked and the guess results shown. Being fooled becomes the start of a grudge match instead of just a loss.
 
-**Implementation (Option A — the full C4 suite):**
+**⚠️ Core design constraint — the reveal must be re-sequenced.** Today the reveal flips **every** forgery's author early in the animation (`FlippingRevealCard` per option row). If authors are visible before the guess, the guess is trivial. The reveal becomes five beats:
+1. Options + vote chips land (existing stagger).
+2. **The Truth flips** (existing, but now FIRST among flips — forgery author cards stay sealed).
+3. **Unmask window** (only when at least one voter was fooled): fooled voters see the guess tray; everyone else sees a status line ("The fooled are naming their deceivers…").
+4. **Forgery authors flip + guess results** ("REVENGE" chips: who unmasked whom, ±1).
+5. Points-awarded chips + standings strip + CONTINUE (existing).
 
-1. **Emulator config** — add to `firebase.json`:
-   ```json
-   "emulators": {
-     "auth": { "port": 9099 },
-     "functions": { "port": 5001 },
-     "firestore": { "port": 8080 },
-     "ui": { "enabled": false }
-   }
-   ```
-   (The client already honors `USE_EMULATOR=true` for these exact ports.)
+### Data model
+- **`CardModel`** (Dart `lib/models/card_model.dart` **and** TS interface in `functions/src/scoring_logic.ts`): add `unmaskGuesses: Map<String, String>` (guesserId → guessedAuthorId), default `{}`, full `toMap`/`fromMap`/`copyWith` + TS typing. Note: the actual author a guesser fell for is already known — it's `card.votes[guesserId]` (votes store the authorId, or `'TRUTH'`). Correctness = `unmaskGuesses[g] == votes[g]`.
+- **`GameState`** (Dart + TS): add `unmaskDeadline: int?` (epoch ms). Serialize; `copyWith` needs a `clearUnmaskDeadline` flag (copy the existing `endTime`/`clearEndTime` pattern exactly).
 
-2. **Test harness location & runner** — put backend tests in `functions/test/` (TypeScript, run with mocha or vitest — pick one, add to `functions/package.json` `devDependencies`, and add scripts: `"test": "firebase emulators:exec --only auth,functions,firestore 'npm run test:inner'"` and `"test:inner"` running the compiled tests). Everything below runs inside `emulators:exec` so the emulators are guaranteed up.
+### Server (`functions/src/index.ts`)
+1. **Set the window at the vote→reveal transition** — in `advancePhaseInternal`'s vote branch, after scoring: compute `hasFooled = Object.values(currentCard.votes).some(v => v !== 'TRUTH')`. Include in the room update: `unmaskDeadline: hasFooled ? Date.now() + 20000 : null` (15 s window + 5 s buffer for the truth-flip beat). In `advanceToNextResolution`, clear it (`unmaskDeadline: null`) when moving to the next card.
+2. **New callable `submitUnmaskGuess`** — args `{roomCode, guesserId, guessedAuthorId}`. Follow the `castVote` skeleton exactly (auth → ownership pre-check on `guesserId`'s doc via `authUid` → transaction with **all reads before writes**):
+   - Reads: room doc, players collection.
+   - Validate (throw `failed-precondition`/`invalid-argument`): `currentPhase == 'reveal'`; `currentReaderId` set and its card found; `card.votes[guesserId]` exists and `!== 'TRUTH'` (only fooled voters guess); `card.unmaskGuesses` lacks `guesserId` (one guess); `room.unmaskDeadline` non-null and `Date.now() <= unmaskDeadline`; `guessedAuthorId !== guesserId`.
+   - Writes: merge the guess into the card's `unmaskGuesses` and update the room's `cards`; if `guessedAuthorId === card.votes[guesserId]` (correct), apply `FieldValue.increment(1)` to the guesser's `totalScore` and `increment(-1)` to the actual forger's. No floor — negative totals are acceptable and dramatic.
+   - Return `{success: true}` only — **do not return correctness**; results are revealed at beat 4 with everyone else (clients compute correctness locally once authors are public).
+3. **No changes** to `debugSimulateBotResponses` — bots never guess (they always vote TRUTH, so they're never fooled).
 
-3. **Auth + callable helpers** — write two small helpers:
-   - `createAnonUser()`: POST to the Auth emulator REST endpoint `http://localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key` with `{returnSecureToken: true}` → returns `{idToken, localId}`.
-   - `callFn(name, idToken, data)`: POST `http://localhost:5001/<projectId>/us-central1/<name>` with headers `Authorization: Bearer <idToken>`, `Content-Type: application/json`, body `{"data": <data>}`; parse `{result}` or the `{error}` envelope. (`<projectId>` comes from `.firebaserc` / the `GCLOUD_PROJECT` env inside `emulators:exec`.)
+### Client (`lib/`)
+1. `GameService`: thin wrapper `submitUnmaskGuess(String guessedAuthorId)` calling the callable with `currentPlayerId`.
+2. `phase4_reveal.dart` — re-sequence `_revealStage` into the five beats, driven by `state.unmaskDeadline`:
+   - Beat timing: beats 1–2 as now but **only the TRUTH row's `FlippingRevealCard` gets `isRevealed: true` before the window**; forgery rows stay sealed until beat 4. Beat 3 runs while `unmaskDeadline != null && now < unmaskDeadline` (compute remaining from the server timestamp — this also makes mid-reveal rejoin land in the correct beat); when `unmaskDeadline == null` (nobody fooled), skip straight to beat 4.
+   - **Guess tray** (fooled local player who hasn't guessed): "UNMASK THE FORGER — who wrote the lie you fell for?" + avatar grid of `card.sabotageAnswers.keys` **minus self**, with a countdown (tabular figures). On tap → confirm → `submitUnmaskGuess`; on success show "Guess sealed." (try/catch + SnackBar per the Issue 14 pattern; leave the tray usable on failure). Non-fooled players and the reader see the status line.
+   - Beat 4: flip forgery authors; render a "REVENGE" results row from `card.unmaskGuesses` vs `card.votes`: correct → "🔍 {guesser} unmasked {forger}! +1 / −1"; wrong → "{guesser} accused {innocent} — missed". The room stream delivers `unmaskGuesses` live.
+   - Reduce-motion (`MediaQuery.accessibleNavigation`): skip flip animations but **keep the guess window** (it's gameplay, not decoration).
+   - Note: the existing "POINTS AWARDED THIS CARD" chips are computed from `ScoringLogic` and won't include unmask ±1s — that's correct; the REVENGE row is their display.
+3. **Mirror in `test/fake_functions.dart`**: fake `submitUnmaskGuess` with the same validation + scoring, and set `unmaskDeadline` in the fake's vote→reveal transition.
 
-4. **Two-client full-game integration test** (the centerpiece — this is the test that proves Issue 1 and would have caught Issue 13):
-   - Create two anon users (host, guest) with **stable playerIds** `"p_host"`, `"p_guest"`.
-   - `createRoom` as host (2 forgery rounds → with 2 players, `startGame` requires players > rounds, so create with `sabotageAnswersCount: 1`); `joinRoom` as guest; `startGame` as host.
-   - Read the room doc via the Admin SDK (`firebase-admin` pointed at the emulator with `FIRESTORE_EMULATOR_HOST`) to fetch `currentCardAssignments`; for each rotation have **both** users call `submitAnswer` for their assigned target — assert each returns success (this line fails before R1).
-   - Assert the phase auto-advanced to `truth` after the last submission (server-side auto-advance); submit truths; assert phase `vote` + `resolutionOrder`/`currentReaderId` set.
-   - Per card: the non-reader calls `castVote` (vote `'TRUTH'`); the reader calls `setReady`; assert phase flips to `reveal`; assert score deltas on player docs match `ScoringLogic` expectations **and** `timesFooled`/`playersDeceived` accumulate; host calls `advanceToNextResolution`; repeat; assert `gameOver` at the end.
-   - **Force-advance branch:** a second scenario where one player never submits during forgery; host calls `advancePhase`; assert the missing slot contains the placeholder text and the phase advanced.
-   - **Negative auth checks:** guest calling `startGame`/`advancePhase` → `permission-denied`; a user calling `submitAnswer` with the *other* player's `authorId` → `permission-denied`; `castVote` with `voterId === votedForId` → `invalid-argument`.
+### Docs
+Update `design_scoring_and_ui.md` (add the Unmask rule to Formulas + the five-beat reveal to Screen Architectures) and the lobby "HOW TO PLAY" manual (`lobby_screen.dart` `_showInstructions`) with one player-friendly line. Add a manual journey to `e2e_testing_journeys.md`.
 
-5. **Rules unit tests** — with `@firebase/rules-unit-testing` (loading `firestore.rules`):
-   - `assertFails`: any write to `/rooms/{code}` by an authed client; `create`/`delete` of a player doc; updating own doc's `totalScore`, `isHost`, or `authUid`; updating **another** player's doc at all.
-   - `assertSucceeds`: updating own doc's `lastSeen`; `{lastReaction, lastReactionAt}`; `lobbyReady`; `name`/`colorValue`/`avatarIndex` — where "own" means the doc's `authUid` equals the request auth uid.
-   - Seed docs with the Admin bypass context (`withSecurityRulesDisabled`).
-
-6. **Clean up the stale fake** — `integration_test/fake_firestore.dart` no longer compiles (2 `invalid_override` errors: `snapshots()` gained a `ListenSource source` parameter in the upgraded SDK). Fix by adding the missing named parameter to both overrides **or** delete the file plus its sole consumer `integration_test/app_test.dart` if that harness is fully superseded by the emulator suite — check imports before deleting. Target: `flutter analyze` back to **0 errors**.
-
-7. **Document** the one-command run (`npm --prefix functions test`, requires `firebase-tools`) in `README.md` under a "Backend tests" section.
-
-**Validation:** the suite *is* the validation. Acceptance: `npm --prefix functions test` green end-to-end including both scenarios and all negative checks; `flutter analyze` 0 errors; `flutter test` still 11/11.
-
----
-
-## R3 · Issue 14 — Surface callable errors; never strand a player on a spinner
-
-**Problem recap:** `_submitAnswer` (`lib/screens/phase2_craft.dart`) and `_castVote` / the reader "I'M READY" path (`lib/screens/phase3_vote.dart`) `await` callables with no try/catch. Any failure (server "too similar" rejection, network blip) leaves `_isSubmitting`/`_submitted` stuck `true` — an eternal spinner, no message, nothing sent.
-
-**Implementation (Option A):**
-1. **`phase2_craft.dart` → `_submitAnswer`:**
-   - Delete the client-side `SemanticFilter` pre-check block (the `comparisonAnswers` build + `isAnswerUnique` call + its SnackBar) and the now-unused import — the server enforces similarity authoritatively.
-   - Delete the `await gs.setPlayerReady(true);` that follows `submitCardAnswer` — the server's `submitAnswer` already marks the author ready inside the same transaction (post-R1).
-   - Wrap the remaining `await gs.submitCardAnswer(targetId, me.id, text, isTruth);` in `try { … } on FirebaseFunctionsException catch (e) { SnackBar(e.message ?? 'Submission failed — try again.'); } catch (e) { generic SnackBar; } finally { if (mounted) setState(() => _isSubmitting = false); }` — and only clear `_answerController` on success. (Import `package:cloud_functions/cloud_functions.dart` for the exception type.)
-2. **`phase3_vote.dart` → `_castVote`:** set `_submitted = true` optimistically as now, but on catch: SnackBar the message and `setState(() => _submitted = false)` so the grid returns and the player can re-vote.
-3. **`phase3_vote.dart` → reader "I'M READY" button:** same pattern around `setPlayerReady(true)` — revert `_submitted` on failure.
-4. Sweep the other user-triggered callables for the same gap: the reroll button (`phase2_craft.dart`) already try/catches — verify; `toggleLobbyReady`, `sendReaction` fail soft (fine); lobby `startGame` already handled (Issue 8).
-
-**Validation:**
-- Widget tests using a throwing fake: extend `test/fake_functions.dart` so a test can arm a one-shot failure for a named callable (e.g. `FakeFirebaseFunctions.failNext('submitAnswer', message: 'Answer is too similar…')` throwing `FirebaseFunctionsException`). Pump the craft screen, submit, assert: SnackBar with the message appears, the SUBMIT button is tappable again, the typed text is still in the field. Repeat for the vote grid (assert re-votable).
-- Manual (emulator, post-R1): submit a near-duplicate answer → see the server's "too similar" message and retry successfully.
+### Validation
+- **Emulator tests** (extend `functions/test/game_e2e.spec.ts`): (a) full-game variant where one voter votes for a forgery → assert `unmaskDeadline` set on reveal; correct guess → scores ±1 and `unmaskGuesses` recorded; (b) wrong guess → no score change; (c) rejections: second guess, guess from a TRUTH-voter, guess after deadline (seed a past deadline via Admin SDK), guess while phase != reveal — each the right error code; (d) nobody fooled → `unmaskDeadline` null.
+- **Widget tests**: fooled player sees the tray, non-fooled doesn't; forgery author rows sealed during beat 3, flipped after; REVENGE row renders correct/missed cases from a seeded card.
+- **Manual**: 3-human game on the emulator — fall for a lie, unmask, watch the ±1 land; confirm the reader's screen makes sense during the window.
 
 ---
 
-## R4 · Issue 16 — Device-stable identity: keep your seat across reinstalls
+## N6 · Feature P10 — Custom Decks (Option A)
 
-**Problem recap:** the server half is done (`joinRoom` re-binds `authUid` for a known `playerId`; callables validate `authUid`; rules lock `authUid`). But the client still uses the **auth uid as the playerId** (`lobby_screen.dart` `_getPlayerId()`), and `tryRejoinSession` **clears the session** on mismatch (the interim guard from Resolved #36) — so seats are still lost, and the guard blocks the server's re-bind from ever running.
+**What it is (player view):** While waiting in the lobby, every player can secretly write up to 3 of their own prompts. If the host picks the **Custom Deck**, the game is played on the group's prompts (topped up from a standard deck if there aren't enough), and nobody ever receives a prompt they wrote themselves.
 
-**Implementation (Option A):**
-1. **Stable ID generation** — in `lobby_screen.dart` `_getPlayerId()`: read SharedPreferences key `stable_player_id`; if absent, generate `const Uuid().v4()` and persist it; **always return it** (never `currentUser.uid`). This id is per-device and permanent.
-2. **Rejoin re-bind** — in `GameService.tryRejoinSession()`:
-   - **Delete** the interim mismatch guard (the `authUid != savedPlayerId → clear prefs → return false` block).
-   - New flow: load `savedRoom`/`savedPlayerId`; fetch the room + player docs (reads are public). If either is missing → clear prefs, return false (room ended).
-   - If the player doc exists, call the **`joinRoom` callable** with `roomCode: savedRoom, playerId: savedPlayerId` and the doc's existing `name`/`colorValue`/`avatarIndex` — the server's rejoin branch updates `authUid` to the current anonymous uid and returns the player's role, restoring write access. Then set `_currentPlayerId = savedPlayerId`, `listenToRoom(savedRoom)`, return true.
-   - Wrap the callable in try/catch: on failure, fall back to clear-prefs/return-false (never restore a session that can't write).
-3. **Migration:** old sessions cached `player_id = <old uid>` — that still works untouched: the saved id points at the existing player doc and `joinRoom` re-binds `authUid` regardless of what the id looks like. No special-casing needed. New sessions write both `stable_player_id` and the session `player_id` (they'll be equal going forward).
-4. **Docs:** update `design_database_and_security.md` §5 — delete the "Current gap / Issue 16" note, state the client behavior as shipped.
+### Data model & rules
+- **`PlayerState`** (Dart + TS): add `customPrompts: List<String>` (default `[]`), serialized. **Contributions ride on the player's own doc** — no new write path needed: the `firestore.rules` protected-field deny-list (`hasAny([...])`) doesn't include `customPrompts`, so owner-writes are already allowed. Verify with a rules test rather than assuming. (Docs are world-readable, so contributions are only secret *in-app* — acceptable for a party game; note it in the design doc.)
+- **`GameState`**: no new field — reuse `selectedDeckId` with the sentinel id `'custom'`.
 
-**Validation:**
-- Emulator test (add to the R2 suite): create+join as anon user A with playerId `p_x`; score some points; create a **new** anon user B (fresh uid); call `joinRoom` with the same `p_x` → assert the player doc's `authUid` == B's uid, `totalScore` preserved, and a follow-up `submitAnswer`/`setReady` as B succeeds.
-- Flutter unit test: `_getPlayerId()` returns the same value across two invocations with mocked prefs; returns a UUID (not the auth uid) when `currentUser` exists.
-- Manual (web): mid-lobby, clear only auth/site storage, reload → app signs in anonymously with a new uid, rejoins, and the same seat/name/score appear.
+### Client — lobby (`lib/screens/lobby_screen.dart`)
+1. **Contribution widget** in the waiting room (all players, always visible, collapsible): up to 3 single-line fields ("Write a prompt about *us*…"), 200-char cap, with a SAVE that writes a **field-scoped** update `{'customPrompts': [...trimmed non-empty...]}` to the player's own doc (Issue 18 pattern — never a full-object write). Editable until the game starts.
+2. **Deck sync:** add `'custom'` to the host's deck dropdown (label "Custom Deck — write your own"). Extend the `updateLobbySettings` **callable** (server + client wrapper) with an optional `selectedDeckId` param so the host's choice lands on the room doc and every client sees it. When `selectedDeckId == 'custom'`, non-hosts see a banner ("Custom Deck selected — add your prompts!") and an aggregate count ("7 prompts from 3 players" — counts only, texts never displayed).
+3. **Host warning:** if starting custom with zero contributions, show a non-blocking notice that standard prompts will fill in.
 
----
+### Server (`functions/src/index.ts` + `functions/src/prompt_decks.ts`)
+1. **`updateLobbySettings`**: accept + persist `selectedDeckId` (host-only, lobby-phase-only).
+2. **`startGame`** when `selectedDeckId == 'custom'`:
+   - **Harvest** from the already-read `playersSnap` (active non-spectators): per player take at most 3 prompts, trim, drop empties, cap 200 chars, dedupe case-insensitively across the pool. Build `pool: {text, authorId}[]`.
+   - **Top up**: while `pool.length < activePlayers.length`, draw from the fallback deck `'the_daily_grind'` (`authorId: null`), skipping texts already in the pool.
+   - **Skip the deck-size precondition** for `'custom'` (the top-up guarantees coverage); keep it for normal decks.
+   - **Own-prompt-free assignment**: shuffle the pool; greedy-assign one prompt per player where `prompt.authorId !== playerId`. If a player is stuck with only their own prompt: scan previously assigned pairs `(holder j, prompt q)` for a swap where `q.authorId !== stuckPlayer && stuckPrompt.authorId !== j` and swap; if **no valid swap exists** (provable edge: 2 players where one authored every pooled prompt), replace the stuck player's prompt with a fresh fallback draw (`authorId: null`). This terminal fallback makes the algorithm total — implement it, don't assume the swap always exists.
+   - Cards are built from the assignment as today; `promptAuthorId` need not be persisted on the card (assignment-time only).
+3. **`rerollPrompt`**: when `room.selectedDeckId == 'custom'`, `PromptDecks.drawOneExcluding('custom', …)` would throw — branch to draw from `'the_daily_grind'` excluding all current card prompts **and** every pooled custom text still on cards. One-line branch selecting the fallback deck id before calling `drawOneExcluding`.
+4. **Mirror in `test/fake_functions.dart`**: port the harvest/top-up/assignment logic into the fake `startGame` (and the reroll branch) so widget tests exercise the same rules.
 
-## R5 · Issue 17 — Port the debug/bot tools to gated dev callables
+### Docs
+Update `design_prompt_system.md` (new "Custom Deck" section: player-doc contributions, harvest caps, top-up, own-prompt-free assignment with the swap + terminal-fallback rule, reroll fallback) and the lobby manual line. Add a manual journey to `e2e_testing_journeys.md`.
 
-**Problem recap:** `debugAddBots` / `debugSimulateBotResponses` in `GameService` still write player docs and the room doc directly → `PERMISSION_DENIED` under the locked-down rules, in production **and** emulator. Journey 2 (`e2e_testing_journeys.md`) and the one-device dev workflow are dead. Also: `_resetAllPlayersReady` + `updateGameState` in `GameService` are unreachable remnants.
-
-**Implementation (Option A — dev-only callables with an explicit gate):**
-1. **Gate design:** add an optional `debugEnabled: boolean` to the `createRoom` callable's payload, stored on the room doc. The Flutter lobby passes `debugEnabled: kDebugMode` (import `flutter/foundation.dart`) when creating a room. In `functions/src/index.ts`, add a helper `assertDebugAllowed(room)` that throws `permission-denied` unless `room.debugEnabled === true` **or** `process.env.FUNCTIONS_EMULATOR === "true"`. (Belt-and-braces: release builds never set the flag; production functions reject even if someone forges it off-emulator only when the flag is absent.)
-2. **`debugAddBots` callable** (`roomCode`): caller must be the host (same `authUid`→`isHost` check as `startGame`); `assertDebugAllowed`; in a batch, create `bot_1`…`bot_9` player docs — `authUid: "BOT"`, `isHost: false`, staggered `joinedAt`, and **`lastSeen: null`** (critical: the client's dead-player detector skips null `lastSeen`, so bots aren't pruned as disconnected); update `totalPlayers`.
-3. **`debugSimulateBots` callable** (`roomCode`): host + `assertDebugAllowed`; **one transaction obeying the R1 read-order invariant** (read room, read players, then writes only):
-   - Forgery/truth phase: for each bot, write `"Simulated Answer from <name>"` into its assigned card (`currentCardAssignments[botId]` → truth vs sabotage slot per phase) and set `readyPlayers[botId] = true`.
-   - Vote phase: each non-reader bot votes `'TRUTH'` on the current card and is marked ready; if the reader is a bot, mark it ready too.
-   - After merging, compute `allReady` over active players and call `advancePhaseInternal` when true — so a lone human + bots actually progresses (this replaces the old client-side behavior).
-4. **Client refactor:** `GameService.debugAddBots()` / `debugSimulateBotResponses()` become 3-line callable wrappers (`httpsCallable('debugAddBots').call({'roomCode': …})`). Delete the direct-write bodies, the `_resetAllPlayersReady` method, and `updateGameState` (verify no remaining callers first — `_resetAllPlayersReady` is its only caller today). Keep the existing debug buttons/UI unchanged.
-5. **Fake parity:** mirror the two callables in `test/fake_functions.dart` so existing widget tests keep passing (port the deleted Dart logic there).
-
-**Validation:**
-- Emulator: create a room (emulator ⇒ gate passes) → `debugAddBots` → 9 bot docs exist with `lastSeen: null`; `startGame` → `debugSimulateBots` twice + one human submit per rotation → phases advance to `gameOver` with sane scores. Negative: seed a room doc with `debugEnabled: false` via Admin SDK **and** temporarily unset `FUNCTIONS_EMULATOR` in the test process env when invoking the gate logic directly (unit-test `assertDebugAllowed` in isolation for the production-deny path, since the emulator env var is always set inside `emulators:exec`).
-- `flutter test` still green (fakes updated); manual Journey 2 run on the emulator.
+### Validation
+- **Emulator tests**: (a) two players contribute marker prompts ("ALICE_P1"… ) via player-doc updates → `startGame('custom')` → assert every card's prompt ∈ contributions ∪ fallback AND no card's prompt is one its own target authored; (b) zero contributions → all-fallback game starts; (c) **the edge case**: 2 players, ALL pooled prompts authored by player A → assert A's card holds a fallback prompt (terminal fallback exercised); (d) reroll during a custom game → new prompt from fallback, not a duplicate; (e) `updateLobbySettings` rejects `selectedDeckId` from a non-host.
+- **Rules tests**: owner can write `customPrompts` on their own doc; cannot write another player's; protected fields still denied alongside it.
+- **Widget tests**: contribution SAVE issues a field-scoped update containing only `customPrompts`; banner + count render when the room's `selectedDeckId` is `'custom'`.
+- **Manual**: two devices — both contribute, host picks Custom, play a card and confirm your own prompt never lands on you; try a reroll.
 
 ---
 
-## R6 · Issue 18 — Field-scoped own-doc writes
+## N4 · Wave E tail (do last)
 
-**Problem recap:** `sendReaction` / `toggleLobbyReady` write the **entire** player map via `copyWith` + `updatePlayerState(merge: true)`. The field-diff rules deny the write if any *stale* protected field (e.g. `totalScore` an instant before the listener catches up after scoring) differs — the reaction/toggle silently vanishes.
+Verified missing as of July 13 (spec: `docs/implementation_plan_gameplay_and_ui.md` Wave E):
+1. **E5 — pressed "stamp" feel on `PrimaryButton`** (`lib/widgets/shared_ui.dart`): tap = quick scale-down + faint wax-ring flash on commit actions.
+2. **E5 — brass halo on the active reader's avatar** (`currentReaderId`) in the vote/reveal screens — nothing renders this today.
+3. **E5 — timer "guttering lamp" flicker** (`auto_advance_timer.dart`): currently only a color swap on `isLowTime`; add a subtle flicker/pulse (guard with reduce-motion).
+4. **E7 — sound + haptics behind a mute toggle**: quill scratch on submit, wax thunk on vote, low swell on truth reveal; `HapticFeedback` on commit/reveal; audio dependency + settings toggle; fully silent when muted.
+5. **E8 — a11y audit**: brass/ivory contrast on soot at body sizes; no meaning via dim opacity alone; tabular figures on live numbers; extend the `MediaQuery.accessibleNavigation` reduce-motion pattern (`FlippingRevealCard`) to all new animation.
 
-**Implementation (Option A):**
-1. `sendReaction(emoji)`: replace the `copyWith` + `updatePlayerState` with a direct targeted update: `_db.collection('rooms').doc(rCode).collection('players').doc(p.id).update({'lastReaction': emoji, 'lastReactionAt': DateTime.now().millisecondsSinceEpoch});`
-2. `toggleLobbyReady()`: same pattern with `{'lobbyReady': !p.lobbyReady}`.
-3. If `updatePlayerState` then has no remaining callers (check — R5 removes others), delete it.
-
-**Validation:**
-- Rules test (in the R2 suite): as the seat owner, `update` with exactly `{lastReaction, lastReactionAt}` → `assertSucceeds`; and (pre-fix behavior, as a regression demo) a full-object write where `totalScore` differs → `assertFails`.
-- Widget/unit test on the fake asserting the update payload contains **only** the intended keys.
-- Manual (emulator): react within a second of a reveal starting (fresh score delta) — emoji still broadcasts.
-
----
-
-## R7 · Wave E polish (E5–E8)
-
-Spec lives in `docs/implementation_plan_gameplay_and_ui.md` Wave E; statuses verified July 12:
-1. **E6 icons (confirmed NOT done — do first):** stock Material icons remain in `phase2_craft.dart` (`remove_red_eye_outlined`), `phase3_vote.dart` (`remove_red_eye`), `lobby_screen.dart` (`timer_off`, `vpn_key`), `auto_advance_timer.dart` (`timer`), `player_avatar.dart` (glyph list incl. `vpn_key`, `casino`, `lightbulb_outline`). Create `lib/theme/app_icons.dart` mapping thematic replacements (monocle/magnifier = observe, pocket-watch = timer, quill = writing, wax seal = confirm, skeleton key = secret, gas lamp = host) — bundle SVGs (e.g. `flutter_svg`) or an icon font; swap the six avatar glyphs for the house sigils (moth, moon, key, raven, hourglass, flame) **keeping the `avatarIndex` positional mapping** so existing players keep their crest.
-2. **E5 components:** audit against the plan — pressed "stamp" scale/flash on `PrimaryButton` commits; engraved bevel on avatar chips; **brass halo on the active reader's avatar** (`currentReaderId`) in vote/reveal; timer "guttering lamp" pulse on `isLowTime`; "SEALED — your own hand" ribbon on the disabled self-card in `card_grid.dart`.
-3. **E7 motion/sound:** bundled sounds (quill scratch on submit, wax thunk on vote, swell on truth reveal) behind a **mute toggle**, plus haptics on commit/reveal; add a reduce-motion setting honored by every animation (the `FlippingRevealCard` already shows the `MediaQuery.accessibleNavigation` pattern — reuse it).
-4. **E8 a11y:** contrast-check brass/ivory on soot at body sizes; ensure no meaning is carried by dim opacity alone; tabular figures on all live numbers.
-
-**Validation:** `flutter analyze` clean; goldens or manual screenshot pass per screen; reduce-motion on ⇒ final states render without animation; each E-item either done or explicitly deferred with a note in the plan doc.
+**Validation:** `flutter analyze` 0 errors; manual pass per item; reduce-motion ⇒ instant final states; mute ⇒ silence. Mark each item done or explicitly deferred in the plan doc.
 
 ---
 
 ## THE LOOP (per item)
 
 ```
- ORIENT once: plan §0 · design_database_and_security.md · flutter pub get ·
- flutter analyze · cd functions && npm run build
+ ORIENT once: read this guide · flutter pub get · flutter analyze ·
+ cd functions && npm run build
       │
       ▼
- (1) SELECT next item R1→R7 (order encodes real dependencies).
- (2) STUDY the spec above + the exact files it names.
- (3) IMPLEMENT as specified. Invariants: transactions read-then-write only;
-     never weaken firestore.rules to make something pass; the TS functions are
-     the authoritative rules — keep test/fake_functions.dart mirrored.
- (4) VALIDATE per the item's Validation block, then: flutter analyze (0 errors),
-     flutter test, and — for anything touching functions/ or rules —
-     npm --prefix functions test (the emulator suite). Fakes never validate
-     backend behavior.
- (5) BLOCKED or the spec is wrong? STOP; file it in ongoing_general_errors.md
+ (1) SELECT next item: N1 → N2 → N3 → N5 → N6 → N4. (P7, P9, P11 are DECLINED — never build.)
+ (2) STUDY the item spec + the exact files named.
+ (3) IMPLEMENT. Invariants: transaction reads before writes, always;
+     advancePhaseInternal never reads; never weaken firestore.rules;
+     keep test/fake_functions.dart mirrored with functions/src/index.ts.
+ (4) VALIDATE per the item block, then flutter analyze (0 errors) · flutter test ·
+     and for anything touching functions/ or rules: npm --prefix functions test.
+ (5) BLOCKED or spec wrong? STOP — file it in ongoing_general_errors.md
      (bug_documentation_guidelines format, with options) and ask the user.
- (6) RECORD: move the issue to Resolved with what-was-solved; after R1+R2 also
-     move Issue 1; sync design docs (esp. §5 identity note after R4).
+ (6) RECORD: move resolved issues to Resolved with what-was-solved; sync design
+     docs if behavior changed (e2e_testing_journeys.md for N2).
  (7) COMMIT: one item = one Conventional Commit, WHY in the body.
 ```
 
 ## Definition of Done
-- [ ] R1: three callables read-before-write; `npm run build` clean; single-`submitAnswer` smoke passes on the emulator.
-- [ ] R2: `npm --prefix functions test` green — two-client full game (both scenarios), negative auth checks, rules tests; stale `integration_test/fake_firestore.dart` fixed/removed; `flutter analyze` 0 errors; run command documented in README.
-- [ ] Issues **1, 13, 15** moved to Resolved, citing the emulator test as proof; `design_database_and_security.md` status note updated.
-- [ ] R3: failed submits/votes show the server message and allow retry; dead pre-check + redundant ready call removed.
-- [ ] R4: stable UUID identity + rejoin re-bind; emulator re-bind test green; design doc §5 updated; Issue 16 → Resolved.
-- [ ] R5: gated bot callables working on the emulator; direct-write bodies + dead remnants deleted; fakes mirrored; Issue 17 → Resolved.
-- [ ] R6: targeted own-doc writes; rules test green; Issue 18 → Resolved.
-- [ ] R7: E6 done; E5/E7/E8 done or explicitly deferred with notes.
-- [ ] Final: `flutter analyze` 0 errors · `flutter test` green · emulator suite green · docs synced · one-item commits.
+- [ ] N1: bots persist past 30s; `lastSeen: null` asserted in the emulator; fake mirrored; Issue 19 → Resolved.
+- [ ] N2: BOTS SUBMIT advances in either tap order incl. bot-reader vote case; fake mirrored; Issue 20 → Resolved; Journey 2 note updated.
+- [ ] N3: force-advance/placeholder scenario green in the emulator suite.
+- [ ] N5 (P8): five-beat reveal with sealed authors through the guess window; `submitUnmaskGuess` callable with all rejection cases emulator-tested; ±1 scoring proven; fakes mirrored; docs + manual updated; proposal marked delivered.
+- [ ] N6 (P10): custom contributions via field-scoped own-doc writes; own-prompt-free assignment incl. the terminal-fallback edge case emulator-tested; reroll fallback works; `updateLobbySettings` deck sync host-gated; fakes mirrored; docs + manual updated; proposal marked delivered.
+- [ ] N4: E5/E7/E8 done or explicitly deferred with notes in the plan doc.
+- [ ] P7, P9, P11 not implemented (declined).
+- [ ] Final: `flutter analyze` 0 errors · `flutter test` green · `npm --prefix functions test` green · docs synced · one-item commits.
