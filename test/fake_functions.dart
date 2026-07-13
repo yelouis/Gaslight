@@ -122,13 +122,16 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final seen = <String>{};
 
         for (var p in activePlayers) {
+          int playerCollectedCount = 0;
           for (var promptText in p.customPrompts) {
+            if (playerCollectedCount >= 3) break;
             final trimmed = promptText.trim();
             if (trimmed.isNotEmpty && trimmed.length <= 200) {
               final lower = trimmed.toLowerCase();
               if (!seen.contains(lower)) {
                 seen.add(lower);
                 pool.add({'text': trimmed, 'authorId': p.id});
+                playerCollectedCount++;
               }
             }
           }

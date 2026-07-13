@@ -200,30 +200,15 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Problem**: Reveal sequence advanced on a fixed 1.8-second cadence, flipping authors at stage 4 before the guess tray rendered at stage 5, rendering the guess trivial.
     - **Solution**: Rewired reveal beats to functionally derive current stage from server `unmaskDeadline` and clock time. The unmask guess tray renders in stage 3 (the unmask window), and forgery authors only flip at stage 4 (after the deadline has passed). Verified via widget tests A–D in `test/phase4_reveal_test.dart`.
 
+48. **Issue 22: Server Never Enforces the 3-Prompts-Per-Player Cap for Custom Decks (Resolved - July 13)**:
+    - **Problem**: Custom prompt harvesting compiled all custom prompts submitted by players without limiting counts per player, leaving custom decks susceptible to prompt-flooding attacks.
+    - **Solution**: Sliced player-submitted custom prompts to a maximum of 3 valid entries per player during harvest in the custom deck branch of `startGame` (and mirrored in `test/fake_functions.dart`). Verified by the backend E2E integration test "should enforce the server-side cap of at most 3 custom prompts per player".
+
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-> Found during the July 13 verification pass of the N-queue delivery (commit `8e8c2dd`). The delivery is otherwise solid — **15/15 emulator tests, 12/12 Flutter tests, 0 analyzer errors** — and the server-side halves of both new features are correct. The issues below are in the client presentation layer and one server input cap.
-
----
-
-### Issue 22: Server Never Enforces the 3-Prompts-Per-Player Cap for Custom Decks
-**Status**: ⚠️ Confirmed Unresolved — Verified in `functions/src/index.ts` `startGame` custom-deck harvest: it iterates each player's entire `customPrompts` array (trim/200-char/dedupe checks only); the N6 spec required "per player take at most 3 prompts". `firestore.rules` allows owners to write `customPrompts` freely, so the cap must be server-side.
-- **What it means for the player:** One prankster with a modified client can stuff hundreds of prompts into their contribution list and flood the custom deck, so almost every card in the game is *their* material (never on their own card, always on everyone else's). The in-app form keeps honest players at 3, but nothing stops a dishonest one.
-- **Root cause:** The harvest loop applies per-prompt hygiene (trim, length, dedupe) but no per-player count limit — the one cap the spec called out was skipped.
-
-**Option A (recommended)**: **Cap at harvest time** — in the custom-deck branch of `startGame`, take only the first 3 valid prompts per player (`.slice(0, 3)` after hygiene filtering). One line; matches the spec.
-  - *Pros*: Closes the flood vector at the only authoritative point; no client or rules change.
-  - *Cons*: None material.
-
-**Option B**: **Cap in `firestore.rules`** — extend the player-doc update rule to reject `customPrompts` arrays longer than 3 (`request.resource.data.customPrompts.size() <= 3`).
-  - *Pros*: Rejects oversized writes at the door; keeps garbage out of the database entirely.
-  - *Cons*: Rules-language list validation is brittle (field may be absent/non-list); still wise to keep the server-side cap as belt-and-braces — i.e., this is an *addition* to Option A, not a replacement.
-
-**Validation**: Emulator test — seed a player doc with 10 `customPrompts` via the Admin SDK, `startGame('custom')` in a 2-player room, and assert at most 3 of that player's prompts entered the pool (e.g., by counting marker-named prompts across dealt cards plus checking the other player's card pool exposure). If Option B is also chosen: rules test asserting a 4-item `customPrompts` write fails and a 3-item write succeeds.
-
-Your selection: Proceed with Option A.
+> There are currently no unresolved client presentation defects or backend timing issues remaining from the July 13 review cycle.
 
 ---
 

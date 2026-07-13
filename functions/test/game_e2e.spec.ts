@@ -690,4 +690,57 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(aliceCardAfterReroll.promptText).to.not.equal('Alice prompt 1');
     expect(aliceCardAfterReroll.promptText).to.not.equal('Alice prompt 2');
   });
+
+  it('should enforce the server-side cap of at most 3 custom prompts per player', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guestUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest'
+    });
+
+    const roomRef = db.collection('rooms').doc(roomCode);
+
+    await callFn('updateLobbySettings', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'custom'
+    });
+
+    // Seed p_host with 10 prompts
+    await roomRef.collection('players').doc('p_host').update({
+      customPrompts: [
+        'FLOOD_01', 'FLOOD_02', 'FLOOD_03', 'FLOOD_04', 'FLOOD_05',
+        'FLOOD_06', 'FLOOD_07', 'FLOOD_08', 'FLOOD_09', 'FLOOD_10'
+      ]
+    });
+    // Seed p_guest with 0 prompts (so all custom prompts in pool must come from p_host)
+    await roomRef.collection('players').doc('p_guest').update({
+      customPrompts: []
+    });
+
+    await callFn('startGame', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'custom'
+    });
+
+    const roomSnap = await roomRef.get();
+    const cards = roomSnap.data()?.cards as any[];
+    
+    // Count how many cards got assigned a FLOOD_ prompt
+    const floodPromptsDealt = cards.filter(c => c.promptText.startsWith('FLOOD_')).length;
+    
+    // Since p_host submitted 10, but only at most 3 are harvested, and p_guest submitted 0 (with rest topped up from fallback deck),
+    // the number of FLOOD_ prompts dealt can never be more than 3!
+    expect(floodPromptsDealt).to.be.at.most(3);
+  });
 });

@@ -316,13 +316,16 @@ export const startGame = onCall(async (request) => {
 
       for (const p of activePlayers) {
         const pPrompts = (p as any).customPrompts || [];
+        let playerCollectedCount = 0;
         for (const promptText of pPrompts) {
+          if (playerCollectedCount >= 3) break;
           const trimmed = promptText.trim();
           if (trimmed.length > 0 && trimmed.length <= 200) {
             const lower = trimmed.toLowerCase();
             if (!seen.has(lower)) {
               seen.add(lower);
               pool.push({ text: trimmed, authorId: p.id });
+              playerCollectedCount++;
             }
           }
         }

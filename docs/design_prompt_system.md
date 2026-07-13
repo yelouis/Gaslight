@@ -52,7 +52,7 @@ Players can play on their **own prompts** instead of a built-in deck.
 * The host selects the sentinel deck id **`'custom'`** in the deck dropdown; the choice syncs to the room document through the `updateLobbySettings` callable so all clients see the "add your prompts" banner and live contribution counts.
 
 ### Server-side deal (`startGame`, custom branch)
-1. **Harvest**: each active non-spectator's `customPrompts` are trimmed, length-capped (≤200 chars), deduplicated case-insensitively, and pooled with author tracking. *(Per-player cap of 3 at harvest is required — see open Issue 22.)*
+1. **Harvest**: each active non-spectator's `customPrompts` are trimmed, length-capped (≤200 chars), deduplicated case-insensitively, capped at a maximum of 3 valid entries per player, and pooled with author tracking.
 2. **Top-up**: if the pool is smaller than the player count, prompts are drawn from the fallback deck `'the_daily_grind'` (author `"fallback"`), skipping duplicates.
 3. **Own-prompt-free assignment**: the pool is shuffled and greedily assigned so **no player ever receives a prompt they authored**. If a player would be stuck with their own prompt, a swap with a compatible earlier assignment is attempted; if no valid swap exists (provable in tiny lobbies where one player authored the entire pool), the stuck slot is filled by a **fresh fallback draw**. The algorithm is total — it cannot fail to deal.
 4. **Re-rolls**: `rerollPrompt` on a custom game draws from the fallback deck (there is no static `'custom'` deck), excluding all prompts already in play.
