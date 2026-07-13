@@ -145,6 +145,67 @@ This document defines the key user journeys in Gaslight and provides step-by-ste
 
 ---
 
+## 🔍 Journey 6: Unmask the Forger (Revenge Guess Window)
+
+**Objective**: Verify the Unmask the Forger gameplay mechanic, ensuring players who are fooled get one blind guess during the active reveal window, while others see a waiting status, followed by author reveals and REVENGE points updating.
+
+### 📋 Steps to Test:
+1. **Lobby & Setup**:
+   - Host ("Alice") creates a room and Bob joins. Add 1 Bot ("Charlie").
+   - Start the game. In Forgery phase, Bob receives Charlie's prompt and writes a forgery. Charlie's bot submits a forgery for Alice.
+   - In Vote phase, Alice's card is resolved.
+     - Charlie's forgery option: "lie A" (written by Bob).
+     - Bob's forgery option: "lie B" (written by Charlie).
+     - Alice's Truth: "truth A".
+     - Bob votes for "truth A" (not fooled).
+     - Charlie (bot) votes for "lie A" (fooled by Bob).
+2. **Transition to Reveal**:
+   - Alice (Host) taps "I'M READY" to submit.
+   - Verify transition to `/reveal` (THE REVEAL).
+   - **Beat 1 & 2 (0 - 3.6s)**: Vote chips land and the Truth option ("truth A") flips open.
+   - **Beat 3 (Unmask Window)**:
+     - Verify that the unmask guess tray displays for Charlie (the fooled bot) and Bob if they were fooled (since Bob voted TRUTH, he is not fooled).
+     - Bob (not fooled) sees a status message: `"UNMASKING IN PROGRESS..."` and `"Fooled players are trying to unmask their forgers: Charlie: Thinking..."`.
+     - Charlie (fooled bot) sees the accusation buttons listing candidates (Alice and Bob).
+     - Since Charlie is a bot, the simulated bot submits a guess accusing Bob (the actual author of "lie A").
+     - Verify that the timer counts down in the tray and the CONTINUE button is locked/opaque.
+   - **Beat 4 (Post-Deadline)**:
+     - Settle time past `unmaskDeadline`.
+     - Verify the forgery author flips open to display `"FORGERY BY BOB"`.
+     - Verify the `"REVENGE UNMASKING RESULTS"` section appears below the options showing `"Charlie accused Bob — SUCCESS! (+1)"`.
+     - Verify that Bob's score stands updated by -1 and Charlie's by +1.
+     - Verify that the CONTINUE button unlocks.
+
+---
+
+## 🎨 Journey 7: Custom Deck Contributions & Deal
+
+**Objective**: Verify the Custom Decks mechanic where players submit custom prompts in the lobby, host selects Custom Deck, and prompts are harvested and dealt authority-correctly (under 3 prompts cap, own-prompt exclusion, fallback top-ups).
+
+### 📋 Steps to Test:
+1. **Lobby Contributions**:
+   - Host ("Alice") creates a room and Bob joins.
+   - In the lobby screen, Alice expands the "CONTRIBUTE PROMPTS" panel.
+     - Alice writes 4 prompts: `"Prompt A"`, `"Prompt B"`, `"Prompt C"`, and `"Prompt D"`.
+     - Bob expands his panel and writes 2 prompts: `"Prompt E"`, `"Prompt F"`.
+   - Host (Alice) selects `"Custom Deck"` from the deck dropdown.
+   - Verify the in-app contribution tracker displays `"Prompts: 6 contributed"` (aggregate count only).
+2. **Start and Harvest**:
+   - Alice taps **START GAME**.
+   - **Server Harvest**:
+     - Alice submitted 4 prompts, but only the first 3 valid ones (`Prompt A`, `Prompt B`, `Prompt C`) are harvested (enforcing the 3-per-player cap).
+     - Bob submitted 2 prompts, so both are harvested (`Prompt E`, `Prompt F`).
+     - Total pool size from contributions is 5.
+     - Since 3 players are active (Alice, Bob, plus 1 bot Charlie), and the pool is shuffled and dealt, the pool size is sufficient.
+   - **Own-Prompt Exclusion**:
+     - Verify cards are dealt such that Alice never receives `Prompt A`, `Prompt B`, or `Prompt C`.
+     - Verify Bob never receives `Prompt E` or `Prompt F`.
+3. **Prompt Re-roll fallback**:
+   - In Forgery phase, Alice clicks **RE-ROLL** on her prompt.
+   - Verify that Alice's prompt is swapped with a fresh fallback prompt from `'the_daily_grind'` deck, rather than another custom prompt that might be hers.
+
+---
+
 ## 🧪 E2E Simulation Automation Script
 
 To run the automated E2E simulation script verifying E2E logic (including 10-player scaling, spectator joins, and mid-game disconnects), execute the following in the project root:

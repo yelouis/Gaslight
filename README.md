@@ -54,11 +54,21 @@ When testing the application locally with a local Firebase emulator suite or cal
 *   **Production Risk**: In compiled production binaries, client-side API keys can be reverse-engineered and extracted.
 *   **Production Migration Path**: For production releases, client-side Gemini requests must be migrated to a secure backend proxy (such as Firebase Cloud Functions or a dedicated Node.js/Go middleware server) to keep the API key fully hidden.
 
-## Development
+## Testing
 
-- The app has screens in `lib/screens/` and reusable UI components in `lib/widgets/`.
-- When adding new dependencies, run `flutter pub get`.
-- The `firebase_options.dart` configuration relies on the environment variables defined in your `.env` file.
+This project contains both client-side widget/unit tests and server-side integration tests.
+
+### Client-Side Tests
+Run the Flutter unit and widget tests:
+```bash
+flutter test
+```
+
+### Server-Side Integration Tests
+The Firebase Cloud Functions and Security Rules are tested E2E using the Firebase emulator suite. The test suite covers core gameplay loops, connection/bot management, custom deck harvests/caps, and the unmasking/revenge guesses system:
+```bash
+npm --prefix functions test
+```
 
 ## Version Control
 

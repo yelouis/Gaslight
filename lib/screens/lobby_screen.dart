@@ -164,11 +164,20 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                _highlightItem('Successful Forgery: ', 'Get +1 point for every player you successfully trick into voting for your lie.'),
                                _highlightItem('Believeable Target: ', 'Targets get +1 point for every player who correctly identifies their truth.'),
                                _highlightItem('Sharp Eye: ', 'Spot the truth on a card you also faked? Earn +1 bonus point.'),
+                               _highlightItem('Unmask Revenge: ', 'Fooled by a forgery? Submit one guess during the unmask window to accuse the author. Correct = +1 to you, -1 to them.'),
                             ],
                           ),
                           _buildInstructionSection(
                             theme,
-                            '4. PROMPT INTEGRITY',
+                            '4. CUSTOM DECKS',
+                            [
+                              _highlightItem('Contribute: ', 'Write up to 3 custom prompts in the lobby to play on your own decks.'),
+                              _highlightItem('Fair Play: ', 'You will never be dealt a prompt you authored yourself.'),
+                            ],
+                          ),
+                          _buildInstructionSection(
+                            theme,
+                            '5. PROMPT INTEGRITY',
                             [
                               _highlightItem('AI Filter: ', 'The game uses semantic analysis to reject answers too similar to existing ones. Be original!'),
                             ],
