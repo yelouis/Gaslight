@@ -17,6 +17,17 @@ Because player count ($P$) and sabotage counts ($S$) are configurable, Gaslight 
 * **Saboteur Points**: Saboteurs receive `1` point for every voter they successfully deceive into voting for their fake answer.
 * **Saboteur Insight Bonus**: A saboteur who also correctly votes for the Truth on a card they forged earns `+1` point in addition to the standard voter reward.
 * **Self-Votes Guard**: Players cannot vote for their own sabotage submissions (the option is disabled).
+* **Unmask the Forger (P8 — revenge guess)**: Each voter who fell for a forgery gets **one guess per card** at who authored the lie they voted for, submitted during the reveal's unmask window via the `submitUnmaskGuess` callable. Correct guess: `+1` to the guesser and `−1` to the forger (no floor — negative totals allowed). Wrong guess: no change. The server validates phase, the `unmaskDeadline`, fooled-voter eligibility, one-guess-per-card, and no self-guess; it deliberately does **not** return correctness, so results land with the author flip.
+
+### The Unmask Window & Five-Beat Reveal (canonical presentation contract)
+The reveal must run as five beats, gated on the **server-written** `GameState.unmaskDeadline` (set at the vote→reveal transition: `now + 20s` when at least one voter was fooled, `null` otherwise; cleared on next-card advance):
+1. Vote chips land on the sealed options.
+2. **The Truth flips** — forgery author cards stay sealed.
+3. **Unmask window** (while `now < unmaskDeadline`): fooled voters see the guess tray; everyone else sees an "unmasking in progress" status. Skipped entirely when `unmaskDeadline == null`.
+4. **Forgery authors flip** + REVENGE results — only after the deadline passes.
+5. Points awarded + standings + host CONTINUE (which is locked until the window ends).
+
+> **Regression guard:** forgery authorship must never be visible while guesses are still accepted — the deadline, not local animation timers, is the beat clock. (Violation of exactly this contract is open **Issue 21**.)
 
 ---
 

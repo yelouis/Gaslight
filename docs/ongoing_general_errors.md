@@ -188,55 +188,66 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Problem**: Full-map merges could transmit stale values of protected fields.
     - **Solution**: Replaced client writes with targeted, field-scoped updates.
 
+45. **Issue 19: Debug Bots Pruned as "Disconnected" After 30 Seconds (Resolved - July 12)**:
+    - **Problem**: `debugAddBots` created bot documents with a real `lastSeen` timestamp, but bots never heartbeat; the client's dead-player detector treated them as stale after 30 seconds and called `handleDisconnect` for each, collapsing debug games mid-flow.
+    - **Solution**: Bot documents are now created with `lastSeen: null` in `functions/src/index.ts`, which the client dead-player filter explicitly skips. Verified by the emulator test "should add bots with lastSeen set to null" and a 2-minute idle debug game.
+
+46. **Issue 20: "BOTS SUBMIT" Order-Dependence — No Phase Advance if Host Submitted First (Resolved - July 12)**:
+    - **Problem**: `debugSimulateBotResponses` merged bot answers/votes and marked bots ready but never ran the all-ready → advance check, so a readiness state completed via the debug path stalled the game until a manual force-advance.
+    - **Solution**: Both branches (forgery/truth and vote) of `debugSimulateBotResponses` now compute `allReady` over active players and call `advancePhaseInternal` with the merged cards, mirroring the gameplay callables while preserving the reads-before-writes transaction invariant. Verified by the emulator test "should advance phase when host submits first then bots simulate".
+
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-> Found during the July 13 verification pass of the R1–R7 delivery. The backend migration itself is verified solid (9/9 emulator tests, 12/12 Flutter tests, 0 analyzer errors) — both new issues below are defects in the ported **debug/bot tooling** (Issue 17's implementation), not in the player-facing game.
+> Found during the July 13 verification pass of the N-queue delivery (commit `8e8c2dd`). The delivery is otherwise solid — **15/15 emulator tests, 12/12 Flutter tests, 0 analyzer errors** — and the server-side halves of both new features are correct. The issues below are in the client presentation layer and one server input cap.
 
 ---
 
-### Issue 19: Debug Bots Get Pruned as "Disconnected" 30 Seconds Into the Game
-**Status**: ⚠️ Confirmed Unresolved — Verified in `functions/src/index.ts` `debugAddBots` (bot docs created with `lastSeen: Date.now()`) against the client dead-player detector in `game_service.dart` (~line 296).
-- **What it means for you (the developer):** You add 9 bots to test a game solo, start playing, and about 30 seconds in the bots start vanishing one by one — cards get removed, rotations recalculate, and the debug game collapses, exactly as if 9 real players all rage-quit at once.
-- **Root cause:** Bots are created with a `lastSeen` timestamp but never send heartbeats. The client prunes any player whose `lastSeen` is older than 30 seconds by calling the `handleDisconnect` callable — which succeeds, because its authorization explicitly allows removing stale players. The original R5 spec called for `lastSeen: null` on bot docs precisely because the client detector skips players with a null `lastSeen`.
+### Issue 21: The Unmask Window Shows the Answers — Forgery Authors Flip BEFORE the Guess Tray Appears
+**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/phase4_reveal.dart`: `_advanceRevealSequence()` advances `_revealStage` on a fixed 1.8-second cadence (stage 4 at ~7.2s, stage 5 at ~9s); forgery author cards flip at `_revealStage >= 4` (line ~827) while the revenge guess tray only renders at `_revealStage == 5` (line ~360); the server accepts guesses until `unmaskDeadline` (~20s).
+- **What it means for the player:** The revenge guess is supposed to be a real test of who you think wrote the lie. Instead, the answer sheet is handed out before the quiz: the "FORGERY BY BOB" labels flip open at ~7 seconds, the guess tray appears ~2 seconds *later*, and the window stays open until ~20 seconds. Every fooled player can simply read the author off the screen and bank a guaranteed +1 (and hit the forger with −1) every single card. The mechanic isn't just weakened — it's inverted: being fooled becomes *profitable*.
+- **Root cause:** The five-beat spec (N5) requires the beats to be gated on the server's `unmaskDeadline` — truth flips first, guess window runs while sealed, authors flip only after the deadline. The implementation instead runs all beats on fixed local timers that finish ~11 seconds before the window closes, and it renders the tray *after* the author flip instead of before. (The emulator test couldn't catch this — it validates the server, and the server is correct; this is purely client presentation ordering.)
 
-**Option A (recommended)**: **Create bots with `lastSeen: null`** — one-line change in `debugAddBots`. The client's dead-player check (`if (lastSeen == null) return false;`) then permanently ignores bots.
-  - *Pros*: Matches the original spec; single line; no client change; bots become immune to pruning.
-  - *Cons*: None material (bots are debug-only and removed with the room).
+**Option A (recommended)**: **Gate the beats on `unmaskDeadline` per the approved spec** — Re-wire the sequence: beats 1–2 (votes land, TRUTH flips) on short local timers as now; beat 3 (guess tray for fooled voters, "unmasking in progress" for others) begins after the truth flip and **persists while `now < unmaskDeadline`** (the 200ms `_countdownTimer` that already exists can drive the transition); beat 4 (forgery author flips + REVENGE results) triggers only when the deadline passes — or immediately when `unmaskDeadline == null` (nobody fooled). Rejoin mid-reveal lands in the correct beat automatically since the deadline is server time.
+  - *Pros*: Implements the design the user approved; server needs no change; the existing deadline field already carries all needed timing; fixes the guaranteed-cheat and the dead ~11s gap between animation end and CONTINUE unlocking.
+  - *Cons*: Reveal takes the full window (~15–20s) on cards where someone was fooled — that's the intended drama, but hosts who find it slow can be given a shorter window later (server constant).
 
-**Option B**: **Client-side skip for `bot_` ids** — add `if (p.id.startsWith('bot_')) return false;` to the dead-player filter.
-  - *Pros*: Also works; keeps a real timestamp on bot docs.
-  - *Cons*: Encodes the bot naming convention in the client; needs a client release; Option A is strictly simpler.
+**Option B**: **Shrink the server window to match the animation** — set `unmaskDeadline = Date.now() + 7000` so guessing closes before the stage-4 flip.
+  - *Pros*: Tiny server change; no client rework.
+  - *Cons*: ~5 seconds to notice the tray, read the author grid, and commit — bad UX on the game's marquee new mechanic; the tray still renders *after* the flip (stage 5 > stage 4), so it would also need a client reorder anyway; abandons the approved 15-second design.
 
-**Validation**: Emulator — create a debug room, `debugAddBots`, wait >30s with the app open (or unit-test the dead-player filter against a bot doc), assert no `handleDisconnect` fires for bots and all 9 remain. Manual — Journey 2: play with bots for 2+ minutes including an idle pause; bots must persist.
+**Validation**: Widget test — pump the reveal with a card where the local player was fooled and `unmaskDeadline` 15s out: assert forgery author rows are still sealed (`SEALED ANSWER` visible, no author name) while the tray is visible; advance fake time past the deadline: assert authors flip and the REVENGE row appears. Second test with `unmaskDeadline == null`: authors flip promptly, no tray. Manual — emulator game: fall for a lie and confirm you must guess blind; confirm the reader's screen shows "unmasking in progress" during the window; confirm a card with all-TRUTH votes skips the wait entirely.
 
 Your selection: Proceed with Option A.
 
 ---
 
-### Issue 20: "BOTS SUBMIT" Never Advances the Phase if the Host Already Submitted
-**Status**: ⚠️ Confirmed Unresolved — Verified in `functions/src/index.ts` `debugSimulateBotResponses`: it merges bot answers/votes and marks bots ready, but never runs the all-ready → advance check that `submitAnswer`/`castVote`/`setReady` perform.
-- **What it means for you (the developer):** In a solo debug game, if you submit your own answer *first* and then tap "DEBUG: BOTS SUBMIT", everyone is marked ready but nothing re-evaluates readiness — the game just sits there. (The documented order — bots first, then your answer — works, because your own submission triggers the check.)
-- **Root cause:** The server advances phases only inside the three gameplay callables. The debug callable updates `readyPlayers` directly without the trailing `allReady → advancePhaseInternal` step, so a readiness state reached *via the debug path* is never acted upon.
+### Issue 22: Server Never Enforces the 3-Prompts-Per-Player Cap for Custom Decks
+**Status**: ⚠️ Confirmed Unresolved — Verified in `functions/src/index.ts` `startGame` custom-deck harvest: it iterates each player's entire `customPrompts` array (trim/200-char/dedupe checks only); the N6 spec required "per player take at most 3 prompts". `firestore.rules` allows owners to write `customPrompts` freely, so the cap must be server-side.
+- **What it means for the player:** One prankster with a modified client can stuff hundreds of prompts into their contribution list and flood the custom deck, so almost every card in the game is *their* material (never on their own card, always on everyone else's). The in-app form keeps honest players at 3, but nothing stops a dishonest one.
+- **Root cause:** The harvest loop applies per-prompt hygiene (trim, length, dedupe) but no per-player count limit — the one cap the spec called out was skipped.
 
-**Option A (recommended)**: **Add the all-ready check to `debugSimulateBotResponses`** — after merging bot responses into `newCards`/`newReadyMap`, compute `allReady` over active players and call `advancePhaseInternal(...)` when true, exactly as the gameplay callables do. The callable's reads already all precede its writes, so the R1 transaction invariant holds.
-  - *Pros*: Debug flow becomes order-independent; reuses the existing, tested advance path; ~10 lines.
-  - *Cons*: Must pass the merged `newCards` (not stale `room.cards`) into `advancePhaseInternal` — same care as `submitAnswer`.
+**Option A (recommended)**: **Cap at harvest time** — in the custom-deck branch of `startGame`, take only the first 3 valid prompts per player (`.slice(0, 3)` after hygiene filtering). One line; matches the spec.
+  - *Pros*: Closes the flood vector at the only authoritative point; no client or rules change.
+  - *Cons*: None material.
 
-**Option B**: **Document the required order** (tap BOTS SUBMIT before submitting your own answer) in `e2e_testing_journeys.md` and leave the code as-is.
-  - *Pros*: Zero code.
-  - *Cons*: A stall trap remains for anyone who forgets; the host's escape hatch (force advance) also fills placeholders unnecessarily when all real answers exist.
+**Option B**: **Cap in `firestore.rules`** — extend the player-doc update rule to reject `customPrompts` arrays longer than 3 (`request.resource.data.customPrompts.size() <= 3`).
+  - *Pros*: Rejects oversized writes at the door; keeps garbage out of the database entirely.
+  - *Cons*: Rules-language list validation is brittle (field may be absent/non-list); still wise to keep the server-side cap as belt-and-braces — i.e., this is an *addition* to Option A, not a replacement.
 
-**Validation**: Emulator test — host submits first, then invoke `debugSimulateBotResponses`; assert the phase advances without any further call. Repeat in the vote phase with a bot reader. Manual — Journey 2 in both orderings.
+**Validation**: Emulator test — seed a player doc with 10 `customPrompts` via the Admin SDK, `startGame('custom')` in a 2-player room, and assert at most 3 of that player's prompts entered the pool (e.g., by counting marker-named prompts across dealt cards plus checking the other player's card pool exposure). If Option B is also chosen: rules test asserting a 4-item `customPrompts` write fails and a 3-item write succeeds.
 
 Your selection: Proceed with Option A.
 
 ---
 
-## 💡 New Gameplay & Fun Proposals (July 13) — ✅ Selections Made
+## 💡 New Gameplay & Fun Proposals (July 13) — Delivery Status
 
-> **Outcome (July 13):** **P8 (Unmask the Forger)** and **P10 (Custom Decks)** selected — both Option A; detailed implementation + validation specs live in `docs/agent_execution_guide.md` (items **N5** and **N6**). **P7, P9, and P11 declined** — do not implement. Original proposals retained below for reference.
+> **Verification (July 13, commit `8e8c2dd`):**
+> - **P10 Custom Decks — ✅ delivered & verified.** Lobby contribution form (own-doc, field-scoped writes), host deck sync via `updateLobbySettings`, server harvest/top-up/own-prompt-free assignment (incl. the terminal-fallback edge), and reroll fallback all proven by the emulator suite and rules tests. One residual: the 3-per-player server cap was skipped — tracked as **Issue 22**.
+> - **P8 Unmask the Forger — ⚠️ server delivered & verified, client presentation broken.** The `submitUnmaskGuess` callable, deadline, guesses, and ±1 scoring are all correct and emulator-tested — but the reveal flips forgery authors *before* the guess tray appears, making every guess free. Tracked as **Issue 21**; not playable as designed until fixed.
+> - **P7, P9, P11 declined** — never implement. Original proposals retained below for reference.
 
 ---
 

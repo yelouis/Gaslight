@@ -1,202 +1,106 @@
-# Agent Execution Guide — Remaining Work (all selections locked, July 13)
+# Agent Execution Guide — Remaining Work (post-verification, July 13 evening)
 
-**You are an engineering agent picking up Gaslight (Flutter + Firebase party game).** The server-authoritative backend is done and proven (see §1). Everything below is user-approved and unblocked: two debug-tool bug fixes (Issues 19/20, Option A), one test-coverage gap, **two new gameplay features (P8 "Unmask the Forger" and P10 "Custom Decks", both Option A — N5/N6 below)**, and the visual-polish tail. Proposals **P7, P9, and P11 were declined — do not implement them.**
+**You are an engineering agent picking up Gaslight (Flutter + Firebase party game).** The July 13 verification of commit `8e8c2dd` found the delivery largely solid — but the marquee new feature (Unmask the Forger) has a **client presentation defect that inverts the mechanic**, and a few smaller tails remain. This guide is the complete remaining queue.
 
-Context read (once): `docs/implementation_plan_gameplay_and_ui.md` **Section 0** (game, architecture, file map) and `docs/design_database_and_security.md` (the shipped server-authoritative architecture).
+Context read (once): `docs/implementation_plan_gameplay_and_ui.md` **Section 0** (game, architecture, file map), `docs/design_database_and_security.md` (server-authoritative architecture), and `docs/design_scoring_and_ui.md` **"The Unmask Window & Five-Beat Reveal"** (the canonical contract F1 must implement).
 
 ---
 
 ## 1. Verified state (July 13 — trust this, don't re-verify)
 
-- **Backend (Issues 1, 13–18): DONE and proven.** `npm --prefix functions test` = **9/9** (full two-client game over real callables, negative auth checks, credential-reset seat re-bind, six rules tests). `flutter test` 12/12; `flutter analyze` **0 errors**; `cd functions && npm run build` clean. Resolved entries #38–44 are legitimate.
-- **Gameplay P1–P6, UI foundation, E6 icons: DONE** (procedural `ThematicIcon`s in `lib/theme/app_icons.dart`; "SEALED" self-card ribbon in `card_grid.dart`).
-- **Accepted deviation — do not "fix":** `_getPlayerId()` derives from the auth uid rather than a persisted UUID; the rejoin **re-bind** flow (emulator-proven) covers seat recovery.
+**All proven by:** `npm --prefix functions test` **15/15** (full game loop, auth denials, seat re-bind, bot lastSeen, bot order-independence, timeout placeholders, unmask server scoring, custom-deck deal + reroll fallback, 7 rules tests) · `flutter test` **12/12** · `flutter analyze` **0 errors** · `functions` TypeScript builds clean.
+
+- **Issues 1–20: ALL resolved** (entries #38–46 in `ongoing_general_errors.md` are verified legitimate).
+- **P10 Custom Decks: delivered & verified** (server deal incl. terminal-fallback edge, lobby form, deck sync, reroll fallback). Residual: Issue 22 (cap) below.
+- **P8 Unmask the Forger: server half delivered & verified** — `submitUnmaskGuess` validates everything and scores ±1 correctly; `unmaskDeadline` is set/cleared properly. **The client reveal sequencing is broken** — Issue 21 below. The feature must not be considered shipped until F1 lands.
+- **N4 polish partials done:** PrimaryButton wax-stamp press, pulsing active-reader halo, low-time timer flicker. Still missing: E7 (sound/haptics/mute), E8 (a11y audit).
+- **Declined forever:** proposals P7, P9, P11.
 
 ## 2. Work queue
 
-| # | Item | Status | Size |
+| # | Item | Gate | Size |
 |---|---|---|---|
-| **N1** | Issue 19 — bots pruned as disconnected after 30s | ✅ Option A — build | 1 line + tests |
-| **N2** | Issue 20 — BOTS SUBMIT doesn't advance when host submitted first | ✅ Option A — build | ~15 lines + tests |
-| **N3** | Emulator-suite gap: force-advance/placeholder scenario | proceed | Small |
-| **N5** | Feature P8 — "Unmask the Forger" revenge guess | ✅ Option A — build | Medium |
-| **N6** | Feature P10 — Custom Decks (lobby-written prompts) | ✅ Option A — build | Medium |
-| **N4** | Wave E tail: E5 components, E7 sound/motion, E8 a11y | proceed (last) | Medium |
-| — | Proposals P7, P9, P11 | ⛔ **declined — do NOT implement** | — |
+| **F1** | Issue 21 — unmask reveal shows authors before the guess | ✅ **Option A selected — build** | Medium (client-only) |
+| **F2** | Issue 22 — server cap: ≤3 custom prompts per player | ✅ **Option A selected — build** | 1 line + test |
+| **F3** | Docs & manual tail for shipped features | none — proceed | Small |
+| **F4** | E7 sound/haptics/mute + E8 a11y audit | none — proceed | Medium |
 
-Execute in this order: **N1 → N2 → N3 → N5 → N6 → N4.** Bug fixes and the coverage test first (N3's scenario also protects N5/N6 regressions), then features, polish last.
+**All selections locked (July 13): Issues 21 and 22 are both Option A** — nothing is awaiting user input. Execute in order: **F1 → F2 → F3 → F4** (F3's journey docs must describe F1's *fixed* behavior, so land F1 first).
 
 ---
 
-## N1 · Issue 19 — Bots created with a live timestamp get pruned (Option A)
+## F1 · Issue 21 — Re-gate the reveal beats on `unmaskDeadline` (Option A spec)
 
-**Change** — `functions/src/index.ts` → `debugAddBots`, inside the `botState` object literal: replace `lastSeen: Date.now()` with `lastSeen: null`.
+**The defect:** `_advanceRevealSequence()` in `lib/screens/phase4_reveal.dart` advances `_revealStage` 1→5 on fixed 1.8s timers. Forgery author cards flip at `_revealStage >= 4` (~7.2s); the guess tray renders at `_revealStage == 5` (~9s); the server accepts guesses until `unmaskDeadline` (~20s). Fooled players read the author off the screen, then "guess" — a guaranteed +1/−1 every card.
 
-**Why this works:** bots never heartbeat. The client dead-player detector (`lib/services/game_service.dart` ~line 296) treats `lastSeen == null` as "never prune" (`if (lastSeen == null) return false;`), so a null-timestamp bot is permanently exempt. Server side is consistent too: `handleDisconnect`'s `isDead` check (`disconnectedPlayer.lastSeen && (Date.now() - lastSeen) > 30000`) evaluates falsy for null — no behavior change for real players. The TS `PlayerState` interface already types `lastSeen: number | null`, so no type change is needed.
+**Target behavior** is codified in `design_scoring_and_ui.md` → "The Unmask Window & Five-Beat Reveal". Implementation:
 
-**Also mirror the fake:** `test/fake_functions.dart` implements a fake `debugAddBots` — make its bot docs use `lastSeen: null` too, so Flutter widget tests model the same data.
+1. **Rewire stage semantics** so the beat clock is the server deadline, not local delays:
+   - Keep short local timers only for beats 1→2 (vote chips) and 2→3 (truth flip) — e.g. 1.8s each, as now.
+   - **Stage 3 (window)**: entered after the truth flip. While `state.unmaskDeadline != null && now < unmaskDeadline`, stay in stage 3. The existing 200ms `_countdownTimer` already rebuilds the widget — derive the current beat *functionally* from (`local intro timers elapsed`, `unmaskDeadline`, `now`) rather than mutating `_revealStage` in nested `Future.delayed` chains. A helper like `int _computeStage(int nowMs)` makes rejoin-mid-reveal land correctly for free (server timestamps, not local state).
+   - **Stage 4 (author flips + REVENGE results)**: entered when `unmaskDeadline == null` (nobody fooled → skip stage 3 entirely) or `now >= unmaskDeadline`. Keep a ~1.8s beat before stage 5 (points/standings) as now.
+2. **Move the tray before the flips:** render `_buildRevengeGuessTray` during **stage 3** (currently `_revealStage == 5`); it already handles fooled vs. non-fooled display and the countdown. Remove the stage-5 rendering.
+3. **Keep these already-correct pieces:** forgery rows flip on `_revealStage >= 4`; truth row flips at stage ≥2; host CONTINUE already locks while the window is active (line ~480) — verify it uses the same deadline check as the new stage logic.
+4. **Guard:** when the player has already guessed (`card.unmaskGuesses[me.id] != null`), the tray shows a "Guess sealed" state for the remainder of the window (verify this exists; add if not).
+5. **Reduce-motion:** unchanged — flips render final state, but the stage-3 *window* must still gate author visibility (it's gameplay, not decoration).
+6. **Mirror check:** `test/fake_functions.dart` already sets `unmaskDeadline` — confirm the fake's value is far enough out for widget tests to observe stage 3 (make it injectable if needed).
 
-**Validation:**
-1. Emulator test (add to `functions/test/game_e2e.spec.ts`): create a room with `debugEnabled: true`, call `debugAddBots`, read `bot_1`'s doc via the Admin SDK, assert `lastSeen === null`.
-2. Dart unit test: run the dead-player predicate (extract or replicate the filter logic) against a bot map with `lastSeen: null` and `now = anything` → assert not selected for pruning.
-3. Manual (Journey 2): debug game with bots, idle 2+ minutes mid-forgery — all 9 bots persist, no `handleDisconnect` traffic in the emulator log.
-4. `npm run build` clean; full suites green.
+**Validation (write these BEFORE fixing, watch them fail, then fix):**
+- Widget test A: pump the reveal with a fooled local player and `unmaskDeadline = now + 15000`. After the intro beats settle, assert: guess tray visible, every forgery row still shows `SEALED ANSWER`, no author name text anywhere.
+- Widget test B: advance mocked time past the deadline (or set a near-past deadline and pump) → assert authors flipped, REVENGE row present, tray gone.
+- Widget test C: `unmaskDeadline == null` → no tray ever, authors flip after the intro beats promptly.
+- Widget test D: local player NOT fooled → status line instead of tray during the window.
+- Manual (emulator, 2 humans): fall for a lie — confirm you must guess blind, the countdown runs, authors flip only at zero, and your ±1 lands in the REVENGE row. Confirm an all-TRUTH card skips the wait. Confirm host CONTINUE unlocks exactly when the window ends.
+- On completion: move Issue 21 → Resolved; delete the "(Violation … Issue 21)" parenthetical from the design doc's regression guard; mark P8 fully delivered in the proposals status note.
 
-## N2 · Issue 20 — Debug bot submissions never trigger the phase advance (Option A)
+## F2 · Issue 22 — Harvest cap (Option A spec)
 
-**Where:** `functions/src/index.ts` → `debugSimulateBotResponses`. Current structure (verified July 13): one transaction; reads first (`roomSnap`, then `playersSnap` — both before any write, so the R1 invariant already holds); two branches (`forgery`/`truth` and `vote`) that each build local `cards` + `readyPlayers` copies and end with `transaction.update(roomRef, { cards, readyPlayers })`.
+**Option A only was selected — do NOT add a `firestore.rules` size gate.** In `functions/src/index.ts` `startGame` custom branch: after the hygiene filter (trim, non-empty, ≤200 chars), take at most 3 **valid** prompts per player before pooling — i.e., collect each player's filtered prompts into a list and `.slice(0, 3)` it (cap valid prompts, not raw entries, so `["", "a", "b", "c", "d"]` still yields `a, b, c`). Everything downstream (dedupe against `seen`, top-up, assignment) is unchanged. Rebuild (`npm run build`).
 
-**Change — mirror the gameplay-callable pattern exactly** (see `submitAnswer` for the reference): in **each** branch, immediately **after** its existing `transaction.update(roomRef, { cards, readyPlayers })`, append:
+**Validation:** emulator test — Admin-seed a player doc with 10 marker prompts (`FLOOD_01`…`FLOOD_10`), start a 2-player custom game, and assert at most 3 `FLOOD_` prompts entered play (the other player's card must hold a `FLOOD_` or fallback prompt; count `FLOOD_` texts across all dealt cards ≤ the cap minus dedupe effects) and the deal still succeeds. Move Issue 22 → Resolved; remove the "(Per-player cap … see open Issue 22)" parenthetical from `design_prompt_system.md` §3 step 1, restating it as shipped behavior.
 
-1. `const activePlayers = players.filter(p => p.role !== "spectator");` — `players` is already in scope from the read phase; do not re-read.
-2. `const allReady = activePlayers.length > 0 && activePlayers.every(p => readyPlayers[p.id] === true);` — use the **merged** local `readyPlayers`, never `room.readyPlayers`.
-3. `if (allReady) { await advancePhaseInternal(transaction, roomRef, room, activePlayers, cards); }` — pass the **merged** local `cards` (this is what makes placeholder-fill and vote-scoring see the bot submissions). Passing `room` (pre-merge) is correct: `advancePhaseInternal` reads only phase/rotation/plan/assignment/timer fields, none of which the debug merge touches.
+## F3 · Docs & manual tail (proceed now; finish after F1)
 
-Notes:
-- Issuing `advancePhaseInternal`'s room update after the branch's own update is the established pattern (`submitAnswer` does the same); later writes to the same doc override the earlier fields within the transaction.
-- The legacy `transaction.update(pRef, { isReady: true })` player-doc writes in this callable are harmless leftovers — leave or remove, but if removed, confirm nothing reads `isReady` (grep first).
-- `advancePhaseInternal` must remain read-free (invariant comment at its definition).
-- **Mirror the fake:** update the fake `debugSimulateBotResponses` in `test/fake_functions.dart` to perform the same all-ready→advance step, or Flutter widget tests will behave differently from production.
+Verified missing on July 13:
+1. **Lobby "HOW TO PLAY" manual** (`lobby_screen.dart` `_showInstructions`): add one player-friendly line each for the Unmask revenge guess (+1/−1, one guess, during the reveal window) and Custom Decks (write up to 3 prompts in the lobby; never dealt your own).
+2. **`docs/e2e_testing_journeys.md`**: add Journey 6 (Unmask: fall for a forgery → guess blind during the window → verify ±1 and the REVENGE row — describe the **post-F1** behavior) and Journey 7 (Custom Deck: two devices contribute, host picks Custom, verify no one receives their own prompt, try a re-roll).
+3. Confirm `README.md` still documents `npm --prefix functions test`; add a line that the suite now covers unmask + custom decks.
 
-**Validation:**
-1. Emulator test — order-independence (the bug): host `submitAnswer` FIRST, then call `debugSimulateBotResponses`; assert `currentPhase` advanced (rotation incremented or moved to `truth`) with **no further calls**. Before this fix that assertion fails.
-2. Emulator test — vote phase with a **bot reader**: humans vote, then `debugSimulateBotResponses`; assert phase flips to `reveal` and score/honor increments landed (proves the merged `cards` reached the scoring path).
-3. Regression: the documented order (bots first, host last) still advances — covered by re-running the existing full-game flow after the change.
-4. Manual: Journey 2 both orderings; `npm run build`; all suites green.
+## F4 · E7 + E8 (unchanged from previous guide)
 
-**On completion of N1+N2:** move Issues 19 and 20 to the Resolved section (what-was-solved format, per `bug_documentation_guidelines`); note in `e2e_testing_journeys.md` Journey 2 that tap order no longer matters.
+1. **E7 — sound + haptics behind a mute toggle:** bundled effects (quill scratch on submit, wax thunk on vote, low swell on the truth flip — and now a seal-crack sting when authors flip at F1's stage 4), `HapticFeedback` on commit/reveal, an audio dep (`audioplayers` or `just_audio`), a settings mute toggle, silent-when-muted verified.
+2. **E8 — a11y audit:** contrast-check brass/ivory on soot at body sizes; no meaning via dim opacity alone; tabular figures on all live numbers (including the unmask countdown); the `MediaQuery.accessibleNavigation` reduce-motion guard on every animation added since (halo pulse, stamp, flicker, tray pop).
 
-## N3 · Coverage gap — force-advance/placeholder scenario (proceed now)
-
-The delivered emulator suite lacks the timeout/force-advance path. Add one `it(...)` to `functions/test/game_e2e.spec.ts` (reuse `createAnonUser`/`callFn` helpers, same describe block):
-1. Two players; start; during forgery rotation 1 only ONE submits.
-2. Host calls `advancePhase`.
-3. Assert the phase advanced AND the missing forgery slot equals the placeholder constant (assert the exact string used in `functions/src/index.ts` — `kMissingAnswerPlaceholder` — so copy drift breaks the test).
-4. Continue to truth: one player never submits; host force-advances; assert that card's `truthAnswer` is the placeholder and the vote phase presents a full option set.
-
-**Validation:** `npm --prefix functions test` → 10+ passing including the new scenario.
-
----
-
-## N5 · Feature P8 — "Unmask the Forger" (Option A)
-
-**What it is (player view):** After the Truth is revealed, every player who fell for a lie gets a 15-second window to guess **who wrote the lie they voted for**. Correct guess: +1 to the guesser, −1 to that forger. Then the forgery authors are unmasked and the guess results shown. Being fooled becomes the start of a grudge match instead of just a loss.
-
-**⚠️ Core design constraint — the reveal must be re-sequenced.** Today the reveal flips **every** forgery's author early in the animation (`FlippingRevealCard` per option row). If authors are visible before the guess, the guess is trivial. The reveal becomes five beats:
-1. Options + vote chips land (existing stagger).
-2. **The Truth flips** (existing, but now FIRST among flips — forgery author cards stay sealed).
-3. **Unmask window** (only when at least one voter was fooled): fooled voters see the guess tray; everyone else sees a status line ("The fooled are naming their deceivers…").
-4. **Forgery authors flip + guess results** ("REVENGE" chips: who unmasked whom, ±1).
-5. Points-awarded chips + standings strip + CONTINUE (existing).
-
-### Data model
-- **`CardModel`** (Dart `lib/models/card_model.dart` **and** TS interface in `functions/src/scoring_logic.ts`): add `unmaskGuesses: Map<String, String>` (guesserId → guessedAuthorId), default `{}`, full `toMap`/`fromMap`/`copyWith` + TS typing. Note: the actual author a guesser fell for is already known — it's `card.votes[guesserId]` (votes store the authorId, or `'TRUTH'`). Correctness = `unmaskGuesses[g] == votes[g]`.
-- **`GameState`** (Dart + TS): add `unmaskDeadline: int?` (epoch ms). Serialize; `copyWith` needs a `clearUnmaskDeadline` flag (copy the existing `endTime`/`clearEndTime` pattern exactly).
-
-### Server (`functions/src/index.ts`)
-1. **Set the window at the vote→reveal transition** — in `advancePhaseInternal`'s vote branch, after scoring: compute `hasFooled = Object.values(currentCard.votes).some(v => v !== 'TRUTH')`. Include in the room update: `unmaskDeadline: hasFooled ? Date.now() + 20000 : null` (15 s window + 5 s buffer for the truth-flip beat). In `advanceToNextResolution`, clear it (`unmaskDeadline: null`) when moving to the next card.
-2. **New callable `submitUnmaskGuess`** — args `{roomCode, guesserId, guessedAuthorId}`. Follow the `castVote` skeleton exactly (auth → ownership pre-check on `guesserId`'s doc via `authUid` → transaction with **all reads before writes**):
-   - Reads: room doc, players collection.
-   - Validate (throw `failed-precondition`/`invalid-argument`): `currentPhase == 'reveal'`; `currentReaderId` set and its card found; `card.votes[guesserId]` exists and `!== 'TRUTH'` (only fooled voters guess); `card.unmaskGuesses` lacks `guesserId` (one guess); `room.unmaskDeadline` non-null and `Date.now() <= unmaskDeadline`; `guessedAuthorId !== guesserId`.
-   - Writes: merge the guess into the card's `unmaskGuesses` and update the room's `cards`; if `guessedAuthorId === card.votes[guesserId]` (correct), apply `FieldValue.increment(1)` to the guesser's `totalScore` and `increment(-1)` to the actual forger's. No floor — negative totals are acceptable and dramatic.
-   - Return `{success: true}` only — **do not return correctness**; results are revealed at beat 4 with everyone else (clients compute correctness locally once authors are public).
-3. **No changes** to `debugSimulateBotResponses` — bots never guess (they always vote TRUTH, so they're never fooled).
-
-### Client (`lib/`)
-1. `GameService`: thin wrapper `submitUnmaskGuess(String guessedAuthorId)` calling the callable with `currentPlayerId`.
-2. `phase4_reveal.dart` — re-sequence `_revealStage` into the five beats, driven by `state.unmaskDeadline`:
-   - Beat timing: beats 1–2 as now but **only the TRUTH row's `FlippingRevealCard` gets `isRevealed: true` before the window**; forgery rows stay sealed until beat 4. Beat 3 runs while `unmaskDeadline != null && now < unmaskDeadline` (compute remaining from the server timestamp — this also makes mid-reveal rejoin land in the correct beat); when `unmaskDeadline == null` (nobody fooled), skip straight to beat 4.
-   - **Guess tray** (fooled local player who hasn't guessed): "UNMASK THE FORGER — who wrote the lie you fell for?" + avatar grid of `card.sabotageAnswers.keys` **minus self**, with a countdown (tabular figures). On tap → confirm → `submitUnmaskGuess`; on success show "Guess sealed." (try/catch + SnackBar per the Issue 14 pattern; leave the tray usable on failure). Non-fooled players and the reader see the status line.
-   - Beat 4: flip forgery authors; render a "REVENGE" results row from `card.unmaskGuesses` vs `card.votes`: correct → "🔍 {guesser} unmasked {forger}! +1 / −1"; wrong → "{guesser} accused {innocent} — missed". The room stream delivers `unmaskGuesses` live.
-   - Reduce-motion (`MediaQuery.accessibleNavigation`): skip flip animations but **keep the guess window** (it's gameplay, not decoration).
-   - Note: the existing "POINTS AWARDED THIS CARD" chips are computed from `ScoringLogic` and won't include unmask ±1s — that's correct; the REVENGE row is their display.
-3. **Mirror in `test/fake_functions.dart`**: fake `submitUnmaskGuess` with the same validation + scoring, and set `unmaskDeadline` in the fake's vote→reveal transition.
-
-### Docs
-Update `design_scoring_and_ui.md` (add the Unmask rule to Formulas + the five-beat reveal to Screen Architectures) and the lobby "HOW TO PLAY" manual (`lobby_screen.dart` `_showInstructions`) with one player-friendly line. Add a manual journey to `e2e_testing_journeys.md`.
-
-### Validation
-- **Emulator tests** (extend `functions/test/game_e2e.spec.ts`): (a) full-game variant where one voter votes for a forgery → assert `unmaskDeadline` set on reveal; correct guess → scores ±1 and `unmaskGuesses` recorded; (b) wrong guess → no score change; (c) rejections: second guess, guess from a TRUTH-voter, guess after deadline (seed a past deadline via Admin SDK), guess while phase != reveal — each the right error code; (d) nobody fooled → `unmaskDeadline` null.
-- **Widget tests**: fooled player sees the tray, non-fooled doesn't; forgery author rows sealed during beat 3, flipped after; REVENGE row renders correct/missed cases from a seeded card.
-- **Manual**: 3-human game on the emulator — fall for a lie, unmask, watch the ±1 land; confirm the reader's screen makes sense during the window.
-
----
-
-## N6 · Feature P10 — Custom Decks (Option A)
-
-**What it is (player view):** While waiting in the lobby, every player can secretly write up to 3 of their own prompts. If the host picks the **Custom Deck**, the game is played on the group's prompts (topped up from a standard deck if there aren't enough), and nobody ever receives a prompt they wrote themselves.
-
-### Data model & rules
-- **`PlayerState`** (Dart + TS): add `customPrompts: List<String>` (default `[]`), serialized. **Contributions ride on the player's own doc** — no new write path needed: the `firestore.rules` protected-field deny-list (`hasAny([...])`) doesn't include `customPrompts`, so owner-writes are already allowed. Verify with a rules test rather than assuming. (Docs are world-readable, so contributions are only secret *in-app* — acceptable for a party game; note it in the design doc.)
-- **`GameState`**: no new field — reuse `selectedDeckId` with the sentinel id `'custom'`.
-
-### Client — lobby (`lib/screens/lobby_screen.dart`)
-1. **Contribution widget** in the waiting room (all players, always visible, collapsible): up to 3 single-line fields ("Write a prompt about *us*…"), 200-char cap, with a SAVE that writes a **field-scoped** update `{'customPrompts': [...trimmed non-empty...]}` to the player's own doc (Issue 18 pattern — never a full-object write). Editable until the game starts.
-2. **Deck sync:** add `'custom'` to the host's deck dropdown (label "Custom Deck — write your own"). Extend the `updateLobbySettings` **callable** (server + client wrapper) with an optional `selectedDeckId` param so the host's choice lands on the room doc and every client sees it. When `selectedDeckId == 'custom'`, non-hosts see a banner ("Custom Deck selected — add your prompts!") and an aggregate count ("7 prompts from 3 players" — counts only, texts never displayed).
-3. **Host warning:** if starting custom with zero contributions, show a non-blocking notice that standard prompts will fill in.
-
-### Server (`functions/src/index.ts` + `functions/src/prompt_decks.ts`)
-1. **`updateLobbySettings`**: accept + persist `selectedDeckId` (host-only, lobby-phase-only).
-2. **`startGame`** when `selectedDeckId == 'custom'`:
-   - **Harvest** from the already-read `playersSnap` (active non-spectators): per player take at most 3 prompts, trim, drop empties, cap 200 chars, dedupe case-insensitively across the pool. Build `pool: {text, authorId}[]`.
-   - **Top up**: while `pool.length < activePlayers.length`, draw from the fallback deck `'the_daily_grind'` (`authorId: null`), skipping texts already in the pool.
-   - **Skip the deck-size precondition** for `'custom'` (the top-up guarantees coverage); keep it for normal decks.
-   - **Own-prompt-free assignment**: shuffle the pool; greedy-assign one prompt per player where `prompt.authorId !== playerId`. If a player is stuck with only their own prompt: scan previously assigned pairs `(holder j, prompt q)` for a swap where `q.authorId !== stuckPlayer && stuckPrompt.authorId !== j` and swap; if **no valid swap exists** (provable edge: 2 players where one authored every pooled prompt), replace the stuck player's prompt with a fresh fallback draw (`authorId: null`). This terminal fallback makes the algorithm total — implement it, don't assume the swap always exists.
-   - Cards are built from the assignment as today; `promptAuthorId` need not be persisted on the card (assignment-time only).
-3. **`rerollPrompt`**: when `room.selectedDeckId == 'custom'`, `PromptDecks.drawOneExcluding('custom', …)` would throw — branch to draw from `'the_daily_grind'` excluding all current card prompts **and** every pooled custom text still on cards. One-line branch selecting the fallback deck id before calling `drawOneExcluding`.
-4. **Mirror in `test/fake_functions.dart`**: port the harvest/top-up/assignment logic into the fake `startGame` (and the reroll branch) so widget tests exercise the same rules.
-
-### Docs
-Update `design_prompt_system.md` (new "Custom Deck" section: player-doc contributions, harvest caps, top-up, own-prompt-free assignment with the swap + terminal-fallback rule, reroll fallback) and the lobby manual line. Add a manual journey to `e2e_testing_journeys.md`.
-
-### Validation
-- **Emulator tests**: (a) two players contribute marker prompts ("ALICE_P1"… ) via player-doc updates → `startGame('custom')` → assert every card's prompt ∈ contributions ∪ fallback AND no card's prompt is one its own target authored; (b) zero contributions → all-fallback game starts; (c) **the edge case**: 2 players, ALL pooled prompts authored by player A → assert A's card holds a fallback prompt (terminal fallback exercised); (d) reroll during a custom game → new prompt from fallback, not a duplicate; (e) `updateLobbySettings` rejects `selectedDeckId` from a non-host.
-- **Rules tests**: owner can write `customPrompts` on their own doc; cannot write another player's; protected fields still denied alongside it.
-- **Widget tests**: contribution SAVE issues a field-scoped update containing only `customPrompts`; banner + count render when the room's `selectedDeckId` is `'custom'`.
-- **Manual**: two devices — both contribute, host picks Custom, play a card and confirm your own prompt never lands on you; try a reroll.
-
----
-
-## N4 · Wave E tail (do last)
-
-Verified missing as of July 13 (spec: `docs/implementation_plan_gameplay_and_ui.md` Wave E):
-1. **E5 — pressed "stamp" feel on `PrimaryButton`** (`lib/widgets/shared_ui.dart`): tap = quick scale-down + faint wax-ring flash on commit actions.
-2. **E5 — brass halo on the active reader's avatar** (`currentReaderId`) in the vote/reveal screens — nothing renders this today.
-3. **E5 — timer "guttering lamp" flicker** (`auto_advance_timer.dart`): currently only a color swap on `isLowTime`; add a subtle flicker/pulse (guard with reduce-motion).
-4. **E7 — sound + haptics behind a mute toggle**: quill scratch on submit, wax thunk on vote, low swell on truth reveal; `HapticFeedback` on commit/reveal; audio dependency + settings toggle; fully silent when muted.
-5. **E8 — a11y audit**: brass/ivory contrast on soot at body sizes; no meaning via dim opacity alone; tabular figures on live numbers; extend the `MediaQuery.accessibleNavigation` reduce-motion pattern (`FlippingRevealCard`) to all new animation.
-
-**Validation:** `flutter analyze` 0 errors; manual pass per item; reduce-motion ⇒ instant final states; mute ⇒ silence. Mark each item done or explicitly deferred in the plan doc.
+**Validation:** `flutter analyze` 0 errors; mute ⇒ fully silent; reduce-motion ⇒ no pulsing/flip animation but correct final states; manual screen pass. Mark done or explicitly deferred in the Wave E section of `implementation_plan_gameplay_and_ui.md`.
 
 ---
 
 ## THE LOOP (per item)
 
 ```
- ORIENT once: read this guide · flutter pub get · flutter analyze ·
- cd functions && npm run build
+ ORIENT once: read this guide + the design contract in design_scoring_and_ui.md ·
+ flutter pub get · flutter analyze · cd functions && npm run build
       │
       ▼
- (1) SELECT next item: N1 → N2 → N3 → N5 → N6 → N4. (P7, P9, P11 are DECLINED — never build.)
- (2) STUDY the item spec + the exact files named.
- (3) IMPLEMENT. Invariants: transaction reads before writes, always;
-     advancePhaseInternal never reads; never weaken firestore.rules;
-     keep test/fake_functions.dart mirrored with functions/src/index.ts.
+ (1) SELECT next item: F1 → F2 → F3 → F4 (all approved; nothing pending).
+ (2) STUDY the spec + the exact files named.
+ (3) IMPLEMENT. Invariants: transaction reads before writes; advancePhaseInternal
+     never reads; never weaken firestore.rules; authorship never visible while
+     guesses are accepted (the F1 contract); keep test/fake_functions.dart mirrored.
  (4) VALIDATE per the item block, then flutter analyze (0 errors) · flutter test ·
      and for anything touching functions/ or rules: npm --prefix functions test.
+     For F1, write the failing widget tests FIRST.
  (5) BLOCKED or spec wrong? STOP — file it in ongoing_general_errors.md
      (bug_documentation_guidelines format, with options) and ask the user.
- (6) RECORD: move resolved issues to Resolved with what-was-solved; sync design
-     docs if behavior changed (e2e_testing_journeys.md for N2).
+ (6) RECORD: move resolved issues to Resolved with what-was-solved; sync the
+     design docs (the Issue-21/22 pointers in design_scoring_and_ui.md and
+     design_prompt_system.md must be cleaned up when fixed).
  (7) COMMIT: one item = one Conventional Commit, WHY in the body.
 ```
 
 ## Definition of Done
-- [ ] N1: bots persist past 30s; `lastSeen: null` asserted in the emulator; fake mirrored; Issue 19 → Resolved.
-- [ ] N2: BOTS SUBMIT advances in either tap order incl. bot-reader vote case; fake mirrored; Issue 20 → Resolved; Journey 2 note updated.
-- [ ] N3: force-advance/placeholder scenario green in the emulator suite.
-- [ ] N5 (P8): five-beat reveal with sealed authors through the guess window; `submitUnmaskGuess` callable with all rejection cases emulator-tested; ±1 scoring proven; fakes mirrored; docs + manual updated; proposal marked delivered.
-- [ ] N6 (P10): custom contributions via field-scoped own-doc writes; own-prompt-free assignment incl. the terminal-fallback edge case emulator-tested; reroll fallback works; `updateLobbySettings` deck sync host-gated; fakes mirrored; docs + manual updated; proposal marked delivered.
-- [ ] N4: E5/E7/E8 done or explicitly deferred with notes in the plan doc.
-- [ ] P7, P9, P11 not implemented (declined).
-- [ ] Final: `flutter analyze` 0 errors · `flutter test` green · `npm --prefix functions test` green · docs synced · one-item commits.
+- [ ] F1: five beats gated on `unmaskDeadline`; authors provably sealed during the window (widget tests A–D green); Issue 21 → Resolved; P8 marked fully delivered.
+- [ ] F2: per-player cap enforced server-side (no rules change — Option A only); flood emulator test green; Issue 22 → Resolved; design-doc pointer cleaned.
+- [ ] F3: manual + Journeys 6/7 + README note updated to post-F1 behavior.
+- [ ] F4: E7/E8 done or explicitly deferred with notes.
+- [ ] Final: `flutter analyze` 0 errors · `flutter test` green · `npm --prefix functions test` green · docs synced · one-item commits · P7/P9/P11 still untouched.

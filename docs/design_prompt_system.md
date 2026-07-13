@@ -38,3 +38,24 @@ static List<String> drawPrompts(String deckId, int count)
 * **Shuffle & Slice**: The list of prompts matching `deckId` is copied, shuffled using Dart's native `List.shuffle()`, and sliced to yield exactly `count` items.
 * **Error Handling**: Throws an exception if the selected deck is missing or if the requested count of players exceeds the total number of prompts available in the deck.
 * **Synchronous Availability**: Because decks are loaded as compilation-time constants rather than async JSON files, prompt drawing occurs synchronously, avoiding `FutureBuilder` latency during match initialization.
+
+> **Server-authoritative note (July 2026):** deck drawing for live games now happens in Cloud Functions (`functions/src/prompt_decks.ts`, a TypeScript port of this utility); the Dart copy remains for client display and test fakes.
+
+---
+
+## 3. Custom Decks (P10 — shipped July 2026)
+
+Players can play on their **own prompts** instead of a built-in deck.
+
+### Contribution flow
+* While in the **lobby**, every player may write up to **3 prompts** (200-char cap each) in the waiting-room contribution form. Contributions are stored on the player's **own** document (`PlayerState.customPrompts: List<String>`) via field-scoped updates — the one gameplay field clients may write directly (verified by a dedicated rules test). Contributions are secret *in-app* (only aggregate counts are displayed), though technically world-readable like all player docs.
+* The host selects the sentinel deck id **`'custom'`** in the deck dropdown; the choice syncs to the room document through the `updateLobbySettings` callable so all clients see the "add your prompts" banner and live contribution counts.
+
+### Server-side deal (`startGame`, custom branch)
+1. **Harvest**: each active non-spectator's `customPrompts` are trimmed, length-capped (≤200 chars), deduplicated case-insensitively, and pooled with author tracking. *(Per-player cap of 3 at harvest is required — see open Issue 22.)*
+2. **Top-up**: if the pool is smaller than the player count, prompts are drawn from the fallback deck `'the_daily_grind'` (author `"fallback"`), skipping duplicates.
+3. **Own-prompt-free assignment**: the pool is shuffled and greedily assigned so **no player ever receives a prompt they authored**. If a player would be stuck with their own prompt, a swap with a compatible earlier assignment is attempted; if no valid swap exists (provable in tiny lobbies where one player authored the entire pool), the stuck slot is filled by a **fresh fallback draw**. The algorithm is total — it cannot fail to deal.
+4. **Re-rolls**: `rerollPrompt` on a custom game draws from the fallback deck (there is no static `'custom'` deck), excluding all prompts already in play.
+
+### Why it's designed this way
+Contributions ride the player's own document to avoid a new write path (rules already permit owner writes to non-protected fields); the assignment constraint preserves the core deduction (writing a "truth" for your own prompt would be trivial); the terminal fallback guarantees `startGame` never throws for custom decks regardless of contribution patterns.
