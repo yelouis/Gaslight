@@ -93,70 +93,74 @@ class PlayerAvatar extends StatelessWidget {
       isActiveReader = gameService.gameState?.currentReaderId == player.id;
     } catch (_) {}
 
+    final avatarStack = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        () {
+          final chip = buildChip(
+            colorValue: player.colorValue,
+            avatarIndex: player.avatarIndex,
+            size: size,
+            isActiveReader: isActiveReader,
+          );
+          return isActiveReader ? _PulsingHalo(size: size, child: chip) : childChipWrapper(chip);
+        }(),
+        if (player.lobbyReady)
+          Positioned(
+            right: -4,
+            bottom: -4,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                color: AppColors.verdigris,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check,
+                color: Colors.white,
+                size: 12,
+              ),
+            ),
+          ),
+        if (player.isHost)
+          Positioned(
+            left: -4,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                color: AppColors.brass,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.star,
+                color: Colors.white,
+                size: 12,
+              ),
+            ),
+          ),
+      ],
+    );
+
+    if (!showName) {
+      return avatarStack;
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            () {
-              final chip = buildChip(
-                colorValue: player.colorValue,
-                avatarIndex: player.avatarIndex,
-                size: size,
-                isActiveReader: isActiveReader,
-              );
-              return isActiveReader ? _PulsingHalo(size: size, child: chip) : childChipWrapper(chip);
-            }(),
-            if (player.lobbyReady)
-              Positioned(
-                right: -4,
-                bottom: -4,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: const BoxDecoration(
-                    color: AppColors.verdigris,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 12,
-                  ),
-                ),
-              ),
-            if (player.isHost)
-              Positioned(
-                left: -4,
-                top: -4,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: const BoxDecoration(
-                    color: AppColors.brass,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.star,
-                    color: Colors.white,
-                    size: 12,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        if (showName) ...[
-          const SizedBox(height: 8),
-          Text(
-            player.name,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: max(12, size / 4),
-              shadows: const [Shadow(color: Colors.black, blurRadius: 4)],
-            ),
-            overflow: TextOverflow.ellipsis,
+        avatarStack,
+        const SizedBox(height: 8),
+        Text(
+          player.name,
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: max(12, size / 4),
+            shadows: const [Shadow(color: Colors.black, blurRadius: 4)],
           ),
-        ]
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }

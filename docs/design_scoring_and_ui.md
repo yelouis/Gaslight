@@ -26,8 +26,7 @@ The reveal must run as five beats, gated on the **server-written** `GameState.un
 3. **Unmask window** (while `now < unmaskDeadline`): fooled voters see the guess tray; everyone else sees an "unmasking in progress" status. Skipped entirely when `unmaskDeadline == null`.
 4. **Forgery authors flip** + REVENGE results — only after the deadline passes.
 5. Points awarded + standings + host CONTINUE (which is locked until the window ends).
-
-> **Regression guard:** forgery authorship must never be visible while guesses are still accepted — the deadline, not local animation timers, is the beat clock. (Violation of exactly this contract is open **Issue 21**.)
+> **Regression guard:** forgery authorship must never be visible while guesses are still accepted — the deadline, not local animation timers, is the beat clock.
 
 ---
 

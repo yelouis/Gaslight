@@ -75,6 +75,13 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
 
       final doc = await db.collection('rooms').doc(roomCode).get();
       final roomState = GameState.fromMap(doc.data()!, doc.id);
+
+      final playerDoc = await db.collection('rooms').doc(roomCode).collection('players').doc(playerId).get();
+      if (playerDoc.exists) {
+        final existingPlayer = PlayerState.fromMap(playerDoc.data()!, playerDoc.id);
+        return FakeHttpsCallableResult({'role': existingPlayer.role.name} as T);
+      }
+
       final isSpectator = roomState.currentPhase != GamePhase.lobby;
 
       final newPlayer = PlayerState(

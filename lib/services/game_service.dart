@@ -221,6 +221,7 @@ class GameService extends ChangeNotifier {
   }
 
   void _startHeartbeat(String roomCode, String playerId) {
+    print("DEBUG HEARTBEAT: started timer for room: $roomCode, player: $playerId");
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
       if (_gameState == null) {
@@ -490,6 +491,7 @@ class GameService extends ChangeNotifier {
 
   @override
   void dispose() {
+    print("DEBUG HEARTBEAT: gameService.dispose() called");
     _roomSubscription?.cancel();
     _playersSubscription?.cancel();
     _heartbeatTimer?.cancel();

@@ -13,6 +13,7 @@ import 'dart:ui';
 import 'dart:math';
 import 'dart:async';
 import 'package:uuid/uuid.dart';
+import 'package:clock/clock.dart';
 
 class Phase4RevealScreen extends StatefulWidget {
   const Phase4RevealScreen({super.key});
@@ -43,46 +44,49 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
   final List<_FloatingReaction> _floatingReactions = [];
   int _lastReactionSentTime = 0;
 
-  int _revealStage = 1;
+  int _revealStartTime = 0;
   String? _previousTargetId;
   Timer? _countdownTimer;
 
-  void _advanceRevealSequence() {
-    _revealStage = 1;
-    // Beat 1 -> Beat 2
-    Future.delayed(const Duration(milliseconds: 1800), () {
-      if (!mounted) return;
-      setState(() {
-        _revealStage = 2;
-      });
-      // Beat 2 -> Beat 3
-      Future.delayed(const Duration(milliseconds: 1800), () {
-        if (!mounted) return;
-        setState(() {
-          _revealStage = 3;
-        });
-        // Beat 3 -> Beat 4
-        Future.delayed(const Duration(milliseconds: 1800), () {
-          if (!mounted) return;
-          setState(() {
-            _revealStage = 4;
-          });
-          // Beat 4 -> Beat 5
-          Future.delayed(const Duration(milliseconds: 1800), () {
-            if (!mounted) return;
-            setState(() {
-              _revealStage = 5;
-            });
-          });
-        });
-      });
-    });
+  int _computeStage(int now, GameState? state) {
+    final elapsed = now - _revealStartTime;
+
+    // Beat 1: 0 to 1800ms
+    if (elapsed < 1800) {
+      return 1;
+    }
+
+    // Beat 2: 1800ms to 3600ms
+    if (elapsed < 3600) {
+      return 2;
+    }
+
+    if (state == null) return 2;
+
+    final unmaskDeadline = state.unmaskDeadline;
+    if (unmaskDeadline != null && now < unmaskDeadline) {
+      // Beat 3: unmask window
+      return 3;
+    }
+
+    // Beat 4 starts either at 3.6s elapsed, or when unmaskDeadline passes.
+    final int beat4Start = unmaskDeadline == null
+        ? _revealStartTime + 3600
+        : (unmaskDeadline > _revealStartTime + 3600 ? unmaskDeadline : _revealStartTime + 3600);
+
+    if (now < beat4Start + 1800) {
+      return 4;
+    }
+
+    // Beat 5
+    return 5;
   }
 
   @override
   void initState() {
     super.initState();
-    _mountTime = DateTime.now().millisecondsSinceEpoch;
+    _mountTime = clock.now().millisecondsSinceEpoch;
+    _revealStartTime = _mountTime;
     context.read<GameService>().addListener(_onGameServiceUpdate);
     _countdownTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
       if (mounted) {
@@ -279,11 +283,11 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
 
     if (currentTargetId != _previousTargetId) {
       _previousTargetId = currentTargetId;
-      _revealStage = 1;
-      if (currentCard != null) {
-        _advanceRevealSequence();
-      }
+      _revealStartTime = clock.now().millisecondsSinceEpoch;
     }
+
+    final now = clock.now().millisecondsSinceEpoch;
+    final revealStage = _computeStage(now, state);
 
     return AnimatedThinkingBackground(
       child: Scaffold(
@@ -349,18 +353,18 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                           const SizedBox(height: 24),
                           
                           // Options & Votes List
-                          if (_revealStage >= 2) ...[
-                            _buildOptionRow('TRUTH', currentCard.truthAnswer, currentCard, gs, theme, isTruth: true),
+                          if (revealStage >= 1) ...[
+                            _buildOptionRow('TRUTH', currentCard.truthAnswer, currentCard, gs, theme, revealStage, isTruth: true),
                             ...currentCard.sabotageAnswers.entries.map((e) => 
-                              _buildOptionRow(e.key, e.value, currentCard!, gs, theme)
+                              _buildOptionRow(e.key, e.value, currentCard!, gs, theme, revealStage)
                             ),
                           ],
 
-                          // Revenge Guess Tray
-                          if (_revealStage == 5)
+                          // Revenge Guess Tray (only shown in unmask window stage 3)
+                          if (revealStage == 3 && state.unmaskDeadline != null)
                             _buildRevengeGuessTray(state, currentCard, gs, theme),
 
-                          if (_revealStage >= 4) ...[
+                          if (revealStage >= 4) ...[
                             if (_latestDeltas.isNotEmpty) ...[
                               const SizedBox(height: 24),
                               Text(
@@ -382,6 +386,47 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                                   );
                                 }).toList(),
                               ),
+                            ],
+
+                            // REVENGE results
+                            if (state.unmaskDeadline != null && currentCard.unmaskGuesses.isNotEmpty) ...[
+                              const SizedBox(height: 24),
+                              Text(
+                                'REVENGE UNMASKING RESULTS', 
+                                style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1.5),
+                              ),
+                              const SizedBox(height: 8),
+                              ...currentCard.unmaskGuesses.entries.map((entry) {
+                                final guesserId = entry.key;
+                                final guessedAuthorId = entry.value;
+                                final guesser = gs.players.firstWhere((p) => p.id == guesserId, orElse: () => PlayerState(id: guesserId, name: 'Unknown'));
+                                final guessed = gs.players.firstWhere((p) => p.id == guessedAuthorId, orElse: () => PlayerState(id: guessedAuthorId, name: 'Unknown'));
+                                final actualForgerId = currentCard!.votes[guesserId];
+                                final isCorrect = guessedAuthorId == actualForgerId;
+                                
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      PlayerAvatar(player: guesser, size: 20, showName: false),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '${guesser.name} accused ${guessed.name} — ',
+                                        style: const TextStyle(color: AppColors.ivory, fontSize: 13),
+                                      ),
+                                      Text(
+                                        isCorrect ? 'SUCCESS! (+1)' : 'FAILED',
+                                        style: TextStyle(
+                                          color: isCorrect ? AppColors.verdigris : Colors.redAccent,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
                             ],
                             
                             // Best Forgery Banner
@@ -415,7 +460,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                                 children: (gs.players.where((p) => p.role != PlayerRole.spectator).toList()
                                       ..sort((a, b) => b.totalScore.compareTo(a.totalScore)))
                                     .map((player) {
-                                      final delta = _revealStage >= 4 ? (_latestDeltas[player.id] ?? 0) : 0;
+                                      final delta = revealStage >= 4 ? (_latestDeltas[player.id] ?? 0) : 0;
                                       return Padding(
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         child: Container(
@@ -476,8 +521,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                           const SizedBox(height: 20),
                           Builder(
                             builder: (context) {
-                              final now = DateTime.now().millisecondsSinceEpoch;
-                              final isTimerActive = state.unmaskDeadline != null && now < state.unmaskDeadline!;
+                              final isTimerActive = revealStage == 3;
                               return Opacity(
                                 opacity: !isTimerActive ? 1.0 : 0.4,
                                 child: PrimaryButton(
@@ -520,7 +564,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                     shape: const CircleBorder(),
                     child: InkWell(
                       onTap: () {
-                        final now = DateTime.now().millisecondsSinceEpoch;
+                        final now = clock.now().millisecondsSinceEpoch;
                         if (now - _lastReactionSentTime < 500) return;
                         _lastReactionSentTime = now;
                         gs.sendReaction(emoji);
@@ -549,7 +593,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
     if (me == null) return const SizedBox.shrink();
 
     final isFooled = card.votes[me.id] != null && card.votes[me.id] != 'TRUTH';
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = clock.now().millisecondsSinceEpoch;
     final isTimerActive = state.unmaskDeadline != null && now < state.unmaskDeadline!;
     
     final remainingMs = state.unmaskDeadline != null ? state.unmaskDeadline! - now : 0;
@@ -781,8 +825,8 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
     );
   }
 
-  Widget _buildOptionRow(String authorId, String text, CardModel card, GameService gs, ThemeData theme, {bool isTruth = false}) {
-    final voters = _revealStage >= 3
+  Widget _buildOptionRow(String authorId, String text, CardModel card, GameService gs, ThemeData theme, int revealStage, {bool isTruth = false}) {
+    final voters = revealStage >= 1
         ? gs.players.where((p) => card.votes[p.id] == authorId).toList()
         : <PlayerState>[];
     final cardColor = AppColors.groundRaised;
@@ -824,7 +868,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                   Row(
                     children: [
                       () {
-                        final bool isRevealed = _revealStage >= 4;
+                        final bool isRevealed = isTruth ? revealStage >= 2 : revealStage >= 4;
 
                         return FlippingRevealCard(
                           isRevealed: isRevealed,

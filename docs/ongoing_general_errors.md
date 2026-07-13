@@ -196,30 +196,15 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Problem**: `debugSimulateBotResponses` merged bot answers/votes and marked bots ready but never ran the all-ready → advance check, so a readiness state completed via the debug path stalled the game until a manual force-advance.
     - **Solution**: Both branches (forgery/truth and vote) of `debugSimulateBotResponses` now compute `allReady` over active players and call `advancePhaseInternal` with the merged cards, mirroring the gameplay callables while preserving the reads-before-writes transaction invariant. Verified by the emulator test "should advance phase when host submits first then bots simulate".
 
+47. **Issue 21: Forgery Authors Flipped Before Guess Tray Appears (Resolved - July 13)**:
+    - **Problem**: Reveal sequence advanced on a fixed 1.8-second cadence, flipping authors at stage 4 before the guess tray rendered at stage 5, rendering the guess trivial.
+    - **Solution**: Rewired reveal beats to functionally derive current stage from server `unmaskDeadline` and clock time. The unmask guess tray renders in stage 3 (the unmask window), and forgery authors only flip at stage 4 (after the deadline has passed). Verified via widget tests A–D in `test/phase4_reveal_test.dart`.
+
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
 > Found during the July 13 verification pass of the N-queue delivery (commit `8e8c2dd`). The delivery is otherwise solid — **15/15 emulator tests, 12/12 Flutter tests, 0 analyzer errors** — and the server-side halves of both new features are correct. The issues below are in the client presentation layer and one server input cap.
-
----
-
-### Issue 21: The Unmask Window Shows the Answers — Forgery Authors Flip BEFORE the Guess Tray Appears
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/phase4_reveal.dart`: `_advanceRevealSequence()` advances `_revealStage` on a fixed 1.8-second cadence (stage 4 at ~7.2s, stage 5 at ~9s); forgery author cards flip at `_revealStage >= 4` (line ~827) while the revenge guess tray only renders at `_revealStage == 5` (line ~360); the server accepts guesses until `unmaskDeadline` (~20s).
-- **What it means for the player:** The revenge guess is supposed to be a real test of who you think wrote the lie. Instead, the answer sheet is handed out before the quiz: the "FORGERY BY BOB" labels flip open at ~7 seconds, the guess tray appears ~2 seconds *later*, and the window stays open until ~20 seconds. Every fooled player can simply read the author off the screen and bank a guaranteed +1 (and hit the forger with −1) every single card. The mechanic isn't just weakened — it's inverted: being fooled becomes *profitable*.
-- **Root cause:** The five-beat spec (N5) requires the beats to be gated on the server's `unmaskDeadline` — truth flips first, guess window runs while sealed, authors flip only after the deadline. The implementation instead runs all beats on fixed local timers that finish ~11 seconds before the window closes, and it renders the tray *after* the author flip instead of before. (The emulator test couldn't catch this — it validates the server, and the server is correct; this is purely client presentation ordering.)
-
-**Option A (recommended)**: **Gate the beats on `unmaskDeadline` per the approved spec** — Re-wire the sequence: beats 1–2 (votes land, TRUTH flips) on short local timers as now; beat 3 (guess tray for fooled voters, "unmasking in progress" for others) begins after the truth flip and **persists while `now < unmaskDeadline`** (the 200ms `_countdownTimer` that already exists can drive the transition); beat 4 (forgery author flips + REVENGE results) triggers only when the deadline passes — or immediately when `unmaskDeadline == null` (nobody fooled). Rejoin mid-reveal lands in the correct beat automatically since the deadline is server time.
-  - *Pros*: Implements the design the user approved; server needs no change; the existing deadline field already carries all needed timing; fixes the guaranteed-cheat and the dead ~11s gap between animation end and CONTINUE unlocking.
-  - *Cons*: Reveal takes the full window (~15–20s) on cards where someone was fooled — that's the intended drama, but hosts who find it slow can be given a shorter window later (server constant).
-
-**Option B**: **Shrink the server window to match the animation** — set `unmaskDeadline = Date.now() + 7000` so guessing closes before the stage-4 flip.
-  - *Pros*: Tiny server change; no client rework.
-  - *Cons*: ~5 seconds to notice the tray, read the author grid, and commit — bad UX on the game's marquee new mechanic; the tray still renders *after* the flip (stage 5 > stage 4), so it would also need a client reorder anyway; abandons the approved 15-second design.
-
-**Validation**: Widget test — pump the reveal with a card where the local player was fooled and `unmaskDeadline` 15s out: assert forgery author rows are still sealed (`SEALED ANSWER` visible, no author name) while the tray is visible; advance fake time past the deadline: assert authors flip and the REVENGE row appears. Second test with `unmaskDeadline == null`: authors flip promptly, no tray. Manual — emulator game: fall for a lie and confirm you must guess blind; confirm the reader's screen shows "unmasking in progress" during the window; confirm a card with all-TRUTH votes skips the wait entirely.
-
-Your selection: Proceed with Option A.
 
 ---
 
