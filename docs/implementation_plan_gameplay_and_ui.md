@@ -221,7 +221,7 @@ Full rationale: `docs/design_ui_direction.md`. North star: **a gas-lit Victorian
 1. Concentrate motion into **orchestrated moments**: wax-stamp on commit; card-flip on reveal (E4); lamp-flicker on low timer and phase transitions.
 2. Optional high-impact: a few **bundled sounds** (quill scratch on submit, wax *thunk* on vote, low swell on Truth reveal) + **haptics** on commit/reveal, behind a **mute toggle**.
    > [!NOTE]
-   > **Sound Assets Deferral Note (July 13)**: The implementation of bundled sound effects (quill scratch, wax thunk, low swell) and the `audioplayers` dependency has been explicitly deferred because no licensed audio assets (.mp3/.wav files) have been provided in the repository.
+   > **Sound Assets Note (updated July 14)**: Decision 1 = **Option B (add sound)**. The **CC0 audio assets are now sourced and committed** to `assets/audio/` (`quill_scratch.wav`, `wax_stamp.wav`, `truth_reveal.wav`, `unmask_success.wav`; Kenney Interface/Impact packs, CC0, see `assets/audio/CREDITS.md`). The remaining work — `audioplayers` dependency, `AudioService`, persisted mute toggle, and trigger wiring — is fully specced in `docs/agent_execution_guide.md` → item **S1**. Ambient lobby loop remains optional/unsourced.
    > **Haptics**: `HapticFeedback.mediumImpact()` is triggered on commit/reveal events.
 3. Add a **"reduce motion" setting** and honor the OS accessibility flag; every animation (E4/D2/D3) checks it and degrades to the final state.
 

@@ -208,16 +208,46 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-> There are currently no unresolved client presentation defects or backend timing issues remaining from the July 13 review cycle.
+> No unresolved **defects** remain from the July 13 review cycle. One **open product decision** below is blocked on your input (it is not a bug — the code is correct and shipping without it is a valid choice).
+
+---
+
+### Decision 1: E7 Bundled Sound Effects — Ship Silent or Source Audio?
+**Status**: 🟡 Open Decision — Awaiting your selection. Verified in `docs/implementation_plan_gameplay_and_ui.md` → E7 "Sound Assets Deferral Note": haptics (`HapticFeedback.mediumImpact()` on commit/reveal) and reduce-motion handling are **done**; only *audio* is deferred, because no licensed sound files exist in the repo and an agent cannot license or author them.
+- **What it means for the player:** Sound is the cheapest way to make a party game feel "expensive" — a quill scratch as you write a forgery, a wax *thunk* as you lock a vote, a low string swell as the Truth is revealed. Right now the game is silent except for haptic buzzes. Adding audio would noticeably lift the theatrical, gaslit-parlor mood — but only if it's done with real, licensed assets (bad or unlicensed audio is worse than none).
+- **Scope note:** This is the *only* item not marked complete across the whole backlog. Everything else (Issues 1–22, Proposals P1–P6, P8, P10, the visual redesign) is delivered and verified green.
+
+**Option A (recommended for now — no work): Ship Silent.**
+Leave E7 audio deferred; haptics + motion carry the feel. Revisit post-launch if playtests ask for sound.
+  - *Pros*: Zero effort; no new dependency, bundle-size, or licensing exposure; nothing blocks a store submission; avoids shipping cheap-sounding placeholder audio.
+  - *Cons*: The app feels quieter/less premium than competitors; you lose the highest-impact, lowest-effort "juice" a party game can have.
+
+**Option B: Source Licensed Audio + Implement Sound.**
+You provide (or approve a budget/source for) royalty-free/licensed clips — quill scratch (submit), wax thunk (vote), low swell (Truth reveal), optionally a soft lobby ambience — placed in `assets/audio/`. An agent then adds an audio dependency (e.g. `audioplayers`), a **mute toggle** in settings, and triggers playback at the commit/vote/reveal moments, silent when muted.
+  - *Pros*: Big perceived-quality jump for modest engineering effort; reinforces the theme; better demo/marketing footage and App Store preview video.
+  - *Cons*: Requires *you* to supply properly licensed assets (the blocker); adds a dependency + bundle size; needs the mute toggle + a "no playback when muted" test; a little per-platform audio-latency tuning.
+
+**Option C: Procedural/Haptic-Only "Sound Design" (no audio files).**
+Skip audio entirely and instead deepen the *haptic* vocabulary — distinct patterns per action (light tap on select, medium on commit, a double-pulse on a correct unmask) — plus stronger visual "sound-like" cues (the wax-stamp flash, screen-shake on a big reveal).
+  - *Pros*: No licensing, no audio assets, no bundle cost; still adds tactile feedback variety; fully within an agent's power to build now.
+  - *Cons*: Silent players (sound off / desktop web with no haptics) gain little; not a substitute for real audio's emotional lift.
+
+**Validation (if Option B or C chosen)**: For B — widget test asserting no `AudioPlayer.play` fires when muted, and a manual pass that each moment plays its clip at reasonable latency on iOS + Android. For C — manual pass confirming distinct haptic patterns per action and no regression to the existing commit/reveal haptics.
+
+Your selection: Proceed with Option B. However, can you find the audio files or provide instruction to the implementing LLM to find royalty free audio files. Optionally, create a new audio files from scratch using an open sourced model or do it yourself.
+
+**Decision recorded (July 13): Option B — add bundled sound + mute toggle.** Full implementation & validation spec (dependency, `AudioService`, trigger points, mute toggle, tests) plus a complete **asset-sourcing plan** — Route 1: a deterministic, license-free procedural-synthesis recipe (`tool/generate_audio.py`, recommended); Route 2: curated **CC0-only** downloads (Freesound CC0 / Pixabay / Mixkit) with exact search terms; Route 3: open-source generative model as a fallback — is in `docs/agent_execution_guide.md` → item **S1 (E7 Sound)**. The implementing model must supply/generate the assets itself following that plan; only CC0 / public-domain / no-attribution audio may be used.
 
 ---
 
 ## 💡 New Gameplay & Fun Proposals (July 13) — Delivery Status
 
-> **Verification (July 13, commit `8e8c2dd`):**
-> - **P10 Custom Decks — ✅ delivered & verified.** Lobby contribution form (own-doc, field-scoped writes), host deck sync via `updateLobbySettings`, server harvest/top-up/own-prompt-free assignment (incl. the terminal-fallback edge), and reroll fallback all proven by the emulator suite and rules tests. One residual: the 3-per-player server cap was skipped — tracked as **Issue 22**.
-> - **P8 Unmask the Forger — ⚠️ server delivered & verified, client presentation broken.** The `submitUnmaskGuess` callable, deadline, guesses, and ±1 scoring are all correct and emulator-tested — but the reveal flips forgery authors *before* the guess tray appears, making every guess free. Tracked as **Issue 21**; not playable as designed until fixed.
+> **Verification (July 13 — final, after fixes `fd43ad7` + `d2423e8`; re-verified in the July 13 review pass):**
+> - **P10 Custom Decks — ✅ delivered & verified complete.** Lobby contribution form (own-doc, field-scoped writes), host deck sync via `updateLobbySettings`, server harvest/top-up/own-prompt-free assignment (incl. the terminal-fallback edge), and reroll fallback — all proven by the emulator suite and rules tests. The former residual (3-per-player cap, Issue 22) is now **fixed** (Resolved #48) and covered by its own emulator test.
+> - **P8 Unmask the Forger — ✅ delivered & verified complete.** Server (`submitUnmaskGuess`, deadline, ±1 scoring) was already correct; the reveal-ordering defect (Issue 21) that made guesses trivial is now **fixed** (Resolved #47) — forgery authors stay sealed through the guess window and flip only after the server `unmaskDeadline` passes, proven by widget tests A–D in `test/phase4_reveal_test.dart`. Fully playable as designed.
 > - **P7, P9, P11 declined** — never implement. Original proposals retained below for reference.
+>
+> **Full battery re-run (July 13 verification pass):** `functions` build clean · `flutter analyze` 0 errors · `flutter test` 16/16 · emulator suite `npm --prefix functions test` **16/16** (incl. revenge-guess scoring, custom-deck assignment, and the 3-prompt cap). No unresolved issues remain.
 
 ---
 
