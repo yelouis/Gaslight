@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/game_service.dart';
+import '../services/audio_service.dart';
+import '../theme/app_icons.dart';
 import '../models/game_state.dart';
 import '../models/player_state.dart';
 import '../models/card_model.dart';
@@ -47,6 +49,8 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
 
   int _revealStartTime = 0;
   String? _previousTargetId;
+  String? _playedRevealForTargetId;
+  String? _playedUnmaskForTargetId;
   Timer? _countdownTimer;
 
   int _computeStage(int now, GameState? state) {
@@ -290,6 +294,28 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
     final now = clock.now().millisecondsSinceEpoch;
     final revealStage = _computeStage(now, state);
 
+    if (revealStage >= 2 && currentTargetId != null && _playedRevealForTargetId != currentTargetId) {
+      _playedRevealForTargetId = currentTargetId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        AudioService.instance.playReveal();
+      });
+    }
+
+    final me = gs.currentPlayer;
+    if (me != null && currentCard != null) {
+      final isFooled = currentCard.votes[me.id] != null && currentCard.votes[me.id] != 'TRUTH';
+      final actualForgerId = isFooled ? currentCard.votes[me.id] : null;
+      final myGuess = currentCard.unmaskGuesses[me.id];
+      final isCorrectGuess = myGuess != null && myGuess == actualForgerId;
+
+      if (revealStage >= 4 && isCorrectGuess && currentTargetId != null && _playedUnmaskForTargetId != currentTargetId) {
+        _playedUnmaskForTargetId = currentTargetId;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          AudioService.instance.playUnmaskSuccess();
+        });
+      }
+    }
+
     return AnimatedThinkingBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -307,6 +333,16 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              icon: ThematicIcon(
+                type: gs.soundEnabled ? ThematicIconType.sound : ThematicIconType.mute,
+                color: theme.colorScheme.secondary,
+              ),
+              onPressed: () => gs.toggleSound(),
+              tooltip: gs.soundEnabled ? 'Mute' : 'Unmute',
+            ),
+          ],
         ),
         body: Stack(
           children: [

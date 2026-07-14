@@ -3,12 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../lib/services/game_service.dart';
+import '../lib/services/audio_service.dart';
 import '../lib/models/game_state.dart';
 import '../lib/models/player_state.dart';
 import '../lib/models/card_model.dart';
 import '../lib/screens/phase4_reveal.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart'; // Import FakeFirestore
+import 'audio_service_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -220,6 +222,48 @@ void main() {
         expect(find.text('UNMASKING IN PROGRESS...'), findsOneWidget);
         expect(find.textContaining('Fooled players are trying'), findsOneWidget);
         expect(find.textContaining('Accuse the player'), findsNothing);
+      } finally {
+        gameService.dispose();
+      }
+    });
+
+    testWidgets('Widget Test E: playReveal fires exactly once when truth is revealed and does not re-fire on timer ticks', (WidgetTester tester) async {
+      try {
+        final mockRevealPlayer = FakeAudioPlayer();
+        final mockSubmitPlayer = FakeAudioPlayer();
+        final mockVotePlayer = FakeAudioPlayer();
+        final mockUnmaskPlayer = FakeAudioPlayer();
+
+        AudioService.instance.setPlayers(
+          submitPlayer: mockSubmitPlayer,
+          votePlayer: mockVotePlayer,
+          revealPlayer: mockRevealPlayer,
+          unmaskPlayer: mockUnmaskPlayer,
+        );
+
+        final now = DateTime.now().millisecondsSinceEpoch;
+        await setupAndPumpRevealScreen(
+          tester: tester,
+          localPlayerId: 'local_player_id',
+          unmaskDeadline: now + 15000,
+        );
+
+        // Before beat 2, reveal player should have 0 play calls (stage 1)
+        expect(mockRevealPlayer.playCallCount, 0);
+
+        // Advance to 2000 ms (into stage 2)
+        await tester.pump(const Duration(milliseconds: 2000));
+        
+        // playReveal should be called exactly once
+        expect(mockRevealPlayer.playCallCount, 1);
+
+        // Let the countdown timer trigger several times (200ms periodic ticks)
+        for (int i = 0; i < 5; i++) {
+          await tester.pump(const Duration(milliseconds: 200));
+        }
+
+        // playReveal should still have been called exactly once (prevent double-play)
+        expect(mockRevealPlayer.playCallCount, 1);
       } finally {
         gameService.dispose();
       }

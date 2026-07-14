@@ -17,6 +17,8 @@ enum ThematicIconType {
   confirm,
   secret,
   host,
+  sound,
+  mute,
 }
 
 class ThematicIcon extends StatelessWidget {
@@ -314,6 +316,43 @@ class _ThematicIconPainter extends CustomPainter {
           ..quadraticBezierTo(w * 0.44, h * 0.68, w * 0.5, h * 0.75)
           ..quadraticBezierTo(w * 0.56, h * 0.68, w * 0.5, h * 0.55);
         canvas.drawPath(flame, fillPaint);
+        break;
+
+      case ThematicIconType.sound:
+        final path = Path()
+          ..moveTo(w * 0.5, h * 0.25)
+          ..quadraticBezierTo(w * 0.5, h * 0.15, w * 0.5, h * 0.15)
+          ..moveTo(w * 0.5, h * 0.25)
+          ..quadraticBezierTo(w * 0.35, h * 0.35, w * 0.3, h * 0.65)
+          ..lineTo(w * 0.70, h * 0.65)
+          ..quadraticBezierTo(w * 0.65, h * 0.35, w * 0.5, h * 0.25)
+          ..close();
+        canvas.drawPath(path, paint);
+        canvas.drawPath(path, fillPaint..color = color.withOpacity(0.2));
+
+        canvas.drawCircle(Offset(w * 0.5, h * 0.72), w * 0.06, fillPaint);
+        canvas.drawLine(Offset(w * 0.25, h * 0.65), Offset(w * 0.75, h * 0.65), paint);
+        canvas.drawCircle(Offset(w * 0.5, h * 0.16), w * 0.05, paint);
+        break;
+
+      case ThematicIconType.mute:
+        final path = Path()
+          ..moveTo(w * 0.5, h * 0.25)
+          ..quadraticBezierTo(w * 0.5, h * 0.15, w * 0.5, h * 0.15)
+          ..moveTo(w * 0.5, h * 0.25)
+          ..quadraticBezierTo(w * 0.35, h * 0.35, w * 0.3, h * 0.65)
+          ..lineTo(w * 0.70, h * 0.65)
+          ..quadraticBezierTo(w * 0.65, h * 0.35, w * 0.5, h * 0.25)
+          ..close();
+        canvas.drawPath(path, paint);
+        canvas.drawPath(path, fillPaint..color = color.withOpacity(0.1));
+
+        canvas.drawCircle(Offset(w * 0.5, h * 0.72), w * 0.06, fillPaint);
+        canvas.drawLine(Offset(w * 0.25, h * 0.65), Offset(w * 0.75, h * 0.65), paint);
+        canvas.drawCircle(Offset(w * 0.5, h * 0.16), w * 0.05, paint);
+
+        // Mute slash line
+        canvas.drawLine(Offset(w * 0.2, h * 0.2), Offset(w * 0.8, h * 0.8), paint..color = color);
         break;
     }
   }

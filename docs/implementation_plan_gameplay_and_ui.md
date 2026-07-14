@@ -219,10 +219,9 @@ Full rationale: `docs/design_ui_direction.md`. North star: **a gas-lit Victorian
 
 ## E7 · Motion, sound & feel (§8 — approved) — restraint
 1. Concentrate motion into **orchestrated moments**: wax-stamp on commit; card-flip on reveal (E4); lamp-flicker on low timer and phase transitions.
-2. Optional high-impact: a few **bundled sounds** (quill scratch on submit, wax *thunk* on vote, low swell on Truth reveal) + **haptics** on commit/reveal, behind a **mute toggle**.
-   > [!NOTE]
-   > **Sound Assets Note (updated July 14)**: Decision 1 = **Option B (add sound)**. The **CC0 audio assets are now sourced and committed** to `assets/audio/` (`quill_scratch.wav`, `wax_stamp.wav`, `truth_reveal.wav`, `unmask_success.wav`; Kenney Interface/Impact packs, CC0, see `assets/audio/CREDITS.md`). The remaining work — `audioplayers` dependency, `AudioService`, persisted mute toggle, and trigger wiring — is fully specced in `docs/agent_execution_guide.md` → item **S1**. Ambient lobby loop remains optional/unsourced.
-   > **Haptics**: `HapticFeedback.mediumImpact()` is triggered on commit/reveal events.
+2. Themed SFX & feel: bundled audio effects (`quill_scratch.wav` on submit, `wax_stamp.wav` on vote/ready lock, `truth_reveal.wav` bell toll on truth reveal, and `unmask_success.wav` on correct accusation) are fully implemented. Exposes a **mute toggle** (persisted handbell icon) in the lobby and reveal screens.
+   - **Sound Assets (July 14)**: Sourced CC0 sounds from Kenney Interface/Impact packs (WAV format). Provenance and licenses are recorded in `assets/audio/CREDITS.md`.
+   - **Haptics**: `HapticFeedback.mediumImpact()` is triggered on commit/reveal events.
 3. Add a **"reduce motion" setting** and honor the OS accessibility flag; every animation (E4/D2/D3) checks it and degrades to the final state.
 
 **Validation:** Manual — animations feel intentional, not scattered; reduce-motion toggles/OS settings work; no motion when reduce-motion is on.

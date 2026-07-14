@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/game_service.dart';
+import '../services/audio_service.dart';
 import '../models/game_state.dart';
 import '../models/player_state.dart';
 import '../models/card_model.dart';
@@ -47,6 +48,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
       await gs.submitCardAnswer(targetId, me.id, text, isTruth);
       if (mounted) {
         _answerController.clear();
+        AudioService.instance.playSubmit();
       }
     } catch (e) {
       debugPrint('EXCEPTION CAUGHT ON SUBMIT: $e, mounted=$mounted');

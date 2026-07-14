@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/audio_service.dart';
 import 'dart:math';
 import '../services/game_service.dart';
 import '../models/game_state.dart';
@@ -65,6 +66,9 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
     
     try {
       await gs.castVote(currentTargetId, me.id, votedForId);
+      if (mounted) {
+        AudioService.instance.playVote();
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -243,6 +247,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
               setState(() => _submitted = true);
               try {
                 await context.read<GameService>().setPlayerReady(true);
+                AudioService.instance.playVote();
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(

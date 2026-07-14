@@ -182,6 +182,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
                               _highlightItem('AI Filter: ', 'The game uses semantic analysis to reject answers too similar to existing ones. Be original!'),
                             ],
                           ),
+                          _buildInstructionSection(
+                            theme,
+                            '6. SOUND SETTINGS',
+                            [
+                              _highlightItem('Mute Toggle: ', 'Toggle the handbell icon in the lobby or reveal screens to mute/unmute game sound effects.'),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -358,6 +365,16 @@ class _LobbyScreenState extends State<LobbyScreen> {
         elevation: 0,
         title: Text('ROOM: ${gs.gameState!.roomCode}', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 4)),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: ThematicIcon(
+              type: gs.soundEnabled ? ThematicIconType.sound : ThematicIconType.mute,
+              color: theme.colorScheme.secondary,
+            ),
+            onPressed: () => gs.toggleSound(),
+            tooltip: gs.soundEnabled ? 'Mute' : 'Unmute',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),

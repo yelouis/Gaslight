@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'audio_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/game_state.dart';
 import '../models/player_state.dart';
@@ -18,6 +19,9 @@ import 'package:uuid/uuid.dart';
 class GameService extends ChangeNotifier {
   final FirebaseFirestore _db;
   final FirebaseFunctions _functions;
+
+  bool _soundEnabled = true;
+  bool get soundEnabled => _soundEnabled;
   
   GameService({FirebaseFirestore? db, FirebaseFunctions? functions})
       : _db = db ?? FirebaseFirestore.instance,
@@ -32,6 +36,22 @@ class GameService extends ChangeNotifier {
         debugPrint('Emulator already initialized: $e');
       }
     }
+    _loadSettings();
+  }
+
+  void _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    _soundEnabled = prefs.getBool('sound_enabled') ?? true;
+    AudioService.instance.soundEnabled = _soundEnabled;
+    notifyListeners();
+  }
+
+  Future<void> toggleSound() async {
+    _soundEnabled = !_soundEnabled;
+    AudioService.instance.soundEnabled = _soundEnabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('sound_enabled', _soundEnabled);
+    notifyListeners();
   }
   
   GameState? _gameState;
