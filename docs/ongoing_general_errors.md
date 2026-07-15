@@ -204,16 +204,33 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Problem**: Custom prompt harvesting compiled all custom prompts submitted by players without limiting counts per player, leaving custom decks susceptible to prompt-flooding attacks.
     - **Solution**: Sliced player-submitted custom prompts to a maximum of 3 valid entries per player during harvest in the custom deck branch of `startGame` (and mirrored in `test/fake_functions.dart`). Verified by the backend E2E integration test "should enforce the server-side cap of at most 3 custom prompts per player".
 
+49. **E7 Bundled Sound Effects — Decision 1, Option B (Resolved - July 14)**:
+    - **Problem**: The game was silent except for haptics; bundled sound (the highest-impact, lowest-effort "juice" for a party game) was deferred because no licensed audio existed in the repo. Product decision "Decision 1" resolved to **Option B — add sound + mute toggle** with a hard CC0/no-attribution licensing constraint.
+    - **Solution**: Sourced four **CC0 (public-domain)** effects from Kenney's Interface/Impact packs — `quill_scratch` (submit), `wax_stamp` (vote/ready), `truth_reveal` (a bell toll for the Truth flip), `unmask_success` (correct revenge guess) — converted to mono 44.1 kHz 16-bit WAV, peak-normalized to −3 dBFS, in `assets/audio/` with `CREDITS.md`. Added the `audioplayers` dependency and `lib/services/audio_service.dart` (singleton, low-latency, every `play*` gated on `soundEnabled`, injectable for tests). Wired triggers at submit (`phase2_craft.dart`), vote + "I'M READY" (`phase3_vote.dart`), and the reveal (`phase4_reveal.dart`) with a **once-per-card guard** (`_playedRevealForTargetId`) and a correct-guess-only unmask sting, both deferred via `addPostFrameCallback`. Added a persisted `soundEnabled` mute toggle (`GameService.toggleSound` + `SharedPreferences`) surfaced as a handbell `ThematicIcon` in the lobby/reveal app bars, documented in the in-app manual. A second CC0 candidate per slot was auditioned via a temporary `audio_review/` kit (since removed); all original picks were kept.
+    - **Validation**: `test/audio_service_test.dart` proves the mute contract (exactly one `play` per method with the correct asset path when enabled; zero when muted). Full battery green — `flutter analyze` 0 errors, `flutter test` 19/19, emulator suite 16/16 (backend unaffected).
+    - **Note**: Optional `lobby_ambience` loop was intentionally not sourced (Kenney has no ambient bed); revisit only if wanted.
+
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-> No unresolved **defects** remain from the July 13 review cycle. One **open product decision** below is blocked on your input (it is not a bug — the code is correct and shipping without it is a valid choice).
+> One **approved change is in flight** (Decision 2, below); no open defects. Everything else is delivered and verified (July 14 — `flutter analyze` 0 · `flutter test` 19/19 · emulator suite 16/16).
+
+---
+
+### Decision 2: Duplicate-Answer Check — Replace Gemini with a Local Heuristic
+**Status**: ✅ DECIDED (July 14) — **build in progress**; full implementation & validation spec in `docs/agent_execution_guide.md` → item **H1**.
+- **What it means for the player:** When you write a forgery, the game blocks answers that are basically identical to one already on the card (so the round stays a real guessing game). Today that check calls Google's Gemini AI — which needs an API key, costs money per call, adds network lag, and silently does nothing if the key is missing. The player experience is the same or better with a built-in check, minus all that baggage.
+- **Decision:** Remove the Gemini path **entirely**. Replace it with a dependency-free **lexical heuristic** (normalize + word-overlap/Jaccard + fuzzy string match), **enforced on the server** (in the `submitAnswer` Cloud Function) and **mirrored on-device** for instant "too similar, try again" feedback before the round-trip. Deterministic, free, offline, and finally unit-testable.
+- **Trade-off accepted:** the heuristic catches exact/near-exact and reworded duplicates (incl. the Journey-5 "sleep all day in bed" case) but **not** pure synonyms with no shared words ("a quick nap" vs "sleeping"). For a party game that's fine; if playtests show otherwise, the cheap upgrade is a bundled shallow word-embedding (a few MB, still no API) — noted for later, not building now.
+- **Why not keep Gemini as an optional layer:** the user chose full removal for simplicity (no key, no cost, no fail-open ambiguity). 
+
+**Validation**: parity unit tests (identical Dart + TS results), an emulator E2E that rejects an enforced near-duplicate over the callable, and a client widget test proving the on-device pre-check blocks before the server call. See H1 for the full table and cleanup checklist (removing `http`, the README Gemini section, and the dead `SemanticFilter`).
 
 ---
 
 ### Decision 1: E7 Bundled Sound Effects — Ship Silent or Source Audio?
-**Status**: 🟡 Open Decision — Awaiting your selection. Verified in `docs/implementation_plan_gameplay_and_ui.md` → E7 "Sound Assets Deferral Note": haptics (`HapticFeedback.mediumImpact()` on commit/reveal) and reduce-motion handling are **done**; only *audio* is deferred, because no licensed sound files exist in the repo and an agent cannot license or author them.
+**Status**: ✅ DECIDED & DELIVERED (July 14) — chose **Option B**; implemented and verified. See **Resolved #49** for the full solution. Kept below for the decision record.
 - **What it means for the player:** Sound is the cheapest way to make a party game feel "expensive" — a quill scratch as you write a forgery, a wax *thunk* as you lock a vote, a low string swell as the Truth is revealed. Right now the game is silent except for haptic buzzes. Adding audio would noticeably lift the theatrical, gaslit-parlor mood — but only if it's done with real, licensed assets (bad or unlicensed audio is worse than none).
 - **Scope note:** This is the *only* item not marked complete across the whole backlog. Everything else (Issues 1–22, Proposals P1–P6, P8, P10, the visual redesign) is delivered and verified green.
 
