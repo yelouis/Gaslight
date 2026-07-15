@@ -1,48 +1,58 @@
-# Semantic Integrity & AI Filtering
+# Duplicate-Answer Filtering
 
-This document details the AI-assisted semantic similarity filtering used to prevent players from writing synonymous or identical answers.
+This document details the local lexical similarity heuristic used to prevent players from writing synonymous, identical, or near-identical answers for a card.
 
-> **Server-side enforcement (July 2026):** with the server-authoritative migration (see `design_database_and_security.md`), the authoritative similarity check now runs **inside the `submitAnswer` Cloud Function** (`functions/src/index.ts`). The `GEMINI_API_KEY` lives only in the Functions environment — it is no longer shipped in the client `.env` (closing the README's key-exposure risk). Embedding vectors are cached per room in Firestore at `/rooms/{roomCode}/embeddings/{md5(normalizedText)}` (server-only; clients cannot read them). The check **fails open** on API errors so gameplay never blocks, but a confirmed >0.85 similarity rejects the submission with a player-facing "too similar" error. The legacy client-side `lib/utils/semantic_filter.dart` pre-check is now vestigial (no client key → always passes) and is slated for removal under open Issue 14.
+## 1. Overview & Architecture
 
-## 1. Embedding Engine
+To maintain the challenge of the deduction puzzle, submissions must not be too similar to existing answers on the same card (e.g. submitting "sleep all day in bed" when "sleeping in my bed all day" is already on the card).
 
-To maintain the challenge of the deduction puzzle, submissions must not be semantically redundant (e.g., submitting "a quick nap" when "sleeping" is already on the card).
-* Authoritative: `functions/src/index.ts` (`getEmbedding`, `cosineSimilarity`, invoked by `submitAnswer`)
-* Legacy client mirror (vestigial): `lib/utils/semantic_filter.dart`
+The check is implemented as a **dependency-free, deterministic lexical heuristic** running in two mirrored places:
+1. **Server-Authoritative:** Runs inside the `submitAnswer` Cloud Function (`functions/src/index.ts` via `./text_similarity`). All submissions are verified on the server before database writes.
+2. **Client-Side Pre-check:** Runs locally on the client inside `phase2_craft.dart` (via `lib/utils/text_similarity.dart`). This provides instant "Too similar, try again" feedback to the player without incurring a network round-trip.
 
-### API Integration
-* **Service**: Gemini API (`models/text-embedding-004`).
-* **Security Header**: The `GEMINI_API_KEY` is read from the Cloud Functions environment (`process.env.GEMINI_API_KEY` / Secret Manager) and passed via the HTTP header `x-goog-api-key`. It is **never** exposed in the request URL query parameters, and never present in client binaries.
-* **Payload**:
-  ```json
-  {
-    "model": "models/text-embedding-004",
-    "content": {
-      "parts": [{ "text": "<answer>" }]
-    }
-  }
-  ```
+### Synonym Trade-off
+Because this is a lexical heuristic rather than a deep learning model, it targets structural and word-level overlaps (normalized spelling, stemming, Jaccard token overlap, substring containment, and Levenshtein distance). It does **not** block pure synonyms with no shared words (e.g., "a quick nap" vs "sleeping"). This is a design-approved trade-off to eliminate Gemini API dependencies, costs, latency, and API keys.
 
 ---
 
-## 2. Cosine Similarity & Math
+## 2. The Shared Heuristic Algorithm
 
-Vectors returned from the embeddings endpoint are compared mathematically:
+The TS and Dart implementations are byte-identical and behave deterministically. The algorithm evaluates a `candidate` string against a list of `existing` answers on the card using four cascading rules:
 
-### Formulas
-* **Dot Product**: $\mathbf{A} \cdot \mathbf{B} = \sum_{i=1}^n A_i B_i$
-* **Magnitude**: $\|\mathbf{A}\| = \sqrt{\sum_{i=1}^n A_i^2}$
-* **Cosine Similarity**: $\text{similarity} = \frac{\mathbf{A} \cdot \mathbf{B}}{\|\mathbf{A}\| \|\mathbf{B}\|}$
+### A. Pre-processing & Normalization
+*   **Stopwords**: Stopwords are filtered out during tokenization.
+    `STOPWORDS = {a, an, the, my, your, our, his, her, their, this, that, in, on, of, to, and, or, for, with, at, is, am, are, was, were, be, been, it, i, me, we, you, all}`
+*   **Normalization (`normalize`)**: Converts the string to lowercase, replaces all non-alphanumeric characters `[^a-z0-9]` with spaces, collapses multiple spaces, and trims.
+*   **Stemming (`stem`)**: Reduces tokens to their base form. Applies the first matching rule:
+    1.  Length > 5 & ends with `"ing"` $\rightarrow$ drop last 3.
+    2.  Length > 4 & ends with `"ed"` $\rightarrow$ drop last 2.
+    3.  Length > 4 & ends with `"es"` $\rightarrow$ drop last 2.
+    4.  Length > 3 & ends with `"s"` & not ends with `"ss"` $\rightarrow$ drop last 1.
+    5.  Length > 4 & ends with `"ly"` $\rightarrow$ drop last 2.
 
-### Threshold
-* **Limit**: `0.85`.
-* **Behavior**: If the cosine similarity score between the new answer and *any* existing answer on the target card (truth or other sabotages) exceeds `0.85`, the submission is rejected, and the client receives a warning SnackBar.
+### B. Cascading Reject Rules
+A candidate `C` is rejected against an existing entry `E` if any of these conditions are met:
+
+1.  **Exact Match**:
+    $$\text{normalize}(C) == \text{normalize}(E)$$
+2.  **Containment**:
+    Extracts the stemmed, stopword-filtered phrase strings `pc` and `pe`. If the shorter phrase is a substring of the longer phrase, and the shorter phrase contains at least `CONTAINMENT_MIN_TOKENS` (2) tokens, the candidate is rejected.
+3.  **Jaccard Similarity**:
+    Extracts the sets of content tokens `tc` and `te`. If both are non-empty:
+    $$\text{Jaccard}(C, E) = \frac{|tc \cap te|}{|tc \cup te|} \ge \text{JACCARD\_THRESHOLD}\ (0.6)$$
+4.  **Levenshtein Distance**:
+    Computes Levenshtein distance on the normalized strings:
+    $$\text{Ratio}(C, E) = 1.0 - \frac{\text{lev}(C, E)}{\max(|C|, |E|)} \ge \text{LEV\_RATIO\_THRESHOLD}\ (0.85)$$
+    *(If both are empty, Ratio is 1.0)*
 
 ---
 
-## 3. Performance & Memory Optimization
+## 3. Thresholds & Configuration Constants
 
-To keep response times low and avoid repeating network calls, a vector cache is maintained:
-* **Cache**: `Map<String, List<double>> _vectorCache` maps text strings to their computed double vectors.
-* **Lifecycle**: To prevent unbounded memory expansion, `SemanticFilter.clearCache()` is invoked when a new game session starts.
-* **Concurrency Security**: All card edits (inserting sabotage or truth answers) run inside Firestore transactions to prevent parallel writes on a card from bypassing similarity checks.
+The threshold constants are exposed at the top of the similarity files for easy adjustment:
+
+| Constant | Value | Purpose |
+|---|---|---|
+| `JACCARD_THRESHOLD` | `0.6` | Triggers reject on high word overlap (e.g. "dog ate homework" vs "dog ate my homework"). |
+| `LEV_RATIO_THRESHOLD` | `0.85` | Triggers reject on near-exact typos or minor spelling differences. |
+| `CONTAINMENT_MIN_TOKENS` | `2` | Minimum token count required for containment matching (prevents single common words from blocking phrases). |

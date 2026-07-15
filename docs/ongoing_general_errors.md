@@ -214,12 +214,12 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-> One **approved change is in flight** (Decision 2, below); no open defects. Everything else is delivered and verified (July 14 — `flutter analyze` 0 · `flutter test` 19/19 · emulator suite 16/16).
+> **No unresolved issues or in-flight decisions remain.** Everything is delivered and verified (July 15 — `flutter analyze` 0 · `flutter test` 30/30 · emulator suite 28/28).
 
 ---
 
 ### Decision 2: Duplicate-Answer Check — Replace Gemini with a Local Heuristic
-**Status**: ✅ DECIDED (July 14) — **build in progress**; full implementation & validation spec in `docs/agent_execution_guide.md` → item **H1**.
+**Status**: ✅ DECIDED & DELIVERED (July 15) — replaced Gemini with local lexical similarity heuristic check. See **Resolved #50** for the full solution. Kept below for the decision record.
 - **What it means for the player:** When you write a forgery, the game blocks answers that are basically identical to one already on the card (so the round stays a real guessing game). Today that check calls Google's Gemini AI — which needs an API key, costs money per call, adds network lag, and silently does nothing if the key is missing. The player experience is the same or better with a built-in check, minus all that baggage.
 - **Decision:** Remove the Gemini path **entirely**. Replace it with a dependency-free **lexical heuristic** (normalize + word-overlap/Jaccard + fuzzy string match), **enforced on the server** (in the `submitAnswer` Cloud Function) and **mirrored on-device** for instant "too similar, try again" feedback before the round-trip. Deterministic, free, offline, and finally unit-testable.
 - **Trade-off accepted:** the heuristic catches exact/near-exact and reworded duplicates (incl. the Journey-5 "sleep all day in bed" case) but **not** pure synonyms with no shared words ("a quick nap" vs "sleeping"). For a party game that's fine; if playtests show otherwise, the cheap upgrade is a bundled shallow word-embedding (a few MB, still no API) — noted for later, not building now.

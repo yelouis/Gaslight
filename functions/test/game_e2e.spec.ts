@@ -743,4 +743,76 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     // the number of FLOOD_ prompts dealt can never be more than 3!
     expect(floodPromptsDealt).to.be.at.most(3);
   });
+
+  it('should enforce duplicate-answer rejection in submitAnswer Cloud Function', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+
+    // 1. Create Room (debugEnabled = true)
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    // 2. Join Room
+    await callFn('joinRoom', guestUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest'
+    });
+
+    // 3. Start Game
+    await callFn('startGame', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'the_daily_grind'
+    });
+
+    const roomRef = db.collection('rooms').doc(roomCode);
+    const roomSnap = await roomRef.get();
+    const targetCardId = roomSnap.data()?.currentCardAssignments['p_host'];
+
+    expect(targetCardId).to.be.a('string');
+
+    // 4. Submit first answer (distinct) -> succeeds
+    await callFn('submitAnswer', hostUser.idToken, {
+      roomCode,
+      targetCardId,
+      authorId: 'p_host',
+      text: 'sleeping in my bed all day',
+      isTruth: false
+    });
+
+    // 5. Submit near-duplicate answer from another player -> rejects
+    try {
+      await callFn('submitAnswer', guestUser.idToken, {
+        roomCode,
+        targetCardId,
+        authorId: 'p_guest',
+        text: 'sleep all day in bed',
+        isTruth: false
+      });
+      expect.fail('Should have rejected the duplicate answer');
+    } catch (err: any) {
+      expect(err.message).to.contain("similar to another player's answer");
+      expect(err.status).to.equal('INVALID_ARGUMENT');
+    }
+
+    // 6. Submit distinct answer from the second player -> succeeds
+    await callFn('submitAnswer', guestUser.idToken, {
+      roomCode,
+      targetCardId,
+      authorId: 'p_guest',
+      text: 'playing video games',
+      isTruth: false
+    });
+
+    // Verify card answers in Firestore
+    const finalRoomSnap = await roomRef.get();
+    const card = finalRoomSnap.data()?.cards.find((c: any) => c.targetPlayerId === targetCardId);
+    expect(card.sabotageAnswers['p_host']).to.equal('sleeping in my bed all day');
+    expect(card.sabotageAnswers['p_guest']).to.equal('playing video games');
+  });
 });

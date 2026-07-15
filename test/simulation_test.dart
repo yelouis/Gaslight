@@ -6,7 +6,7 @@ import '../lib/models/game_state.dart';
 import '../lib/models/player_state.dart';
 import '../lib/models/card_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../lib/utils/semantic_filter.dart';
+import '../lib/utils/text_similarity.dart';
 import 'fake_functions.dart';
 
 // Minimal manual mock for Firestore
@@ -496,26 +496,20 @@ void main() {
     test('Semantic Similarity Filtering Validation', () async {
       print('--- STARTING SEMANTIC INTEGRITY SIMULATION ---');
 
-      // Setup cache mock embeddings using debugSetEmbedding
-      SemanticFilter.clearCache();
-      SemanticFilter.debugSetEmbedding('sleeping in my bed all day', [1.0, 0.0, 0.0]);
-      SemanticFilter.debugSetEmbedding('sleep all day in bed', [0.95, 0.1, 0.0]); // Cosine Similarity: 0.95 / (1.0 * sqrt(0.9125)) ~= 0.99
-      SemanticFilter.debugSetEmbedding('playing video games', [0.0, 1.0, 0.0]); // Cosine Similarity: 0.0
-
       // Test highly similar answer rejection
-      bool isUniqueDuplicate = await SemanticFilter.isAnswerUnique(
+      bool isTooSimilarDuplicate = TextSimilarity.isTooSimilar(
         'sleep all day in bed',
         ['sleeping in my bed all day'],
       );
-      expect(isUniqueDuplicate, isFalse);
+      expect(isTooSimilarDuplicate, isTrue);
       print('Verified: Highly similar answer was successfully rejected.');
 
       // Test unique answer acceptance
-      bool isUniqueDifferent = await SemanticFilter.isAnswerUnique(
+      bool isTooSimilarDifferent = TextSimilarity.isTooSimilar(
         'playing video games',
         ['sleeping in my bed all day'],
       );
-      expect(isUniqueDifferent, isTrue);
+      expect(isTooSimilarDifferent, isFalse);
       print('Verified: Unique answer was successfully accepted.');
     });
   });

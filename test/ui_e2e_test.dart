@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gaslight/main.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/models/game_state.dart';
-import 'package:gaslight/utils/semantic_filter.dart';
 import 'simulation_test.dart';
 import 'fake_functions.dart';
 
@@ -42,10 +41,7 @@ void main() {
         await tester.pump();
       }
 
-      // Pre-populate embedding cache to avoid network blocks or async delays in similarity checks
-      SemanticFilter.clearCache();
-      SemanticFilter.debugSetEmbedding('Alice\'s Simulated Forgery', [1.0, 0.0, 0.0]);
-      SemanticFilter.debugSetEmbedding('Alice\'s Real Truth', [1.0, 0.0, 0.0]);
+
 
       // 1. Pump GaslightApp hydrated with mock game service
       await tester.pumpWidget(

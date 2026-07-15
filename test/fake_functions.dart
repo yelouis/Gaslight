@@ -7,6 +7,7 @@ import '../lib/models/card_model.dart';
 import '../lib/utils/prompt_decks.dart';
 import '../lib/utils/rotation_engine.dart';
 import '../lib/utils/scoring_logic.dart';
+import '../lib/utils/text_similarity.dart';
 import 'dart:math';
 
 class FakeHttpsCallableResult<T> implements HttpsCallableResult<T> {
@@ -251,14 +252,28 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final text = params['text'];
       final isTruth = params['isTruth'];
 
-      if (text.toString().contains('trigger_error')) {
-        throw FirebaseFunctionsException(
-          message: 'Similarity check failed or mock error triggered!',
-          code: 'invalid-argument',
-        );
-      }
-
       final roomRef = db.collection('rooms').doc(roomCode);
+      final roomSnap = await roomRef.get();
+      if (roomSnap.exists) {
+        final currentState = GameState.fromMap(roomSnap.data()!, roomSnap.id);
+        final card = currentState.cards.firstWhere((c) => c.targetPlayerId == targetCardId);
+        final existing = <String>[];
+        if (card.truthAnswer.isNotEmpty && !isTruth) {
+          existing.add(card.truthAnswer);
+        }
+        card.sabotageAnswers.forEach((sabId, sabotageText) {
+          if (sabId != authorId && sabotageText.isNotEmpty) {
+            existing.add(sabotageText);
+          }
+        });
+
+        if (TextSimilarity.isTooSimilar(text, existing) || text.toString().contains('trigger_error')) {
+          throw FirebaseFunctionsException(
+            message: 'Answer is too similar to another player\'s answer!',
+            code: 'invalid-argument',
+          );
+        }
+      }
       
       await db.runTransaction((transaction) async {
         final snapshot = await transaction.get(roomRef);

@@ -11,7 +11,6 @@ import '../utils/prompt_decks.dart';
 import '../utils/rotation_engine.dart';
 import '../models/card_model.dart';
 import '../utils/scoring_logic.dart';
-import '../utils/semantic_filter.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:uuid/uuid.dart';
@@ -325,7 +324,7 @@ class GameService extends ChangeNotifier {
         _functions.httpsCallable('handleDisconnect').call({
           'roomCode': roomCode,
           'disconnectedPlayerId': dp.id,
-        }).catchError((_) {});
+        }).then((_) {}).catchError((_) {});
       }
 
       notifyListeners();

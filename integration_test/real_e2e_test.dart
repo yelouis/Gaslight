@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gaslight/main.dart' as app;
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/models/game_state.dart';
-import 'package:gaslight/utils/semantic_filter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -92,10 +91,7 @@ void main() {
         await tick(500);
       }
 
-      // Pre-populate embedding cache to avoid network blocks or async delays in similarity checks
-      SemanticFilter.clearCache();
-      SemanticFilter.debugSetEmbedding('Alice\'s Real Forgery', [1.0, 0.0, 0.0]);
-      SemanticFilter.debugSetEmbedding('Alice\'s Real Truth', [1.0, 0.0, 0.0]);
+
 
       await tick(500);
 
@@ -633,10 +629,7 @@ void main() {
       await gameService.submitCardAnswer(targetId!, 'some_other_player_id', existingText, false);
       await tick(500);
 
-      // Set up cache embeddings to match similarity threshold > 0.85
-      SemanticFilter.clearCache();
-      SemanticFilter.debugSetEmbedding(existingText, [1.0, 0.0, 0.0]);
-      SemanticFilter.debugSetEmbedding(duplicateText, [0.95, 0.1, 0.0]); // highly similar
+
 
       // 4. Try to submit duplicateText
       final inputField = find.byType(TextField).first;

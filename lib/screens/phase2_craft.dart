@@ -10,7 +10,7 @@ import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../widgets/auto_advance_timer.dart';
 import '../utils/prompt_decks.dart';
-import '../utils/semantic_filter.dart';
+import '../utils/text_similarity.dart';
 import '../theme/app_colors.dart';
 
 
@@ -45,6 +45,39 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
 
     try {
       bool isTruth = state.currentPhase == GamePhase.truth;
+
+      // Local pre-check similarity
+      CardModel? card;
+      try {
+        card = state.cards.firstWhere((c) => c.targetPlayerId == targetId);
+      } catch (_) {}
+
+      if (card != null) {
+        final existing = <String>[];
+        if (card.truthAnswer.isNotEmpty && !isTruth) {
+          existing.add(card.truthAnswer);
+        }
+        card.sabotageAnswers.forEach((sabId, sabotageText) {
+          if (sabId != me.id && sabotageText.isNotEmpty) {
+            existing.add(sabotageText);
+          }
+        });
+
+        if (TextSimilarity.isTooSimilar(text, existing)) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Too similar to an existing answer! Be more creative.'),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+          }
+          setState(() => _isSubmitting = false);
+          return;
+        }
+      }
+
       await gs.submitCardAnswer(targetId, me.id, text, isTruth);
       if (mounted) {
         _answerController.clear();

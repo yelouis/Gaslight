@@ -48,11 +48,9 @@ When testing the application locally with a local Firebase emulator suite or cal
 *   **Android Emulator**: Cannot resolve `127.0.0.1` as the host machine. Instead, use the special loopback IP address **`10.0.2.2`** which redirects to your host machine's loopback (`127.0.0.1`).
 *   **Physical Android Device**: Ensure both your host machine and mobile device are connected to the same Wi-Fi network, and target the host machine's IP address (e.g. `192.168.x.x`). Alternatively, perform port forwarding using `adb reverse tcp:8080 tcp:8080` (or appropriate Firestore/auth ports).
 
-### Gemini API Key Prototyping Risk
+### Duplicate-Answer Filtering
 
-*   **Current Architecture**: The application loads the Gemini API key via `.env` on the client and passes it directly in HTTP headers (`x-goog-api-key`) to facilitate rapid, serverless prototyping.
-*   **Production Risk**: In compiled production binaries, client-side API keys can be reverse-engineered and extracted.
-*   **Production Migration Path**: For production releases, client-side Gemini requests must be migrated to a secure backend proxy (such as Firebase Cloud Functions or a dedicated Node.js/Go middleware server) to keep the API key fully hidden.
+*   **Lexical Heuristic**: Duplicate-answer detection is implemented as a local, offline lexical heuristic (normalized Jaccard / containment / Levenshtein metrics) to prevent duplicate or near-duplicate forgeries. No external AI APIs or keys are required.
 
 ## Testing
 

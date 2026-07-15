@@ -1,10 +1,10 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import crypto from "crypto";
 import { RotationEngine } from "./rotation_engine";
 import { ScoringLogic, GameState, CardModel } from "./scoring_logic";
 import { PromptDecks } from "./prompt_decks";
+import { isTooSimilar } from "./text_similarity";
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -39,63 +39,7 @@ function generateRoomCode(): string {
   return result;
 }
 
-function getAnswerHash(text: string): string {
-  const normalized = text.toLowerCase().trim().replace(/\s+/g, " ");
-  return crypto.createHash("md5").update(normalized).digest("hex");
-}
 
-async function getEmbedding(roomCode: string, text: string, geminiApiKey: string): Promise<number[]> {
-  const hash = getAnswerHash(text);
-  const cacheRef = db.collection("rooms").doc(roomCode).collection("embeddings").doc(hash);
-  const cachedDoc = await cacheRef.get();
-
-  if (cachedDoc.exists) {
-    const data = cachedDoc.data();
-    if (data && data.vector) {
-      return data.vector;
-    }
-  }
-
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent";
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": geminiApiKey,
-    },
-    body: JSON.stringify({
-      model: "models/text-embedding-004",
-      content: {
-        parts: [{ text: text }]
-      }
-    })
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini API returned ${response.status}: ${errText}`);
-  }
-
-  const resJson = await response.json();
-  const vector = resJson.embedding.values as number[];
-
-  await cacheRef.set({ text, vector });
-  return vector;
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0.0;
-  let dotProduct = 0.0;
-  let normA = 0.0;
-  let normB = 0.0;
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  if (normA === 0 || normB === 0) return 0.0;
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
 
 // 1. Create Room
 export const createRoom = onCall(async (request) => {
@@ -474,43 +418,25 @@ export const submitAnswer = onCall(async (request) => {
     throw new HttpsError("permission-denied", "User does not own this player document.");
   }
 
-  // 1. Semantic similarity check (failing open on API errors)
-  const geminiApiKey = process.env.GEMINI_API_KEY;
-  if (geminiApiKey) {
-    try {
-      const roomSnap = await roomRef.get();
-      if (roomSnap.exists) {
-        const room = roomSnap.data() as GameState;
-        const card = room.cards.find(c => c.targetPlayerId === targetCardId);
-        if (card) {
-          const existingAnswers: string[] = [];
-          if (card.truthAnswer && isTruth === false) {
-            existingAnswers.push(card.truthAnswer);
-          }
-          for (const [sabId, sabotageText] of Object.entries(card.sabotageAnswers || {})) {
-            // Exclude current author's overwrite attempt
-            if (sabId !== authorId && sabotageText) {
-              existingAnswers.push(sabotageText);
-            }
-          }
-
-          if (existingAnswers.length > 0) {
-            const newVector = await getEmbedding(roomCode, text, geminiApiKey);
-            for (const ansText of existingAnswers) {
-              const compVector = await getEmbedding(roomCode, ansText, geminiApiKey);
-              const similarity = cosineSimilarity(newVector, compVector);
-              if (similarity > 0.85) {
-                throw new HttpsError("invalid-argument", "Answer is too similar to another player's answer!");
-              }
-            }
-          }
+  // 1. Heuristic similarity check
+  const roomSnap = await roomRef.get();
+  if (roomSnap.exists) {
+    const room = roomSnap.data() as GameState;
+    const card = room.cards.find((c) => c.targetPlayerId === targetCardId);
+    if (card) {
+      const existing: string[] = [];
+      if (card.truthAnswer && isTruth === false) {
+        existing.push(card.truthAnswer);
+      }
+      for (const [sabId, sabotageText] of Object.entries(card.sabotageAnswers || {})) {
+        if (sabId !== authorId && sabotageText) {
+          existing.push(sabotageText);
         }
       }
-    } catch (e) {
-      if (e instanceof HttpsError) {
-        throw e;
+
+      if (isTooSimilar(text, existing)) {
+        throw new HttpsError("invalid-argument", "Answer is too similar to another player's answer!");
       }
-      console.error("Gemini API Error (failing open):", e);
     }
   }
 
