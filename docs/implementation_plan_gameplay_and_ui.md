@@ -220,7 +220,7 @@ Full rationale: `docs/design_ui_direction.md`. North star: **a gas-lit Victorian
 ## E7 · Motion, sound & feel (§8 — approved) — restraint
 1. Concentrate motion into **orchestrated moments**: wax-stamp on commit; card-flip on reveal (E4); lamp-flicker on low timer and phase transitions.
 2. Themed SFX & feel: bundled audio effects (`quill_scratch.wav` on submit, `wax_stamp.wav` on vote/ready lock, `truth_reveal.wav` bell toll on truth reveal, and `unmask_success.wav` on correct accusation) are fully implemented. Exposes a **mute toggle** (persisted handbell icon) in the lobby and reveal screens.
-   - **Sound Assets (July 14)**: Sourced CC0 sounds from Kenney Interface/Impact packs (WAV format). Provenance and licenses are recorded in `assets/audio/CREDITS.md`.
+   - **Sound Effects — ✅ SHIPPED (July 14)**: Four CC0 sounds from Kenney Interface/Impact packs (mono 44.1 kHz 16-bit WAV, −3 dBFS) in `assets/audio/` (`quill_scratch`, `wax_stamp`, `truth_reveal`, `unmask_success`; provenance in `assets/audio/CREDITS.md`). Wired via `lib/services/audio_service.dart` (mute-gated singleton) at submit / vote+ready / reveal (once-per-card guard) / correct-unmask, with a persisted `soundEnabled` mute toggle (handbell icon in lobby + reveal). Mute contract covered by `test/audio_service_test.dart`. Haptics + reduce-motion already done. Optional lobby ambience not sourced (no CC0 match in these packs).
    - **Haptics**: `HapticFeedback.mediumImpact()` is triggered on commit/reveal events.
 3. Add a **"reduce motion" setting** and honor the OS accessibility flag; every animation (E4/D2/D3) checks it and degrades to the final state.
 
