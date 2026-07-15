@@ -1,6 +1,6 @@
-# Agent Execution Guide — One Active Item: H1 (Heuristic Similarity) (July 14)
+# Agent Execution Guide — Queue Complete (verified July 15)
 
-**You are an engineering agent picking up Gaslight (Flutter + Firebase party game).** Everything previously selected is implemented and verified green (§1) — **except one newly-approved change: replace the Gemini-based "too similar" answer check with a dependency-free heuristic, server-enforced and mirrored on-device for instant feedback (item `H1`, §4).** The user approved removing the Gemini path entirely. Read this before starting so you don't redo finished work or "fix" intentional decisions.
+**You are an engineering agent picking up Gaslight (Flutter + Firebase party game).** As of the July 15 verification pass, **every selected issue, feature, product decision, and polish item is implemented and verified green** — including H1 (Gemini→heuristic) and S1 (E7 sound), whose specs are retained in §4/§5 as delivered records. There is no outstanding engineering work. Read this before starting so you don't redo finished work or "fix" intentional decisions.
 
 Context read (once): `docs/implementation_plan_gameplay_and_ui.md` **Section 0** (game, architecture, file map) and `docs/design_database_and_security.md` (server-authoritative architecture).
 
@@ -8,15 +8,16 @@ Context read (once): `docs/implementation_plan_gameplay_and_ui.md` **Section 0**
 
 ## 1. Verified state — trust this, re-run the battery before changing anything
 
-**Full battery (July 14 verification pass):**
+**Full battery (July 15 verification pass):**
 - `cd functions && npm run build` — clean.
 - `flutter analyze` — **0 errors** (lint-only info/warnings remain).
-- `flutter test` — **19/19 passing** (incl. `test/phase4_reveal_test.dart` reveal-ordering + `test/audio_service_test.dart` mute-contract tests).
-- `npm --prefix functions test` — **16/16 passing** on the Firebase emulator: full two-client game loop, auth denials, seat re-bind, bot `lastSeen:null`, bot order-independent advance, timeout placeholders, **unmask revenge-guess scoring**, **custom-deck deal + top-up + reroll fallback + 3-prompt cap**, and `firestore.rules` tests.
+- `flutter test` — **30/30 passing** (incl. reveal-ordering, mute-contract, `test/text_similarity_test.dart` parity, and `test/phase2_craft_test.dart` pre-check tests).
+- `npm --prefix functions test` — **28/28 passing** on the Firebase emulator: full two-client game loop, auth denials, seat re-bind, bot `lastSeen:null`, bot order-independent advance, timeout placeholders, **unmask revenge-guess scoring**, **custom-deck deal + top-up + reroll fallback + 3-prompt cap**, **enforced duplicate-answer rejection**, the **28-case `text_similarity.spec.ts` parity suite**, and `firestore.rules` tests.
 
 **Everything shipped and confirmed:**
-- **Issues 1–22 + Decision 1 (E7 sound): ALL resolved** — entries #38–49 in `ongoing_general_errors.md` are verified legitimate against the code and tests.
-- **Server-authoritative backend (Issue 1):** all mutations are Cloud Functions callables; `firestore.rules` denies client room writes and scopes player-doc writes to non-protected fields; Gemini key is server-side.
+- **Issues 1–22 + Decisions 1 (E7 sound) & 2 (heuristic dup-check): ALL resolved** — entries #38–50 in `ongoing_general_errors.md` are verified legitimate against the code and tests.
+- **Server-authoritative backend (Issue 1):** all mutations are Cloud Functions callables; `firestore.rules` denies client room writes and scopes player-doc writes to non-protected fields.
+- **Duplicate-answer check (Decision 2):** a dependency-free lexical heuristic (`functions/src/text_similarity.ts` ↔ `lib/utils/text_similarity.dart`, byte-identical), server-enforced + on-device pre-check; **Gemini fully removed** (no key, no `http` dep, README section gone). Contract: `design_semantic_integrity.md`.
 - **P8 Unmask the Forger — fully playable.** Server scoring + the client five-beat reveal (authors stay sealed through the `unmaskDeadline` window, flip only after it passes). Contract: `design_scoring_and_ui.md` → "The Unmask Window & Five-Beat Reveal".
 - **P10 Custom Decks — complete.** Lobby contribution form (own-doc field-scoped writes), host deck sync, server harvest/top-up/own-prompt-free assignment incl. terminal-fallback edge, reroll fallback, and the 3-per-player cap (Issue 22).
 - **E7 Sound — complete.** Four CC0 (Kenney) SFX in `assets/audio/` wired via `lib/services/audio_service.dart` at submit/vote/reveal(once-per-card)/unmask, with a persisted mute toggle; mute contract tested. (`CREDITS.md` records CC0 provenance.)
@@ -29,8 +30,11 @@ There are **no unresolved issues or open decisions** in `ongoing_general_errors.
 
 ## 2. What to do
 
-1. **Primary: build item `H1` (§4)** — replace the Gemini similarity check with the heuristic. Execute via the loop in §3.
-2. After H1 lands, the queue is empty — do **not** invent work. Only act again if a **new user selection** appears in `ongoing_general_errors.md` (a fresh `### Issue N` / `### Decision N` / proposal with a filled `Your selection:` line), or a **regression** appears (the §1 battery fails on a fresh checkout → triage, file with options, fix). Otherwise report complete and stop; don't refactor working, tested code for its own sake. The delivered `S1 · E7 sound` and `H1` specs are retained as records.
+The queue is empty — do **not** invent work. Only act again if:
+1. A **new user selection** appears in `ongoing_general_errors.md` (a fresh `### Issue N` / `### Decision N` / proposal with a filled `Your selection:` line) → implement per its chosen option using the loop in §3.
+2. A **regression** appears (the §1 battery fails on a fresh checkout) → triage, file it in `ongoing_general_errors.md` (bug_documentation_guidelines format, with options), and fix per the loop.
+
+Otherwise report that the queue is complete and stop; don't refactor working, tested code for its own sake. The delivered `H1` (§4) and `S1 · E7 sound` (§5) specs are retained as records.
 
 ---
 
@@ -195,13 +199,13 @@ Notes: (1) the reveal cue is a **bell toll** (sharp strike + long decay), so the
 ---
 
 ## 6. Definition of Done
-**H1 · Heuristic similarity (the active item):**
-- [ ] `isTooSimilar` implemented identically in `functions/src/text_similarity.ts` and `lib/utils/text_similarity.dart`; worked-cases table passes on **both** (parity).
-- [ ] Gemini fully removed: `getEmbedding`/`getAnswerHash`/`cosineSimilarity` + the env-key block gone from `functions/src/index.ts`; `lib/utils/semantic_filter.dart` deleted; `http` dropped from `pubspec.yaml`; README Gemini section removed; no `GEMINI_API_KEY` anywhere.
-- [ ] Server enforces in `submitAnswer` (always runs, same error); client pre-checks in `phase2_craft.dart` (instant SnackBar, no server call on a dup); fake mirrors it.
-- [ ] Emulator E2E rejects an enforced near-duplicate over the callable; client widget test proves the pre-check blocks before the server; obsolete `SemanticFilter` test hooks replaced.
-- [ ] `design_semantic_integrity.md` rewritten to the heuristic; Decision 2 → Resolved.
-- [ ] Full battery green (`functions` build · `flutter analyze` 0 · `flutter test` · emulator suite).
+**H1 · Heuristic similarity — ✅ DELIVERED (July 15):**
+- [x] `isTooSimilar` implemented identically in `functions/src/text_similarity.ts` and `lib/utils/text_similarity.dart`; parity tables pass on both.
+- [x] Gemini fully removed: helpers + env-key block gone from `functions/src/index.ts`; `semantic_filter.dart` deleted; `http` dropped; README Gemini section removed; no `GEMINI_API_KEY`.
+- [x] Server enforces in `submitAnswer` (always runs, same error); client pre-checks in `phase2_craft.dart`; fake mirrors it.
+- [x] Emulator E2E rejects an enforced near-duplicate; `phase2_craft_test.dart` proves the pre-check blocks before the server; obsolete `SemanticFilter` hooks replaced.
+- [x] `design_semantic_integrity.md` rewritten to the heuristic; Decision 2 → Resolved #50.
+- [x] Full battery green (`functions` build · `flutter analyze` 0 · `flutter test` 30/30 · emulator 28/28).
 
 **Preserve (already met — regression bar):**
 - [x] `flutter analyze` 0 errors · `flutter test` green · `npm --prefix functions test` green · `functions` builds.
