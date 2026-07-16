@@ -115,7 +115,7 @@ void main() {
       }
       expect(gameService.gameState, isNotNull);
       final rCode = gameService.gameState!.roomCode;
-      expect(find.text('ROOM: $rCode'), findsOneWidget);
+      expect(find.text(rCode), findsOneWidget);
       print('Room created in real Firestore: $rCode.');
 
       // 3. Add bots and wait for Firestore sync
@@ -141,11 +141,11 @@ void main() {
       
       // Wait for holding screen to appear (reflecting host submission)
       elapsedMs = 0;
-      while (find.text('HOLDING TIGHT...').evaluate().isEmpty && elapsedMs < 10000) {
+      while (find.text('THE INK DRIES…').evaluate().isEmpty && elapsedMs < 10000) {
         await tick(500);
         elapsedMs += 500;
       }
-      expect(find.text('HOLDING TIGHT...'), findsOneWidget);
+      expect(find.text('THE INK DRIES…'), findsOneWidget);
       print('Host forgery submission registered.');
 
       // Bot forgery submissions
@@ -159,11 +159,11 @@ void main() {
       
       // Wait for holding screen to appear (reflecting host truth submission)
       elapsedMs = 0;
-      while (find.text('HOLDING TIGHT...').evaluate().isEmpty && elapsedMs < 10000) {
+      while (find.text('THE INK DRIES…').evaluate().isEmpty && elapsedMs < 10000) {
         await tick(500);
         elapsedMs += 500;
       }
-      expect(find.text('HOLDING TIGHT...'), findsOneWidget);
+      expect(find.text('THE INK DRIES…'), findsOneWidget);
       print('Host truth submission registered.');
 
       // Bot truth submissions
@@ -174,11 +174,11 @@ void main() {
       final isHostTargetInitial = gameService.currentPlayerId == gameService.gameState!.currentReaderId;
       if (isHostTargetInitial) {
         elapsedMs = 0;
-        while (find.text('THEY ARE VOTING ON YOUR CARD...').evaluate().isEmpty && elapsedMs < 10000) {
-          await tick(500);
-          elapsedMs += 500;
+        while (find.text('THE PARLOR DELIBERATES…').evaluate().isEmpty && elapsedMs < 10000) {
+          await tester.pump(const Duration(milliseconds: 100));
+          elapsedMs += 100;
         }
-        expect(find.text('THEY ARE VOTING ON YOUR CARD...'), findsOneWidget);
+        expect(find.text('THE PARLOR DELIBERATES…'), findsOneWidget);
         await tick(1000); // Allow transition to settle
         await tester.tap(find.text('I\'M READY'));
         await tick(500);
@@ -207,11 +207,11 @@ void main() {
         final isHostTarget = gameService.currentPlayerId == gameService.gameState!.currentReaderId;
         if (isHostTarget) {
           elapsedMs = 0;
-          while (find.text('THEY ARE VOTING ON YOUR CARD...').evaluate().isEmpty && elapsedMs < 10000) {
-            await tick(500);
-            elapsedMs += 500;
+          while (find.text('THE PARLOR DELIBERATES…').evaluate().isEmpty && elapsedMs < 10000) {
+            await tester.pump(const Duration(milliseconds: 100));
+            elapsedMs += 100;
           }
-          expect(find.text('THEY ARE VOTING ON YOUR CARD...'), findsOneWidget);
+          expect(find.text('THE PARLOR DELIBERATES…'), findsOneWidget);
           await tick(1000); // Allow transition to settle
           await tester.tap(find.text('I\'M READY'));
           await tick(500);
@@ -333,11 +333,11 @@ void main() {
       
       // Wait for UI to render lobby with the room code
       elapsedMs = 0;
-      while (find.text('ROOM: $rCode').evaluate().isEmpty && elapsedMs < 10000) {
+      while (find.text(rCode).evaluate().isEmpty && elapsedMs < 10000) {
         await tick(500);
         elapsedMs += 500;
       }
-      expect(find.text('ROOM: $rCode'), findsOneWidget);
+      expect(find.text(rCode), findsOneWidget);
       print('Alice created room: $rCode');
 
       // 2. Add bots so we have active players
@@ -378,11 +378,11 @@ void main() {
 
       // Wait for Alice to be registered as ready
       elapsedMs = 0;
-      while (find.text('HOLDING TIGHT...').evaluate().isEmpty && elapsedMs < 10000) {
+      while (find.text('THE INK DRIES…').evaluate().isEmpty && elapsedMs < 10000) {
         await tick(500);
         elapsedMs += 500;
       }
-      expect(find.text('HOLDING TIGHT...'), findsOneWidget);
+      expect(find.text('THE INK DRIES…'), findsOneWidget);
 
       // 5. Bot forgery submissions
       await tester.tap(find.text('DEBUG: BOTS SUBMIT'));
@@ -476,11 +476,11 @@ void main() {
 
       // Wait for UI to render lobby with the room code
       elapsedMs = 0;
-      while (find.text('ROOM: $rCode').evaluate().isEmpty && elapsedMs < 10000) {
+      while (find.text(rCode).evaluate().isEmpty && elapsedMs < 10000) {
         await tick(500);
         elapsedMs += 500;
       }
-      expect(find.text('ROOM: $rCode'), findsOneWidget);
+      expect(find.text(rCode), findsOneWidget);
 
       // 2. Add 9 Bots (10 total players)
       await tester.tap(find.text('DEBUG: ADD 9 BOTS'));
@@ -599,11 +599,11 @@ void main() {
 
       // Wait for UI to render lobby with the room code
       elapsedMs = 0;
-      while (find.text('ROOM: $rCode').evaluate().isEmpty && elapsedMs < 10000) {
+      while (find.text(rCode).evaluate().isEmpty && elapsedMs < 10000) {
         await tick(500);
         elapsedMs += 500;
       }
-      expect(find.text('ROOM: $rCode'), findsOneWidget);
+      expect(find.text(rCode), findsOneWidget);
 
       // 2. Add 9 Bots
       await tester.tap(find.text('DEBUG: ADD 9 BOTS'));

@@ -11,6 +11,9 @@ import '../models/player_state.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/lobby_background.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
+import '../widgets/gaslight_route.dart';
+import '../theme/app_icons.dart';
 
 class GameOverScreen extends StatefulWidget {
   const GameOverScreen({super.key});
@@ -56,7 +59,7 @@ class _GameOverScreenState extends State<GameOverScreen> {
 
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'image/png')],
-        text: 'Just finished a match of Gaslight! Check out my crew\'s honors.',
+        text: 'Just finished a match of Gaslight! Check out the night\'s honors.',
       );
     } catch (e) {
       debugPrint('Error sharing case file: $e');
@@ -124,7 +127,10 @@ class _GameOverScreenState extends State<GameOverScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: Text('GAME OVER', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 4)),
+          title: TitleSettle(
+            text: 'GAME OVER',
+            style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
+          ),
           centerTitle: true,
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -149,7 +155,7 @@ class _GameOverScreenState extends State<GameOverScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'THE CREW\'S HONORS',
+                          'THE NIGHT\'S HONORS',
                           style: theme.textTheme.headlineMedium?.copyWith(
                             color: theme.colorScheme.secondary, // Gold
                             fontWeight: FontWeight.bold,
@@ -172,7 +178,7 @@ class _GameOverScreenState extends State<GameOverScreen> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : const Icon(Icons.share),
+                      : const ThematicIcon(type: ThematicIconType.envelope, color: AppColors.ivory),
                   label: Text(
                     _isSharing ? 'Generating dossier...' : 'Share Case File',
                     style: const TextStyle(fontWeight: FontWeight.bold),
@@ -258,7 +264,7 @@ class _GameOverScreenState extends State<GameOverScreen> {
           const SizedBox(height: 12),
           Text(title, style: TextStyle(color: accentColor, fontSize: 13, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
           const SizedBox(height: 6),
-          Text(player.name, style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'serif'), textAlign: TextAlign.center),
+          Text(player.name, style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'CormorantGaramond'), textAlign: TextAlign.center),
           const SizedBox(height: 6),
           Text('${player.totalScore} Pts', style: TextStyle(color: theme.colorScheme.primary, fontSize: 16, fontWeight: FontWeight.bold)),
         ],

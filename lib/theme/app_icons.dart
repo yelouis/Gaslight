@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'app_colors.dart';
 
 enum ThematicIconType {
   // Avatar Sigils
@@ -19,6 +20,11 @@ enum ThematicIconType {
   host,
   sound,
   mute,
+
+  // New Types
+  ledger,
+  envelope,
+  redraw,
 }
 
 class ThematicIcon extends StatelessWidget {
@@ -354,9 +360,179 @@ class _ThematicIconPainter extends CustomPainter {
         // Mute slash line
         canvas.drawLine(Offset(w * 0.2, h * 0.2), Offset(w * 0.8, h * 0.8), paint..color = color);
         break;
+
+      case ThematicIconType.ledger:
+        // Left page
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTRB(w * 0.12, h * 0.2, w * 0.48, h * 0.8),
+            Radius.circular(w * 0.04),
+          ),
+          paint,
+        );
+        // Right page
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTRB(w * 0.52, h * 0.2, w * 0.88, h * 0.8),
+            Radius.circular(w * 0.04),
+          ),
+          paint,
+        );
+        // Spine
+        canvas.drawLine(Offset(w * 0.5, h * 0.18), Offset(w * 0.5, h * 0.82), paint);
+        break;
+
+      case ThematicIconType.envelope:
+        final double rectW = w * 0.9;
+        final double rectH = h * 0.62;
+        final double left = (w - rectW) / 2;
+        final double top = (h - rectH) / 2;
+        final double right = left + rectW;
+        final double bottom = top + rectH;
+        canvas.drawRect(Rect.fromLTRB(left, top, right, bottom), paint);
+        // Flaps
+        canvas.drawLine(Offset(left, top), Offset(w * 0.5, top + rectH * 0.5), paint);
+        canvas.drawLine(Offset(right, top), Offset(w * 0.5, top + rectH * 0.5), paint);
+        break;
+
+      case ThematicIconType.redraw:
+        final double r = w * 0.38;
+        final double endAngle = -math.pi / 2 + 300.0 * math.pi / 180.0;
+        final double endX = center.dx + r * math.cos(endAngle);
+        final double endY = center.dy + r * math.sin(endAngle);
+        
+        final redrawPaint = Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.08 * w
+          ..strokeCap = StrokeCap.round;
+        
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: r),
+          -math.pi / 2,
+          300.0 * math.pi / 180.0,
+          false,
+          redrawPaint,
+        );
+        
+        // Arrowhead
+        final double tangentAngle = endAngle + math.pi / 2;
+        final double angle1 = tangentAngle + 5 * math.pi / 4;
+        final double angle2 = tangentAngle + 3 * math.pi / 4;
+        final double arrowLen = 0.18 * w;
+        
+        canvas.drawLine(
+          Offset(endX, endY),
+          Offset(endX + arrowLen * math.cos(angle1), endY + arrowLen * math.sin(angle1)),
+          redrawPaint..strokeWidth = paint.strokeWidth,
+        );
+        canvas.drawLine(
+          Offset(endX, endY),
+          Offset(endX + arrowLen * math.cos(angle2), endY + arrowLen * math.sin(angle2)),
+          redrawPaint..strokeWidth = paint.strokeWidth,
+        );
+        break;
     }
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
+
+class WaxSealBadge extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const WaxSealBadge({
+    super.key,
+    this.size = 24,
+    this.color = AppColors.oxblood,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _WaxSealPainter(color: color),
+      ),
+    );
+  }
+}
+
+class _WaxSealPainter extends CustomPainter {
+  final Color color;
+
+  _WaxSealPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double sz = size.width;
+    final Offset center = Offset(sz / 2, sz / 2);
+    final fillPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    // 1. Wax blob
+    final path = Path();
+    for (int i = 0; i <= 360; i += 10) {
+      double rad = i * math.pi / 180;
+      double r = 0.42 * sz * (1.0 + 0.06 * math.sin(5.0 * rad + 1.3) + 0.04 * math.cos(3.0 * rad));
+      double x = center.dx + r * math.cos(rad);
+      double y = center.dy + r * math.sin(rad);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    canvas.drawPath(path, fillPaint);
+
+    // 2. Pressed ring
+    final ringPaint = Paint()
+      ..color = Color.lerp(color, Colors.black, 0.35)!
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.05 * sz;
+    canvas.drawCircle(center, 0.26 * sz, ringPaint);
+
+    // 3. Emboss starburst
+    final starPaint = Paint()
+      ..color = AppColors.brass
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.04 * sz
+      ..strokeCap = StrokeCap.round;
+    final double spokeLen = 0.14 * sz;
+    for (int i = 0; i < 6; i++) {
+      double angle = i * math.pi / 3;
+      double x = center.dx + spokeLen * math.cos(angle);
+      double y = center.dy + spokeLen * math.sin(angle);
+      canvas.drawLine(center, Offset(x, y), starPaint);
+    }
+    final centerPaint = Paint()
+      ..color = AppColors.brass
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, 0.05 * sz, centerPaint);
+
+    // 4. Highlight
+    final highlightPaint = Paint()
+      ..color = AppColors.ivory.withOpacity(0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.05 * sz
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: 0.36 * sz),
+      200.0 * math.pi / 180.0,
+      50.0 * math.pi / 180.0,
+      false,
+      highlightPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _WaxSealPainter oldDelegate) {
+    return oldDelegate.color != color;
+  }
+}
+

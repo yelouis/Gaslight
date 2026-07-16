@@ -12,6 +12,8 @@ import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../widgets/flipping_card.dart';
+import '../widgets/gaslight_route.dart';
+import '../theme/app_text_styles.dart';
 import '../theme/app_colors.dart';
 import 'dart:ui';
 import 'dart:math';
@@ -321,14 +323,9 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: Text(
-            'THE REVEAL',
-            style: TextStyle(
-              color: theme.colorScheme.secondary,
-              fontFamily: 'CormorantGaramond',
-              fontWeight: FontWeight.bold,
-              letterSpacing: 3,
-            ),
+          title: TitleSettle(
+            text: 'THE REVEAL',
+            style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
           ),
           centerTitle: true,
           backgroundColor: Colors.transparent,
@@ -674,8 +671,8 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(
-                      isFooled ? Icons.gavel : Icons.hourglass_empty,
+                    ThematicIcon(
+                      type: isFooled ? ThematicIconType.confirm : ThematicIconType.hourglass,
                       color: isLowTime ? Colors.redAccent : AppColors.brass,
                     ),
                     const SizedBox(width: 8),
@@ -921,7 +918,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.lock, color: AppColors.brass, size: 12),
+                                const WaxSealBadge(size: 12),
                                 const SizedBox(width: 4),
                                 const Text(
                                   'SEALED ANSWER',
@@ -947,10 +944,10 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
-                                    children: const [
-                                      Icon(Icons.verified, color: AppColors.verdigris, size: 14),
-                                      SizedBox(width: 4),
-                                      Text(
+                                    children: [
+                                      const WaxSealBadge(size: 16, color: AppColors.verdigris),
+                                      const SizedBox(width: 4),
+                                      const Text(
                                         'THE TRUTH',
                                         style: TextStyle(
                                           fontFamily: 'CormorantGaramond',
@@ -1005,7 +1002,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                       fontSize: 18, 
                       fontWeight: FontWeight.bold, 
                       color: theme.colorScheme.onSurface,
-                      fontFamily: 'serif',
+                      fontFamily: 'Lora',
                     ),
                   ),
                 ],

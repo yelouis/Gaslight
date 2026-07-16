@@ -11,6 +11,8 @@ import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../widgets/auto_advance_timer.dart';
 import '../widgets/card_grid.dart';
+import '../theme/app_text_styles.dart';
+import '../widgets/gaslight_route.dart';
 
 
 import '../theme/app_icons.dart';
@@ -126,7 +128,10 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
         appBar: AppBar(
           title: Column(
             children: [
-              Text('THE VOTE', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)),
+              TitleSettle(
+                text: 'THE VOTE',
+                style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
+              ),
               const SizedBox(height: 4),
             ],
           ),
@@ -200,9 +205,9 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
       children: [
         CircularProgressIndicator(color: theme.colorScheme.secondary),
         const SizedBox(height: 20),
-        const Text('YOUR VOTE IS LOCKED IN', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+        const Text('YOUR BALLOT IS SEALED', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         const SizedBox(height: 10),
-        Text('Waiting for $unready other voters...', style: TextStyle(color: Colors.white70)),
+        Text('Awaiting $unready more ballots…', style: TextStyle(color: Colors.white70)),
         if (gs.currentPlayer!.isHost) ...[
           Padding(
             padding: const EdgeInsets.only(top: 40),
@@ -231,13 +236,13 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
           ThematicIcon(type: ThematicIconType.observe, size: 80, color: theme.colorScheme.secondary),
           const SizedBox(height: 24),
           Text(
-            'THEY ARE VOTING ON YOUR CARD...',
+            'THE PARLOR DELIBERATES…',
             style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 2),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
           Text(
-            'Keep a straight face.',
+            'They are voting on your card. Keep a straight face.',
             style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 16),
           ),
           const SizedBox(height: 40),
@@ -294,7 +299,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
                  const SizedBox(height: 6),
                  Text(
                    currentCard.promptText,
-                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontFamily: 'serif'),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontFamily: 'Lora'),
                    textAlign: TextAlign.center,
                  ),
                ],
@@ -368,7 +373,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
                     const SizedBox(height: 10),
                     Text(
                       currentCard.promptText,
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontFamily: 'serif'),
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontFamily: 'Lora'),
                       textAlign: TextAlign.center,
                     ),
                   ],

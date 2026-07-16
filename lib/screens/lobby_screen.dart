@@ -15,6 +15,7 @@ import '../utils/prompt_decks.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_icons.dart';
+import '../widgets/gaslight_route.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -125,7 +126,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       style: theme.textTheme.headlineMedium?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.w900,
-                        fontFamily: 'serif',
+                        fontFamily: 'Lora',
                         letterSpacing: 2,
                       ),
                       textAlign: TextAlign.center,
@@ -244,7 +245,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 color: theme.colorScheme.primary,
                 fontSize: 20,
                 fontWeight: FontWeight.w900,
-                fontFamily: 'serif',
+                fontFamily: 'Lora',
                 letterSpacing: 1.2,
               ),
             ),
@@ -363,7 +364,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('ROOM: ${gs.gameState!.roomCode}', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 4)),
+        title: TitleSettle(
+          text: 'THE PARLOR',
+          style: AppTextStyles.phaseTitle.copyWith(fontSize: 22),
+        ),
         centerTitle: true,
         actions: [
           IconButton(
@@ -381,7 +385,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
         child: Column(
           children: [
             Text(
-              'WAITING FOR CREW...',
+              'ASSEMBLING THE SUSPECTS…',
               style: theme.textTheme.headlineMedium?.copyWith(
                 color: theme.colorScheme.secondary, // Gold
                 fontWeight: FontWeight.bold,
@@ -630,12 +634,12 @@ class _LobbyScreenState extends State<LobbyScreen> {
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Text(
-                                'CREW STATION',
+                                'THE GUEST LEDGER',
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   color: crimsonColor,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 4,
-                                  fontFamily: 'serif',
+                                  fontFamily: 'Lora',
                                 ),
                               ),
                               const SizedBox(height: 24),
@@ -658,7 +662,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                   ),
                                   filled: true,
                                   fillColor: Colors.black.withOpacity(0.5),
-                                  prefixIcon: Icon(Icons.person, color: crimsonColor.withOpacity(0.8)),
+                                  prefixIcon: ThematicIcon(type: ThematicIconType.writing, size: 20, color: crimsonColor.withOpacity(0.8)),
                                 ),
                                 onChanged: (_) {
                                   if (_nameError) setState(() => _nameError = false);
@@ -667,7 +671,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                               const SizedBox(height: 18),
                               DropdownButtonFormField<int>(
                                 value: _selectedRounds,
-                                style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontFamily: 'serif', fontSize: 16),
+                                style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontFamily: 'Lora', fontSize: 16),
                                 decoration: InputDecoration(
                                   labelText: 'Number of Rounds',
                                   labelStyle: TextStyle(color: ivoryColor.withOpacity(0.7), fontWeight: FontWeight.bold),
@@ -682,7 +686,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                   ),
                                   filled: true,
                                   fillColor: Colors.black.withOpacity(0.5),
-                                  prefixIcon: Icon(Icons.loop, color: crimsonColor.withOpacity(0.8)),
+                                  prefixIcon: ThematicIcon(type: ThematicIconType.redraw, size: 20, color: crimsonColor.withOpacity(0.8)),
                                 ),
                                 dropdownColor: const Color(0xFF161C19),
                                 items: [1, 2, 3, 4, 5].map((int value) {
@@ -845,7 +849,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                               const SizedBox(height: 18),
                               TextButton.icon(
                                 onPressed: _showInstructions,
-                                icon: Icon(Icons.menu_book, color: crimsonColor),
+                                icon: ThematicIcon(type: ThematicIconType.ledger, color: crimsonColor),
                                 label: Text(
                                   'READ MANUAL',
                                   style: TextStyle(
@@ -956,7 +960,24 @@ class _LobbyScreenState extends State<LobbyScreen> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: const Icon(Icons.add_circle, color: AppColors.brass, size: 36),
+                icon: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.brass, width: 1.5),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      '+',
+                      style: TextStyle(
+                        color: AppColors.ivory,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
                 onPressed: () => _addCustomPrompt(gs, myPrompts),
               ),
             ],
@@ -988,7 +1009,24 @@ class _LobbyScreenState extends State<LobbyScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.redAccent, size: 18),
+                            icon: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppColors.oxblood, width: 1.5),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  '×',
+                                  style: TextStyle(
+                                    color: AppColors.ivory,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
                             onPressed: () {
                               final updated = List<String>.from(myPrompts)..removeAt(idx);
                               gs.updatePlayerCustomPrompts(updated);

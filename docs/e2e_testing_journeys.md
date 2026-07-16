@@ -29,7 +29,7 @@ This document defines the key user journeys in Gaslight and provides step-by-ste
    - Verify the timer counts down in the AppBar.
    - Each player is shown a prompt belonging to a different player.
      - *Example*: Alice completes Dave's prompt.
-   - Enter a response and tap **SUBMIT**. Verify the screen changes to `"HOLDING TIGHT..."` and indicates how many players are remaining.
+   - Enter a response and tap **SUBMIT**. Verify the screen changes to `"THE INK DRIES…"` and indicates how many players are remaining.
 5. **Forgery Phase (Rotation 2 of 2)**:
    - Once all 4 submit, verify all players advance to Rotation 2.
    - Each player completes a prompt for a different player than in Rotation 1.
@@ -41,7 +41,7 @@ This document defines the key user journeys in Gaslight and provides step-by-ste
 7. **Voting Phase (Resolving Cards)**:
    - Verify all players transition to `/vote`. Title must display `"THE VOTE"`.
    - **Card 1 Resolution (e.g., Alice's Card)**:
-     - Alice (Target/Reader) sees: `"THEY ARE VOTING ON YOUR CARD... Keep a straight face."`
+     - Alice (Target/Reader) sees: `"THE PARLOR DELIBERATES…"` and subtitle: `"They are voting on your card. Keep a straight face."`
      - Bob, Charlie, Dave (Voters) see the prompt and a shuffled list of 3 options (Alice's Truth + Forgeries by Bob/Charlie).
      - Bob clicks the option corresponding to his own forgery. Verify that the option is disabled or his vote is rejected (Self-Vote Guard).
      - Bob, Charlie, and Dave select the correct Truth and tap submit.
@@ -94,7 +94,7 @@ This document defines the key user journeys in Gaslight and provides step-by-ste
    - A new player `"Steve"` joins by typing the active room code.
    - Verify that Steve is immediately assigned the role `PlayerRole.spectator`.
    - Steve should be navigated directly to `/craft`.
-   - **Check Steve's UI**: Verify Steve sees `"SPECTATOR MODE: You joined mid-game. Enjoy watching!"` and the game progress count (e.g. `"Players ready: 0 / 2"`). Steve has no prompt input field.
+   - **Check Steve's UI**: Verify Steve sees `"THE GALLERY"` with description `"You joined mid-game. Enjoy watching the match!"` and the game progress count (e.g. `"Players ready: 0 / 2"`). Steve has no prompt input field.
 3. **Readiness Verification**:
    - Player 1 (Host) and the bot submit their forgery answers.
    - Verify that the game transitions to the next phase immediately once they are ready, **without** waiting for Steve.

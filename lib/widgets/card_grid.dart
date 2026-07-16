@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../theme/app_colors.dart';
+import '../theme/app_icons.dart';
+import '../theme/app_motion.dart';
 
 class VotingAnswer {
   final String authorId;
@@ -81,11 +83,9 @@ class CardGrid extends StatelessWidget {
                   Positioned.fill(
                     child: Center(
                       child: Opacity(
-                        opacity: 0.04,
-                        child: const Icon(
-                          Icons.verified,
+                        opacity: 0.05,
+                        child: const WaxSealBadge(
                           size: 80,
-                          color: AppColors.oxblood,
                         ),
                       ),
                     ),
@@ -131,7 +131,7 @@ class CardGrid extends StatelessWidget {
                                       : theme.colorScheme.onSurface,
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  fontFamily: 'serif',
+                                  fontFamily: 'Lora',
                                   height: 1.3,
                                 ),
                                 textAlign: TextAlign.center,
@@ -162,8 +162,8 @@ class CardGrid extends StatelessWidget {
                       top: 8,
                       right: 8,
                       child: TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: 0.0, end: 1.0),
-                        duration: const Duration(milliseconds: 250),
+                        tween: Tween<double>(begin: 1.6, end: 1.0),
+                        duration: AppMotion.fast,
                         curve: Curves.easeOutBack,
                         builder: (context, scale, child) {
                           return Transform.scale(
@@ -171,29 +171,7 @@ class CardGrid extends StatelessWidget {
                             child: child,
                           );
                         },
-                        child: Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: AppColors.oxblood, // Dark Red Wax
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.brass, width: 1.5), // Gold Seal Ring
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.5),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              )
-                            ]
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.verified,
-                              size: 14,
-                              color: AppColors.brass, // Gold seal stamp details
-                            ),
-                          ),
-                        ),
+                        child: const WaxSealBadge(size: 34),
                       ),
                     ),
                 ],

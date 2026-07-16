@@ -68,8 +68,8 @@ void main() {
       // Verify lobby screen
       expect(gameService.gameState, isNotNull);
       final rCode = gameService.gameState!.roomCode;
-      expect(find.text('ROOM: $rCode'), findsOneWidget);
-      expect(find.text('WAITING FOR CREW...'), findsOneWidget);
+      expect(find.text(rCode), findsOneWidget);
+      expect(find.text('ASSEMBLING THE SUSPECTS…'), findsOneWidget);
       print('Room created: $rCode. Displaying Lobby Wait Screen.');
 
       // 4. Add bots and Start game
@@ -99,7 +99,7 @@ void main() {
       print('DEBUG: cards status: ${gameService.gameState?.cards.map((c) => 'target:${c.targetPlayerId}, truth:${c.truthAnswer.isNotEmpty}, sabs:${c.sabotageAnswers.keys}')}');
       
       // Verify waiting screen
-      expect(find.text('HOLDING TIGHT...'), findsOneWidget);
+      expect(find.text('THE INK DRIES…'), findsOneWidget);
       print('Host submission locked. Waiting screen displayed.');
 
       // Complete forgery round 1
@@ -140,7 +140,7 @@ void main() {
         final isHostTarget = gameService.currentPlayerId == gameService.gameState!.currentReaderId;
 
         if (isHostTarget) {
-          expect(find.text('THEY ARE VOTING ON YOUR CARD...'), findsOneWidget);
+          expect(find.text('THE PARLOR DELIBERATES…'), findsOneWidget);
           await tester.tap(find.text('I\'M READY'));
           await tick(400);
         } else {

@@ -109,18 +109,7 @@ class PlayerAvatar extends StatelessWidget {
           Positioned(
             right: -4,
             bottom: -4,
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
-                color: AppColors.verdigris,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check,
-                color: Colors.white,
-                size: 12,
-              ),
-            ),
+            child: const WaxSealBadge(size: 16),
           ),
         if (player.isHost)
           Positioned(
@@ -132,8 +121,8 @@ class PlayerAvatar extends StatelessWidget {
                 color: AppColors.brass,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.star,
+              child: const ThematicIcon(
+                type: ThematicIconType.flame,
                 color: Colors.white,
                 size: 12,
               ),

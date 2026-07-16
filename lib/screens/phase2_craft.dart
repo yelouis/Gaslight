@@ -12,6 +12,8 @@ import '../widgets/auto_advance_timer.dart';
 import '../utils/prompt_decks.dart';
 import '../utils/text_similarity.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
+import '../widgets/gaslight_route.dart';
 
 
 import '../theme/app_icons.dart';
@@ -136,9 +138,9 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
         appBar: AppBar(
           title: Column(
             children: [
-              Text(
-                state.currentPhase == GamePhase.truth ? 'TRUTH' : 'FORGERY', 
-                style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)
+              TitleSettle(
+                text: state.currentPhase == GamePhase.truth ? 'TRUTH' : 'FORGERY',
+                style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
               ),
               const SizedBox(height: 4),
 
@@ -147,7 +149,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     'Rotation ${state.currentRotationIndex} of ${state.sabotageAnswersCount}',
-                    style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.5), fontSize: 12, letterSpacing: 1),
+                    style: AppTextStyles.sectionLabel,
                   ),
                 ),
             ],
@@ -197,7 +199,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
         ThematicIcon(type: ThematicIconType.observe, size: 64, color: theme.colorScheme.secondary),
         const SizedBox(height: 24),
         Text(
-          'SPECTATOR MODE',
+          'THE GALLERY',
           style: theme.textTheme.headlineSmall?.copyWith(
             color: theme.colorScheme.secondary,
             fontWeight: FontWeight.bold,
@@ -263,7 +265,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
         CircularProgressIndicator(color: theme.colorScheme.secondary),
         const SizedBox(height: 30),
         Text(
-          'HOLDING TIGHT...',
+          'THE INK DRIES…',
           style: theme.textTheme.headlineSmall?.copyWith(
             color: theme.colorScheme.secondary,
             fontWeight: FontWeight.bold,
@@ -376,7 +378,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                           width: double.infinity,
                           height: 48,
                           child: ElevatedButton.icon(
-                            icon: const Icon(Icons.refresh, size: 18),
+                            icon: const ThematicIcon(type: ThematicIconType.redraw, size: 18),
                             label: Text(me.hasRerolled ? 'RE-ROLL USED' : 'RE-ROLL PROMPT'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.ground,
