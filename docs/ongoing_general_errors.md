@@ -318,7 +318,7 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
   - *Pros*: Fixes the aesthetic clash cheaply.
   - *Cons*: The ending still has no drama — arguably the game's biggest missed beat.
 
-*Effort:* Medium. Your selection: _____
+*Effort:* Medium. Your selection: Proceed with Option A.
 
 ---
 
