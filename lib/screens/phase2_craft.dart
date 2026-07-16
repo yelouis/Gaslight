@@ -15,6 +15,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/gaslight_route.dart';
 import '../widgets/waiting_indicator.dart';
+import '../widgets/dealt_card_overlay.dart';
 
 
 import '../theme/app_icons.dart';
@@ -27,9 +28,12 @@ class Phase2CraftScreen extends StatefulWidget {
 }
 
 class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
-  final _answerController = TextEditingController();
-  bool _isNavigating = false;
+  final TextEditingController _answerController = TextEditingController();
   bool _isSubmitting = false;
+  bool _isNavigating = false;
+  bool _showDealtOverlay = false;
+  GamePhase? _lastPhase;
+  int? _lastRotation;
 
   void _submitAnswer(GameService gs) async {
     final text = _answerController.text.trim();
@@ -120,6 +124,16 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    if (me.role != PlayerRole.spectator) {
+      if (state.currentPhase != _lastPhase || state.currentRotationIndex != _lastRotation) {
+        _lastPhase = state.currentPhase;
+        _lastRotation = state.currentRotationIndex;
+        if (!(state.readyPlayers[me.id] ?? false)) {
+          _showDealtOverlay = true;
+        }
+      }
+    }
+
     final correctRoute = GameState.getRouteForPhase(state.currentPhase);
     if (correctRoute != '/craft') {
       if (!_isNavigating) {
@@ -177,15 +191,34 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
             ),
           ],
         ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: me.role == PlayerRole.spectator
-                ? _buildSpectatorUI(state, gs, theme)
-                : (state.readyPlayers[me.id] ?? false)
-                    ? _buildWaitingUI(state, gs, theme)
-                    : _buildWriteUI(state, me, theme, gs),
-          ),
+        body: Stack(
+          children: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: me.role == PlayerRole.spectator
+                    ? _buildSpectatorUI(state, gs, theme)
+                    : (state.readyPlayers[me.id] ?? false)
+                        ? _buildWaitingUI(state, gs, theme)
+                        : _buildWriteUI(state, me, theme, gs),
+              ),
+            ),
+            if (_showDealtOverlay && me.role != PlayerRole.spectator)
+              DealtCardOverlay(
+                phase: state.currentPhase,
+                readerName: state.currentCardAssignments[me.id] != null
+                    ? gs.players.firstWhere((p) => p.id == state.currentCardAssignments[me.id], orElse: () => me).name
+                    : me.name,
+                promptText: state.currentCardAssignments[me.id] != null
+                    ? state.cards.firstWhere((c) => c.targetPlayerId == state.currentCardAssignments[me.id], orElse: () => state.cards.first).promptText
+                    : '',
+                onDismiss: () {
+                  setState(() {
+                    _showDealtOverlay = false;
+                  });
+                },
+              ),
+          ],
         ),
       ),
     );
@@ -317,120 +350,163 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
               style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1.5),
             ),
             const SizedBox(height: 24),
-            CrimsonShadowCard(
+            Container(
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+              decoration: BoxDecoration(
+                color: AppColors.parchment,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.brass, width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
               child: Column(
                 children: [
-                  Text(
-                    "CASE PROMPT",
+                  const Text(
+                    "CASE DOSSIER",
                     style: TextStyle(
-                      color: theme.colorScheme.primary, 
-                      fontWeight: FontWeight.w800, 
-                      fontSize: 13, 
-                      letterSpacing: 3.0,
+                      color: Color(0xCCB3A369), // brass @ 0.8
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      letterSpacing: 3.5,
+                      fontFamily: 'Lora',
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     targetCard.promptText,
-                    style: TextStyle(
-                      fontSize: 22, 
-                      fontWeight: FontWeight.bold, 
-                      color: theme.colorScheme.onSurface, 
+                    style: const TextStyle(
+                      fontFamily: 'CormorantGaramond',
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      fontStyle: FontStyle.italic,
+                      color: AppColors.oxblood,
                       height: 1.4,
                     ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 30),
-                  TextField(
-                    controller: _answerController,
-                    maxLines: 3,
-                    enabled: !_isSubmitting,
-                    style: const TextStyle(
+                  Container(
+                    decoration: BoxDecoration(
                       color: Colors.white,
-                      fontSize: 16, 
-                      fontWeight: FontWeight.bold, 
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFC8BCA6), width: 1.0),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 3,
+                          offset: const Offset(1, 1),
+                        ),
+                      ],
                     ),
-                    decoration: InputDecoration(
-                      hintText: 'Enter your answer...',
-                      hintStyle: TextStyle(
-                        color: Colors.white.withOpacity(0.4),
+                    child: TextField(
+                      controller: _answerController,
+                      maxLines: 3,
+                      enabled: !_isSubmitting,
+                      style: const TextStyle(
+                        fontFamily: 'Lora',
+                        color: AppColors.ink,
+                        fontSize: 15,
                       ),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: theme.colorScheme.primary.withOpacity(0.4)),
+                      decoration: const InputDecoration(
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: InputBorder.none,
+                        hintText: 'Pen your response here...',
+                        hintStyle: TextStyle(
+                          color: Color(0x662C1E16), // ink @ 0.4
+                          fontFamily: 'Lora',
+                        ),
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: theme.colorScheme.primary, width: 2.0),
-                      ),
-                      filled: true,
-                      fillColor: Colors.black.withOpacity(0.3),
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
+                  if (_isSubmitting)
+                    const CircularProgressIndicator(color: AppColors.brass)
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brass,
+                          foregroundColor: AppColors.ink,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          elevation: 2,
+                        ),
+                        onPressed: () => _submitAnswer(gs),
+                        child: const Text(
+                          'SUBMIT DOSSIER',
+                          style: TextStyle(
+                            fontFamily: 'Lora',
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 2,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
                   if (isTruthRound) ...[
+                    const SizedBox(height: 16),
                     () {
                       final bool isTimerLast5Sec = state.endTime != null && 
                           (state.endTime! - DateTime.now().millisecondsSinceEpoch) < 5000;
                       final bool canReroll = !me.hasRerolled && !isTimerLast5Sec && !_isSubmitting;
 
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton.icon(
-                            icon: const ThematicIcon(type: ThematicIconType.redraw, size: 18),
-                            label: Text(me.hasRerolled ? 'RE-ROLL USED' : 'RE-ROLL PROMPT'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.ground,
-                              foregroundColor: AppColors.brass,
-                              side: BorderSide(
-                                color: canReroll ? AppColors.brass : AppColors.brass.withOpacity(0.3),
-                                width: 1,
-                              ),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton.icon(
+                          icon: const ThematicIcon(type: ThematicIconType.redraw, size: 18),
+                          label: Text(me.hasRerolled ? 'RE-ROLL USED' : 'RE-ROLL PROMPT'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.ground,
+                            foregroundColor: AppColors.brass,
+                            side: BorderSide(
+                              color: canReroll ? AppColors.brass : AppColors.brass.withOpacity(0.3),
+                              width: 1,
                             ),
-                            onPressed: canReroll
-                                ? () async {
-                                    setState(() => _isSubmitting = true);
-                                    try {
-                                      await gs.rerollMyPrompt();
-                                      _answerController.clear();
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Prompt re-rolled successfully!')),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
-                                        );
-                                      }
-                                    } finally {
-                                      if (mounted) {
-                                        setState(() => _isSubmitting = false);
-                                      }
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: canReroll
+                              ? () async {
+                                  setState(() => _isSubmitting = true);
+                                  try {
+                                    await gs.rerollMyPrompt();
+                                    _answerController.clear();
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Prompt re-rolled successfully!')),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(e.toString().replaceAll('Exception: ', '')),
+                                          backgroundColor: Theme.of(context).colorScheme.error,
+                                        ),
+                                      );
+                                    }
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() => _isSubmitting = false);
                                     }
                                   }
-                                : null,
-                          ),
+                                }
+                              : null,
                         ),
                       );
                     }(),
                   ],
-                  _isSubmitting
-                      ? CircularProgressIndicator(color: theme.colorScheme.primary)
-                      : PrimaryButton(
-                          text: 'SUBMIT',
-                          onPressed: () => _submitAnswer(gs),
-                        ),
                   if (gs.currentPlayer!.isHost)
                     Padding(
-                      padding: const EdgeInsets.only(top: 10),
+                      padding: const EdgeInsets.only(top: 16),
                       child: TextButton(
                         onPressed: () => gs.debugSimulateBotResponses(),
                         child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),

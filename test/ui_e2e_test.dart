@@ -86,11 +86,15 @@ void main() {
       expect(find.text('WRITE YOUR TRUTH'), findsNothing);
       print('Successfully transitioned to FORGERY phase.');
 
+      // Dismiss dealt card overlay first
+      await tester.tap(find.text('INSPECT'));
+      await tick(600); // Allow overlay dismiss transition
+
       // Submit forgery
       final inputField = find.byType(TextField).first;
       await tester.enterText(inputField, 'Alice\'s Simulated Forgery');
       await tick(100);
-      await tester.tap(find.text('SUBMIT'));
+      await tester.tap(find.text('SUBMIT DOSSIER'));
       await tick(400); // Allow host submit to completely finish and write to readyPlayers!
 
       print('DEBUG: currentPlayerId: ${gameService.currentPlayer?.id}');
@@ -115,10 +119,14 @@ void main() {
       expect(find.text('WRITE YOUR TRUTH'), findsOneWidget);
       print('Successfully transitioned to TRUTH phase.');
 
+      // Dismiss dealt card overlay first
+      await tester.tap(find.text('DISMISS'));
+      await tick(600); // Allow overlay dismiss transition
+
       // Submit truth
       await tester.enterText(find.byType(TextField).first, 'Alice\'s Real Truth');
       await tick(100);
-      await tester.tap(find.text('SUBMIT'));
+      await tester.tap(find.text('SUBMIT DOSSIER'));
       await tick(400);
 
       // Complete Truth round
@@ -221,12 +229,16 @@ void main() {
       // Verify forgery phase
       expect(find.text('FORGERY'), findsOneWidget);
 
+      // Dismiss dealt card overlay first
+      await tester.tap(find.text('INSPECT'));
+      await tick(600); // Allow overlay dismiss transition
+
       // Try submitting a similarity failure text (contains "trigger_error")
       final craftField = find.byType(TextField).first;
       await tester.enterText(craftField, 'This is a trigger_error answer');
       await tick(100);
 
-      await tester.tap(find.text('SUBMIT'));
+      await tester.tap(find.text('SUBMIT DOSSIER'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 750));
 

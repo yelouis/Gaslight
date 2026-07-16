@@ -134,10 +134,12 @@ void main() {
       await waitForPhase(GamePhase.forgery);
 
       // 5. Submit forgery
+      await tester.tap(find.text('INSPECT'));
+      await tick(500);
       final inputField = find.byType(TextField).first;
       await tester.enterText(inputField, 'Alice\'s Real Forgery');
       await tick(100);
-      await tester.tap(find.text('SUBMIT'));
+      await tester.tap(find.text('SUBMIT DOSSIER'));
       
       // Wait for holding screen to appear (reflecting host submission)
       elapsedMs = 0;
@@ -153,9 +155,11 @@ void main() {
       await waitForPhase(GamePhase.truth);
 
       // 6. Submit truth
+      await tester.tap(find.text('DISMISS'));
+      await tick(500);
       await tester.enterText(find.byType(TextField).first, 'Alice\'s Real Truth');
       await tick(100);
-      await tester.tap(find.text('SUBMIT'));
+      await tester.tap(find.text('SUBMIT DOSSIER'));
       
       // Wait for holding screen to appear (reflecting host truth submission)
       elapsedMs = 0;
@@ -371,10 +375,12 @@ void main() {
       print('Steve successfully joined mid-game as spectator.');
 
       // 4. Submit Host (Alice) Forgery
+      await tester.tap(find.text('INSPECT'));
+      await tick(500);
       final inputField = find.byType(TextField).first;
       await tester.enterText(inputField, 'Alice\'s Spectator Test Forgery');
       await tick(100);
-      await tester.tap(find.text('SUBMIT'));
+      await tester.tap(find.text('SUBMIT DOSSIER'));
 
       // Wait for Alice to be registered as ready
       elapsedMs = 0;
@@ -632,10 +638,12 @@ void main() {
 
 
       // 4. Try to submit duplicateText
+      await tester.tap(find.text('INSPECT'));
+      await tick(500);
       final inputField = find.byType(TextField).first;
       await tester.enterText(inputField, duplicateText);
       await tick(100);
-      await tester.tap(find.text('SUBMIT'));
+      await tester.tap(find.text('SUBMIT DOSSIER'));
 
       // Wait for SnackBar similarity warning
       elapsedMs = 0;
