@@ -14,6 +14,7 @@ import '../utils/text_similarity.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/gaslight_route.dart';
+import '../widgets/waiting_indicator.dart';
 
 
 import '../theme/app_icons.dart';
@@ -257,13 +258,14 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
 
   Widget _buildWaitingUI(GameState state, GameService gs, ThemeData theme) {
     int readyCount = state.readyPlayers.values.where((v) => v).length;
-    final activeCount = gs.players.where((p) => p.role != PlayerRole.spectator).length;
+    final activeNonSpectators = gs.players.where((p) => p.role != PlayerRole.spectator).toList();
+    final activeCount = activeNonSpectators.length;
     int unready = (activeCount - readyCount).clamp(0, activeCount);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        CircularProgressIndicator(color: theme.colorScheme.secondary),
-        const SizedBox(height: 30),
+        const CandleFlameIndicator(),
+        const SizedBox(height: 24),
         Text(
           'THE INK DRIES…',
           style: theme.textTheme.headlineSmall?.copyWith(
@@ -275,6 +277,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
         ),
         const SizedBox(height: 10),
         Text('Waiting for $unready players...', style: const TextStyle(color: Colors.white)),
+        const SizedBox(height: 16),
+        WaitingOnRow(players: activeNonSpectators, readyMap: state.readyPlayers),
         
         if (gs.currentPlayer!.isHost) ...[
           const SizedBox(height: 40),

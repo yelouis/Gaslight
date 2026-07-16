@@ -11,8 +11,10 @@ import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../widgets/auto_advance_timer.dart';
 import '../widgets/card_grid.dart';
+import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/gaslight_route.dart';
+import '../widgets/waiting_indicator.dart';
 
 
 import '../theme/app_icons.dart';
@@ -163,7 +165,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             child: me.role == PlayerRole.spectator
               ? _buildSpectatorVoteUI(state, me, theme, currentCard, gs)
               : _submitted || (state.readyPlayers[me.id] ?? false) 
-                ? _buildWaitingUI(theme, gs, state) 
+                ? _buildWaitingUI(state, gs, theme) 
                 : _buildVotingUI(state, me, theme, currentCard),
           ),
         ),
@@ -196,18 +198,29 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
     );
   }
 
-  Widget _buildWaitingUI(ThemeData theme, GameService gs, GameState state) {
+  Widget _buildWaitingUI(GameState state, GameService gs, ThemeData theme) {
     int readyCount = state.readyPlayers.values.where((v) => v).length;
-    final activeCount = gs.players.where((p) => p.role != PlayerRole.spectator).length;
-    final unready = (activeCount - readyCount).clamp(0, activeCount);
+    final activeNonSpectators = gs.players.where((p) => p.role != PlayerRole.spectator).toList();
+    final activeCount = activeNonSpectators.length;
+    int unready = (activeCount - readyCount).clamp(0, activeCount);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        CircularProgressIndicator(color: theme.colorScheme.secondary),
-        const SizedBox(height: 20),
-        const Text('YOUR BALLOT IS SEALED', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+        const CandleFlameIndicator(),
+        const SizedBox(height: 24),
+        Text(
+          'YOUR BALLOT IS SEALED',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            color: theme.colorScheme.secondary,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+            shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 8)],
+          ),
+        ),
         const SizedBox(height: 10),
-        Text('Awaiting $unready more ballots…', style: TextStyle(color: Colors.white70)),
+        Text('Waiting for $unready players...', style: const TextStyle(color: Colors.white)),
+        const SizedBox(height: 16),
+        WaitingOnRow(players: activeNonSpectators, readyMap: state.readyPlayers),
         if (gs.currentPlayer!.isHost) ...[
           Padding(
             padding: const EdgeInsets.only(top: 40),
