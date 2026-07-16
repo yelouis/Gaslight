@@ -14,6 +14,8 @@ import 'screens/phase4_reveal.dart';
 import 'screens/game_over_screen.dart';
 import 'services/game_service.dart';
 
+import 'widgets/gaslight_route.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
@@ -62,12 +64,21 @@ class GaslightApp extends StatelessWidget {
         useMaterial3: true,
       ),
       initialRoute: '/',
-      routes: {
-        '/': (context) => const LobbyScreen(),
-        '/craft': (context) => const Phase2CraftScreen(),
-        '/vote': (context) => const Phase3VoteScreen(),
-        '/reveal': (context) => const Phase4RevealScreen(),
-        '/game-over': (context) => const GameOverScreen(),
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/':
+            return GaslightPageRoute(child: const LobbyScreen(), settings: settings);
+          case '/craft':
+            return GaslightPageRoute(child: const Phase2CraftScreen(), settings: settings);
+          case '/vote':
+            return GaslightPageRoute(child: const Phase3VoteScreen(), settings: settings);
+          case '/reveal':
+            return GaslightPageRoute(child: const Phase4RevealScreen(), settings: settings);
+          case '/game-over':
+            return GaslightPageRoute(child: const GameOverScreen(), settings: settings);
+          default:
+            return null;
+        }
       },
     );
   }
