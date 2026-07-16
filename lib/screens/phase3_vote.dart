@@ -15,6 +15,8 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/gaslight_route.dart';
 import '../widgets/waiting_indicator.dart';
+import '../widgets/flipping_card.dart';
+import '../widgets/blinking_eye.dart';
 
 
 import '../theme/app_icons.dart';
@@ -258,7 +260,59 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             'They are voting on your card. Keep a straight face.',
             style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 16),
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 32),
+          () {
+            final gs = context.read<GameService>();
+            final voters = gs.players
+                .where((p) =>
+                    p.role != PlayerRole.spectator &&
+                    p.id != state.currentReaderId &&
+                    p.id != currentCard.targetPlayerId)
+                .toList();
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  children: voters.map((voter) {
+                    final isVoted = state.readyPlayers[voter.id] ?? false;
+                    return SizedBox(
+                      width: 36,
+                      height: 48,
+                      child: FlippingRevealCard(
+                        isRevealed: isVoted,
+                        back: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: AppColors.ivory.withOpacity(0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        front: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(4),
+                            color: AppColors.ground,
+                            border: Border.all(
+                              color: AppColors.brass.withOpacity(0.4),
+                              width: 1.0,
+                            ),
+                          ),
+                          child: const Center(
+                            child: WaxSealBadge(size: 28),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(width: 16),
+                const BlinkingEye(size: 24),
+              ],
+            );
+          }(),
+          const SizedBox(height: 32),
           PrimaryButton(
             text: 'I\'M READY',
             onPressed: () async {
