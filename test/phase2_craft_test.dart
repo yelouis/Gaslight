@@ -174,5 +174,39 @@ void main() {
         gameService.dispose();
       }
     });
+
+    testWidgets('should render pinned target header and underline input fields correctly', (WidgetTester tester) async {
+      try {
+        await setupAndPumpCraftScreen(
+          tester: tester,
+          localPlayerId: 'local_player_id',
+          phase: GamePhase.forgery,
+          truthAnswer: 'sleeping in my bed all day',
+          sabotageAnswers: {},
+        );
+
+        // Dismiss dealt card overlay first
+        await tester.tap(find.text('INSPECT'));
+        await tester.pump();
+
+        // 1. Verify pinned target name is visible and styled in CormorantGaramond
+        final targetText = find.text('GUESTPLAYER');
+        expect(targetText, findsOneWidget);
+        final textStyle = tester.widget<Text>(targetText).style;
+        expect(textStyle?.fontFamily, 'CormorantGaramond');
+        expect(textStyle?.fontSize, 22);
+
+        // 2. Verify TextField is styled with Lora 18 and UnderlineInputBorder
+        final txtFinder = find.byType(TextField);
+        expect(txtFinder, findsOneWidget);
+        final txtWidget = tester.widget<TextField>(txtFinder);
+        expect(txtWidget.style?.fontFamily, 'Lora');
+        expect(txtWidget.style?.fontSize, 18);
+        expect(txtWidget.decoration?.enabledBorder, isA<UnderlineInputBorder>());
+        expect(txtWidget.decoration?.hintText, 'Dip the quill…');
+      } finally {
+        gameService.dispose();
+      }
+    });
   });
 }

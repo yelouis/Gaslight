@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' show FontFeature;
+import 'dart:async';
 import 'package:provider/provider.dart';
 import '../services/audio_service.dart';
 import 'dart:math';
@@ -13,10 +15,13 @@ import '../widgets/auto_advance_timer.dart';
 import '../widgets/card_grid.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../theme/app_motion.dart';
 import '../widgets/gaslight_route.dart';
 import '../widgets/waiting_indicator.dart';
 import '../widgets/flipping_card.dart';
 import '../widgets/blinking_eye.dart';
+import '../widgets/lamp_loading.dart';
+import '../widgets/raven_mascot.dart';
 
 
 import '../theme/app_icons.dart';
@@ -37,6 +42,11 @@ class _AnonymizedAnswer {
 class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
   bool _submitted = false;
   bool _isNavigating = false;
+  final Set<String> _sealedSoundPlayed = {};
+  final Set<String> _hoppedFor = {};
+  RavenState _ravenState = RavenState.idle;
+  Timer? _ravenHopTimer;
+  String? _lastReaderId;
   List<_AnonymizedAnswer>? _shuffledAnswers;
   String? _shuffledCardId;
   String? _localSelectedAuthorId;
@@ -97,7 +107,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
     final theme = Theme.of(context);
 
     if (state == null || me == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(backgroundColor: AppColors.ground, body: Center(child: LampLightingIndicator()));
     }
 
     final correctRoute = GameState.getRouteForPhase(state.currentPhase);
@@ -161,14 +171,16 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             ),
           ],
         ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: me.role == PlayerRole.spectator
-              ? _buildSpectatorVoteUI(state, me, theme, currentCard, gs)
-              : _submitted || (state.readyPlayers[me.id] ?? false) 
-                ? _buildWaitingUI(state, gs, theme) 
-                : _buildVotingUI(state, me, theme, currentCard),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: me.role == PlayerRole.spectator
+                ? _buildSpectatorVoteUI(state, me, theme, currentCard, gs)
+                : _submitted || (state.readyPlayers[me.id] ?? false) 
+                  ? _buildWaitingUI(state, gs, theme) 
+                  : _buildVotingUI(state, me, theme, currentCard),
+            ),
           ),
         ),
       ),
@@ -245,6 +257,61 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
     if (currentCard == null) return const Text('No card to vote on.');
 
     if (me.id == state.currentReaderId || me.id == currentCard.targetPlayerId) {
+      final gs = context.read<GameService>();
+      final expectedVoters = gs.players
+          .where((p) =>
+              p.role != PlayerRole.spectator &&
+              p.id != state.currentReaderId &&
+              p.id != currentCard.targetPlayerId)
+          .toList();
+
+      if (_lastReaderId != state.currentReaderId) {
+        _sealedSoundPlayed.clear();
+        _hoppedFor.clear();
+        _lastReaderId = state.currentReaderId;
+        if (AppMotion.reduce(context)) {
+          for (var voter in expectedVoters) {
+            if (state.readyPlayers[voter.id] ?? false) {
+              _sealedSoundPlayed.add(voter.id);
+              _hoppedFor.add(voter.id);
+            }
+          }
+        }
+      }
+
+      bool shouldHop = false;
+      for (var voter in expectedVoters) {
+        if (state.readyPlayers[voter.id] == true && !_sealedSoundPlayed.contains(voter.id)) {
+          _sealedSoundPlayed.add(voter.id);
+          if (!AppMotion.reduce(context)) {
+            AudioService.instance.playVote(volume: 0.4);
+          }
+        }
+        if (state.readyPlayers[voter.id] == true && !_hoppedFor.contains(voter.id)) {
+          _hoppedFor.add(voter.id);
+          shouldHop = true;
+        }
+      }
+
+      if (shouldHop && !AppMotion.reduce(context)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _ravenHopTimer?.cancel();
+          setState(() {
+            _ravenState = RavenState.hop;
+          });
+          _ravenHopTimer = Timer(const Duration(milliseconds: 300), () {
+            if (mounted) {
+              setState(() {
+                _ravenState = RavenState.idle;
+              });
+            }
+          });
+        });
+      }
+
+      final M = expectedVoters.length;
+      final N = expectedVoters.where((voter) => state.readyPlayers[voter.id] ?? false).length;
+
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -261,57 +328,76 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 16),
           ),
           const SizedBox(height: 32),
-          () {
-            final gs = context.read<GameService>();
-            final voters = gs.players
-                .where((p) =>
-                    p.role != PlayerRole.spectator &&
-                    p.id != state.currentReaderId &&
-                    p.id != currentCard.targetPlayerId)
-                .toList();
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  children: voters.map((voter) {
-                    final isVoted = state.readyPlayers[voter.id] ?? false;
-                    return SizedBox(
-                      width: 36,
-                      height: 48,
-                      child: FlippingRevealCard(
-                        isRevealed: isVoted,
-                        back: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: AppColors.ivory.withOpacity(0.3),
-                              width: 1.5,
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        children: expectedVoters.map((voter) {
+                          final isVoted = state.readyPlayers[voter.id] ?? false;
+                          return SizedBox(
+                            width: 36,
+                            height: 48,
+                            child: FlippingRevealCard(
+                              isRevealed: isVoted,
+                              back: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: AppColors.ivory.withOpacity(0.3),
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                              front: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(4),
+                                  color: AppColors.ground,
+                                  border: Border.all(
+                                    color: AppColors.brass.withOpacity(0.4),
+                                    width: 1.0,
+                                  ),
+                                ),
+                                child: const Center(
+                                  child: WaxSealBadge(size: 28),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        front: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(4),
-                            color: AppColors.ground,
-                            border: Border.all(
-                              color: AppColors.brass.withOpacity(0.4),
-                              width: 1.0,
-                            ),
-                          ),
-                          child: const Center(
-                            child: WaxSealBadge(size: 28),
-                          ),
-                        ),
+                          );
+                        }).toList(),
                       ),
-                    );
-                  }).toList(),
+                      const SizedBox(width: 16),
+                      const BlinkingEye(size: 24),
+                    ],
+                  ),
+                  Positioned(
+                    right: -24,
+                    top: -44,
+                    child: RavenMascot(
+                      state: _ravenState,
+                      size: 48,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '$N of $M ballots sealed',
+                style: const TextStyle(
+                  fontFamily: 'Lora',
+                  fontSize: 14,
+                  color: AppColors.ivory,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
-                const SizedBox(width: 16),
-                const BlinkingEye(size: 24),
-              ],
-            );
-          }(),
+              ),
+            ],
+          ),
           const SizedBox(height: 32),
           PrimaryButton(
             text: 'I\'M READY',
@@ -490,5 +576,10 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
         ),
       ),
     );
+  }
+  @override
+  void dispose() {
+    _ravenHopTimer?.cancel();
+    super.dispose();
   }
 }

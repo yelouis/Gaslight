@@ -95,95 +95,102 @@ class _DealtCardOverlayState extends State<DealtCardOverlay> with SingleTickerPr
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
-            child: Column(
-              children: [
-                // Gold crown header
-                const Center(
-                  child: ThematicIcon(
-                    type: ThematicIconType.host,
-                    color: AppColors.brass,
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isTruth ? 'THE RECORD OF TRUTH' : 'DECK OF FORGERIES',
-                  style: const TextStyle(
-                    fontFamily: 'CormorantGaramond',
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
-                    color: AppColors.brass,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                const Divider(color: AppColors.brass, thickness: 1),
-                const SizedBox(height: 16),
-                // Card Prompt Box
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          isTruth
-                              ? 'You must pen the absolute truth. Reveal a genuine secret from your past.'
-                              : 'You have been dealt the ledger of ${widget.readerName.toUpperCase()}.\nCraft a convincing counterfeit to deceive the parlor.',
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(
+                width: 260,
+                height: 372,
+                child: Column(
+                  children: [
+                    // Gold crown header
+                    const Center(
+                      child: ThematicIcon(
+                        type: ThematicIconType.host,
+                        color: AppColors.brass,
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isTruth ? 'THE RECORD OF TRUTH' : 'DECK OF FORGERIES',
+                      style: const TextStyle(
+                        fontFamily: 'CormorantGaramond',
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 2,
+                        color: AppColors.brass,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(color: AppColors.brass, thickness: 1),
+                    const SizedBox(height: 16),
+                    // Card Prompt Box
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              isTruth
+                                  ? 'You must pen the absolute truth. Reveal a genuine secret from your past.'
+                                  : 'You have been dealt the ledger of ${widget.readerName.toUpperCase()}.\nCraft a convincing counterfeit to deceive the parlor.',
+                              style: const TextStyle(
+                                fontFamily: 'Lora',
+                                fontSize: 13,
+                                fontStyle: FontStyle.italic,
+                                color: AppColors.ink,
+                                height: 1.4,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
+                              widget.promptText,
+                              style: const TextStyle(
+                                fontFamily: 'CormorantGaramond',
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.oxblood,
+                                height: 1.3,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(color: AppColors.brass, thickness: 1),
+                    const SizedBox(height: 16),
+                    // Dismiss Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.oxblood,
+                          foregroundColor: AppColors.ivory,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          elevation: 4,
+                        ),
+                        onPressed: _handleDismiss,
+                        child: Text(
+                          isTruth ? 'DISMISS' : 'INSPECT',
                           style: const TextStyle(
                             fontFamily: 'Lora',
-                            fontSize: 13,
-                            fontStyle: FontStyle.italic,
-                            color: AppColors.ink,
-                            height: 1.4,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                            fontSize: 14,
                           ),
-                          textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 24),
-                        Text(
-                          widget.promptText,
-                          style: const TextStyle(
-                            fontFamily: 'CormorantGaramond',
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.oxblood,
-                            height: 1.3,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Divider(color: AppColors.brass, thickness: 1),
-                const SizedBox(height: 16),
-                // Dismiss Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.oxblood,
-                      foregroundColor: AppColors.ivory,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      elevation: 4,
-                    ),
-                    onPressed: _handleDismiss,
-                    child: Text(
-                      isTruth ? 'DISMISS' : 'INSPECT',
-                      style: const TextStyle(
-                        fontFamily: 'Lora',
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
-                        fontSize: 14,
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ],

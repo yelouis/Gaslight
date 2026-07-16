@@ -16,6 +16,8 @@ import '../theme/app_text_styles.dart';
 import '../widgets/gaslight_route.dart';
 import '../widgets/waiting_indicator.dart';
 import '../widgets/dealt_card_overlay.dart';
+import '../widgets/lamp_loading.dart';
+import '../widgets/raven_mascot.dart';
 
 
 import '../theme/app_icons.dart';
@@ -121,7 +123,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     final theme = Theme.of(context);
 
     if (state == null || me == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(backgroundColor: AppColors.ground, body: Center(child: LampLightingIndicator()));
     }
 
     if (me.role != PlayerRole.spectator) {
@@ -193,14 +195,16 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
         ),
         body: Stack(
           children: [
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: me.role == PlayerRole.spectator
-                    ? _buildSpectatorUI(state, gs, theme)
-                    : (state.readyPlayers[me.id] ?? false)
-                        ? _buildWaitingUI(state, gs, theme)
-                        : _buildWriteUI(state, me, theme, gs),
+            SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: me.role == PlayerRole.spectator
+                      ? _buildSpectatorUI(state, gs, theme)
+                      : (state.readyPlayers[me.id] ?? false)
+                          ? _buildWaitingUI(state, gs, theme)
+                          : _buildWriteUI(state, me, theme, gs),
+                ),
               ),
             ),
             if (_showDealtOverlay && me.role != PlayerRole.spectator)
@@ -297,6 +301,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        const RavenMascot(state: RavenState.idle, size: 64),
+        const SizedBox(height: 12),
         const CandleFlameIndicator(),
         const SizedBox(height: 24),
         Text(
@@ -334,123 +340,131 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     if (targetId == null) return const Text('Error: No target assigned');
 
     CardModel targetCard = state.cards.firstWhere((c) => c.targetPlayerId == targetId);
-    String targetName = gs.players.firstWhere((p) => p.id == targetId, orElse: () => me).name;
+    final targetPlayer = gs.players.firstWhere((p) => p.id == targetId, orElse: () => me);
     bool isTruthRound = state.currentPhase == GamePhase.truth;
 
-    return SingleChildScrollView(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            PlayerAvatar(player: me, size: 50),
-            const SizedBox(height: 20),
-            Text(
-              isTruthRound ? "WRITE YOUR TRUTH" : "FORGERY FOR ${targetName.toUpperCase()}",
-              style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1.5),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-              decoration: BoxDecoration(
-                color: AppColors.parchment,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.brass, width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.4),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: AppColors.parchment,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.brass, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              PlayerAvatar(
+                player: isTruthRound ? me : targetPlayer,
+                size: 40,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                isTruthRound ? 'YOUR TRUTH' : targetPlayer.name.toUpperCase(),
+                style: const TextStyle(
+                  fontFamily: 'CormorantGaramond',
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.ink,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
               child: Column(
                 children: [
-                  const Text(
-                    "CASE DOSSIER",
-                    style: TextStyle(
-                      color: Color(0xCCB3A369), // brass @ 0.8
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11,
-                      letterSpacing: 3.5,
-                      fontFamily: 'Lora',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    targetCard.promptText,
-                    style: const TextStyle(
-                      fontFamily: 'CormorantGaramond',
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      fontStyle: FontStyle.italic,
-                      color: AppColors.oxblood,
-                      height: 1.4,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 30),
                   Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFFC8BCA6), width: 1.0),
+                      color: AppColors.parchment,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.brass, width: 1.5),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 3,
-                          offset: const Offset(1, 1),
+                          color: Colors.black.withOpacity(0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: TextField(
-                      controller: _answerController,
-                      maxLines: 3,
-                      enabled: !_isSubmitting,
-                      style: const TextStyle(
-                        fontFamily: 'Lora',
-                        color: AppColors.ink,
-                        fontSize: 15,
-                      ),
-                      decoration: const InputDecoration(
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: InputBorder.none,
-                        hintText: 'Pen your response here...',
-                        hintStyle: TextStyle(
-                          color: Color(0x662C1E16), // ink @ 0.4
-                          fontFamily: 'Lora',
+                    child: Column(
+                      children: [
+                        const Text(
+                          "CASE DOSSIER",
+                          style: TextStyle(
+                            color: Color(0xCCB3A369), // brass @ 0.8
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                            letterSpacing: 3.5,
+                            fontFamily: 'Lora',
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 16),
+                        Text(
+                          targetCard.promptText,
+                          style: const TextStyle(
+                            fontFamily: 'CormorantGaramond',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            fontStyle: FontStyle.italic,
+                            color: AppColors.oxblood,
+                            height: 1.4,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 30),
+                        TextField(
+                          controller: _answerController,
+                          maxLines: 3,
+                          enabled: !_isSubmitting,
+                          style: const TextStyle(
+                            fontFamily: 'Lora',
+                            color: AppColors.ink,
+                            fontSize: 18,
+                          ),
+                          decoration: const InputDecoration(
+                            contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                            enabledBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(color: Color(0x992C1E16), width: 1.5), // ink @ 0.6
+                            ),
+                            focusedBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(color: AppColors.ink, width: 2.0),
+                            ),
+                            disabledBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(color: Color(0x4D2C1E16), width: 1.0),
+                            ),
+                            hintText: 'Dip the quill…',
+                            hintStyle: TextStyle(
+                              color: Color(0x662C1E16), // ink @ 0.4
+                              fontFamily: 'Lora',
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        PrimaryButton(
+                          text: 'SUBMIT DOSSIER',
+                          loading: _isSubmitting,
+                          onPressed: () => _submitAnswer(gs),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  if (_isSubmitting)
-                    const CircularProgressIndicator(color: AppColors.brass)
-                  else
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brass,
-                          foregroundColor: AppColors.ink,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          elevation: 2,
-                        ),
-                        onPressed: () => _submitAnswer(gs),
-                        child: const Text(
-                          'SUBMIT DOSSIER',
-                          style: TextStyle(
-                            fontFamily: 'Lora',
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 2,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ),
                   if (isTruthRound) ...[
                     const SizedBox(height: 16),
                     () {
@@ -515,9 +529,9 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                 ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 

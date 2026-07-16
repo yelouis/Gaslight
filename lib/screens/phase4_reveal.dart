@@ -15,11 +15,15 @@ import '../widgets/flipping_card.dart';
 import '../widgets/gaslight_route.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
 import 'dart:ui';
 import 'dart:math';
 import 'dart:async';
 import 'package:uuid/uuid.dart';
 import 'package:clock/clock.dart';
+import '../widgets/lamp_loading.dart';
+import '../theme/reaction_medallions.dart';
+import '../widgets/raven_mascot.dart';
 
 class Phase4RevealScreen extends StatefulWidget {
   const Phase4RevealScreen({super.key});
@@ -55,6 +59,8 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
   String? _playedRevealForTargetId;
   String? _playedUnmaskForTargetId;
   Timer? _countdownTimer;
+  RavenState _ravenState = RavenState.idle;
+  Timer? _ravenRuffleTimer;
 
   int _computeStage(int now, GameState? state) {
     final elapsed = now - _revealStartTime;
@@ -106,6 +112,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _ravenRuffleTimer?.cancel();
     try {
       context.read<GameService>().removeListener(_onGameServiceUpdate);
     } catch (_) {}
@@ -255,7 +262,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
     final theme = Theme.of(context);
 
     if (state == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(backgroundColor: AppColors.ground, body: Center(child: LampLightingIndicator()));
     }
     
     final correctRoute = GameState.getRouteForPhase(state.currentPhase);
@@ -301,6 +308,19 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
       _playedRevealForTargetId = currentTargetId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         AudioService.instance.playReveal();
+        if (!AppMotion.reduce(context)) {
+          _ravenRuffleTimer?.cancel();
+          setState(() {
+            _ravenState = RavenState.ruffle;
+          });
+          _ravenRuffleTimer = Timer(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              setState(() {
+                _ravenState = RavenState.idle;
+              });
+            }
+          });
+        }
       });
     }
 
@@ -342,9 +362,10 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
             ),
           ],
         ),
-        body: Stack(
-          children: [
-            Center(
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Center(
               child: TweenAnimationBuilder<double>(
                 tween: Tween<double>(begin: 0.0, end: 1.0),
                 duration: const Duration(milliseconds: 800),
@@ -389,6 +410,16 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                           
                           // Options & Votes List
                           if (revealStage >= 1) ...[
+                            Align(
+                              alignment: Alignment.topRight,
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0, right: 16.0),
+                                child: RavenMascot(
+                                  state: _ravenState,
+                                  size: 48,
+                                ),
+                              ),
+                            ),
                             _buildOptionRow('TRUTH', currentCard.truthAnswer, currentCard, gs, theme, revealStage, isTruth: true),
                             ...currentCard.sabotageAnswers.entries.map((e) => 
                               _buildOptionRow(e.key, e.value, currentCard!, gs, theme, revealStage)
@@ -586,7 +617,8 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
             }),
           ],
         ),
-        bottomNavigationBar: SafeArea(
+      ),
+      bottomNavigationBar: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Row(
@@ -605,11 +637,14 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                         gs.sendReaction(emoji);
                       },
                       customBorder: const CircleBorder(),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Text(
-                          emoji,
-                          style: const TextStyle(fontSize: 28),
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: ReactionMedallion.fromEmoji(
+                            emoji,
+                            size: 30,
+                          ),
                         ),
                       ),
                     ),
@@ -1068,9 +1103,9 @@ class FloatingEmojiWidget extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                ReactionMedallion.fromEmoji(
                   emoji,
-                  style: const TextStyle(fontSize: 40),
+                  size: 44,
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

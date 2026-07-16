@@ -1,6 +1,8 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
 
 class CrimsonShadowCard extends StatelessWidget {
   final Widget child;
@@ -85,12 +87,13 @@ class ParchmentCard extends StatelessWidget {
     );
   }
 }
-
 class PrimaryButton extends StatefulWidget {
   final String text;
   final VoidCallback? onPressed;
   final double fontSize;
   final Widget? icon;
+  final bool loading;
+  final bool showTextOnLoading;
   
   const PrimaryButton({
     super.key,
@@ -98,14 +101,17 @@ class PrimaryButton extends StatefulWidget {
     required this.onPressed,
     this.fontSize = 20,
     this.icon,
+    this.loading = false,
+    this.showTextOnLoading = false,
   });
 
   @override
   State<PrimaryButton> createState() => _PrimaryButtonState();
 }
 
-class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProviderStateMixin {
+class _PrimaryButtonState extends State<PrimaryButton> with TickerProviderStateMixin {
   late final AnimationController _controller;
+  late final AnimationController _loadingController;
   late final Animation<double> _scaleAnimation;
   late final Animation<double> _flashAnimation;
 
@@ -122,18 +128,115 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
     _flashAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.linear),
     );
+
+    _loadingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    if (widget.loading) {
+      _startLoadingAnimation();
+    }
+  }
+
+  void _startLoadingAnimation() {
+    final prefersReducedMotion = AppMotion.reduce(context);
+    if (!prefersReducedMotion) {
+      _loadingController.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(PrimaryButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.loading != oldWidget.loading) {
+      if (widget.loading) {
+        _startLoadingAnimation();
+      } else {
+        _loadingController.stop();
+      }
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.loading) {
+      _startLoadingAnimation();
+    }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _loadingController.dispose();
     super.dispose();
+  }
+
+  Widget _buildLoadingDots(BuildContext context) {
+    final bool prefersReducedMotion = AppMotion.reduce(context);
+    
+    if (prefersReducedMotion) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(3, (index) {
+          return Padding(
+            padding: EdgeInsets.only(left: index == 0 ? 0 : 6.0),
+            child: Opacity(
+              opacity: 0.6,
+              child: Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                  color: AppColors.ivory,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          );
+        }),
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: _loadingController,
+      builder: (context, child) {
+        final t = _loadingController.value;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (i) {
+            final phase = 2 * math.pi * t - i * 2 * math.pi / 3.0;
+            final double value = math.sin(phase);
+            final double opacity = 0.25 + 0.75 * math.max(0.0, value);
+            final double scale = 0.8 + 0.2 * math.max(0.0, value);
+            
+            return Padding(
+              padding: EdgeInsets.only(left: i == 0 ? 0 : 6.0),
+              child: Transform.scale(
+                scale: scale,
+                child: Opacity(
+                  opacity: opacity.clamp(0.0, 1.0),
+                  child: Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: AppColors.ivory,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isEnabled = widget.onPressed != null;
+    final isEnabled = widget.onPressed != null && !widget.loading;
 
     return Listener(
       onPointerDown: (event) {
@@ -187,22 +290,33 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
                       elevation: isEnabled ? 6 : 0,
                       shadowColor: Colors.black.withOpacity(0.5),
                     ),
-                    onPressed: widget.onPressed == null
+                    onPressed: widget.loading || widget.onPressed == null
                         ? null
                         : () {
                             HapticFeedback.mediumImpact();
                             widget.onPressed!();
                           },
-                    child: widget.icon == null
-                        ? Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2))
-                        : Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              widget.icon!,
-                              const SizedBox(width: 8),
-                              Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2)),
-                            ],
-                          ),
+                    child: widget.loading
+                        ? (widget.showTextOnLoading
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildLoadingDots(context),
+                                  const SizedBox(width: 12),
+                                  Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2)),
+                                ],
+                              )
+                            : _buildLoadingDots(context))
+                        : (widget.icon == null
+                            ? Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2))
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  widget.icon!,
+                                  const SizedBox(width: 8),
+                                  Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2)),
+                                ],
+                              )),
                   ),
                 ),
                 if (isEnabled && _flashAnimation.value > 0)

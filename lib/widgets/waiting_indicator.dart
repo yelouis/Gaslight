@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_icons.dart';
+import '../theme/candle_paths.dart';
 import '../models/player_state.dart';
 import '../widgets/player_avatar.dart';
 
@@ -148,17 +149,12 @@ class _CandleFlamePainter extends CustomPainter {
       ..color = AppColors.brass.withOpacity(0.85)
       ..style = PaintingStyle.fill;
 
-    final Path outerPath = Path();
-    outerPath.moveTo(wickTop.dx - baseWidth / 2, wickTop.dy);
-    outerPath.quadraticBezierTo(
-      wickTop.dx - baseWidth / 2, wickTop.dy - flameHeight * 0.4,
-      flameTip.dx, flameTip.dy,
+    final Path outerPath = CandlePaths.flamePath(
+      wickTop: wickTop,
+      baseWidth: baseWidth,
+      flameHeight: flameHeight,
+      swayX: swayX,
     );
-    outerPath.quadraticBezierTo(
-      wickTop.dx + baseWidth / 2, wickTop.dy - flameHeight * 0.4,
-      wickTop.dx + baseWidth / 2, wickTop.dy,
-    );
-    outerPath.close();
     canvas.drawPath(outerPath, outerPaint);
 
     // Core flame: anchor to wick, 55% scale, ivory @ 0.9
@@ -168,19 +164,13 @@ class _CandleFlamePainter extends CustomPainter {
 
     final double coreHeight = flameHeight * 0.55;
     final double coreWidth = baseWidth * 0.55;
-    final Offset coreTip = Offset(wickTop.dx + swayX * 0.55, wickTop.dy - coreHeight);
 
-    final Path corePath = Path();
-    corePath.moveTo(wickTop.dx - coreWidth / 2, wickTop.dy);
-    corePath.quadraticBezierTo(
-      wickTop.dx - coreWidth / 2, wickTop.dy - coreHeight * 0.4,
-      coreTip.dx, coreTip.dy,
+    final Path corePath = CandlePaths.flamePath(
+      wickTop: wickTop,
+      baseWidth: coreWidth,
+      flameHeight: coreHeight,
+      swayX: swayX * 0.55,
     );
-    corePath.quadraticBezierTo(
-      wickTop.dx + coreWidth / 2, wickTop.dy - coreHeight * 0.4,
-      wickTop.dx + coreWidth / 2, wickTop.dy,
-    );
-    corePath.close();
     canvas.drawPath(corePath, corePaint);
   }
 

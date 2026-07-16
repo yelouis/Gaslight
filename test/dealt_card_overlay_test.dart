@@ -76,4 +76,26 @@ void main() {
 
     expect(dismissed, isTrue);
   });
+
+  testWidgets('DealtCardOverlay wraps face column inside FittedBox', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Stack(
+            children: [
+              DealtCardOverlay(
+                phase: GamePhase.forgery,
+                readerName: 'Alice',
+                promptText: 'A secret prompt...',
+                onDismiss: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.byType(FittedBox), findsOneWidget);
+  });
 }

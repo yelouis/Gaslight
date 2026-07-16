@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,6 +19,7 @@ import 'widgets/gaslight_route.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await dotenv.load(fileName: ".env");
 
   await Firebase.initializeApp(
@@ -63,6 +65,14 @@ class GaslightApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        final scale = media.textScaler.clamp(minScaleFactor: 1.0, maxScaleFactor: 1.3);
+        return MediaQuery(
+          data: media.copyWith(textScaler: scale),
+          child: child!,
+        );
+      },
       initialRoute: '/',
       onGenerateRoute: (settings) {
         switch (settings.name) {

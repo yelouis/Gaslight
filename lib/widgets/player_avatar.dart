@@ -75,7 +75,7 @@ class PlayerAvatar extends StatelessWidget {
           border: Border.all(color: borderColor.withOpacity(0.5), width: 1.5),
         ),
         child: Center(
-          child: ThematicIcon(
+          child: AnimatedThematicIcon(
             type: sigilType,
             size: size * 0.45,
             color: borderColor,

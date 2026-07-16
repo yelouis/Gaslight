@@ -52,7 +52,6 @@ class _RoomCodePlaqueState extends State<RoomCodePlaque> {
         duration: AppMotion.fast,
         child: Container(
           width: 320,
-          height: 84,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             gradient: const LinearGradient(
@@ -76,80 +75,90 @@ class _RoomCodePlaqueState extends State<RoomCodePlaque> {
               ),
             ],
           ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Material(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              children: [
+                Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
                     onTap: _copyToClipboard,
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text(
-                            'ROOM CODE',
-                            style: TextStyle(
-                              fontFamily: 'Lora',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xB22C1E16), // ink @ 0.7
-                              letterSpacing: 3,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 12.0), // Offset the letterSpacing on the end
-                            child: Text(
-                              widget.code,
-                              style: const TextStyle(
-                                fontFamily: 'CormorantGaramond',
-                                fontSize: 40,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 12,
-                                color: AppColors.ink,
-                                shadows: [
-                                  Shadow(
-                                    color: Color(0x59F5EEDB), // ivory @ 0.35
-                                    offset: Offset(0, 1),
-                                  ),
-                                  Shadow(
-                                    color: Color(0x66000000), // black @ 0.4
-                                    offset: Offset(0, -1),
-                                  ),
-                                ],
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 84),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'ROOM CODE',
+                                style: TextStyle(
+                                  fontFamily: 'Lora',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xB22C1E16), // ink @ 0.7
+                                  letterSpacing: 3,
+                                ),
                               ),
-                            ),
+                              const SizedBox(height: 2),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 12.0),
+                                child: Text(
+                                  widget.code,
+                                  style: const TextStyle(
+                                    fontFamily: 'CormorantGaramond',
+                                    fontSize: 40,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 12,
+                                    color: AppColors.ink,
+                                    shadows: [
+                                      Shadow(
+                                        color: Color(0x59F5EEDB), // ivory @ 0.35
+                                        offset: Offset(0, 1),
+                                      ),
+                                      Shadow(
+                                        color: Color(0x66000000), // black @ 0.4
+                                        offset: Offset(0, -1),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(4),
-                    onTap: () {
-                      Share.share('Join my Gaslight game! Room code: ${widget.code}');
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(6.0),
-                      child: ThematicIcon(
-                        type: ThematicIconType.envelope,
-                        size: 22,
-                        color: AppColors.ink.withOpacity(0.7),
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () {
+                        Share.share('Join my Gaslight game! Room code: ${widget.code}');
+                      },
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: ThematicIcon(
+                            type: ThematicIconType.envelope,
+                            size: 22,
+                            color: AppColors.ink.withOpacity(0.7),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

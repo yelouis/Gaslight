@@ -118,5 +118,79 @@ void main() {
       // Clean up heartbeat timer
       await gameService.leaveRoom();
     });
+
+    testWidgets('GameOverScreen ceremony gates share button and handles staggers stepwise', (WidgetTester tester) async {
+      final mastermind = PlayerState(
+        id: 'p1',
+        name: 'MastermindAlice',
+        totalScore: 40,
+        playersDeceived: 5,
+        timesFooled: 1,
+        role: PlayerRole.voter,
+      );
+      final trickster = PlayerState(
+        id: 'p2',
+        name: 'TricksterBob',
+        totalScore: 30,
+        playersDeceived: 8,
+        timesFooled: 2,
+        role: PlayerRole.voter,
+      );
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.gameOver,
+        totalPlayers: 2,
+        cards: [],
+        currentCardAssignments: {},
+        readyPlayers: {},
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('p1').set(
+        mastermind.toMap()..['authUid'] = 'uid1',
+      );
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('p2').set(
+        trickster.toMap()..['authUid'] = 'uid2',
+      );
+
+      gameService.listenToRoom('TEST');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('room_code', 'TEST');
+      await prefs.setString('player_id', 'p1');
+      await gameService.tryRejoinSession();
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: MaterialApp(
+            builder: (context, child) {
+              return MediaQuery(
+                data: const MediaQueryData(accessibleNavigation: false),
+                child: child!,
+              );
+            },
+            home: const GameOverScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Engraving…'), findsOneWidget);
+      expect(find.text('Share Case File'), findsNothing);
+
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Engraving…'), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 1200));
+      expect(find.text('Share Case File'), findsOneWidget);
+      expect(find.text('Engraving…'), findsNothing);
+
+      await gameService.leaveRoom();
+    });
   });
 }

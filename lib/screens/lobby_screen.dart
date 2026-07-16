@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -17,6 +18,8 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_icons.dart';
 import '../widgets/gaslight_route.dart';
 import '../widgets/room_code_plaque.dart';
+import '../widgets/deck_carousel.dart';
+import '../widgets/raven_mascot.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -37,6 +40,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
   bool _isTimerDisabled = false;
   Set<String> _knownPlayerIds = {};
   bool _familyFriendlyOnly = false;
+  RavenState _ravenState = RavenState.sleep;
+  Timer? _ravenWakeTimer;
 
   @override
   void initState() {
@@ -311,6 +316,18 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final newPlayers = players.where((p) => !_knownPlayerIds.contains(p.id)).toList();
     if (newPlayers.isNotEmpty && _knownPlayerIds.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ravenWakeTimer?.cancel();
+        setState(() {
+          _ravenState = RavenState.idle;
+        });
+        _ravenWakeTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _ravenState = RavenState.sleep;
+            });
+          }
+        });
+
         for (var p in newPlayers) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -381,235 +398,328 @@ class _LobbyScreenState extends State<LobbyScreen> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            Text(
-              'ASSEMBLING THE SUSPECTS…',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                color: theme.colorScheme.secondary, // Gold
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-                shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 10)],
-              ),
-            ),
-            const SizedBox(height: 16),
-            RoomCodePlaque(code: gs.gameState!.roomCode),
-            const SizedBox(height: 16),
-            Text(
-              '${players.length} Joined ($readyNonHostsCount/$totalNonHostsCount Ready)',
-              style: const TextStyle(fontSize: 18, color: Colors.white70, fontFamily: 'Lora'),
-            ),
-            const SizedBox(height: 30),
-            Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 32,
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24.0, 12.0, 24.0, 260.0), // pad bottom to stay clear of sheet
+            child: Column(
+              children: [
+                Text(
+                  'ASSEMBLING THE SUSPECTS…',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    color: theme.colorScheme.secondary, // Gold
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2,
+                    shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 10)],
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                itemCount: players.length,
-                itemBuilder: (context, index) {
-                  final player = players[index];
-                  return TweenAnimationBuilder<double>(
-                    key: ValueKey(player.id),
-                    tween: Tween<double>(begin: 0.0, end: 1.0),
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeOutBack,
-                    builder: (context, scale, child) {
-                      return Transform.scale(
-                        scale: scale,
-                        child: Opacity(opacity: scale.clamp(0.0, 1.0), child: child),
-                      );
-                    },
-                    child: PlayerAvatar(player: player),
-                  );
-                },
-              ),
-            ),
-            if (selectedDeckId == 'custom') ...[
-              const SizedBox(height: 16),
-              _buildCustomPromptsSection(theme, gs),
-            ],
-            if (isHost) ...[
-              const SizedBox(height: 16),
-              CrimsonShadowCard(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 16),
+                Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    Text(
-                      'HOUSE RULES',
-                      style: TextStyle(
-                        fontFamily: 'CormorantGaramond',
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.secondary,
-                        letterSpacing: 2,
+                    RoomCodePlaque(code: gs.gameState!.roomCode),
+                    Positioned(
+                      right: 16,
+                      top: -48,
+                      child: RavenMascot(
+                        state: _ravenState,
+                        size: 64,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Forgery Rounds:',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory),
-                        ),
-                        Row(
-                          children: [1, 2, 3, 4].map((r) {
-                            final isSelected = rounds == r;
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: ChoiceChip(
-                                label: Text('$r'),
-                                selected: isSelected,
-                                selectedColor: AppColors.brass,
-                                labelStyle: TextStyle(
-                                  color: isSelected ? AppColors.ink : AppColors.ivory,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                onSelected: (selected) {
-                                  if (selected) {
-                                    gs.updateLobbySettings(sabotageAnswersCount: r);
-                                  }
-                                },
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Material(
-                      color: Colors.transparent,
-                      child: SwitchListTile(
-                        title: const Text(
-                          'Disable Game Timers',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
-                        ),
-                        value: gs.gameState?.isTimerDisabled ?? false,
-                        activeColor: AppColors.brass,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (val) {
-                          gs.updateLobbySettings(isTimerDisabled: val);
-                        },
-                      ),
-                    ),
-                    Material(
-                      color: Colors.transparent,
-                      child: SwitchListTile(
-                        title: const Text(
-                          'Family-Friendly Decks Only',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
-                        ),
-                        value: _familyFriendlyOnly,
-                        activeColor: AppColors.brass,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (val) {
-                          setState(() {
-                            _familyFriendlyOnly = val;
-                          });
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Prompt Deck:',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory),
-                        ),
-                        DropdownButton<String>(
-                          value: selectedDeckId,
-                          dropdownColor: AppColors.groundRaised,
-                          style: const TextStyle(color: AppColors.brass, fontWeight: FontWeight.bold),
-                          items: availableDecks.map((deckId) {
-                            return DropdownMenuItem(
-                              value: deckId,
-                              child: Text(PromptDecks.getDeckName(deckId)),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              gs.updateLobbySettings(selectedDeckId: val);
-                            }
-                          },
-                        ),
-                      ],
                     ),
                   ],
                 ),
-              ),
-              if (players.length < 10)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
-                  child: TextButton(
-                    onPressed: () => gs.debugAddBots(),
-                    child: const Text('DEBUG: ADD 9 BOTS', style: TextStyle(color: Colors.white24, fontSize: 10)),
-                  ),
+                const SizedBox(height: 24),
+                DeckCarousel(
+                  selectedDeckId: selectedDeckId,
+                  availableDecks: availableDecks,
+                  onDeckSelected: (val) => gs.updateLobbySettings(selectedDeckId: val),
+                  isHost: isHost,
+                  gameService: gs,
                 ),
-
-              if (startWarning != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    startWarning,
-                    style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              Container(
-                decoration: allNonHostsReady && startWarning == null
-                    ? BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.brass.withOpacity(0.5),
-                            blurRadius: 16,
-                            spreadRadius: 1,
-                          )
+                const SizedBox(height: 24),
+                if (selectedDeckId == 'custom') ...[
+                  _buildCustomPromptsSection(theme, gs),
+                  const SizedBox(height: 16),
+                ],
+                if (isHost) ...[
+                  CrimsonShadowCard(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'HOUSE RULES',
+                          style: TextStyle(
+                            fontFamily: 'CormorantGaramond',
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.secondary,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Forgery Rounds:',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory),
+                            ),
+                            Row(
+                              children: [1, 2, 3, 4].map((r) {
+                                final isSelected = rounds == r;
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  child: ChoiceChip(
+                                    label: Text('$r'),
+                                    selected: isSelected,
+                                    selectedColor: AppColors.brass,
+                                    labelStyle: TextStyle(
+                                      color: isSelected ? AppColors.ink : AppColors.ivory,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    onSelected: (selected) {
+                                      if (selected) {
+                                        gs.updateLobbySettings(sabotageAnswersCount: r);
+                                      }
+                                    },
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Material(
+                          color: Colors.transparent,
+                          child: SwitchListTile(
+                            title: const Text(
+                              'Disable Game Timers',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                            ),
+                            value: gs.gameState?.isTimerDisabled ?? false,
+                            activeColor: AppColors.brass,
+                            contentPadding: EdgeInsets.zero,
+                            onChanged: (val) {
+                              gs.updateLobbySettings(isTimerDisabled: val);
+                            },
+                          ),
+                        ),
+                        Material(
+                          color: Colors.transparent,
+                          child: SwitchListTile(
+                            title: const Text(
+                              'Family-Friendly Decks Only',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                            ),
+                            value: _familyFriendlyOnly,
+                            activeColor: AppColors.brass,
+                            contentPadding: EdgeInsets.zero,
+                            onChanged: (val) {
+                              setState(() {
+                                _familyFriendlyOnly = val;
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         ],
-                      )
-                    : null,
-                child: PrimaryButton(
-                  text: 'START GAME',
-                  onPressed: startWarning == null ? () async {
-                    try {
-                      await gs.startGame(_selectedDeck);
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
-                        );
-                      }
-                    }
-                  } : null,
-                ),
+                      ),
+                    ),
+                    if (players.length < 10)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                        child: TextButton(
+                          onPressed: () => gs.debugAddBots(),
+                          child: const Text('DEBUG: ADD 9 BOTS', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                        ),
+                      ),
+                  ],
+                ],
               ),
-            ],
-            if (!isHost) ...[
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: PrimaryButton(
-                  text: gs.currentPlayer?.lobbyReady == true ? 'NOT READY' : "I'M READY",
-                  onPressed: () => gs.toggleLobbyReady(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Waiting for Host to start...',
-                style: TextStyle(fontStyle: FontStyle.italic, color: theme.colorScheme.secondary),
-              ),
-            ]
+            ),
+            DraggableScrollableSheet(
+              initialChildSize: 0.4,
+              minChildSize: 0.25,
+              maxChildSize: 0.7,
+              builder: (context, scrollController) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.parchment,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                    border: const Border(
+                      top: BorderSide(color: AppColors.brass, width: 3.0),
+                      left: BorderSide(color: AppColors.brass, width: 1.5),
+                      right: BorderSide(color: AppColors.brass, width: 1.5),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.5),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                        offset: const Offset(0, -4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 8, bottom: 8),
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: AppColors.brass.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Text(
+                          '${players.length} SUSPECTS JOINED',
+                          style: const TextStyle(
+                            fontFamily: 'CormorantGaramond',
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '($readyNonHostsCount/$totalNonHostsCount Ready)',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontFamily: 'Lora',
+                          fontStyle: FontStyle.italic,
+                          color: AppColors.ink.withOpacity(0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: GridView.builder(
+                          controller: scrollController,
+                          padding: const EdgeInsets.all(16),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.9,
+                          ),
+                          itemCount: players.length,
+                          itemBuilder: (context, index) {
+                            final player = players[index];
+                            return TweenAnimationBuilder<double>(
+                              key: ValueKey(player.id),
+                              tween: Tween<double>(begin: 0.0, end: 1.0),
+                              duration: const Duration(milliseconds: 500),
+                              curve: Curves.easeOutBack,
+                              builder: (context, scale, child) {
+                                return Transform.scale(
+                                  scale: scale,
+                                  child: Opacity(opacity: scale.clamp(0.0, 1.0), child: child),
+                                );
+                              },
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  PlayerAvatar(player: player, size: 48, showName: false),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    player.name,
+                                    style: const TextStyle(
+                                      fontFamily: 'Lora',
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.ink,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ],
         ),
-      ),
-    );
-  }  Widget _buildEntryForm(ThemeData theme) {
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isHost) ...[
+                  if (startWarning != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        startWarning,
+                        style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  Container(
+                    decoration: allNonHostsReady && startWarning == null
+                        ? BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.brass.withOpacity(0.5),
+                                blurRadius: 16,
+                                spreadRadius: 1,
+                              )
+                            ],
+                          )
+                        : null,
+                    child: PrimaryButton(
+                      text: 'START GAME',
+                      onPressed: startWarning == null ? () async {
+                        try {
+                          await gs.startGame(_selectedDeck);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                            );
+                          }
+                        }
+                      } : null,
+                    ),
+                  ),
+                ],
+                if (!isHost) ...[
+                  PrimaryButton(
+                    text: gs.currentPlayer?.lobbyReady == true ? 'NOT READY' : "I'M READY",
+                    onPressed: () => gs.toggleLobbyReady(),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Waiting for Host to start...',
+                    style: TextStyle(fontStyle: FontStyle.italic, color: theme.colorScheme.secondary),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+  }
+
+  Widget _buildEntryForm(ThemeData theme) {
     final ivoryColor = const Color(0xFFF5EEDB);
     final crimsonColor = theme.colorScheme.primary; // Burgundy/Crimson accent
     return Scaffold(
@@ -779,7 +889,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                         child: PlayerAvatar.buildChip(
                                           colorValue: isSelected ? crimsonColor.value : Colors.grey.shade700.value,
                                           avatarIndex: index,
-                                          size: 46,
+                                          size: 48,
                                         ),
                                       ),
                                     ),
@@ -1068,6 +1178,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     _nameController.dispose();
     _roomCodeController.dispose();
     _customPromptController.dispose();
+    _ravenWakeTimer?.cancel();
     super.dispose();
   }
 }

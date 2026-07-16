@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/game_service.dart';
+import '../services/audio_service.dart';
 import '../models/player_state.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/lobby_background.dart';
@@ -16,6 +18,9 @@ import '../theme/app_text_styles.dart';
 import '../widgets/gaslight_route.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_motion.dart';
+import '../widgets/lamp_loading.dart';
+import '../widgets/shared_ui.dart';
+import '../widgets/raven_mascot.dart';
 
 class GameOverScreen extends StatefulWidget {
   const GameOverScreen({super.key});
@@ -27,6 +32,60 @@ class GameOverScreen extends StatefulWidget {
 class _GameOverScreenState extends State<GameOverScreen> {
   final GlobalKey _globalKey = GlobalKey();
   bool _isSharing = false;
+  bool _ceremonyComplete = false;
+  bool _timerStarted = false;
+  final Set<int> _soundedIndices = {};
+  Timer? _ceremonyTimer;
+  RavenState _ravenState = RavenState.fly;
+  Timer? _ravenFlyTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _ravenFlyTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) {
+        setState(() {
+          _ravenState = RavenState.idle;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _ceremonyTimer?.cancel();
+    _ravenFlyTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startCeremonyTimer(int totalCount) {
+    if (AppMotion.reduce(context)) {
+      setState(() {
+        _ceremonyComplete = true;
+      });
+      return;
+    }
+
+    final delayMs = 400 + AppMotion.ceremonyStep.inMilliseconds * (totalCount - 1) + 400;
+    _ceremonyTimer = Timer(Duration(milliseconds: delayMs), () {
+      if (mounted) {
+        setState(() {
+          _ceremonyComplete = true;
+        });
+      }
+    });
+  }
+
+  void _playHonorSound(int index, int totalCount) {
+    if (AppMotion.reduce(context)) return;
+    if (_soundedIndices.contains(index)) return;
+    _soundedIndices.add(index);
+    if (index == totalCount - 1) {
+      AudioService.instance.playReveal();
+    } else {
+      AudioService.instance.playUnmaskSuccess();
+    }
+  }
 
   Future<void> _shareCaseFile() async {
     if (_isSharing) return;
@@ -86,7 +145,7 @@ class _GameOverScreenState extends State<GameOverScreen> {
     final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
 
     if (activePlayers.isEmpty) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(backgroundColor: AppColors.ground, body: Center(child: LampLightingIndicator()));
     }
 
     // Determine Superlatives by Metric Honors
@@ -125,6 +184,16 @@ class _GameOverScreenState extends State<GameOverScreen> {
       assignedIds.add(runnerUp.id);
     }
 
+    int totalCount = 1 + (trickster != null ? 1 : 0) + (runnerUp != null ? 1 : 0) + (gullible != null ? 1 : 0);
+    if (!_timerStarted) {
+      _timerStarted = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _startCeremonyTimer(totalCount);
+        }
+      });
+    }
+
     return Scaffold(
       backgroundColor: AppColors.ground,
       appBar: AppBar(
@@ -140,7 +209,8 @@ class _GameOverScreenState extends State<GameOverScreen> {
       body: Stack(
         children: [
           const EmberBackdrop(),
-          Center(
+          SafeArea(
+            child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
               child: Column(
@@ -155,12 +225,17 @@ class _GameOverScreenState extends State<GameOverScreen> {
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: AppColors.brass, width: 2),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'THE NIGHT\'S HONORS',
-                            style: theme.textTheme.headlineMedium?.copyWith(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            RavenMascot(
+                              state: _ravenState,
+                              size: 72,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'THE NIGHT\'S HONORS',
+                              style: theme.textTheme.headlineMedium?.copyWith(
                               color: theme.colorScheme.secondary, // Gold
                               fontWeight: FontWeight.bold,
                               fontFamily: 'CormorantGaramond',
@@ -175,23 +250,16 @@ class _GameOverScreenState extends State<GameOverScreen> {
                     ),
                   ),
                   const SizedBox(height: 30),
-                  ElevatedButton.icon(
-                    icon: const ThematicIcon(type: ThematicIconType.envelope, color: AppColors.ivory),
-                    label: Text(
-                      _isSharing ? 'Generating dossier...' : 'Share Case File',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary, // Burgundy
-                      foregroundColor: const Color(0xFFF5EEDB), // Ivory
-                      minimumSize: const Size(double.infinity, 56),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: theme.colorScheme.secondary, width: 2), // Gold
-                      ),
-                      elevation: 8,
-                    ),
-                    onPressed: _isSharing ? null : _shareCaseFile,
+                  PrimaryButton(
+                    icon: _isSharing
+                        ? null
+                        : const ThematicIcon(type: ThematicIconType.envelope, color: AppColors.ivory),
+                    text: !_ceremonyComplete
+                        ? 'Engraving…'
+                        : (_isSharing ? 'Generating dossier...' : 'Share Case File'),
+                    loading: _isSharing,
+                    showTextOnLoading: true,
+                    onPressed: (!_ceremonyComplete || _isSharing) ? null : _shareCaseFile,
                   ),
                   const SizedBox(height: 20),
                   TextButton(
@@ -206,8 +274,9 @@ class _GameOverScreenState extends State<GameOverScreen> {
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    ),
     );
   }
 
@@ -218,12 +287,21 @@ class _GameOverScreenState extends State<GameOverScreen> {
     PlayerState? runnerUp, 
     PlayerState? gullible
   ) {
+    final honorsSequence = <String>[];
+    if (gullible != null) honorsSequence.add('gullible');
+    if (runnerUp != null) honorsSequence.add('runnerUp');
+    if (trickster != null) honorsSequence.add('trickster');
+    honorsSequence.add('mastermind');
+
+    final totalCount = honorsSequence.length;
+    int getIndex(String type) => honorsSequence.indexOf(type);
+
     List<Widget> cards = [];
-    int animIndex = 0;
 
     cards.add(
       StaggeredPlaque(
-        index: animIndex++,
+        index: getIndex('mastermind'),
+        onComplete: () => _playHonorSound(getIndex('mastermind'), totalCount),
         child: _plaque(
           theme: theme,
           title: 'THE MASTERMIND',
@@ -241,7 +319,8 @@ class _GameOverScreenState extends State<GameOverScreen> {
       );
       cards.add(
         StaggeredPlaque(
-          index: animIndex++,
+          index: getIndex('trickster'),
+          onComplete: () => _playHonorSound(getIndex('trickster'), totalCount),
           child: _plaque(
             theme: theme,
             title: 'THE DUPLICITOUS',
@@ -260,7 +339,8 @@ class _GameOverScreenState extends State<GameOverScreen> {
       );
       cards.add(
         StaggeredPlaque(
-          index: animIndex++,
+          index: getIndex('runnerUp'),
+          onComplete: () => _playHonorSound(getIndex('runnerUp'), totalCount),
           child: _plaque(
             theme: theme,
             title: 'THE RUNNER UP',
@@ -279,7 +359,8 @@ class _GameOverScreenState extends State<GameOverScreen> {
       );
       cards.add(
         StaggeredPlaque(
-          index: animIndex++,
+          index: getIndex('gullible'),
+          onComplete: () => _playHonorSound(getIndex('gullible'), totalCount),
           child: _plaque(
             theme: theme,
             title: 'THE GULLIBLE',
@@ -561,11 +642,13 @@ class _StaticEmberPainter extends CustomPainter {
 class StaggeredPlaque extends StatefulWidget {
   final int index;
   final Widget child;
+  final VoidCallback? onComplete;
 
   const StaggeredPlaque({
     super.key,
     required this.index,
     required this.child,
+    this.onComplete,
   });
 
   @override
@@ -574,32 +657,52 @@ class StaggeredPlaque extends StatefulWidget {
 
 class _StaggeredPlaqueState extends State<StaggeredPlaque> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _slideAnimation;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _rotationAnimation;
   late final Animation<double> _fadeAnimation;
+  Timer? _startTimer;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    _slideAnimation = Tween<double>(begin: 30.0, end: 0.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    _scaleAnimation = Tween<double>(begin: 1.15, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    );
+    _rotationAnimation = Tween<double>(begin: -0.03, end: 0.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
 
-    Future.delayed(Duration(milliseconds: 200 * widget.index), () {
-      if (mounted) {
-        _controller.forward();
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        widget.onComplete?.call();
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (AppMotion.reduce(context)) {
+        // under reduce-motion we return child directly in build
+      } else {
+        final delay = 400 + AppMotion.ceremonyStep.inMilliseconds * widget.index;
+        _startTimer = Timer(Duration(milliseconds: delay), () {
+          if (mounted) {
+            _controller.forward();
+          }
+        });
       }
     });
   }
 
   @override
   void dispose() {
+    _startTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -615,8 +718,11 @@ class _StaggeredPlaqueState extends State<StaggeredPlaque> with SingleTickerProv
       builder: (context, child) {
         return Opacity(
           opacity: _fadeAnimation.value,
-          child: Transform.translate(
-            offset: Offset(0, _slideAnimation.value),
+          child: Transform(
+            transform: Matrix4.identity()
+              ..scale(_scaleAnimation.value)
+              ..rotateZ(_rotationAnimation.value),
+            alignment: Alignment.center,
             child: child,
           ),
         );

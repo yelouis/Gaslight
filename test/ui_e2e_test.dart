@@ -116,7 +116,7 @@ void main() {
 
       // 6. Verify transition directly to TRUTH phase (as 1 round was configured)
       expect(find.text('TRUTH'), findsOneWidget);
-      expect(find.text('WRITE YOUR TRUTH'), findsOneWidget);
+      expect(find.text('YOUR TRUTH'), findsOneWidget);
       print('Successfully transitioned to TRUTH phase.');
 
       // Dismiss dealt card overlay first

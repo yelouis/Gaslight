@@ -43,9 +43,10 @@ class AudioService {
     }
   }
 
-  Future<void> playVote() async {
+  Future<void> playVote({double volume = 1.0}) async {
     if (!soundEnabled) return;
     try {
+      await votePlayer.setVolume(volume);
       await votePlayer.stop();
       await votePlayer.play(
         AssetSource('audio/wax_stamp.wav'),

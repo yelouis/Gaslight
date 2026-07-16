@@ -27,6 +27,11 @@ class FakeAudioPlayer implements AudioPlayer {
   }
 
   @override
+  Future<void> setVolume(double volume) async {
+    // no-op
+  }
+
+  @override
   Future<void> dispose() async {
     // no-op
   }
