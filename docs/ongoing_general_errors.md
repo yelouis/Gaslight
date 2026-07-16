@@ -220,13 +220,187 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-> **No open defects.** Everything selected to date is delivered and verified (July 15 — `flutter analyze` 0 · `flutter test` 30/30 · emulator suite 28/28). A **UI & UX design review** (below) proposes the next round of polish — awaiting your selections.
+> **No open defects; nothing awaiting selection.** Battery as of July 16: `flutter analyze` 0 · `flutter test` 42/42 · emulator suite 28/28. **In flight (all approved):** the 13-item build queue **UF1–UF3 → M1–M5 → V1–V5** — complete design specs in `docs/agent_execution_guide.md` (M2 fixes the confirmed small-phone roster-collapse bug).
 
 ---
 
-## 🎨 UI & UX Design Review (July 15) — ✅ All Selected (Option A ×8)
+## 📱 Mobile-First Audit (July 16) — ✅ All Selected (Option A ×5)
 
-> **Selections locked (July 15): U1–U8 all Option A.** The full design specification — exact durations, curves, dimensions, color tokens, copy strings, state guards, reduce-motion fallbacks, and per-item validation — is in `docs/agent_execution_guide.md` (execution order **U0 prep → U4 → U5 → U1 → U7 → U2 → U8 → U3 → U6**). Original proposals retained below for the record.
+> **Selections locked (July 16): M1–M5 all Option A.** Full design specs (exact placements, bar recipe, clamp values, hit-area fixes, per-item validation incl. the 360×640 regression test) are in `docs/agent_execution_guide.md` **Part B**. Original proposals retained below for the record.
+
+> Gaslight ships as a **phone app (Android + iOS)** — so I audited every screen against phone realities: small portrait viewports (360×640 dp worst case), software keyboards, system font scaling, gesture-nav safe areas, and thumb-sized touch targets. **What already passes:** the reveal screen scrolls correctly, the craft write view scrolls, the entry form uses the right scroll pattern, vote options are in a scrollable grid, and the reaction tray respects the bottom safe area. **Five gaps below** — each is a place the current design assumes a bigger or friendlier screen than a phone guarantees.
+
+---
+
+### Proposal M1: Lock the App to Portrait on Phones
+**The gap:** The app does not lock orientation — iPhone's `Info.plist` allows landscape and there's no `setPreferredOrientations` call. Every screen is a portrait column design; rotating a phone mid-game (very easy to do accidentally lying on a couch) squeezes the lobby, craft, and reveal into a ~360 dp-tall letterbox where nothing fits. Party phone games (Jackbox-likes, among others) lock portrait as standard.
+
+**Options:**
+- **Option A (recommended)**: Lock **portrait-only on phones** — `SystemChrome.setPreferredOrientations([portraitUp])` in `main()` before `runApp`, remove the two landscape entries from `Info.plist` (iPhone section only), set `android:screenOrientation="portrait"` in the manifest. Keep iPad/tablet flexible (`~ipad` plist section untouched).
+  - *Pros*: One-time, three-file change; instantly eliminates a whole class of layout breakage; matches genre convention.
+  - *Cons*: Users who genuinely want landscape typing lose it (rare on phones; the keyboard covers most of a landscape screen anyway).
+- **Option B**: Support landscape properly with adaptive two-pane layouts per screen.
+  - *Pros*: Maximum flexibility.
+  - *Cons*: Weeks of layout work for a mode few party-game players use; every future screen pays the tax.
+
+*Effort:* Trivial (A). Your selection: Option A.
+
+---
+
+### Proposal M2: The Waiting Room Collapses on Small Phones — Make It a Scrollable Sheet
+**The gap (a real layout bug):** The lobby waiting room is a fixed `Column`: header + brass plaque (84 dp) + counts + **`Expanded` player roster** + custom-prompts card + house-rules card + START/READY buttons. Everything except the roster is fixed-height, so on a small phone, **as the host with the Custom Deck selected, the fixed sections total roughly the whole screen — the player roster (the point of the screen!) shrinks toward zero height**, and on the smallest devices the column can overflow outright. The design silently assumed a tall viewport.
+
+**Options:**
+- **Option A (recommended)**: Restructure the waiting room as one scrollable surface (`ListView`/`CustomScrollView`): plaque → roster as a `shrinkWrap` grid (never collapses) → custom prompts → house rules — and **pin the primary action (START GAME / I'M READY) in a bottom bar** (`bottomNavigationBar` with SafeArea) so it's always visible and thumb-reachable regardless of content height.
+  - *Pros*: Fixes the collapse *and* upgrades ergonomics (primary action in the thumb zone is the core mobile-first pattern); scales to 10-player rosters and future lobby content.
+  - *Cons*: Moderate restructure of the screen's build method; bottom-bar styling must match the theme.
+- **Option B**: Minimal fix — make the house-rules and custom-prompts cards collapsible (collapsed by default on screens < 700 dp tall), keep the current column.
+  - *Pros*: Small diff.
+  - *Cons*: The roster still competes with whatever is expanded; START still buried mid-column.
+
+*Effort:* Medium (A) / Low (B). Your selection: Option A.
+
+---
+
+### Proposal M3: System Font Scaling Can Break Fixed-Height Widgets
+**The gap:** Many users run Android/iOS at 130–200% system font size. The app never clamps `textScaler` and several widgets have **fixed heights sized for 100% text**: the brass plaque (height 84), ballot cards (34×48), honor plaques (aspect-ratio grid), the dealt-card face. At 150%+ these clip or overflow their frames — a top source of one-star "text is cut off" reviews.
+
+**Options:**
+- **Option A (recommended)**: Clamp the app-wide text scale to **1.0–1.3** (`MediaQuery` override in the `MaterialApp.builder`: `textScaler: TextScaler.linear(clamp(1.0, 1.3))`) **and** audit the four fixed-height widgets above to tolerate 1.3 (swap fixed heights for min-heights/padding where cheap).
+  - *Pros*: Industry-standard compromise — honors accessibility up to 130% while guaranteeing layouts; the audit makes the most-visible widgets genuinely elastic.
+  - *Cons*: Users at 200% get 130% (still larger than default, but capped — an explicit accessibility trade-off worth acknowledging).
+- **Option B**: Clamp only, no widget audit.
+  - *Pros*: Three lines.
+  - *Cons*: 1.3 can still clip the tightest fixed frames (plaque code at letterSpacing 12).
+
+*Effort:* Low (B) / Low–Medium (A). Your selection: Option A.
+
+---
+
+### Proposal M4: Touch Targets Below the 44–48 dp Minimum
+**The gap:** Apple's HIG requires ≥44 pt and Material ≥48 dp tappable areas. Confirmed under-size: the plaque's **envelope share icon** (22 dp icon + small padding ≈ 34–38 dp) and the custom-prompt **+ / × circle buttons** (24 dp). On a phone these produce real missed taps — especially the share icon sitting next to the copy-tap plaque (mis-taps trigger copy instead of share).
+
+**Options:**
+- **Option A (recommended)**: Fix the known offenders (wrap in 48 dp `SizedBox`/`InkWell` hit areas without growing the visuals) **and** sweep every `InkWell`/`GestureDetector`/`IconButton` in `lib/` asserting ≥44 dp effective hit area (a quick manual audit table in the PR).
+  - *Pros*: Cheap; eliminates a whole niggle class before store review.
+  - *Cons*: None material.
+- **Option B**: Fix only the two confirmed offenders.
+  - *Pros*: Ten minutes.
+  - *Cons*: Unswept surfaces may hide more (e.g., reroll text button, sigil picker).
+
+*Effort:* Low. Your selection: Option A
+
+---
+
+### Proposal M5: Safe-Area & Thumb-Zone Pass
+**The gap:** Only the reveal screen uses `SafeArea` (for the reaction tray). On gesture-nav Androids and notched iPhones, bottom-anchored content on the other screens (game-over RETURN TO LOBBY, lobby buttons, vote CONFIRM) can sit under the home indicator / gesture bar; and several primary actions live mid-column where tall-phone thumbs don't rest. One pass: wrap every screen body's bottom edge in `SafeArea`, and anchor each screen's single primary action (SUBMIT / CONFIRM VOTE / I'M READY / CONTINUE) toward the bottom on tall screens (they can stay in-flow on short ones via `LayoutBuilder`).
+
+**Options:**
+- **Option A (recommended)**: Full pass — SafeArea everywhere + primary-action bottom anchoring (combined with M2's bottom bar this gives every screen a consistent "action lives at your thumb" grammar).
+  - *Pros*: The single biggest one-hand-usability upgrade; consistent muscle memory across phases.
+  - *Cons*: Touches every screen's layout (low risk each, but broad).
+- **Option B**: SafeArea wrapping only; leave action placement as-is.
+  - *Pros*: Small, purely defensive.
+  - *Cons*: Skips the ergonomic half of mobile-first.
+
+*Effort:* Medium (A) / Low (B). Your selection: Option A.
+
+---
+
+## 🎭 Character & Custom Widget Proposals (July 16) — ✅ All Selected (Option A ×5)
+
+> **Selections locked (July 16): V1–V5 all Option A.** Full design specs (raven anatomy/states/perches, sigil micro-animations + one-at-a-time ticker, dossier folder anatomy + debounced carousel selection, lamp intro/sustain choreography, medallion motifs with unchanged wire format) are in `docs/agent_execution_guide.md` **Part C** (execution order: V4 → V5 → V2 → V3 → V1, after UF and M). Original proposals retained below for the record.
+
+> The U-pass gave every screen the same *stage dressing*. This round proposes **inhabitants** — a mascot, living icons, and bespoke widgets that replace the last generic elements with drawn, animated ones. All are client-only, all procedural (CustomPaint, no image assets, consistent with `ThematicIcon`/`WaxSealBadge`), all reduce-motion aware. Ordered by expected character-per-effort.
+
+---
+
+### Proposal V1: A Mascot — "The Lamplighter's Raven"
+**What it adds:** A small procedurally-drawn raven who *runs the parlor* — perched on a corner of the UI, reacting to the game: asleep on the lobby mantel (head tucked, slow breathing), head-tilting curiously while you write, hopping once when a ballot seals, ruffling feathers + a single silent "caw" beak-open when the Truth is revealed, and taking flight across the screen to deliver the game-over plaques. A mascot gives the game a face for its personality — the single biggest "this app has charm" signal a party game can add, and a natural anchor for future onboarding/tips.
+
+**Options:**
+- **Option A (recommended)**: Full reactive raven — one `RavenMascot` widget with 5 states (sleep / idle-tilt / hop / ruffle-caw / fly-across), mounted on lobby, craft-waiting, vote-reader, reveal, and game-over screens.
+  - *Pros*: Charm across the whole loop; states map to events the client already knows; one widget, five poses.
+  - *Cons*: The most custom animation work in this list; a badly-drawn raven is worse than none (budget iteration time on the silhouette).
+- **Option B**: Cameo raven — reveal + game-over only (ruffle-caw at the Truth flip; fly-in delivering the plaques).
+  - *Pros*: The two highest-drama moments get the charm at a third of the work.
+  - *Cons*: Feels like an easter egg rather than a character.
+- **Option C**: No mascot — keep the world unpopulated.
+  - *Pros*: Zero effort/risk; some prefer the austere look.
+  - *Cons*: Passes on the strongest personality lever available.
+
+*Effort:* Medium–High (A) / Low–Medium (B). Your selection: Option A
+
+---
+
+### Proposal V2: Living Avatar Sigils
+**What it adds:** The six player sigils (flame, moth, key, raven, moon, hourglass) are static engravings. Give each a **2-second idle micro-animation**, played subtly and infrequently (every 6–10 s, one at a time, never in sync): the flame gutters, the moth's wings flutter once, the key glints along its shaft, the raven blinks, the moon drifts through a sliver of phase, the hourglass drops a grain. Players stare at avatar rows constantly (lobby, waiting, reveal) — tiny life there makes the whole game feel hand-crafted.
+
+**Options:**
+- **Option A (recommended)**: All six sigils animated, everywhere avatars render, driven by one shared low-frequency ticker (perf-safe), reduce-motion → static.
+  - *Pros*: Blanket charm with one mechanism; no layout changes at all.
+  - *Cons*: Six small painters to choreograph; must stay *subtle* (if playtesters notice them consciously every time, they're too loud).
+- **Option B**: Animate only in "spotlight" contexts — the active reader's halo avatar and the lobby roster.
+  - *Pros*: Half the surfaces to test; draws the eye where the game wants it.
+  - *Cons*: Inconsistent — sigils die when they leave the spotlight.
+
+*Effort:* Medium. Your selection: Option A
+
+---
+
+### Proposal V3: Deck Selection as Case Files
+**What it adds:** Deck choice — the host's most flavorful decision — is currently a plain dropdown. Replace it with a horizontal **dossier carousel**: each deck is a drawn manila-parchment case folder, string-tied, with a wax rating seal (brass "PG" seal for the relatable decks, oxblood "R" for NSFW, near-black seal for dark humor) and a 2-line sample prompt peeking out; the Custom deck is a blank folder with a quill. Swipe/tap to choose; the chosen folder pulls forward with the stamp-press animation.
+
+**Options:**
+- **Option A (recommended)**: Full dossier carousel replacing the dropdown (host) with a read-only "chosen file" view for non-hosts.
+  - *Pros*: Turns a form control into a moment; the rating seals communicate content maturity at a glance (nice for the App Store audience question).
+  - *Cons*: A new widget + selection state plumbing; must stay usable with 7+ decks (scroll affordance).
+- **Option B**: Keep the dropdown; add per-deck seal icons + maturity color in the item rows.
+  - *Pros*: One-file change; still communicates maturity.
+  - *Cons*: Still a form, not a moment.
+
+*Effort:* Medium (A) / Low (B). Your selection: Option A
+
+---
+
+### Proposal V4: Custom Loading States — "Lighting the Lamp"
+**What it adds:** The last two generic moments: the app-boot/route guards (`state == null` → stock spinner) and the submit button's in-flight spinner. Replace with: (a) boot — a 1.5 s loop of a match striking and the gaslamp catching (drawn, 3 beats: spark → flame catches → glow blooms), with the word `'LIGHTING THE LAMPS…'` in `sectionLabel`; (b) submit-in-flight — the button label swaps to a 3-dot ink-blot ellipsis that fills left-to-right (400 ms/dot loop). Nothing generic remains anywhere in the app.
+
+**Options:**
+- **Option A (recommended)**: Both (boot lamp + button ink-dots).
+  - *Pros*: Completes the "no stock widgets" sweep begun by U2/U5; the boot moment sets tone before the lobby even appears.
+  - *Cons*: The lamp painter is new bespoke work for a screen users see ~2 s.
+- **Option B**: Button ink-dots only; keep the plain spinner (brass-tinted) at boot.
+  - *Pros*: Tiny; covers the moment users actually stare at (their own submit).
+  - *Cons*: First impression of the app remains a stock spinner.
+
+*Effort:* Low–Medium (A) / Low (B). Your selection: Option A
+
+---
+
+### Proposal V5: Victorian Reaction Medallions
+**What it adds:** The emoji reactions (😂 🤨 🐍 👏 🔥) float up as raw OS emoji — the only modern-cartoon element left on the reveal screen. Replace each with a **drawn brass cameo medallion** carrying an engraved motif: laughing theater mask (😂), raised monocle (🤨), coiled serpent (🐍), clapping gloves (👏), flame (🔥). Same tray, same float-up behavior, same player-name tag — just re-skinned tokens that match the world (and render identically on every platform, unlike emoji).
+
+**Options:**
+- **Option A (recommended)**: Five engraved medallion painters replacing the emoji in both the tray and the floating animation.
+  - *Pros*: The reveal — the game's showcase screen — loses its last off-theme element; consistent cross-platform rendering.
+  - *Cons*: Five small painters; motifs must stay readable at 28 dp (test at size).
+- **Option B**: Keep the emoji glyphs but mount each in a 32 dp brass ring with a parchment disc behind it.
+  - *Pros*: One generic frame widget; emoji stay instantly legible.
+  - *Cons*: Half-measure — modern emoji in Victorian frames reads as intentional kitsch (which may be fine, but it *is* a look).
+
+*Effort:* Medium (A) / Low (B). Your selection: Option A
+
+---
+
+## 🎨 UI & UX Design Review (July 15) — ✅ Delivered (verification July 16: ~85% faithful, finishing punch list in flight)
+
+> **Verification (July 16, commits `fb05415`…`0f07a5d`):** all nine U-commits landed and the battery is green (`flutter analyze` 0 · `flutter test` 42/42 · emulator 28/28). Verified faithful: **U0** (motion tokens, flip extraction, dead code deleted), **U4** (0 `serif`, 0 "crew", copy table applied, matchers updated), **U5** (0 stock `Icons.` in screens/widgets; `WaxSealBadge` + `ledger`/`envelope`/`redraw` painters), **U1** (flicker `TweenSequence` route via `onGenerateRoute`), **U7** (plaque + copy + share), **U2** (candle + waiting-on row, spinners only in boot guards). **U3/U8/U6 delivered with gaps** — the approved design's finishing items are specced as **UF1–UF3** in `agent_execution_guide.md` (no new decisions needed; already authorized under Option A):
+> - **UF1 (U6):** honor reveal order is inverted (Mastermind enters *first* at a 200 ms cascade — spec: Gullible→RunnerUp→Trickster→**Mastermind last** at 400+900·i ms); ceremony has **no sounds** (spec: chime ×3 + bell on the winner); share button isn't gated on ceremony completion. (Deviations kept as improvements: metric subtitles like "MOST PLAYERS DECEIVED", "N Fooled".)
+> - **UF2 (U8):** missing the `'N of M ballots sealed'` caption and the quiet per-seal stamp (`playVote` gained no `volume` param; no once-per-voter sound guard).
+> - **UF3 (U3):** the E5 "inkwell" field restyle was skipped (box style + "Pen your response here..." remains — spec: brass underline + "Dip the quill…"); the pinned target header is text-only (spec: target's avatar pinned beside it). Replay guard verified correct.
+>
+> Original proposals retained below for the record.
 
 > A screen-by-screen design pass against the "gas-lit Victorian parlor" north star (`design_ui_direction.md`), grounded in the **current** code. The foundation is strong (palette tokens, Cormorant titles on the reveal, lamp-pool gradients, card flips, wax-seal select, halo, stamp press, SFX). What's left is **consistency** — the theme is applied unevenly across screens — and a handful of **animation moments** that would make the game feel alive. Ordered by impact-to-effort. All items are client-only (no backend changes).
 >
