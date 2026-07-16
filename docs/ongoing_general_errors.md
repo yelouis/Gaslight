@@ -220,7 +220,135 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-> **No unresolved issues or in-flight decisions remain.** Everything is delivered and verified (July 15 — `flutter analyze` 0 · `flutter test` 30/30 · emulator suite 28/28).
+> **No open defects.** Everything selected to date is delivered and verified (July 15 — `flutter analyze` 0 · `flutter test` 30/30 · emulator suite 28/28). A **UI & UX design review** (below) proposes the next round of polish — awaiting your selections.
+
+---
+
+## 🎨 UI & UX Design Review (July 15) — Awaiting Selection
+
+> A screen-by-screen design pass against the "gas-lit Victorian parlor" north star (`design_ui_direction.md`), grounded in the **current** code. The foundation is strong (palette tokens, Cormorant titles on the reveal, lamp-pool gradients, card flips, wax-seal select, halo, stamp press, SFX). What's left is **consistency** — the theme is applied unevenly across screens — and a handful of **animation moments** that would make the game feel alive. Ordered by impact-to-effort. All items are client-only (no backend changes).
+>
+> *Hygiene note (no selection needed — fold into whichever item lands first): `lib/widgets/atmosphere_background.dart` and `lib/widgets/swipeable_card.dart` are confirmed dead code (unreferenced) — delete them; audit `lib/widgets/prompt_deck.dart` too.*
+
+---
+
+### Proposal U1: The "Gaslight Flicker" Scene Change (phase-transition animation)
+**What it improves:** Every phase change (lobby→forgery→truth→vote→reveal→game over) currently uses the stock page slide — the most-seen animation in the game is the least thematic one. Replace it with a signature **gaslight scene change**: the screen dims as if the lamp gutters, flickers once, and brightens onto the new scene (a fast fade-through-dark with a 1–2 frame brightness stutter, ~450 ms, honoring reduce-motion). One custom transition instantly ties every screen together — highest thematic payoff per line of code in this list.
+
+**Options:**
+- **Option A (recommended)**: One shared custom route transition used by all phase navigation, plus the AppBar title cross-fading in with a letter-spacing settle.
+  - *Pros*: Single `PageRouteBuilder`/theme change covers the whole game; the game suddenly "has a director"; trivially reduce-motion aware (falls back to plain fade).
+  - *Cons*: Must verify it doesn't fight the E2E tests' navigation waits (they already tolerate transition delays).
+- **Option B**: Keep stock transitions; add the flicker only at the two dramatic seams (truth→vote and vote→reveal).
+  - *Pros*: Half the surface area to test.
+  - *Cons*: Inconsistent — the seam between "themed" and "stock" transitions is exactly what makes apps feel unfinished.
+
+*Effort:* Low. Your selection: Proceed with Option A.
+
+---
+
+### Proposal U2: Kill the Spinner — Themed Waiting Moments with Social Pressure
+**What it improves:** The single most-stared-at UI in the game — the "HOLDING TIGHT..." / "YOUR VOTE IS LOCKED IN" waiting states — is a stock `CircularProgressIndicator`. Two upgrades in one: (a) replace the spinner with a small **thematic idle animation** (a guttering candle flame or a swinging pocket watch, drawn procedurally like the existing `ThematicIcon`s); (b) show **who everyone is waiting on** — the avatars of not-yet-ready players, dimmed, with ready players stamped with a small wax check. The data (`readyPlayers` + avatars) is already on every client. Naming the laggard is a party-game classic: gentle social pressure that speeds rounds up and gets a laugh.
+
+**Options:**
+- **Option A (recommended)**: Candle/watch idle animation **+** the waiting-on avatar row (ready = sealed, unready = dimmed & gently pulsing) in craft and vote waiting views.
+  - *Pros*: Turns dead air into a social beat; kills the last stock-Material tell on the most-seen screen; reuses `PlayerAvatar`.
+  - *Cons*: Mild "call-out" pressure (that's the point, but worth knowing); the idle animation is new custom-paint work.
+- **Option B**: Avatar row only, keep a simple pulse instead of a custom flame/watch.
+  - *Pros*: 80% of the value (the social layer) with no new painter.
+  - *Cons*: The waiting state still reads generic without the thematic centerpiece.
+
+*Effort:* Low–Medium. Your selection: Proceed with Option A.
+
+---
+
+### Proposal U3: "The Card Is Dealt" — Craft-Screen Entrance & Rotation Handoff
+**What it improves:** In the forgery phase, when rotations advance the prompt just *swaps in place* — players often don't register that they're now writing for a **different person**, and the game's central fantasy ("someone's card was slid across the table to you") has no physical moment. Add: (1) a brief **handoff interstitial** when a rotation starts — the old card slides off, a face-down card slides in from the side and flips up revealing "FORGING FOR **BOB**" with Bob's token, then settles into the prompt view (~1.2 s, skippable by tap, reduce-motion → instant); (2) the target's avatar stays pinned beside the prompt so "whose card is this" is always visible while typing.
+
+**Options:**
+- **Option A (recommended)**: Handoff interstitial + pinned target avatar + the text field restyled to the long-specified "inkwell" look (thin brass underline instead of the full outline box — E5's one unshipped piece).
+  - *Pros*: Fixes a real comprehension gap (wrong-target forgeries) with the game's most on-theme animation; completes E5.
+  - *Cons*: The interstitial must not delay input focus (auto-focus the field as it settles).
+- **Option B**: Pinned target avatar + a snackbar-style "Now forging for Bob" notice; no card animation.
+  - *Pros*: Fixes comprehension with minimal motion work.
+  - *Cons*: Misses the tactile "card dealt" moment that sells the theme.
+
+*Effort:* Medium. Your selection: Proceed with Option A.
+
+---
+
+### Proposal U4: Typography & Voice Unification Pass
+**What it improves:** The reveal got the full treatment (Cormorant, letter-spaced, dramatic) but the rest lags: **FORGERY / TRUTH / THE VOTE titles are plain 18 px text** while THE REVEAL is Cormorant; **9 spots still use generic `fontFamily: 'serif'`** (vote cards, reveal answers, lobby labels) instead of Lora/Cormorant; and the copy voice drifts — "CREW STATION" / "WAITING FOR CREW..." reads nautical, not Victorian parlor. One pass: every phase title in Cormorant at a consistent size; every `'serif'` replaced with the real fonts; and a copy sweep to the parlor voice (e.g. CREW STATION → **"THE GUEST LEDGER"**, WAITING FOR CREW → **"ASSEMBLING THE SUSPECTS…"**, HOLDING TIGHT → **"THE INK DRIES…"**).
+
+**Options:**
+- **Option A (recommended)**: Typography unification **+** the copy/voice sweep (final wording list to be written into the design doc for your approval inside the PR).
+  - *Pros*: Cheapest way to make the whole app feel authored by one hand; zero layout risk.
+  - *Cons*: Copy changes touch the E2E journey docs' quoted strings (update `e2e_testing_journeys.md` + any test string matchers in the same commit).
+- **Option B**: Typography only; leave all copy as-is.
+  - *Pros*: Zero test-string churn.
+  - *Cons*: "CREW" keeps breaking the fiction on the two screens every game starts with.
+
+*Effort:* Low. Your selection: Proceed with Option A.
+
+---
+
+### Proposal U5: Finish the Icon Sweep — and a Real Wax Seal
+**What it improves:** The icon overhaul missed a pocket of stock Material glyphs (13 uses): most visibly, **the wax seal on vote cards and the truth badge is literally `Icons.verified`** — a modern checkmark badge at the heart of the game's signature motif. Draw one proper **procedural wax-seal painter** (irregular blob, pressed ring, tiny highlight — same CustomPaint approach as `app_icons.dart`) and use it for the vote-select stamp, the card watermark, and the truth badge; then sweep the stragglers (`Icons.person`, `share`, `lock`, `gavel`, `hourglass_empty`, `menu_book`, `add_circle`, `delete`, `check`, `refresh`, `star`, `loop`) onto `ThematicIcon` equivalents.
+
+**Options:**
+- **Option A (recommended)**: Wax-seal painter + full 13-icon sweep.
+  - *Pros*: Closes E6 completely; the seal is the brand — it deserves better than a checkmark; no stock glyph left anywhere in the play flow.
+  - *Cons*: A dozen small touchpoints to retest visually.
+- **Option B**: Wax-seal painter only (vote cards + truth badge); leave utility icons stock.
+  - *Pros*: Concentrates effort on the highest-visibility fake.
+  - *Cons*: `Icons.person` still greets every player on the entry form.
+
+*Effort:* Low–Medium. Your selection: Proceed with Option A.
+
+---
+
+### Proposal U6: Game Over as a Ceremony — "The Honors Are Read"
+**What it improves:** The final screen — the payoff of the whole night — currently just *appears*: a static grid of four cards with **emoji titles (🏆 🃏 🥈 🤡) that clash with the engraved Victorian aesthetic**. Make it a 5-second ceremony: honors revealed **one by one** (frame swings/fades in, plaque engraves, `unmask_success` chime per reveal, Mastermind last with the bell), styled as **brass-framed portrait plaques on the parlor wall** (the long-specified E5 idea), with a slow fall of ember/wax-fleck particles behind (the theme's answer to confetti) and the emoji replaced by engraved sigil icons.
+
+**Options:**
+- **Option A (recommended)**: Full ceremony — staggered reveals + plaque restyle + ember fall + SFX, reduce-motion → all visible instantly.
+  - *Pros*: Ends every game on a high note (the screenshot/share moment — feeds the existing Case File share image too, since the `RepaintBoundary` wraps this exact widget).
+  - *Cons*: The most animation work on this list; keep the share capture waiting until the ceremony completes.
+- **Option B**: Restyle only (plaques + sigils instead of emoji, no stagger/particles).
+  - *Pros*: Fixes the aesthetic clash cheaply.
+  - *Cons*: The ending still has no drama — arguably the game's biggest missed beat.
+
+*Effort:* Medium. Your selection: _____
+
+---
+
+### Proposal U7: The Room Code as a Brass Plaque — with Tap-to-Copy & Share
+**What it improves:** The room code — the one thing every host must transmit to friends — is a small text string in the AppBar (`ROOM: ABCD`) with **no way to copy or share it**. Give it a proper home: a **brass door-plaque** front-and-center in the waiting room, code in large engraved Cormorant, **tap to copy** (with a stamp-press animation + "Copied" toast) and a small share icon that opens the OS share sheet ("Join my Gaslight game — code ABCD"). This is the highest pure-UX win on the list: it removes real friction from starting every single game.
+
+**Options:**
+- **Option A (recommended)**: Plaque + tap-to-copy + OS share sheet (reuses the `share_plus` dependency already shipped for the Case File).
+  - *Pros*: Directly speeds up game setup; zero new dependencies; an obvious "quality" signal in the first 30 seconds of use.
+  - *Cons*: None material.
+- **Option B**: Tap-to-copy on the existing AppBar text only.
+  - *Pros*: One-line UX fix.
+  - *Cons*: Keeps the game's most important string visually buried.
+
+*Effort:* Low. Your selection: Proceed with Option A.
+
+---
+
+### Proposal U8: The Reader's Seat — Live Vote Ticker During Lockout
+**What it improves:** While others vote on your card, you (the reader/target) stare at a static "THEY ARE VOTING ON YOUR CARD… keep a straight face" screen — the game's tensest moment renders as its most boring screen. Add a **live ballot ticker**: a row of face-down ballot cards, one **flipping face-down→sealed with a wax stamp (+ the stamp thunk, quietly) as each vote lands** ("3 of 5 ballots sealed"), plus a slow-blinking procedural eye above the caption. The vote *choices* stay secret — only arrival is shown (the data already streams to every client via `readyPlayers`).
+
+**Options:**
+- **Option A (recommended)**: Ballot-card ticker with per-vote flip/stamp + blinking eye idle.
+  - *Pros*: Converts the anxiety peak into the fun kind of tension; zero information leak; pure client rendering of existing state.
+  - *Cons*: New small widget + careful not to re-fire stamps on rebuilds (same once-per-event guard pattern as the reveal SFX).
+- **Option B**: Text-only live counter ("3 of 5 ballots in") with a subtle pulse, no ballot animation.
+  - *Pros*: Ten-line change.
+  - *Cons*: Informative but not theatrical.
+
+*Effort:* Low–Medium. Your selection: Proceed with Option A.
 
 ---
 

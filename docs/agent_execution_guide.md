@@ -30,7 +30,7 @@ There are **no unresolved issues or open decisions** in `ongoing_general_errors.
 
 ## 2. What to do
 
-The queue is empty — do **not** invent work. Only act again if:
+The build queue is empty — do **not** invent work. **Note:** a 🎨 **UI & UX Design Review (U1–U8)** is awaiting the user's selections in `ongoing_general_errors.md`; once `Your selection:` lines are filled, detailed implementation specs get written before building (per the established flow). Only act if:
 1. A **new user selection** appears in `ongoing_general_errors.md` (a fresh `### Issue N` / `### Decision N` / proposal with a filled `Your selection:` line) → implement per its chosen option using the loop in §3.
 2. A **regression** appears (the §1 battery fails on a fresh checkout) → triage, file it in `ongoing_general_errors.md` (bug_documentation_guidelines format, with options), and fix per the loop.
 
