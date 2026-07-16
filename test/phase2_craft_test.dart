@@ -78,18 +78,21 @@ void main() {
         await Future.delayed(const Duration(milliseconds: 100));
       });
 
-      tester.view.physicalSize = const Size(1200, 2000);
+      tester.view.physicalSize = const Size(800, 600);
       tester.view.devicePixelRatio = 1.0;
 
       await tester.pumpWidget(
         ChangeNotifierProvider<GameService>.value(
           value: gameService,
           child: const MaterialApp(
-            home: Phase2CraftScreen(),
+            home: MediaQuery(
+              data: MediaQueryData(accessibleNavigation: true),
+              child: Phase2CraftScreen(),
+            ),
           ),
         ),
       );
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 1000));
     }
 
     testWidgets('should block submission locally if answer is too similar to existing truth/sabotage answers', (WidgetTester tester) async {
@@ -104,6 +107,10 @@ void main() {
           },
         );
 
+        // Dismiss dealt card overlay first
+        await tester.tap(find.text('INSPECT'));
+        await tester.pump();
+
         // Find TextField and type a duplicate forgery
         final txtFinder = find.byType(TextField);
         expect(txtFinder, findsOneWidget);
@@ -111,7 +118,7 @@ void main() {
         await tester.pump();
 
         // Tap submit
-        final submitFinder = find.text('SUBMIT');
+        final submitFinder = find.text('SUBMIT DOSSIER');
         expect(submitFinder, findsOneWidget);
         await tester.tap(submitFinder);
         await tester.pump(const Duration(milliseconds: 500));
@@ -140,6 +147,10 @@ void main() {
           },
         );
 
+        // Dismiss dealt card overlay first
+        await tester.tap(find.text('INSPECT'));
+        await tester.pump();
+
         // Find TextField and type a distinct forgery
         final txtFinder = find.byType(TextField);
         expect(txtFinder, findsOneWidget);
@@ -147,7 +158,7 @@ void main() {
         await tester.pump();
 
         // Tap submit
-        final submitFinder = find.text('SUBMIT');
+        final submitFinder = find.text('SUBMIT DOSSIER');
         expect(submitFinder, findsOneWidget);
         await tester.tap(submitFinder);
         await tester.pump(const Duration(milliseconds: 500));

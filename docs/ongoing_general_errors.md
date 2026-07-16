@@ -224,7 +224,9 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ---
 
-## 🎨 UI & UX Design Review (July 15) — Awaiting Selection
+## 🎨 UI & UX Design Review (July 15) — ✅ All Selected (Option A ×8)
+
+> **Selections locked (July 15): U1–U8 all Option A.** The full design specification — exact durations, curves, dimensions, color tokens, copy strings, state guards, reduce-motion fallbacks, and per-item validation — is in `docs/agent_execution_guide.md` (execution order **U0 prep → U4 → U5 → U1 → U7 → U2 → U8 → U3 → U6**). Original proposals retained below for the record.
 
 > A screen-by-screen design pass against the "gas-lit Victorian parlor" north star (`design_ui_direction.md`), grounded in the **current** code. The foundation is strong (palette tokens, Cormorant titles on the reveal, lamp-pool gradients, card flips, wax-seal select, halo, stamp press, SFX). What's left is **consistency** — the theme is applied unevenly across screens — and a handful of **animation moments** that would make the game feel alive. Ordered by impact-to-effort. All items are client-only (no backend changes).
 >
