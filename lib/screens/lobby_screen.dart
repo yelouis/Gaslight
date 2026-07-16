@@ -16,6 +16,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_icons.dart';
 import '../widgets/gaslight_route.dart';
+import '../widgets/room_code_plaque.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -393,7 +394,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 10)],
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
+            RoomCodePlaque(code: gs.gameState!.roomCode),
+            const SizedBox(height: 16),
             Text(
               '${players.length} Joined ($readyNonHostsCount/$totalNonHostsCount Ready)',
               style: const TextStyle(fontSize: 18, color: Colors.white70, fontFamily: 'Lora'),

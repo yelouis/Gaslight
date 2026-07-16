@@ -170,7 +170,7 @@ void main() {
 
       // 8. Verify transition to GAME OVER phase
       expect(find.text('GAME OVER'), findsOneWidget);
-      expect(find.text('THE CREW\'S HONORS'), findsOneWidget);
+      expect(find.text('THE NIGHT\'S HONORS'), findsOneWidget);
       print('Successfully transitioned to GAME OVER phase.');
 
       // Return to Lobby
