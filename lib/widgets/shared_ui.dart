@@ -303,18 +303,49 @@ class _PrimaryButtonState extends State<PrimaryButton> with TickerProviderStateM
                                 children: [
                                   _buildLoadingDots(context),
                                   const SizedBox(width: 12),
-                                  Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2)),
+                                  Flexible(
+                                    child: Text(
+                                      widget.text,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: widget.fontSize,
+                                        letterSpacing: 2,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
                                 ],
                               )
                             : _buildLoadingDots(context))
                         : (widget.icon == null
-                            ? Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2))
+                            ? Text(
+                                widget.text,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: widget.fontSize,
+                                  letterSpacing: 2,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              )
                             : Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   widget.icon!,
                                   const SizedBox(width: 8),
-                                  Text(widget.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: widget.fontSize, letterSpacing: 2)),
+                                  Flexible(
+                                    child: Text(
+                                      widget.text,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: widget.fontSize,
+                                        letterSpacing: 2,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
                                 ],
                               )),
                   ),

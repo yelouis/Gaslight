@@ -211,20 +211,20 @@ class _GameOverScreenState extends State<GameOverScreen> {
           const EmberBackdrop(),
           SafeArea(
             child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  RepaintBoundary(
-                    key: _globalKey,
-                    child: Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: AppColors.ground,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.brass, width: 2),
-                      ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 12.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    RepaintBoundary(
+                      key: _globalKey,
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: AppColors.ground,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.brass, width: 2),
+                        ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -236,47 +236,70 @@ class _GameOverScreenState extends State<GameOverScreen> {
                             Text(
                               'THE NIGHT\'S HONORS',
                               style: theme.textTheme.headlineMedium?.copyWith(
-                              color: theme.colorScheme.secondary, // Gold
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'CormorantGaramond',
-                              letterSpacing: 3,
-                              shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 10)],
+                                color: theme.colorScheme.secondary, // Gold
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'CormorantGaramond',
+                                letterSpacing: 3,
+                                shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 10)],
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 30),
-                          _buildHonorCards(theme, mastermind, trickster, runnerUp, gullible),
-                        ],
+                            const SizedBox(height: 30),
+                            _buildHonorCards(theme, mastermind, trickster, runnerUp, gullible),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 30),
-                  PrimaryButton(
-                    icon: _isSharing
-                        ? null
-                        : const ThematicIcon(type: ThematicIconType.envelope, color: AppColors.ivory),
-                    text: !_ceremonyComplete
-                        ? 'Engraving…'
-                        : (_isSharing ? 'Generating dossier...' : 'Share Case File'),
-                    loading: _isSharing,
-                    showTextOnLoading: true,
-                    onPressed: (!_ceremonyComplete || _isSharing) ? null : _shareCaseFile,
-                  ),
-                  const SizedBox(height: 20),
-                  TextButton(
-                    onPressed: () async {
-                      final navigator = Navigator.of(context);
-                      await gs.leaveRoom();
-                      navigator.pushNamedAndRemoveUntil('/', (route) => false);
-                    },
-                    child: Text('RETURN TO LOBBY', style: TextStyle(color: theme.colorScheme.secondary)),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
+        ],
+      ),
+      bottomNavigationBar: Container(
+        key: const Key('game_over_bottom_bar'),
+        decoration: BoxDecoration(
+          color: AppColors.ground,
+          border: Border(
+            top: BorderSide(color: AppColors.brass.withOpacity(0.25), width: 1),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
         ),
-      ],
-    ),
+        child: SafeArea(
+          minimum: const EdgeInsets.fromLTRB(24, 12, 24, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PrimaryButton(
+                icon: _isSharing
+                    ? null
+                    : const ThematicIcon(type: ThematicIconType.envelope, color: AppColors.ivory),
+                text: !_ceremonyComplete
+                    ? 'Engraving…'
+                    : (_isSharing ? 'Generating dossier...' : 'Share Case File'),
+                loading: _isSharing,
+                showTextOnLoading: true,
+                onPressed: (!_ceremonyComplete || _isSharing) ? null : _shareCaseFile,
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () async {
+                  final navigator = Navigator.of(context);
+                  await gs.leaveRoom();
+                  navigator.pushNamedAndRemoveUntil('/', (route) => false);
+                },
+                child: Text('RETURN TO LOBBY', style: TextStyle(color: theme.colorScheme.secondary)),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -438,55 +461,74 @@ class _GameOverScreenState extends State<GameOverScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontFamily: 'CormorantGaramond',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.ink,
-                    letterSpacing: 1.5,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontFamily: 'CormorantGaramond',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.ink,
+                      letterSpacing: 1.5,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontFamily: 'Lora',
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ink.withOpacity(0.7),
-                    letterSpacing: 1,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    subtitle,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontFamily: 'Lora',
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink.withOpacity(0.7),
+                      letterSpacing: 1,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           // Player Name & Metric Value
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                player.name,
-                style: const TextStyle(
-                  fontFamily: 'Lora',
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.ink,
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    player.name,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontFamily: 'Lora',
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.ink,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                metricText,
-                style: const TextStyle(
-                  fontFamily: 'CormorantGaramond',
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.oxblood,
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    metricText,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontFamily: 'CormorantGaramond',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.oxblood,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),

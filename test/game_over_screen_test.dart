@@ -192,5 +192,30 @@ void main() {
 
       await gameService.leaveRoom();
     });
+
+    testWidgets('GameOverScreen MF1: pins actions in bottom bar and is visible at 360x640 portrait without scrolling', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await setupAndPumpGameOverScreen(tester: tester, reduceMotion: true);
+
+      // Verify Scaffold has a bottomNavigationBar containing the actions
+      final Scaffold scaffold = tester.widget(find.byType(Scaffold));
+      expect(scaffold.bottomNavigationBar, isNotNull);
+
+      // Verify buttons are visible and located inside the bottomNavigationBar
+      final bottomBarFinder = find.byKey(const Key('game_over_bottom_bar'));
+      expect(find.descendant(of: bottomBarFinder, matching: find.text('Share Case File')), findsOneWidget);
+      expect(find.descendant(of: bottomBarFinder, matching: find.text('RETURN TO LOBBY')), findsOneWidget);
+
+      // Ensure no layout exceptions or overflows
+      expect(tester.takeException(), isNull);
+
+      await gameService.leaveRoom();
+    });
   });
 }

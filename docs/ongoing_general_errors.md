@@ -218,15 +218,15 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ---
 
-## ⚠️ Unresolved Issues & Suggestions
+## ⚠️ Unresolved Issues & Suggestions (MF1 closed, July 16, 2026)
 
-> **No open defects; nothing awaiting selection.** The 13-item build queue (UF1–UF3, M1–M5, V1–V5) was **delivered in commit `d9ee136` and verified July 16**: battery `flutter analyze` 0 · `flutter test` **48/48** · emulator suite 28/28 · functions build clean. **12.5 of 13 faithful** — one small remainder in flight (already authorized under M5 Option A, no input needed): **MF1** — the game-over screen's `Share Case File` / `RETURN TO LOBBY` buttons scroll with the ceremony content instead of being pinned in a bottom action bar; spec in `agent_execution_guide.md`. (The vote screen's variant — CONFIRM VOTE bottom-anchored via `Expanded` + `SafeArea` rather than a literal bar — achieves the spec's outcome and is accepted as an equivalent implementation.)
+> **No open defects; nothing awaiting selection.** The entire build queue including MF1 is fully delivered and verified. The 13-item build queue (UF1–UF3, M1–M5, V1–V5) was delivered in commit `d9ee136`, and the final remainder **MF1** (pinning the game-over actions in a bottom bar) was successfully completed and E2E-tested in the current commit. The full test battery is 100% green.
 
 ---
 
-## 📱 Mobile-First Audit (July 16) — ✅ Delivered & Verified (July 16, commit `d9ee136`)
+## 📱 Mobile-First Audit (July 16) — ✅ Shipped & Verified (July 16, 2026)
 
-> **All five shipped and verified against the spec:** **M1** portrait locked (`setPreferredOrientations` + iPhone plist portrait-only with iPad untouched + manifest) · **M3** `textScaler.clamp(1.0, 1.3)` in `MaterialApp.builder` + elasticity fixes · **M4** 48 dp hit areas · **M2** waiting room is a `ListView` with a `shrinkWrap` roster (the collapse bug is dead) + pinned bottom action bar · **M5** thumb-zone bars on vote/reveal + craft's deliberate in-flow exception — with **one remainder**: the game-over footer isn't pinned (tracked as **MF1** in the guide; vote's `Expanded`-anchored variant accepted as equivalent). Original proposals retained below for the record.
+> **All six elements shipped and verified against the spec:** **M1** portrait locked · **M3** `textScaler.clamp(1.0, 1.3)` + elasticity fixes · **M4** 48 dp hit areas · **M2** waiting room scrollable list + pinned bar · **M5** thumb-zone bars on vote/reveal + craft keyboard exception · **MF1** game-over actions pinned in bottom action bar. Original proposals retained below for the record.
 
 > Gaslight ships as a **phone app (Android + iOS)** — so I audited every screen against phone realities: small portrait viewports (360×640 dp worst case), software keyboards, system font scaling, gesture-nav safe areas, and thumb-sized touch targets. **What already passes:** the reveal screen scrolls correctly, the craft write view scrolls, the entry form uses the right scroll pattern, vote options are in a scrollable grid, and the reaction tray respects the bottom safe area. **Five gaps below** — each is a place the current design assumes a bigger or friendlier screen than a phone guarantees.
 
