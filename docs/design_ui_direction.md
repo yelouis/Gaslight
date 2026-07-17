@@ -142,6 +142,8 @@ The current app has nice entrance tweens; the risk is *scattered* motion reading
 
 ## 10. Suggested roadmap (quick wins → bigger bets)
 
+> **STATUS (July 16, 2026): this direction has SHIPPED — every row below is ✅ delivered**, via the U-pass (U0–U8 + UF punch list), the mobile-first pass (M1–M5), and the character pass (V1–V5). The world now also contains what this doc only dreamed of: a procedural wax seal, the gaslight-flicker scene change, the dealt-card handoff, the honors ceremony, the Lamplighter's Raven mascot, living sigils, reaction medallions, the deck dossier carousel, and lamp-lighting loading states. Delivery records: `ongoing_general_errors.md` (U/M/V sections); implementation specs preserved in `agent_execution_guide.md` history. This table is retained as the original plan of record.
+
 | Tier | Change | Effort | Payoff |
 |------|--------|--------|--------|
 | **Quick wins** | Warm-neutral palette shift (§3); aged brass; tabular figures; verdigris for truth | Low | Instant cohesion |

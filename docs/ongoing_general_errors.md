@@ -220,13 +220,13 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-> **No open defects; nothing awaiting selection.** Battery as of July 16: `flutter analyze` 0 · `flutter test` 42/42 · emulator suite 28/28. **In flight (all approved):** the 13-item build queue **UF1–UF3 → M1–M5 → V1–V5** — complete design specs in `docs/agent_execution_guide.md` (M2 fixes the confirmed small-phone roster-collapse bug).
+> **No open defects; nothing awaiting selection.** The 13-item build queue (UF1–UF3, M1–M5, V1–V5) was **delivered in commit `d9ee136` and verified July 16**: battery `flutter analyze` 0 · `flutter test` **48/48** · emulator suite 28/28 · functions build clean. **12.5 of 13 faithful** — one small remainder in flight (already authorized under M5 Option A, no input needed): **MF1** — the game-over screen's `Share Case File` / `RETURN TO LOBBY` buttons scroll with the ceremony content instead of being pinned in a bottom action bar; spec in `agent_execution_guide.md`. (The vote screen's variant — CONFIRM VOTE bottom-anchored via `Expanded` + `SafeArea` rather than a literal bar — achieves the spec's outcome and is accepted as an equivalent implementation.)
 
 ---
 
-## 📱 Mobile-First Audit (July 16) — ✅ All Selected (Option A ×5)
+## 📱 Mobile-First Audit (July 16) — ✅ Delivered & Verified (July 16, commit `d9ee136`)
 
-> **Selections locked (July 16): M1–M5 all Option A.** Full design specs (exact placements, bar recipe, clamp values, hit-area fixes, per-item validation incl. the 360×640 regression test) are in `docs/agent_execution_guide.md` **Part B**. Original proposals retained below for the record.
+> **All five shipped and verified against the spec:** **M1** portrait locked (`setPreferredOrientations` + iPhone plist portrait-only with iPad untouched + manifest) · **M3** `textScaler.clamp(1.0, 1.3)` in `MaterialApp.builder` + elasticity fixes · **M4** 48 dp hit areas · **M2** waiting room is a `ListView` with a `shrinkWrap` roster (the collapse bug is dead) + pinned bottom action bar · **M5** thumb-zone bars on vote/reveal + craft's deliberate in-flow exception — with **one remainder**: the game-over footer isn't pinned (tracked as **MF1** in the guide; vote's `Expanded`-anchored variant accepted as equivalent). Original proposals retained below for the record.
 
 > Gaslight ships as a **phone app (Android + iOS)** — so I audited every screen against phone realities: small portrait viewports (360×640 dp worst case), software keyboards, system font scaling, gesture-nav safe areas, and thumb-sized touch targets. **What already passes:** the reveal screen scrolls correctly, the craft write view scrolls, the entry form uses the right scroll pattern, vote options are in a scrollable grid, and the reaction tray respects the bottom safe area. **Five gaps below** — each is a place the current design assumes a bigger or friendlier screen than a phone guarantees.
 
@@ -307,9 +307,9 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ---
 
-## 🎭 Character & Custom Widget Proposals (July 16) — ✅ All Selected (Option A ×5)
+## 🎭 Character & Custom Widget Proposals (July 16) — ✅ Delivered & Verified (July 16, commit `d9ee136`)
 
-> **Selections locked (July 16): V1–V5 all Option A.** Full design specs (raven anatomy/states/perches, sigil micro-animations + one-at-a-time ticker, dossier folder anatomy + debounced carousel selection, lamp intro/sustain choreography, medallion motifs with unchanged wire format) are in `docs/agent_execution_guide.md` **Part C** (execution order: V4 → V5 → V2 → V3 → V1, after UF and M). Original proposals retained below for the record.
+> **All five shipped and verified against the spec:** **V4** `LampLightingIndicator` in every boot guard + `PrimaryButton(loading:)` ink-dots — **zero `CircularProgressIndicator` remain in `lib/`** · **V5** five engraved `ReactionMedallion`s via `ReactionMedallion.fromEmoji` — the wire format (emoji strings) unchanged · **V2** `SigilTicker` + `AnimatedThematicIcon` wired inside `PlayerAvatar` (one-at-a-time pulses) · **V3** `DeckCarousel` (`viewportFraction 0.48`, 400 ms-debounced `updateLobbySettings`, PG/R/X wax seals, non-host "THE CHOSEN FILE" view) · **V1** `RavenMascot` with all five states perched on all five specified screens, hop-per-seal (`_hoppedFor` guard) and ruffle-on-Truth wired. New tests brought the suite to 48/48. Original proposals retained below for the record.
 
 > The U-pass gave every screen the same *stage dressing*. This round proposes **inhabitants** — a mascot, living icons, and bespoke widgets that replace the last generic elements with drawn, animated ones. All are client-only, all procedural (CustomPaint, no image assets, consistent with `ThematicIcon`/`WaxSealBadge`), all reduce-motion aware. Ordered by expected character-per-effort.
 
@@ -393,7 +393,9 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ---
 
-## 🎨 UI & UX Design Review (July 15) — ✅ Delivered (verification July 16: ~85% faithful, finishing punch list in flight)
+## 🎨 UI & UX Design Review (July 15) — ✅ Delivered in full (UF punch list closed July 16, commit `d9ee136`)
+
+> **UF1–UF3 verified delivered:** ceremony reveals Gullible→RunnerUp→Trickster→Mastermind at 400+900·i ms with chime ×3 + bell on the winner (`_soundedIndices` guard) and `'Engraving…'` share gating · ballot caption `'N of M ballots sealed'` + quiet 0.4-volume per-seal stamp (`playVote(volume:)`, `_sealedSoundPlayed` guard cleared per card) · inkwell underline field with `'Dip the quill…'` + pinned target avatar header. The original July 16 gap report is retained below for history.
 
 > **Verification (July 16, commits `fb05415`…`0f07a5d`):** all nine U-commits landed and the battery is green (`flutter analyze` 0 · `flutter test` 42/42 · emulator 28/28). Verified faithful: **U0** (motion tokens, flip extraction, dead code deleted), **U4** (0 `serif`, 0 "crew", copy table applied, matchers updated), **U5** (0 stock `Icons.` in screens/widgets; `WaxSealBadge` + `ledger`/`envelope`/`redraw` painters), **U1** (flicker `TweenSequence` route via `onGenerateRoute`), **U7** (plaque + copy + share), **U2** (candle + waiting-on row, spinners only in boot guards). **U3/U8/U6 delivered with gaps** — the approved design's finishing items are specced as **UF1–UF3** in `agent_execution_guide.md` (no new decisions needed; already authorized under Option A):
 > - **UF1 (U6):** honor reveal order is inverted (Mastermind enters *first* at a 200 ms cascade — spec: Gullible→RunnerUp→Trickster→**Mastermind last** at 400+900·i ms); ceremony has **no sounds** (spec: chime ×3 + bell on the winner); share button isn't gated on ceremony completion. (Deviations kept as improvements: metric subtitles like "MOST PLAYERS DECEIVED", "N Fooled".)
