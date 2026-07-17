@@ -220,7 +220,7 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ## ⚠️ Unresolved Issues & Suggestions (MF1 closed, July 16, 2026)
 
-> **No open defects; nothing awaiting selection.** The entire build queue including MF1 is fully delivered and verified. The 13-item build queue (UF1–UF3, M1–M5, V1–V5) was delivered in commit `d9ee136`, and the final remainder **MF1** (pinning the game-over actions in a bottom bar) was successfully completed and E2E-tested in the current commit. The full test battery is 100% green.
+> **No open defects; nothing awaiting selection; the build queue is EMPTY.** The 13-item queue (UF1–UF3, M1–M5, V1–V5) was delivered in `d9ee136`; the final remainder **MF1** was closed in `40e3463` and **independently verified July 16**: exact M2 bar recipe (`ground` fill, 1 dp `brass @0.25` top border, upward shadow) + `SafeArea(minimum: 24/12/24/12)`, both actions out of the scroll view, `'Engraving…'` ceremony gating preserved in the bar, dedicated 360×640 no-scroll widget test. **Final battery: `flutter analyze` 0 · `flutter test` 49/49 · emulator suite 28/28 · functions build clean.** Every issue, decision, and proposal ever selected in this document is now implemented and verified. Playtest/run instructions (local emulator + TestFlight) now live in `README.md` → "Testing & Running the Game".
 
 ---
 
