@@ -60,20 +60,20 @@ class DefaultFirebaseOptions {
 
   static FirebaseOptions get ios => FirebaseOptions(
         apiKey: dotenv.env['FIREBASE_API_KEY_IOS'] ?? '',
-        appId: '1:184580940908:ios:39742ab201759265022449',
+        appId: '1:184580940908:ios:e79d100cc1231a8f022449',
         messagingSenderId: '184580940908',
         projectId: 'gaslight-46368',
         storageBucket: 'gaslight-46368.firebasestorage.app',
-        iosBundleId: 'com.example.gaslight',
+        iosBundleId: 'com.whylabs.gaslight',
       );
 
   static FirebaseOptions get macos => FirebaseOptions(
         apiKey: dotenv.env['FIREBASE_API_KEY_IOS'] ?? '',
-        appId: '1:184580940908:ios:39742ab201759265022449',
+        appId: '1:184580940908:ios:e79d100cc1231a8f022449',
         messagingSenderId: '184580940908',
         projectId: 'gaslight-46368',
         storageBucket: 'gaslight-46368.firebasestorage.app',
-        iosBundleId: 'com.example.gaslight',
+        iosBundleId: 'com.whylabs.gaslight',
       );
 
   static FirebaseOptions get windows => FirebaseOptions(

@@ -1,4 +1,4 @@
-package com.example.gaslight
+package com.whylabs.gaslight
 
 import io.flutter.embedding.android.FlutterActivity
 
