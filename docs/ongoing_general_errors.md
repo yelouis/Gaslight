@@ -214,91 +214,33 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Problem**: The "too similar" answer check called Google's Gemini embedding API from the `submitAnswer` Cloud Function — requiring an API key, incurring per-call cost + latency, silently doing nothing when the key was absent ("fail open"), caching vectors in a `rooms/{code}/embeddings` subcollection, and never being covered by a test. Decision 2 resolved to remove Gemini entirely in favor of a dependency-free heuristic.
     - **Solution**: Added a pure lexical `isTooSimilar(candidate, existing)` in **two byte-identical mirrors** — `functions/src/text_similarity.ts` and `lib/utils/text_similarity.dart` (normalize → stopword-strip + light stem → reject on exact match / substring containment ≥2 tokens / token Jaccard ≥ 0.6 / Levenshtein ratio ≥ 0.85). Enforced server-side in `submitAnswer` (always runs; same `invalid-argument` "too similar" error, existing list = other saboteurs' answers + the truth only when forging) and mirrored on-device in `phase2_craft.dart` for an instant SnackBar before the round-trip, with `test/fake_functions.dart` mirroring it. Fully removed Gemini: deleted `getEmbedding`/`getAnswerHash`/`cosineSimilarity` + the env-key block, deleted `lib/utils/semantic_filter.dart`, dropped the `http` dependency, removed the README "Gemini API Key Prototyping Risk" section, and purged `GEMINI_API_KEY`. Rewrote `docs/design_semantic_integrity.md` as "Duplicate-Answer Filtering".
     - **Validation**: parity unit tests on both sides (`functions/test/text_similarity.spec.ts` 28-case TS suite + `test/text_similarity_test.dart`), an enforced emulator E2E in `game_e2e.spec.ts` (submitting "sleep all day in bed" after "sleeping in my bed all day" is rejected over the callable, then a distinct answer succeeds — the enforced test the Gemini path never had), and a `test/phase2_craft_test.dart` widget test proving the on-device pre-check blocks before any server call. Full battery green — `functions` build clean, `flutter analyze` 0 errors, `flutter test` 30/30, emulator suite 28/28.
-    - **Trade-off (by design)**: pure synonyms with no shared words ("a quick nap" vs "sleeping") are allowed through; cheap future upgrade is a bundled shallow word-embedding, not built now.
+51. **Issue 23: Hybrid Icon System — Option B (Resolved - August 06)**:
+    - **Problem**: `ThematicIcon` glyphs suffered severe optical size mismatches when rendered with identical `size:` parameters (e.g. `redraw` ink was ~2.4× the size of `timer`/`key`), causing visual imbalance across the entry form and navigation bars.
+    - **Solution**: Replaced functional glyph painters in `lib/theme/app_icons.dart` with `phosphoricons_flutter` (`PhosphorIconsLight` glyphs for `writing`, `redraw`, `timer`, `secret`, `ledger`, `envelope`, `observe`, `confirm`, `sound`, `mute`, `host`) while retaining bespoke `CustomPainter` implementations for avatar sigils (`flame`, `moth`, `key`, `raven`, `moon`, `hourglass`).
+    - **Validation**: `test/thematic_icon_test.dart` verifies that functional glyphs render standard `Icon` widgets with `PhosphorIconsLight` while sigil icons render `CustomPaint`.
+
+52. **Issue 25: House Rules Gating & Parlor Dialog — Option C (Resolved - August 06)**:
+    - **Problem**: Game creation settings (round count, timer toggles) were crowded into the entry form and lacked a host-controlled, live-editable home once the lobby was active.
+    - **Solution**: Removed round count and timer controls from the entry form (`lib/screens/lobby_screen.dart`), defaulting `createRoom` to `sabotageAnswersCount: 2`. Built `HouseRulesDialog` (`lib/widgets/house_rules_dialog.dart`), a host-only dialog opened via a ledger icon in the Parlor AppBar. Gated host controls behind host ownership (`0.5` opacity for non-hosts with an explanatory caption) while allowing hosts to update live lobby settings via the `updateLobbySettings` Cloud Function stream.
+    - **Validation**: `test/house_rules_dialog_test.dart` verifies host setting edits, non-host disabled gating, Firestore stream sync, and default 2-round room creation.
+
+53. **Issue 24: Entry Form Fits 360x640 Viewport — Option A (Resolved - August 06)**:
+    - **Problem**: The lobby entry form overflowed 360×640 phone viewports, pushing the room code input and "JOIN ROOM" action below the fold.
+    - **Solution**: Offloaded pre-creation settings off the entry form (per Issue 25) and compressed the vertical layout in `lib/screens/lobby_screen.dart` to a tight 6/8/12/16/20 spacing scale. Added a logo size breakpoint when `maxHeight < 700` dp, scaling `AnimatedLobbyLogo` into a 60 dp box. Reclaimed over 300 dp of vertical height while retaining `SingleChildScrollView` as an overflow safety net for accessibility text scaling.
+    - **Validation**: `test/lobby_entry_test.dart` verifies zero scroll extent (`maxScrollExtent == 0.0`) and full visibility of "JOIN ROOM" above the fold at 360×640 portrait, and overflow safety under `1.3` text scaling.
+
+54. **Issue 26: Draggable Roster Sheet Header Gestures — Option C (Resolved - August 06)**:
+    - **Problem**: The Parlor roster sheet header (drag handle, title, and counter) was non-interactive and swallowed gestures, preventing users from dragging the sheet down on short rosters.
+    - **Solution**: Added a `DraggableScrollableController` (`_sheetController`) to `_LobbyScreenState` in `lib/screens/lobby_screen.dart` with `snap: true` (`[0.25, 0.4, 0.7]`). Wrapped the header block in a `GestureDetector(behavior: HitTestBehavior.opaque)` handling drag deltas and velocity snaps, plus tap-to-toggle between expanded (`0.7`) and collapsed (`0.25`). Added `physics: const AlwaysScrollableScrollPhysics()` to the roster `GridView` so 1-player short rosters hand drags to the sheet.
+    - **Validation**: `test/lobby_parlor_sheet_test.dart` verifies header drag collapse on 1-player short rosters, header tap expansion/collapse toggling, independent grid scrolling when expanded with 10 players, and controller disposal cleanly without leaks.
 
 ---
 
-## ⚠️ Unresolved Issues & Suggestions (4 open — Issues 23–26, filed August 4, 2026)
+## ⚠️ Unresolved Issues & Suggestions (0 open)
 
-> **4 client UI/UX items awaiting your selection (Issues 23–26).** Found during TestFlight-prep playtesting on **iPhone 17 / iOS 26.5 against the deployed Firebase backend** — the first run outside the emulator. None is a backend defect: room creation, anonymous auth, and the callable path all worked on production. Blocks with options are at the end of this section.
+> **All active build queue items (Issues 23–26) have been resolved and verified.**
 >
-> *Prior state (July 16 — still accurate for everything before Issue 23):* The 13-item queue (UF1–UF3, M1–M5, V1–V5) was delivered in `d9ee136`; the final remainder **MF1** was closed in `40e3463` and **independently verified July 16**: exact M2 bar recipe (`ground` fill, 1 dp `brass @0.25` top border, upward shadow) + `SafeArea(minimum: 24/12/24/12)`, both actions out of the scroll view, `'Engraving…'` ceremony gating preserved in the bar, dedicated 360×640 no-scroll widget test. **Final battery: `flutter analyze` 0 · `flutter test` 49/49 · emulator suite 28/28 · functions build clean.** Every issue, decision, and proposal ever selected in this document is now implemented and verified. Playtest/run instructions (local emulator + TestFlight) now live in `README.md` → "Testing & Running the Game".
-
----
-
-### Issue 23: `ThematicIcon` Has No Shared Optical Sizing — Identical `size:` Renders ~2.4× Apart
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/theme/app_icons.dart`. All three entry-form icons already declare `size: 20` (`lobby_screen.dart:778` quill/`writing`, `:802` round-arrow/`redraw`, `:833` hourglass), so the inconsistency is **not** a call-site bug — it is structural. `_ThematicIconPainter` (lines 56–442) draws each of the 19 glyphs from hand-tuned fractional coordinates with no normalization pass, so each glyph's ink fills a different fraction of the `SizedBox`. Ink extents read off the paths: `redraw` ≈ 0.90 w (arc `r = 0.38 w`, line 401, plus a `0.18 w` arrowhead, line 424), `writing` ≈ 0.65 w × 0.75 h (lines 240–254), `hourglass`/`timer` ≈ 0.50 w × 0.70 h (lines 187–220), `key`/`secret` ≈ 0.38 w (lines 137–153). Stroke weight diverges too: the shared paint is `max(1.5, w/16)` = 1.5 dp at size 20 (line 67), while `redraw` overrides to `0.08 * w` = 1.6 dp (line 409). Net effect at an identical `size:` — the round-arrow's ink is ~2.4× the key's, which is exactly the reported "quill is much bigger than the timer, round symbol bigger than both."
-
-**Option A (recommended)**: **Normalize inside the existing painter** — introduce a per-type optical-bounds table (or `Path.getBounds()` where the glyph is already a single `Path`), scale and centre every glyph into one shared optical box (~0.78 of the widget box), and route all glyphs through a single stroke-width formula, deleting the `redraw` override.
-  - *Pros*: One-file change, no new dependency, no visual redesign; preserves the animated `flame`/`moth`/`raven`/`hourglass` sigils and the `SigilTicker` pulse system that V1/V2 shipped; consistency becomes structural, so any future glyph inherits it; zero risk to the `design_ui_direction.md` token contract.
-  - *Cons*: Several glyphs are drawn with `drawLine`/`drawCircle`/`drawRRect` rather than a single `Path`, so their bounds must be hand-declared in a 19-entry table (or those calls refactored into paths first); optical balance ≠ mathematical bounds, so 3–4 glyphs will still need eyeball tuning.
-
-**Option B**: **Icon library for affordances, bespoke sigils for identity** — add `phosphor_flutter` (thin/light weight reads closest to the current hairline work) or `lucide_icons` and swap the ten functional glyphs (`writing`, `redraw`, `hourglass`/`timer`, `secret`, `ledger`, `envelope`, `observe`, `confirm`, `sound`, `mute`); keep `flame`/`moth`/`key`/`raven`/`moon` as custom avatar sigils.
-  - *Pros*: Font-glyph metrics are uniform by construction and stay uniform forever; substantially less painter code to own; matches the "find an icon library" instinct directly.
-  - *Cons*: New dependency plus a font asset; the library's geometric style will not match the hand-drawn Victorian character that `design_ui_direction.md` stamped SHIPPED; two icon systems side by side is its own species of inconsistency, visible wherever a library icon sits next to a sigil.
-
-**Option C**: **Full library replacement** — retire `ThematicIcon` entirely.
-  - *Pros*: Maximum consistency, least remaining code.
-  - *Cons*: Destroys the V1/V2 character work outright (animated avatar sigils, `AnimatedThematicIcon`, `SigilTicker`); contradicts the design-token contract; touches every screen in the app.
-
-*Effort:* Moderate (A) · Moderate (B) · Large (C). Your selection: **Option B** — hybrid: icon library for the functional glyphs, bespoke sigils retained for avatars.
-
----
-
-### Issue 24: Entry Form Overflows the Phone Viewport — "JOIN ROOM" Sits Below the Fold
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lobby_screen.dart:722–735`. `_buildEntryForm` wraps its content in a `SingleChildScrollView` (line 729) inside a `ConstrainedBox(minHeight: constraints.maxHeight)`, so the page is designed to **scroll** rather than fit. Summing the widget tree at iPhone-17 portrait: 32 dp page padding ×2, `AnimatedLobbyLogo`, 40 gap, then the card — title, 24, name field ≈56, 18, rounds dropdown ≈56, 18, timer toggle ≈66, 24, "Select Character Token" label, 12, a six-token `Wrap` landing on two rows ≈140, 30, CREATE ROOM ≈56, "OR" divider ≈40, 18, room-code field ≈56, 18, JOIN ROOM ≈56, 18. That lands ≈250–300 dp past the usable viewport, matching the screenshot where the page ends at "OR" and both the room-code field and JOIN ROOM are unreachable without scrolling. (Component heights are read off the tree, not measured at runtime; the exact overflow gets pinned by a widget test during implementation, as M2/MF1 were.)
-
-**Option A (recommended)**: **Relocate settings (Issue 25) + tighten the vertical rhythm** — move the timer toggle and rounds dropdown to the settings page, then compress the ad-hoc 18/24/30 gaps to a 12/16/20 scale and shrink `AnimatedLobbyLogo` below a height breakpoint. Reclaims ≈66 dp (toggle) + ≈74 dp (dropdown) + ≈60 dp (rhythm) + logo headroom.
-  - *Pros*: Fixes Issues 24 and 25 with one coherent change; no new navigation for the common path (name → token → create/join); keeps the single-screen "guest ledger" feel the design docs describe.
-  - *Cons*: Only works if Issue 25 is accepted — spacing alone is not enough to close a ~275 dp gap; rounds becomes one tap further away for the host.
-
-**Option B**: **Two-step entry** — step 1 asks name + character token with CREATE and JOIN as peers; step 2 ("House Rules") collects rounds/timers before the room is created.
-  - *Pros*: Guarantees fit on any phone regardless of future additions; gives settings a natural home without a separate route; JOIN gets equal billing instead of being buried below CREATE.
-  - *Cons*: Adds a step to the most-used path in a party game where speed matters; needs back-navigation state handling; more layout work than A.
-
-**Option C**: **Keep scrolling, make it legible** — add a bottom gradient fade and a scroll cue.
-  - *Pros*: Trivial; nothing moves.
-  - *Cons*: Does not meet the stated requirement ("I want the entry page to fit everything"); JOIN ROOM stays below the fold, which is the actual complaint.
-
-*Effort:* Moderate (A) · Large (B) · Trivial (C). Your selection: **Option A** — relocate settings off the entry page (per Issue 25) and tighten the vertical rhythm.
-
----
-
-### Issue 25: No Dedicated Game Settings Page — Settings Are Scattered Across Two Homes
-**Status**: ⚠️ Confirmed Unresolved — Verified across three files. "Disable Game Timers" is inlined into the entry form as a bespoke `Container`+`Row`+`Switch` (`lobby_screen.dart:820–860`), holding local `_isTimerDisabled` state that is passed straight to `createRoom(..., isTimerDisabled:)` (`game_service.dart:148`). The sound toggle lives somewhere entirely different — an AppBar action at `lobby_screen.dart:392`. No settings route exists: `main.dart:90–105` registers only `/`, `/craft`, `/vote`, `/reveal`, `/game-over`. So two settings currently have two unrelated homes and there is nowhere to put a third, which is the direct cause of the entry-form pressure in Issue 24.
-
-**Option A (recommended)**: **A `/settings` route + `SettingsScreen`**, reached from a gear/lantern action on the entry AppBar, grouped into **House Rules** (rounds, disable timers, forgery count) and **Device** (sound, reduce motion). Host-only rules are disabled with an explanatory caption for non-hosts.
-  - *Pros*: Gives every future setting an obvious home; removes ≈140 dp from the entry page, doing most of Issue 24's work; a real route is deep-linkable and testable like the other five screens; matches the existing `GaslightPageRoute` navigation pattern.
-  - *Cons*: New screen to build and theme; rules chosen pre-creation must be threaded into `createRoom`, and post-creation edits must route through `updateLobbySettings` — two different write paths to keep straight.
-
-**Option B**: **Modal bottom sheet instead of a route** — same content, presented as a sheet from the entry form and the Parlor.
-  - *Pros*: Less scaffolding; keeps the user in place; reusable from both screens without route juggling.
-  - *Cons*: Cramped on small phones once the list grows; not a route, so it is harder to test and cannot be linked; repeats the sheet-gesture complexity of Issue 26.
-
-**Option C**: **Host-only settings panel inside the Parlor** — no settings before creation, since rules only matter once a room exists; `updateLobbySettings` already supports live edits.
-  - *Pros*: One write path (`updateLobbySettings`) instead of two; strips the most from the entry page; everyone sees rule changes live before START.
-  - *Cons*: The host cannot set rules before creating; adds pressure to the Parlor, which is already the screen with the Issue 26 sheet problem.
-
-*Effort:* Moderate (A) · Moderate (B) · Moderate (C). Your selection: **Option C** — host-only settings panel inside the Parlor, driven by the existing `updateLobbySettings` callable.
-
----
-
-### Issue 26: The Parlor Roster Sheet Cannot Be Dragged Back Down — the Handle Is Decorative
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lobby_screen.dart:542–656`. `DraggableScrollableSheet(initialChildSize: 0.4, minChildSize: 0.25, maxChildSize: 0.7)` derives its extent **solely** from the `ScrollController` it hands to its `builder`, and that controller is attached to exactly one widget: the `GridView.builder` at lines 606–607. The visual drag handle (lines 570–580), the "N SUSPECTS JOINED" title (581–593) and the ready counter (595–603) are plain `Column` children sitting above the grid with no gesture recognizer of any kind — a drag starting anywhere in that header region is not routed to the sheet and does nothing at all. Collapsing therefore only works by dragging **on the grid**, and only while it is at scroll offset 0; with a short roster (the reported case was 1 player) the grid does not fill its viewport, so under default physics it has no scroll extent to give the sheet, and the gesture is dropped. The one element that visually advertises itself as draggable — the brass handle — is the one element guaranteed never to work.
-
-**Option A**: **Minimal physics fix** — add `physics: const AlwaysScrollableScrollPhysics()` to the `GridView` and `snap: true, snapSizes: const [0.25, 0.4, 0.7]` to the sheet.
-  - *Pros*: Two-line change; restores drag-to-collapse on the grid even when the roster is too short to scroll; snapping makes the sheet feel intentional rather than loose.
-  - *Cons*: The handle, title and counter stay dead, so the discoverability failure remains — a user who grabs the handle still gets nothing.
-
-**Option B (recommended)**: **Restructure the sheet as one scrollable** — replace the `Column` with a `CustomScrollView` driven by the provided `scrollController`: a pinned `SliverPersistentHeader` carrying the handle/title/counter, then a `SliverGrid` for the roster, with `AlwaysScrollableScrollPhysics` and `snap: true`.
-  - *Pros*: Every pixel of the sheet becomes a drag surface, including the handle, so the affordance finally matches the behaviour; idiomatic Flutter with no manual extent math; the pinned header keeps the roster count visible while scrolling; fixes the short-roster case in the same stroke.
-  - *Cons*: Restructures the widget subtree and the header must be reimplemented as a sliver delegate with an explicit extent; the 360×640 layout needs re-validation.
-
-**Option C**: **`DraggableScrollableController` + explicit header gestures** — hold a controller, wrap the header in a `GestureDetector`, and translate vertical drag deltas into `controller.jumpTo` / velocity-based `animateTo`, plus tap-to-toggle between collapsed and expanded.
-  - *Pros*: Keeps the existing tree intact; tap-to-toggle is a genuinely nice affordance on top of drag.
-  - *Cons*: Hand-rolled extent math and fling/snap physics that Flutter already implements; easy to get subtly wrong at the min/max boundaries; more code to maintain than B.
-
-*Effort:* Trivial (A) · Moderate (B) · Moderate (C). Your selection: **Option C** — `DraggableScrollableController` with explicit header drag gestures plus tap-to-toggle.
+> *Current Queue Status (August 6, 2026):* Issues 23, 24, 25, and 26 delivered in full with dedicated test coverage. **Final battery: `flutter analyze` 0 errors · `flutter test` 54/54 pass · emulator suite 28/28 pass · TypeScript functions build clean · iOS simulator debug build succeeded.**
 
 ---
 
