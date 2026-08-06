@@ -119,6 +119,20 @@ For the **avatar tokens**, swap the six Material glyphs for six **engraved "hous
 
 Your selection (icon overhaul now / later): Sounds good. Proceed
 
+> ### ⚙️ SHIPPED STATE (revised August 6, 2026 — Issue 23, Option B)
+>
+> §7 as written above was delivered in Wave E as a fully bespoke `CustomPainter` set (`lib/theme/app_icons.dart`), and **that approach has since been partially reversed.** The hand-drawn set never normalised optical size: because each of the 19 glyphs was hand-tuned in fractional coordinates with no shared bounds pass, an identical `size:` produced ink from `0.38 w` (`key`) to `0.90 w` (`redraw`) — a ~2.4× spread, visible as a mismatched icon row on the entry form.
+>
+> **The icon system is now a hybrid**, and this is the current contract:
+>
+> - **The six avatar house sigils remain bespoke and hand-painted** — `flame`, `moth`, `key`, `raven`, `moon`, `hourglass`. The paragraph above about engraved crests still holds in full, including the `SigilTicker` / `AnimatedThematicIcon` animation work from V1/V2.
+> - **The eleven functional affordances now render from a Phosphor icon font at Light weight** — `writing`, `redraw`, `timer`, `secret`, `ledger`, `envelope`, `observe`, `confirm`, `sound`, `mute`, `host`. Light was chosen because its 1.5 px nominal stroke matches the painter's hairline `max(1.5, w/16)`, preserving "single-weight brass line icons for consistency."
+> - `ThematicIcon` remains the **single public entry point**; the fork is internal (`app_icons.dart:33` `_bespokeSigils`, `:42` `_phosphorGlyphs`). No call site imports the icon package directly, and none changed.
+>
+> **The trade-off, stated plainly:** Phosphor is a modern geometric set, not a Victorian one. This concedes some of the period specificity §7 was written to win, in exchange for metric consistency that the bespoke set could not deliver without a normalisation pass. That trade was offered as Issue 23 Option B and explicitly selected. The alternative — Option A, an optical-bounds table applied to all 19 bespoke glyphs — remains available if the geometric style reads as a "stock UI tell" in practice.
+>
+> **Known residual:** sigil-to-sigil optical sizing is still uneven, since normalisation was not applied to the six retained glyphs. It reads acceptably because the character tokens sit inside medallions that impose their own frame. Fix path if review disagrees: Issue 23 Option A, scoped to those six.
+
 ---
 
 ## 8. Motion, sound & feel (restraint required)
