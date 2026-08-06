@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'dart:math' as math;
 import 'dart:async';
 import 'app_colors.dart';
@@ -29,6 +30,29 @@ enum ThematicIconType {
   redraw,
 }
 
+const Set<ThematicIconType> _bespokeSigils = {
+  ThematicIconType.flame,
+  ThematicIconType.moth,
+  ThematicIconType.key,
+  ThematicIconType.raven,
+  ThematicIconType.moon,
+  ThematicIconType.hourglass,
+};
+
+const Map<ThematicIconType, IconData> _phosphorGlyphs = {
+  ThematicIconType.writing:  PhosphorIconsLight.feather,
+  ThematicIconType.redraw:   PhosphorIconsLight.arrowsClockwise,
+  ThematicIconType.timer:    PhosphorIconsLight.hourglass,
+  ThematicIconType.secret:   PhosphorIconsLight.key,
+  ThematicIconType.ledger:   PhosphorIconsLight.bookOpen,
+  ThematicIconType.envelope: PhosphorIconsLight.envelope,
+  ThematicIconType.observe:  PhosphorIconsLight.magnifyingGlass,
+  ThematicIconType.confirm:  PhosphorIconsLight.sealCheck,
+  ThematicIconType.sound:    PhosphorIconsLight.bellRinging,
+  ThematicIconType.mute:     PhosphorIconsLight.bellSlash,
+  ThematicIconType.host:     PhosphorIconsLight.lamp,
+};
+
 class ThematicIcon extends StatelessWidget {
   final ThematicIconType type;
   final double size;
@@ -43,6 +67,16 @@ class ThematicIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!_bespokeSigils.contains(type)) {
+      final glyph = _phosphorGlyphs[type];
+      if (glyph != null) {
+        return SizedBox(
+          width: size,
+          height: size,
+          child: Center(child: Icon(glyph, size: size, color: color)),
+        );
+      }
+    }
     return SizedBox(
       width: size,
       height: size,
