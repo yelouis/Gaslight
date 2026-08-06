@@ -296,7 +296,7 @@ can't be extended outside of its library because it's a final class.
   - *Pros*: No font asset at all, and one single rendering mechanism across the whole app.
   - *Cons*: Re-creates by hand exactly the optical-inconsistency problem Issue 23 was opened to escape — the uniform metrics come *from* the font. Strongly discouraged.
 
-*Effort:* Trivial (A) · Moderate (B) · Large (C). Your selection: _____
+*Effort:* Trivial (A) · Moderate (B) · Large (C). Your selection: Proceed with Option B.
 
 ---
 
@@ -317,7 +317,7 @@ No functional harm: non-hosts cannot toggle it, so the `selectedDeckId` display 
   - *Pros*: Makes the UI truthful in the other direction — it *becomes* the shared rule it currently appears to be, and content filtering for a party game is arguably a table-level decision, not a per-device one.
   - *Cons*: The only option here that touches `functions/` and `firestore.rules` territory, so it requires the emulator suite as a gate; needs a migration story for rooms created before the field existed. Materially larger than the other two.
 
-*Effort:* Trivial (A) · Small (B) · Moderate (C). Your selection: _____
+*Effort:* Trivial (A) · Small (B) · Moderate (C). Your selection: Proceed with Option A.
 
 ---
 

@@ -1,20 +1,22 @@
-# Agent Execution Guide — One Approved Task + Two Awaiting Selection (August 6, 2026)
+# Agent Execution Guide — Active Build: Issue 30 → T1 → Issue 29 (August 6, 2026)
 
 **You are an engineering agent picking up Gaslight (Flutter party game, iOS + Android, server-authoritative Firebase backend). Assume you have no memory of this project.**
 
-**Current state:** Issues 23–28 are implemented and independently verified (§7). The August 6 verification pass produced exactly three follow-ups:
+**Approved work — three items, in this order:**
 
-| What | Status | Where |
-|---|---|---|
-| **Task T1** — close the Issue 27 test-coverage gap | ✅ **APPROVED — start here** | §3 |
-| **Issue 29** — icon dependency: your Option A was impossible | ⛔ `Your selection: _____` blank | `ongoing_general_errors.md` |
-| **Issue 30** — `Family-Friendly Decks Only` shown to non-hosts | ⛔ `Your selection: _____` blank | `ongoing_general_errors.md` |
+| # | Item | Scope | Selected |
+|---|---|---|---|
+| 1 | **Issue 30** — hide `Family-Friendly Decks Only` from non-hosts | `lib/` + 1 test | Option A |
+| 2 | **T1** — close the Issue 27 test-coverage gap | `test/` only | (approved task) |
+| 3 | **Issue 29** — vendor the 11 Phosphor glyphs, drop the dependency | `lib/` + `pubspec` + assets | Option B |
 
-**Do T1. Do not start Issues 29 or 30** — both have empty selection lines and are the user's decisions. Check those lines first: if still blank after T1, report and stop.
+Nothing else is approved. All three specs are complete in §3–§5.
 
-**Specs are decisions, not suggestions.** If a value is impossible, keep the intent, deviate minimally, and say so in the commit body. **If the design cannot work, STOP and file it** in `ongoing_general_errors.md` with options and a `Your selection: _____` line. This matters — last pass an agent hit a genuine blocker on Issue 28, correctly diagnosed it, then silently substituted a different option instead of filing it. The technical call was right; the process left the user out of a decision that was theirs. **A blocker is a filing event, not a licence to re-choose.**
+**Specs are decisions, not suggestions.** Every code point, family name, and path below is deliberate.
 
-**Line numbers are anchors measured August 6, 2026.** They drift as you edit — re-grep rather than trusting them.
+**If something turns out to be impossible, STOP and file it** in `ongoing_general_errors.md` with options and a `Your selection: _____` line. **A blocker is a filing event, not a licence to re-choose.** Last pass an agent hit a genuine blocker, diagnosed it correctly, then silently substituted a different option — right call technically, but a decision that was the user's got made without them. Issue 29 exists only because that happened.
+
+**Line numbers are anchors measured August 6, 2026** and drift as you edit — re-grep rather than trusting them.
 
 ---
 
@@ -25,7 +27,7 @@
 3. **Every animation needs an `AppMotion.reduce(context)` path.**
 4. **Text scale clamped 1.0–1.3** (`main.dart:81–88`). Layouts must survive 1.3.
 5. **Touch targets ≥ 48 dp** (M4).
-6. **T1 touches only `test/`.** If you are editing `lib/`, `functions/`, or `firestore.rules` for T1, you have left the spec — STOP.
+6. **None of these three items touches `functions/` or `firestore.rules`.** If you are editing either, you have left the spec — STOP.
 7. **One item = one commit**, Conventional Commits, WHY in the body.
 
 ---
@@ -45,35 +47,97 @@
 ### ⚠️ Three traps that have each cost a cycle
 
 1. **Analyzer scope.** Run `flutter analyze lib test`, never bare `flutter analyze`. The bare form reports ~678 errors, all inside `build/{ios,macos}/SourcePackages/` — vendored plugin source dropped by Swift Package Manager. Not project code, gitignored, not yours to fix.
-2. **Analyze ≠ compile.** `flutter analyze` does **not** analyse dependency source. It reported **0 errors** with a package installed that could not build. Only `flutter test` or `flutter build` surfaces a broken dependency. Likewise `dart pub add --dry-run` resolving proves nothing about compilation. **When a task involves a dependency, the acceptance check must be a command that compiles it.**
-3. **Working directory persists** between Bash calls. `cd functions && npm run build` leaves you in `functions/`, and the next `grep lib/...` fails with "No such file or directory". Use absolute paths or `npm --prefix functions run build`.
+2. **Analyze ≠ compile.** `flutter analyze` does **not** analyse dependency source. It reported **0 errors** with a package installed that could not build. Only `flutter test` or `flutter build` surfaces that. `dart pub add --dry-run` resolving proves nothing either. **Issue 29 changes a dependency — your acceptance check must be a command that compiles and renders, not one that resolves.**
+3. **Working directory persists** between Bash calls. `cd functions && npm run build` leaves you in `functions/`; the next `grep lib/...` then fails with "No such file or directory". Use absolute paths or `npm --prefix functions run build`.
 
 ---
 
 ## 2. Execution order
 
-**T1 only.** Issues 29 and 30 are blocked on selection. If a selection lands, implement that option and nothing else.
+| # | Item | Position rationale |
+|---|---|---|
+| 1 | **Issue 30** | Changes behaviour that T1 must then assert. Doing it first means T1's Family-Friendly case is written **once**, against final behaviour, instead of being written to today's behaviour and immediately flipped. Its pinning test ships in this commit. |
+| 2 | **T1** | Test-only. Closes the remaining coverage gap on already-correct behaviour. |
+| 3 | **Issue 29** | Largest and most error-prone: touches the dependency, the asset bundle, and the icon table. Doing it last means the House Rules panel is fully test-covered before the icon system is rebuilt under it. |
 
 ---
 
-## 3. TASK T1 — Close the Issue 27 test-coverage gap ✅ APPROVED
+## 3. Issue 30 — Hide `Family-Friendly Decks Only` from non-hosts (Option A)
 
-**What this means for the user:** nothing visible. Issue 27's behaviour is correct and verified; three of the six specified regression tests were never written, so parts of it are protected by nothing.
+**What this means for the user:** a non-host currently sees a greyed "Family-Friendly Decks Only" toggle inside the "HOUSE RULES" card, which implies the host has set a content filter for the whole table. That is untrue — it is a per-device filter and each player's copy is independent. Non-hosts should see only settings that genuinely describe the shared game.
 
 ### The gap
-`test/house_rules_dialog_test.dart` covers four of the six cases the Issue 27 spec required. Missing:
+`_familyFriendlyOnly` is a client-local `bool` at `lobby_screen.dart:43`, mutated with `setState`, **never sent to the server** — no `updateLobbySettings` call, no `GameState` field. Its only effect is filtering `availableDecks` at `:345–353`, which feeds the host's `DeckCarousel`.
 
-- **AppBar `IconButton`-count assertion** — nothing prevents a future change from reintroducing a second House Rules entry point, which was the entire defect.
-- **`Family-Friendly Decks Only` role visibility** — currently unpinned in either direction. See the ordering note below.
-- **360×640 non-host overflow guard** — the explicitly-flagged over-reach check. **Verified manually on August 6 and it passes** (`exception=NONE`), so this is a coverage gap, not a bug. Making the panel visible to non-hosts made their Parlor the tallest layout case, and nothing in CI protects it.
-
-**This is test-only work. Do not change `lib/`.** The behaviour is correct as shipped.
+It is currently rendered **inside** the `IgnorePointer(ignoring: !isHost)` block that wraps the two genuine house rules, so non-hosts see it at 0.5 opacity. No functional harm — they cannot toggle it, so the `selectedDeckId` display desync that originally motivated this ruling cannot occur — but it misrepresents a device preference as a table rule.
 
 ### Implementation
 
-**Step 1 — rename the file.** `test/house_rules_dialog_test.dart` → **`test/house_rules_panel_test.dart`**. There is no dialog any more; the name misleads. Use `git mv` so history follows.
+Move the `Family-Friendly Decks Only` `Material` → `SwitchListTile` block **out of** the `IgnorePointer` subtree and render it only for the host.
 
-**Step 2 — add three cases** to the existing group, reusing the helper `setupRoomAndPump(WidgetTester tester, {required bool isHost, int sabotageAnswersCount, bool isTimerDisabled})` at `:25`. Note its exact name and that it takes `tester` **positionally** — it both seats the room in `FakeFirestore` and pumps `LobbyScreen`; do not write your own pump.
+Locate it by content, not line number: the `Material(color: Colors.transparent, child: SwitchListTile(title: const Text('Family-Friendly Decks Only'), …))` currently sitting as the last child inside the `IgnorePointer` → `Opacity` → `Column`.
+
+- Remove it from that `Column`.
+- Re-insert it **after** the `IgnorePointer` block closes, wrapped as `if (isHost) …`.
+- It keeps `value: _familyFriendlyOnly` and its existing `onChanged` with `setState` — **do not** route it through `updateLobbySettings`. It is deliberately client-local; making it a synced rule was Issue 30 Option C and was **not** selected.
+- Leave the two genuine house rules (`Forgery Rounds`, `Disable Game Timers`) inside the `IgnorePointer` exactly as they are.
+- The `if (!isHost)` caption block stays where it is, after everything.
+
+Resulting order inside the card: title → `IgnorePointer`(rounds, timers) → `if (isHost)` Family-Friendly → `if (!isHost)` caption.
+
+### Validation
+
+Add this case to the House Rules test file (in T1 it gets renamed; if you do Issue 30 first, add it to the current `test/house_rules_dialog_test.dart` and let T1 carry it through the rename).
+
+```dart
+testWidgets('Family-Friendly Decks Only is host-only', (tester) async {
+  await setupRoomAndPump(tester, isHost: false);
+  expect(find.text('Family-Friendly Decks Only'), findsNothing);
+});
+
+testWidgets('Family-Friendly Decks Only is present for the host', (tester) async {
+  await setupRoomAndPump(tester, isHost: true);
+  expect(find.text('Family-Friendly Decks Only'), findsOneWidget);
+  // The two genuine house rules must still render for BOTH roles -- this is the
+  // over-reach guard. A fix that hid the whole card from non-hosts would pass
+  // the assertion above while destroying Issue 27.
+});
+
+testWidgets('genuine house rules remain visible to non-hosts', (tester) async {
+  await setupRoomAndPump(tester, isHost: false);
+  expect(find.text('HOUSE RULES'), findsOneWidget);
+  expect(find.text('Forgery Rounds:'), findsOneWidget);
+  expect(find.text('Disable Game Timers'), findsOneWidget);
+});
+```
+
+**The falsifying assertion is `findsNothing` for the non-host** — it fails against current code, where the control renders greyed. **The third test is the over-reach guard and is not optional:** the naive way to make the first test pass is to hide the whole card from non-hosts, which would silently undo Issue 27's entire point.
+
+`setupRoomAndPump(WidgetTester tester, {required bool isHost, int sabotageAnswersCount, bool isTimerDisabled})` is at `test/house_rules_dialog_test.dart:25`. Note it takes `tester` **positionally** and performs the pump itself — do not write your own.
+
+Prove falsifiability per §6, then run the full §1 battery. Expect **63/63**.
+
+### Blast radius
+`lib/screens/lobby_screen.dart` (the panel only) and the House Rules test file. Nothing else. `_familyFriendlyOnly`'s declaration at `:43` and its use at `:345–353` are unchanged.
+
+---
+
+## 4. Task T1 — Close the Issue 27 test-coverage gap (test-only)
+
+**What this means for the user:** nothing visible. Issue 27's behaviour is correct and verified; two of its specified regression tests were never written, so parts of it are protected by nothing.
+
+### The gap
+Two cases from the Issue 27 spec are still missing after Issue 30 lands:
+- **AppBar `IconButton`-count assertion** — nothing prevents a future change reintroducing a second House Rules entry point, which *was* the entire defect.
+- **360×640 non-host overflow guard** — the explicitly-flagged over-reach check. **Verified manually on August 6 and it passes** (`exception=NONE`), so this is a coverage gap, not a bug. Making the panel visible to non-hosts made their Parlor the tallest layout case, and nothing in CI protects it.
+
+**Test-only. Do not change `lib/`.**
+
+### Implementation
+
+**Step 1 — rename the file.** `test/house_rules_dialog_test.dart` → **`test/house_rules_panel_test.dart`** via `git mv` so history follows. There is no dialog any more; the name misleads.
+
+**Step 2 — add two cases.**
 
 **Case A — exactly one House Rules surface.**
 ```dart
@@ -85,16 +149,7 @@ expect(
 expect(find.text('HOUSE RULES'), findsOneWidget);
 ```
 
-**Case B — `Family-Friendly Decks Only` role visibility.** ⚠️ **Ordering — read before writing this one.** Issue 30 asks the user whether this control should be visible to non-hosts at all. **Assert only current behaviour** (visible to both roles, non-interactive for non-hosts) so the suite is honest today, and add a comment naming Issue 30 as the reason it may flip:
-```dart
-// Pins CURRENT behaviour. Issue 30 may change this to host-only -- if that
-// option is selected, this expectation flips to findsNothing for non-hosts.
-await setupRoomAndPump(tester, isHost: false);
-expect(find.text('Family-Friendly Decks Only'), findsOneWidget);
-```
-Do **not** assert the host-only behaviour the Issue 27 spec originally ruled — that ruling is what Issue 30 is re-opening. Writing it now would make the suite fail against shipped code.
-
-**Case C — non-host Parlor fits 360×640.** The tallest layout case.
+**Case B — non-host Parlor fits 360×640.** The tallest layout case.
 ```dart
 tester.view.physicalSize = const Size(360, 640);
 tester.view.devicePixelRatio = 1.0;
@@ -105,36 +160,145 @@ addTearDown(() {
 await setupRoomAndPump(tester, isHost: false);
 expect(tester.takeException(), isNull);   // catches RenderFlex overflow
 ```
-Add a second variant at `TextScaler.linear(1.3)`. `setupRoomAndPump` hardcodes `MediaQueryData(accessibleNavigation: true)` with no `textScaler`, so for the 1.3 case either extend the helper with an optional `double textScale = 1.0` parameter (preferred — keeps one pump path) or pump inline. If you extend it, keep the default at `1.0` so the existing four cases are unaffected.
+Add a second variant at `TextScaler.linear(1.3)`. `setupRoomAndPump` hardcodes `MediaQueryData(accessibleNavigation: true)` with no `textScaler`, so extend it with an optional `double textScale = 1.0` parameter — preferred, since it keeps one pump path — and default it to `1.0` so existing cases are unaffected.
 
 ### Validation
 
-These are regression tests for already-correct behaviour, so the §5 "prove it fails first" procedure does **not** apply — there is nothing broken to fail against. Prove they are not vacuous a different way: **temporarily break the thing each one guards, confirm the test fails, then revert.**
+These guard already-correct behaviour, so the §6 "observe it fail" procedure does not apply — **there is nothing broken to fail against.** Prove they are not vacuous the other way: temporarily break what each one guards, confirm failure, revert.
 
 | Case | Temporary break that must make it fail |
 |---|---|
 | A | Add a second dummy `IconButton` to the Parlor `AppBar` `actions:` |
-| B | Wrap `Family-Friendly Decks Only` in `if (isHost)` |
-| C | Add `const SizedBox(height: 400)` inside the House Rules card |
+| B | Add `const SizedBox(height: 400)` inside the House Rules card |
 
-Revert each break immediately; finish with `git status --short` clean. Record in the commit body that you did this and what each broken run reported.
+Revert each immediately; finish with `git status --short` clean. **Record in the commit body that you did this and what each broken run reported** — otherwise nobody can tell a real guard from a vacuous one.
 
-Then the full §1 battery. Expect **63/63** (60 + 3; more if you split the 1.3 variant).
+Then the full §1 battery. Expect **≥ 65/65**.
 
 ### Blast radius
 `test/house_rules_dialog_test.dart` → `test/house_rules_panel_test.dart`, contents only. Nothing in `lib/`.
 
 ---
 
-## 4. Blocked items — do not start
+## 5. Issue 29 — Vendor the 11 Phosphor glyphs, drop the dependency (Option B)
 
-**Issue 29 — icon dependency.** You selected Option A on Issue 28 (switch to `phosphor_flutter: ^2.1.0`). It is **impossible**: `IconData` is a `final class` in Flutter 3.44.6 (`flutter/lib/src/widgets/icon_data.dart:23`) and `phosphor_flutter` extends it, so it cannot compile. Proven empirically August 6 by performing the swap; the tree was restored. The current `phosphoricons_flutter: ^1.0.0` is a principled workaround, not an accident — see the SDK-constraint block in `design_ui_direction.md` §7. Issue 29 asks whether to ratify it or vendor the glyphs instead. **Do not attempt `phosphor_flutter` again.**
+**What this means for the user:** a smaller download, and one less third-party package in a shipping app. The icons look exactly the same — if any icon changes appearance, something is wrong.
 
-**Issue 30 — `Family-Friendly Decks Only` visibility.** It is a client-local `bool` (`lobby_screen.dart:43`) that never reaches the server and only filters the host's `DeckCarousel`, yet non-hosts now see it greyed inside a card titled "HOUSE RULES". Options: hide from non-hosts / move to a "Your Device" section / promote to a real synced rule. **Option C would touch `functions/` and require the emulator suite** — check the constraint list before starting if it is selected.
+### The gap
+`pubspec.yaml:50` carries `phosphoricons_flutter: ^1.0.0`, a single-maintainer package. Only **11 glyphs** at **one weight** are used, but the package declares **all six** weights in its `flutter: fonts:` block (`Phosphor-Light.ttf` 524K, plus Bold 484K, Duotone 555K, Fill 439K, Thin 523K, Regular 477K ≈ **3.0 MB** of declared font assets).
+
+Do **not** attempt the upstream `phosphor_flutter` package — it cannot compile here (`final class IconData`); see §8 and `design_ui_direction.md` §7.
+
+### Implementation
+
+**Step 1 — vendor the font and its licence.**
+
+Copy from the pub cache into the repo:
+```
+~/.pub-cache/hosted/pub.dev/phosphoricons_flutter-1.0.0/lib/fonts/Phosphor-Light.ttf
+   →  assets/fonts/phosphor/Phosphor-Light.ttf
+```
+Copy **only** `Phosphor-Light.ttf`. The other five weights are unused.
+
+**Licence obligation — not optional.** The font is MIT, © Phosphor Icons (`github.com/phosphor-icons/core`). Create `assets/fonts/phosphor/LICENSE` containing the MIT text with that attribution. Vendoring moves the notice obligation onto this repo; the pub package was carrying it for us. (The wrapper package's own MIT © Lucas Zafret no longer applies once the Dart code is gone — only the font travels.)
+
+**Step 2 — declare the font family in `pubspec.yaml`.** Append to the existing `flutter: fonts:` list, alongside `CormorantGaramond` and `Lora`:
+```yaml
+    - family: PhosphorLight
+      fonts:
+        - asset: assets/fonts/phosphor/Phosphor-Light.ttf
+```
+The family name **must be exactly `PhosphorLight`** — it must match the `fontFamily` in the `IconData` constants below.
+
+**Step 3 — replace the glyph table in `lib/theme/app_icons.dart`.** Replace the `_phosphorGlyphs` map (currently at `:42–54`, whose values are `PhosphorIconsLight.*`) with locally-declared `IconData`. These code points were read directly out of `phosphoricons_flutter 1.0.0`:
+
+```dart
+/// Vendored from Phosphor Icons (MIT) -- see assets/fonts/phosphor/LICENSE.
+/// `fontPackage` is deliberately omitted: the font is a first-party asset now,
+/// so Flutter must resolve the family from this app's own bundle.
+const String _kPhosphorLight = 'PhosphorLight';
+
+const Map<ThematicIconType, IconData> _phosphorGlyphs = {
+  ThematicIconType.writing:  IconData(0xe9c0, fontFamily: _kPhosphorLight), // feather
+  ThematicIconType.redraw:   IconData(0xe094, fontFamily: _kPhosphorLight), // arrowsClockwise
+  ThematicIconType.timer:    IconData(0xe2b2, fontFamily: _kPhosphorLight), // hourglass
+  ThematicIconType.secret:   IconData(0xe2d6, fontFamily: _kPhosphorLight), // key
+  ThematicIconType.ledger:   IconData(0xe0e6, fontFamily: _kPhosphorLight), // bookOpen
+  ThematicIconType.envelope: IconData(0xe214, fontFamily: _kPhosphorLight), // envelope
+  ThematicIconType.observe:  IconData(0xe30c, fontFamily: _kPhosphorLight), // magnifyingGlass
+  ThematicIconType.confirm:  IconData(0xe606, fontFamily: _kPhosphorLight), // sealCheck
+  ThematicIconType.sound:    IconData(0xe5e8, fontFamily: _kPhosphorLight), // bellRinging
+  ThematicIconType.mute:     IconData(0xe0d4, fontFamily: _kPhosphorLight), // bellSlash
+  ThematicIconType.host:     IconData(0xe638, fontFamily: _kPhosphorLight), // lamp
+};
+```
+
+**Three things that will silently break this if you change them:**
+- **Drop `fontPackage`.** The originals carry `fontPackage: 'phosphoricons_flutter'`. Keeping it makes Flutter look for the font inside a package that no longer exists → every icon renders as a blank box.
+- **Keep the map `const`.** Flutter's `--tree-shake-icons` (on by default for release builds) only subsets fonts when `IconData` is const and statically analysable. A non-const map silently disables tree-shaking and can fail the release build outright.
+- **Keep the trailing comments.** The code points are opaque; `// feather` is the only thing telling the next reader what `0xe9c0` is.
+
+**Step 4 — remove the dependency and its imports.**
+```bash
+flutter pub remove phosphoricons_flutter
+```
+Then delete the import at `lib/theme/app_icons.dart:2` and at `test/thematic_icon_test.dart:4`. Confirm:
+```bash
+grep -rn "phosphoricons_flutter\|PhosphorIconsLight" lib test pubspec.yaml
+```
+Must return nothing.
+
+**Step 5 — update `test/thematic_icon_test.dart`.** It currently asserts `expect(icon.icon, PhosphorIconsLight.feather)`, a symbol that no longer exists. Replace with assertions on the vendored identity:
+```dart
+expect(icon.icon!.codePoint, 0xe9c0);
+expect(icon.icon!.fontFamily, 'PhosphorLight');
+expect(icon.icon!.fontPackage, isNull);   // proves it is first-party now
+```
+`fontPackage, isNull` is the falsifying assertion for this whole item — today it is `'phosphoricons_flutter'`.
+
+### Validation
+
+**⚠️ A wrong code point renders a blank box and NO automated test catches it.** `codePoint` assertions prove the table matches this spec; they cannot prove the glyph is the intended picture. Both layers are required.
+
+**Layer 1 — automated.**
+```bash
+flutter analyze lib test && flutter test
+```
+Expect **0 errors** and the same count as after T1 (**≥ 65**); this item adds no tests, it rewrites assertions.
+
+**Layer 2 — visual, mandatory.** Build and run on the iPhone 17 simulator, then confirm **each of the 11** renders as a real glyph and not a tofu box (`􀀀`/hollow rectangle). They appear in these places:
+
+| Glyph | Where to look |
+|---|---|
+| `writing` (quill) | Entry form, name field prefix |
+| `redraw` (circular arrows) | Parlor House Rules — *only if still used after Issue 27* |
+| `timer` (hourglass) | Parlor House Rules, Disable Game Timers row |
+| `secret` (key) | Entry form, room-code field prefix |
+| `ledger` (open book) | Entry form, JOIN ROOM row |
+| `sound` / `mute` (bell / bell-slash) | Parlor AppBar — toggle it to see both |
+| `observe`, `confirm`, `envelope`, `host` | Grep their call sites: `grep -rn "ThematicIconType.observe\|confirm\|envelope\|host" lib` |
+
+Any glyph that renders as a box means its code point is wrong — **report it, do not guess a replacement.**
+
+**Layer 3 — measure the size change; do not estimate it.** The Issue 24 spec estimated 275 dp of overflow where the truth was 593. Do not repeat that. Flutter's `--tree-shake-icons` may already have been subsetting the unused weights, so the real saving is an open question.
+
+```bash
+flutter build ios --release --no-codesign
+du -sh build/ios/iphoneos/Runner.app
+```
+Record that number **before** Step 1 and **after** Step 5, and put both in the commit body and the Resolved entry. Report whatever it actually is, including "smaller than expected".
+
+### Blast radius
+- **New:** `assets/fonts/phosphor/Phosphor-Light.ttf`, `assets/fonts/phosphor/LICENSE`.
+- `pubspec.yaml` — dependency removed, font family added. `pubspec.lock`.
+- `lib/theme/app_icons.dart` — import `:2`, glyph map `:42–54`.
+- `test/thematic_icon_test.dart` — import `:4` and the glyph assertions.
+- `docs/design_ui_direction.md` §7 — the SHIPPED STATE block documents the dependency and the `final class IconData` constraint. **Update it**: the constraint stays true and still explains why upstream was never viable, but the app no longer depends on either package. Say what it depends on now.
+- **`.gitignore` check:** confirm `assets/` is not ignored and the `.ttf` is actually tracked — `git check-ignore -v assets/fonts/phosphor/Phosphor-Light.ttf` must print nothing, and the file must appear in `git status`. A silently-ignored font is a blank-box crash on every other machine.
 
 ---
 
-## 5. Validation standard
+## 6. Validation standard
 
 **For a fix: write validation that fails against the broken state, and observe it fail.**
 ```bash
@@ -146,15 +310,19 @@ git status --short                 # must be clean
 ```
 This is how Issues 24 and 26 were confirmed real (`Actual: <593.0>`, `Actual: <334.0>`). **Record the observed failure output in the Resolved entry.**
 
-**For a regression test over already-correct behaviour** (T1): there is nothing to fail against, so instead temporarily break what the test guards and confirm it fails — see §3.
+**For a regression test over already-correct behaviour** (T1): nothing exists to fail against, so temporarily break what the test guards and confirm it fails.
 
-Prefer assertions on **counts, ranges, geometry and state transitions** over "it looks right". Pair every fix assertion with an **over-reach guard** — the thing most likely to be skipped, and the thing that was skipped last pass.
+**For anything a test cannot see** (Issue 29 glyph identity): a mandatory manual pass, itemised — see §5 Layer 2.
+
+Prefer assertions on **counts, ranges, geometry and state transitions** over "it looks right". Pair every fix assertion with an **over-reach guard** — the first thing dropped under time pressure, and the thing dropped last pass.
 
 ---
 
-## 6. `.gitignore` maintenance
+## 7. `.gitignore` maintenance
 
 **Decision rule.** (1) Secret, or identifies a developer's machine/account? → **ignore, always.** (2) Would a fresh clone fail or build differently without it? → **commit.** Generated-and-reproducible (`build/`, `.dart_tool/`, `Pods/`, `functions/lib/`, `functions/node_modules/`) → ignore.
+
+**Relevant to Issue 29:** the vendored `.ttf` and its `LICENSE` must be **committed**. Verify with `git check-ignore -v assets/fonts/phosphor/Phosphor-Light.ttf` (must print nothing) and confirm the file appears in `git status`.
 
 **Trap: `.swiftpm/` does not match `swiftpm/`.** The real paths are `ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and `ios/Runner.xcworkspace/xcshareddata/swiftpm/Package.resolved` — no leading dot. Those are SPM lockfiles in `xcshareddata` and should be **committed**. Do not add a `swiftpm/` ignore rule.
 
@@ -174,15 +342,15 @@ Prefer assertions on **counts, ranges, geometry and state transitions** over "it
 
 ---
 
-## 7. Already delivered — do NOT rework
+## 8. Already delivered — do NOT rework
 
 **Issues 23–28, independently verified August 5–6, 2026:**
-- **Issue 23** — hybrid icons: 11 functional glyphs route to Phosphor Light, 6 avatar sigils stay bespoke. Fork at `app_icons.dart:33`/`:42`; no call site changed.
+- **Issue 23** — hybrid icons: 11 functional glyphs render from a Phosphor font, 6 avatar sigils stay bespoke `CustomPainter`s. Fork at `app_icons.dart:33`/`:42`; no call site changed. *(Issue 29 changes where the font comes from, not the architecture.)*
 - **Issue 24** — entry form fits 360×640. **Proven:** pre-fix overflow `593.0` dp → now `0.0`.
-- **Issue 25** — house rules off the entry form; `createRoom` defaults to `sabotageAnswersCount: 2`. **The entry-form offload must survive any future change** — Issue 24's fit depends on those controls being absent.
+- **Issue 25** — house rules off the entry form; `createRoom` defaults to `sabotageAnswersCount: 2`. **The entry-form offload must survive** — Issue 24's fit depends on those controls being absent.
 - **Issue 26** — roster sheet header drag/tap. **Proven:** pre-fix header drag moved the sheet `0` px (stuck at `334.0`) → now responds.
 - **Issue 27** — House Rules consolidated into one inline Parlor panel; dialog deleted; AppBar down to one action; chips 1–5 in a `Wrap`; non-hosts see it read-only. Verified: no `HouseRulesDialog` references remain, and a non-host tap records **no** write.
-- **Issue 28** — icon dependency retained as `phosphoricons_flutter: ^1.0.0` for a proven SDK reason. See §4 and `design_ui_direction.md` §7.
+- **Issue 28** — the upstream `phosphor_flutter` package **cannot compile here**: `flutter/lib/src/widgets/icon_data.dart:23` declares `final class IconData` (SDK 3.44.6) and the package does `class PhosphorIconData extends IconData`. Proven empirically. **Do not attempt it again**, including after Issue 29.
 
 **Everything through July 16:** server-authoritative backend · gameplay P1–P6, P8, P10 · heuristic duplicate-answer check · E7 sound · UI/UX U0–U8 + UF · mobile-first M1–M5 + MF1 · character pass V1–V5.
 
@@ -196,55 +364,55 @@ Prefer assertions on **counts, ranges, geometry and state transitions** over "it
 
 ---
 
-## 8. Accepted equivalents — do NOT "fix" back
+## 9. Accepted equivalents — do NOT "fix" back
 
 - **Craft SUBMIT is in-flow** under the text field, not a bottom bar — deliberate keyboard exception (M5).
 - **Vote's CONFIRM is bottom-anchored via `Expanded`+`SafeArea`.**
 - **Reactions send raw emoji strings**; medallions are render-side only (V5).
 - **Entry-form logo shrinks via `SizedBox(height: 60)` + `FittedBox`**, not `Transform.scale` — the latter does not change layout size.
-- **`isSmallHeight` uses a `< 700` dp breakpoint with a 6/8/12/16/20 spacing scale.** Hits the measured target of 0 dp scroll extent at 360×640.
-- **House Rules non-host gating uses `IgnorePointer(ignoring: !isHost)` + `Opacity(0.5)`**, not per-control `onChanged: null`. Equivalent for blocking input; the server rejects non-host writes regardless. Consequence: `SwitchListTile.onChanged` stays non-null, so the switch renders enabled-but-dimmed rather than Flutter's greyed disabled state.
+- **`isSmallHeight` uses a `< 700` dp breakpoint with a 6/8/12/16/20 spacing scale.** Hits the measured 0 dp scroll extent at 360×640.
+- **House Rules non-host gating uses `IgnorePointer(ignoring: !isHost)` + `Opacity(0.5)`**, not per-control `onChanged: null`. Equivalent for blocking input; the server rejects non-host writes regardless. Consequence: `SwitchListTile.onChanged` stays non-null, so the switch renders enabled-but-dimmed rather than greyed.
 - **The Forgery Rounds chip row uses `Wrap(spacing: 6)`** to fit five chips at 360 dp.
-- **`phosphoricons_flutter: ^1.0.0` over `phosphor_flutter`** — forced by `final class IconData`. See §4.
+- **House Rules caption reads `Only the host can modify house rules.`** — shorter than the originally specified two-sentence copy. Settled; do not re-expand.
 
 ---
 
-## 9. Intentional decisions / invariants — do NOT change
+## 10. Intentional decisions / invariants — do NOT change
 
 - **Server-authoritative:** clients read Firestore streams; **all** mutations go through Cloud Functions callables; `firestore.rules` denies client room writes. Transactions read-before-write always; `advancePhaseInternal` never reads.
 - **Portrait-locked on phones**, iPad rotation retained.
 - **Text scale clamped 1.0–1.3** (M3).
 - **Duplicate-answer check is a lexical heuristic**, mirrored byte-identically in `functions/src/text_similarity.ts` ↔ `lib/utils/text_similarity.dart` (Decision 2).
 - **The `_advancedStateKeys` / once-per-event guards** survive Firestore-stream rebuilds — **never remove them.**
-- **`ThematicIcon` is the single public icon entry point.** Call sites must not import the icon package directly — the sole exception is `test/thematic_icon_test.dart`, where the direct import is the package-identity assertion.
-- **"Forgery Rounds" / "Number of Rounds" maps to `sabotageAnswersCount`** (forgeries per card). Renaming user-visible copy is a product decision.
-- **`_familyFriendlyOnly` is client-local**, never synced — until and unless Issue 30 Option C is selected.
+- **`ThematicIcon` is the single public icon entry point.** Call sites must not reference the glyph table or font family directly.
+- **"Forgery Rounds" maps to `sabotageAnswersCount`** (forgeries per card). Renaming user-visible copy is a product decision.
+- **`_familyFriendlyOnly` is client-local and never synced.** Issue 30 Option C would have changed this and was **not** selected — do not route it through `updateLobbySettings`.
 
 ---
 
-## 10. Where the contracts live
+## 11. Where the contracts live
 
 | What | Where |
 |---|---|
 | Engineering history, all issues & selections | `docs/ongoing_general_errors.md` |
 | How to run / playtest (emulator + TestFlight) | `README.md` → "Testing & Running the Game" |
-| System design contracts | `docs/design_*.md` — `design_ui_direction.md` §7 carries the **SHIPPED STATE** block for the hybrid icon system *and* the `final class IconData` SDK constraint |
+| System design contracts | `docs/design_*.md` — `design_ui_direction.md` §7 carries the **SHIPPED STATE** block for the hybrid icon system and the `final class IconData` constraint. **Issue 29 must update it.** |
 | Manual test journeys | `docs/e2e_testing_journeys.md` |
 | Doc / commit / bug-filing conventions | `.agents/skills/` |
 
 ---
 
-## 11. Feedback loop — what earlier specs got wrong
+## 12. Feedback loop — what earlier specs got wrong
 
 Each is a spec failure, not an implementation failure. Read before writing any new spec.
 
-- **Resolution is not compilation.** Issue 28's spec verified `phosphor_flutter` resolved via `dart pub add --dry-run` and concluded it would work. It cannot compile — `IconData` is `final`. `flutter analyze` also reported 0 errors with the broken package installed, because it does not analyse dependency source. **Name a compiling command as the acceptance check for any dependency change.**
-- **A blocker is a filing event, not a licence to re-choose.** Facing the above, the implementer switched to a different option and self-recorded it. Right call technically; wrong process — the user never got to choose between the remaining options. THE LOOP step (4) exists for exactly this.
-- **A "no X exists" claim must be grepped across the whole feature.** Issue 25 asserted no settings home existed after checking `main.dart` and the entry form, but never the Parlor body — where one already lived. That produced Issue 27. `grep -rn "Disable Game Timers" lib` would have caught it.
-- **Layout overflow must be measured, not estimated.** Issue 24 estimated ~275 dp; the harness measured **593 dp**.
-- **A ruling is only as durable as the test that pins it.** The Issue 27 spec ruled `Family-Friendly Decks Only` host-only and named a test case for it. The ruling was not followed *and* the test was not written, so nothing caught it — now Issue 30. **State a ruling and pin it in the same breath; an unpinned ruling is a comment.**
-- **Over-reach guards are the first thing dropped.** The 360×640 non-host layout check was flagged as most likely to be skipped, and was skipped. It passes on manual check — but that was luck, not process. T1 closes it.
-- **What went right, keep doing:** every falsifying assertion named in a spec has held up under adversarial re-testing. Issue 26's test drags the *header text*, not the grid.
+- **Resolution is not compilation.** Issue 28's spec verified `phosphor_flutter` resolved via `dart pub add --dry-run` and concluded it would work. It cannot compile — `IconData` is `final`. `flutter analyze` also reported 0 errors with the broken package installed. **Name a compiling command as the acceptance check for any dependency change.**
+- **A blocker is a filing event, not a licence to re-choose.** Facing the above, the implementer switched options and self-recorded it. Right technically; wrong process — THE LOOP step (4) exists for exactly this.
+- **A "no X exists" claim must be grepped across the whole feature.** Issue 25 asserted no settings home existed after checking `main.dart` and the entry form, but never the Parlor body — where one already lived. That produced Issue 27.
+- **Layout overflow must be measured, not estimated.** Issue 24 estimated ~275 dp; the harness measured **593 dp**. Issue 29 §5 Layer 3 applies this directly: measure the app-size change, do not claim it.
+- **A ruling is only as durable as the test that pins it.** The Issue 27 spec ruled Family-Friendly host-only and named a test for it. The ruling was not followed *and* the test was not written, so nothing caught it — hence Issue 30. **State a ruling and pin it in the same breath.**
+- **Over-reach guards are the first thing dropped.** The 360×640 non-host check was flagged as most likely to be skipped, and was skipped. It passed on manual check — luck, not process. T1 closes it, and §3 adds one specifically against the naive "hide the whole card" fix.
+- **Some correctness is invisible to tests.** A wrong icon code point renders a blank box that every assertion passes. Where that is true, say so and require an itemised manual pass — §5 Layer 2.
 
 ---
 
@@ -254,14 +422,15 @@ Each is a spec failure, not an implementation failure. Read before writing any n
 (1) STUDY the item here + the rejected options in ongoing_general_errors.md + the
     exact files at the cited anchors (re-grep; line numbers drift).
 (2) IMPLEMENT exactly as specified.
-(3) VALIDATE per §5. For a fix, observe the test fail against the broken state.
+(3) VALIDATE per §6. For a fix, observe the test fail against the broken state.
     For a regression test, break the guarded thing and observe the failure.
+    For anything tests cannot see, do the itemised manual pass.
     Then the full §1 battery.
 (4) BLOCKED, or the spec turns out to be impossible? STOP. File it in
     ongoing_general_errors.md with options and a `Your selection: _____` line.
     Do NOT substitute a different option on the user's behalf.
 (5) RECORD: move to Resolved (Problem / Solution / Validation) including observed
-    failure output. Sync any design doc whose described behaviour changed.
+    failure output and measured numbers. Sync any design doc whose behaviour changed.
 (6) COMMIT: one item = one Conventional Commit, WHY in the body.
 ```
 
@@ -269,11 +438,16 @@ Each is a spec failure, not an implementation failure. Read before writing any n
 
 ## Definition of Done
 
-- [ ] **T1:** file renamed to `test/house_rules_panel_test.dart` via `git mv`; three cases added (AppBar count, Family-Friendly current-behaviour with the Issue 30 comment, 360×640 non-host at scale 1.0 and 1.3).
-- [ ] Each new case was proven non-vacuous by temporarily breaking what it guards; the observed failures are recorded in the commit body; the tree is clean afterwards.
-- [ ] Full battery: `flutter analyze lib test` **0 errors** · `flutter test` **≥ 63** · `npm --prefix functions run build` clean · `npm --prefix functions test` **28/28** · `flutter build ios --simulator --debug` succeeds.
-- [ ] No `lib/` changes in the T1 commit.
-- [ ] `git status --porcelain | grep "^??"` returns nothing (§6).
-- [ ] This guide rewritten to reflect the new state.
+- [ ] **Issue 30:** Family-Friendly moved out of the `IgnorePointer` block and wrapped in `if (isHost)`; still client-local (no `updateLobbySettings`); three tests added including the over-reach guard that genuine house rules still render for non-hosts; the `findsNothing` assertion was **observed to fail** against pre-change code.
+- [ ] **T1:** file renamed via `git mv` to `test/house_rules_panel_test.dart`; AppBar-count and 360×640 non-host cases added at scale 1.0 and 1.3; each proven non-vacuous by temporarily breaking what it guards, with the observed failures recorded in the commit body.
+- [ ] **Issue 29:** `Phosphor-Light.ttf` + `LICENSE` vendored under `assets/fonts/phosphor/` and **tracked by git**; `PhosphorLight` family declared in `pubspec.yaml`; glyph map rewritten as `const IconData` with `fontPackage` omitted; `grep -rn "phosphoricons_flutter\|PhosphorIconsLight" lib test pubspec.yaml` returns nothing; `fontPackage, isNull` assertion added.
+- [ ] **All 11 glyphs visually confirmed on the simulator** — none renders as a blank box.
+- [ ] **App-size delta measured** before and after Issue 29 (`du -sh build/ios/iphoneos/Runner.app`), both numbers recorded in the commit body and the Resolved entry.
+- [ ] `docs/design_ui_direction.md` §7 SHIPPED STATE updated: the `final class IconData` constraint stays, but the app now vendors the font rather than depending on either package.
+- [ ] Full battery: `flutter analyze lib test` **0 errors** · `flutter test` **≥ 65** · `npm --prefix functions run build` clean · `npm --prefix functions test` **28/28** · `flutter build ios --simulator --debug` succeeds.
+- [ ] All three items moved to Resolved in `ongoing_general_errors.md`.
+- [ ] `git status --porcelain | grep "^??"` returns nothing (§7).
+- [ ] Three commits, one per item.
+- [ ] This guide rewritten to **Queue Complete**, or to the next approved queue.
 
-**After T1, if Issues 29 and 30 still have blank selection lines: report that and stop. Do not invent work, and do not choose for the user.** The only legitimate triggers are (a) a filled-in `Your selection:` line, (b) a regression against the §1 baseline on a fresh checkout, or (c) an explicit user request. Store-readiness chores — app icons, store listing, privacy manifest, release signing — are user-driven.
+**When all three are done and this guide is rewritten: the queue is empty. Do not invent work, and do not choose for the user.** The only legitimate triggers are (a) a filled-in `Your selection:` line in `ongoing_general_errors.md`, (b) a regression against the §1 baseline on a fresh checkout, or (c) an explicit user request. Store-readiness chores — app icons, store listing, privacy manifest, release signing — are user-driven.
