@@ -241,7 +241,7 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
   - *Pros*: Maximum consistency, least remaining code.
   - *Cons*: Destroys the V1/V2 character work outright (animated avatar sigils, `AnimatedThematicIcon`, `SigilTicker`); contradicts the design-token contract; touches every screen in the app.
 
-*Effort:* Moderate (A) · Moderate (B) · Large (C). Your selection: _____
+*Effort:* Moderate (A) · Moderate (B) · Large (C). Your selection: **Option B** — hybrid: icon library for the functional glyphs, bespoke sigils retained for avatars.
 
 ---
 
@@ -260,7 +260,7 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
   - *Pros*: Trivial; nothing moves.
   - *Cons*: Does not meet the stated requirement ("I want the entry page to fit everything"); JOIN ROOM stays below the fold, which is the actual complaint.
 
-*Effort:* Moderate (A) · Large (B) · Trivial (C). Your selection: _____
+*Effort:* Moderate (A) · Large (B) · Trivial (C). Your selection: **Option A** — relocate settings off the entry page (per Issue 25) and tighten the vertical rhythm.
 
 ---
 
@@ -279,7 +279,7 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
   - *Pros*: One write path (`updateLobbySettings`) instead of two; strips the most from the entry page; everyone sees rule changes live before START.
   - *Cons*: The host cannot set rules before creating; adds pressure to the Parlor, which is already the screen with the Issue 26 sheet problem.
 
-*Effort:* Moderate (A) · Moderate (B) · Moderate (C). Your selection: _____
+*Effort:* Moderate (A) · Moderate (B) · Moderate (C). Your selection: **Option C** — host-only settings panel inside the Parlor, driven by the existing `updateLobbySettings` callable.
 
 ---
 
@@ -298,7 +298,7 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
   - *Pros*: Keeps the existing tree intact; tap-to-toggle is a genuinely nice affordance on top of drag.
   - *Cons*: Hand-rolled extent math and fling/snap physics that Flutter already implements; easy to get subtly wrong at the min/max boundaries; more code to maintain than B.
 
-*Effort:* Trivial (A) · Moderate (B) · Moderate (C). Your selection: _____
+*Effort:* Trivial (A) · Moderate (B) · Moderate (C). Your selection: **Option C** — `DraggableScrollableController` with explicit header drag gestures plus tap-to-toggle.
 
 ---
 
