@@ -270,7 +270,7 @@ Root cause is a specification error, not an implementation error: the Issue 25 S
   - *Pros*: No work is discarded; a host mid-lobby gets a fast path without scrolling the body.
   - *Cons*: Two surfaces for one concept is the actual defect, and this keeps it while adding naming overhead; the range mismatch must still be reconciled; every future setting needs a ruling on which surface it belongs to.
 
-*Effort:* Small (A) · Small (B) · Trivial (C). Your selection: _____
+*Effort:* Small (A) · Small (B) · Trivial (C). Your selection: Proceed with Option A.
 
 ---
 
@@ -293,7 +293,7 @@ The concern is **provenance and maintenance**, in a codebase heading to TestFlig
   - *Pros*: No third-party dependency at all; strips ~3.0 MB of unused font weights from the IPA, which is the only real size win available here.
   - *Cons*: Materially more work than either alternative; re-creates by hand the bespoke-glyph maintenance burden that Issue 23 Option B was chosen to escape; loses the uniform font metrics that were the entire point.
 
-*Effort:* Trivial (A) · Trivial (B) · Moderate (C). Your selection: _____
+*Effort:* Trivial (A) · Trivial (B) · Moderate (C). Your selection: Proceed with Option A.
 
 ---
 
