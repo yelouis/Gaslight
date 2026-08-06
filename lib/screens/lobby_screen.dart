@@ -14,7 +14,9 @@ import '../models/player_state.dart';
 import '../widgets/shared_ui.dart';
 import '../utils/prompt_decks.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_text_styles.dart';
+import '../widgets/house_rules_dialog.dart';
 import '../theme/app_icons.dart';
 import '../widgets/gaslight_route.dart';
 import '../widgets/room_code_plaque.dart';
@@ -33,11 +35,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
   final _roomCodeController = TextEditingController();
   final _customPromptController = TextEditingController();
   bool _nameError = false;
-  int _selectedRounds = 1;
   int _selectedAvatarIndex = 0;
   bool _isNavigating = false;
   String _selectedDeck = PromptDecks.availableDecks.first;
-  bool _isTimerDisabled = false;
   Set<String> _knownPlayerIds = {};
   bool _familyFriendlyOnly = false;
   RavenState _ravenState = RavenState.sleep;
@@ -82,9 +82,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
       await gameService.createRoom(
         name,
         playerId,
-        sabotageAnswersCount: _selectedRounds,
+        sabotageAnswersCount: 2,
         avatarIndex: _selectedAvatarIndex,
-        isTimerDisabled: _isTimerDisabled,
         debugEnabled: kDebugMode,
       );
     } catch (e) {
@@ -388,6 +387,11 @@ class _LobbyScreenState extends State<LobbyScreen> {
         ),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: ThematicIcon(type: ThematicIconType.ledger, color: theme.colorScheme.secondary),
+            onPressed: () => HouseRulesDialog.show(context),
+            tooltip: 'House Rules',
+          ),
           IconButton(
             icon: ThematicIcon(
               type: gs.soundEnabled ? ThematicIconType.sound : ThematicIconType.mute,
@@ -780,82 +784,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                 onChanged: (_) {
                                   if (_nameError) setState(() => _nameError = false);
                                 },
-                              ),
-                              const SizedBox(height: 18),
-                              DropdownButtonFormField<int>(
-                                value: _selectedRounds,
-                                style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontFamily: 'Lora', fontSize: 16),
-                                decoration: InputDecoration(
-                                  labelText: 'Number of Rounds',
-                                  labelStyle: TextStyle(color: ivoryColor.withOpacity(0.7), fontWeight: FontWeight.bold),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: crimsonColor.withOpacity(0.4)),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: crimsonColor, width: 2),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.black.withOpacity(0.5),
-                                  prefixIcon: ThematicIcon(type: ThematicIconType.redraw, size: 20, color: crimsonColor.withOpacity(0.8)),
-                                ),
-                                dropdownColor: const Color(0xFF161C19),
-                                items: [1, 2, 3, 4, 5].map((int value) {
-                                  return DropdownMenuItem<int>(
-                                    value: value,
-                                    child: Text('$value Round${value > 1 ? 's' : ''}', style: TextStyle(color: ivoryColor)),
-                                  );
-                                }).toList(),
-                                onChanged: (int? newValue) {
-                                  if (newValue != null) {
-                                    setState(() {
-                                      _selectedRounds = newValue;
-                                    });
-                                  }
-                                },
-                              ),
-                              const SizedBox(height: 18),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.4),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: crimsonColor.withOpacity(0.2)),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          ThematicIcon(type: ThematicIconType.hourglass, color: crimsonColor.withOpacity(0.8), size: 20),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              'Disable Game Timers',
-                                              style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontSize: 14),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Switch(
-                                      value: _isTimerDisabled,
-                                      activeColor: crimsonColor,
-                                      activeTrackColor: crimsonColor.withOpacity(0.4),
-                                      inactiveThumbColor: Colors.grey,
-                                      inactiveTrackColor: Colors.grey.withOpacity(0.3),
-                                      onChanged: (val) {
-                                        setState(() {
-                                          _isTimerDisabled = val;
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                ),
                               ),
                               const SizedBox(height: 24),
                               Text(
