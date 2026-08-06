@@ -1,16 +1,17 @@
-# Agent Execution Guide — Active Build: Issue 30 → T1 → Issue 29 (August 6, 2026)
+# Agent Execution Guide — Active Build: Issue 30 → T1 → Issue 29 → T2 (August 6, 2026)
 
 **You are an engineering agent picking up Gaslight (Flutter party game, iOS + Android, server-authoritative Firebase backend). Assume you have no memory of this project.**
 
-**Approved work — three items, in this order:**
+**Approved work — four items, in this order:**
 
 | # | Item | Scope | Selected |
 |---|---|---|---|
 | 1 | **Issue 30** — hide `Family-Friendly Decks Only` from non-hosts | `lib/` + 1 test | Option A |
 | 2 | **T1** — close the Issue 27 test-coverage gap | `test/` only | (approved task) |
 | 3 | **Issue 29** — vendor the 11 Phosphor glyphs, drop the dependency | `lib/` + `pubspec` + assets | Option B |
+| 4 | **T2** — drop the unused `cupertino_icons` dependency | `pubspec` only | (approved task) |
 
-Nothing else is approved. All three specs are complete in §3–§5.
+Nothing else is approved. All four specs are complete in §3–§6.
 
 **Specs are decisions, not suggestions.** Every code point, family name, and path below is deliberate.
 
@@ -27,7 +28,7 @@ Nothing else is approved. All three specs are complete in §3–§5.
 3. **Every animation needs an `AppMotion.reduce(context)` path.**
 4. **Text scale clamped 1.0–1.3** (`main.dart:81–88`). Layouts must survive 1.3.
 5. **Touch targets ≥ 48 dp** (M4).
-6. **None of these three items touches `functions/` or `firestore.rules`.** If you are editing either, you have left the spec — STOP.
+6. **None of these four items touches `functions/` or `firestore.rules`.** If you are editing either, you have left the spec — STOP.
 7. **One item = one commit**, Conventional Commits, WHY in the body.
 
 ---
@@ -58,7 +59,8 @@ Nothing else is approved. All three specs are complete in §3–§5.
 |---|---|---|
 | 1 | **Issue 30** | Changes behaviour that T1 must then assert. Doing it first means T1's Family-Friendly case is written **once**, against final behaviour, instead of being written to today's behaviour and immediately flipped. Its pinning test ships in this commit. |
 | 2 | **T1** | Test-only. Closes the remaining coverage gap on already-correct behaviour. |
-| 3 | **Issue 29** | Largest and most error-prone: touches the dependency, the asset bundle, and the icon table. Doing it last means the House Rules panel is fully test-covered before the icon system is rebuilt under it. |
+| 3 | **Issue 29** | Largest and most error-prone: touches the dependency, the asset bundle, and the icon table. Doing it after T1 means the House Rules panel is fully test-covered before the icon system is rebuilt under it. |
+| 4 | **T2** | Same asset-size territory as Issue 29 and verified by the same release-build inspection, so that workflow is already in hand. Kept as its own commit so each font removal has an attributable size delta. |
 
 ---
 
@@ -115,7 +117,7 @@ testWidgets('genuine house rules remain visible to non-hosts', (tester) async {
 
 `setupRoomAndPump(WidgetTester tester, {required bool isHost, int sabotageAnswersCount, bool isTimerDisabled})` is at `test/house_rules_dialog_test.dart:25`. Note it takes `tester` **positionally** and performs the pump itself — do not write your own.
 
-Prove falsifiability per §6, then run the full §1 battery. Expect **63/63**.
+Prove falsifiability per §7, then run the full §1 battery. Expect **63/63**.
 
 ### Blast radius
 `lib/screens/lobby_screen.dart` (the panel only) and the House Rules test file. Nothing else. `_familyFriendlyOnly`'s declaration at `:43` and its use at `:345–353` are unchanged.
@@ -164,7 +166,7 @@ Add a second variant at `TextScaler.linear(1.3)`. `setupRoomAndPump` hardcodes `
 
 ### Validation
 
-These guard already-correct behaviour, so the §6 "observe it fail" procedure does not apply — **there is nothing broken to fail against.** Prove they are not vacuous the other way: temporarily break what each one guards, confirm failure, revert.
+These guard already-correct behaviour, so the §7 "observe it fail" procedure does not apply — **there is nothing broken to fail against.** Prove they are not vacuous the other way: temporarily break what each one guards, confirm failure, revert.
 
 | Case | Temporary break that must make it fail |
 |---|---|
@@ -187,14 +189,14 @@ Then the full §1 battery. Expect **≥ 65/65**.
 ### The gap
 `pubspec.yaml:50` carries `phosphoricons_flutter: ^1.0.0`, a single-maintainer package. Only **11 glyphs** at **one weight** are used, but the package declares **all six** weights in its `flutter: fonts:` block (`Phosphor-Light.ttf` 524K, plus Bold 484K, Duotone 555K, Fill 439K, Thin 523K, Regular 477K ≈ **3.0 MB** of declared font assets).
 
-Do **not** attempt the upstream `phosphor_flutter` package — it cannot compile here (`final class IconData`); see §8 and `design_ui_direction.md` §7.
+Do **not** attempt the upstream `phosphor_flutter` package — it cannot compile here (`final class IconData`); see §9 and `design_ui_direction.md` §8.
 
 **Do not substitute a different icon library either.** Four alternatives were surveyed on August 6 and all were rejected on evidence:
 
 | Package | Compiles? | Font files | Verdict |
 |---|---|---|---|
 | `lucide_icons_flutter` 3.1.15 | ✅ safe | 13 | Worse — more unused weights than Phosphor, same failure mode |
-| `material_symbols_icons` 4.2960.0 | ✅ safe | 6 | Same failure mode, and Material is precisely the "stock UI tell" `design_ui_direction.md` §7 was written to escape |
+| `material_symbols_icons` 4.2960.0 | ✅ safe | 6 | Same failure mode, and Material is precisely the "stock UI tell" `design_ui_direction.md` §8 was written to escape |
 | `hugeicons` 1.1.7 | ✅ safe | 0 | Different rendering model; no metric advantage |
 | `iconsax_flutter` 1.0.1 | ✅ safe | 1 | Only one that avoids the multi-weight problem, but a rounded modern set — would mean re-choosing and re-verifying all 11 glyphs against the Victorian aesthetic |
 
@@ -321,12 +323,68 @@ The `find` is the real check — a single subsetted `Phosphor-Light.ttf` and not
 - `pubspec.yaml` — dependency removed, font family added. `pubspec.lock`.
 - `lib/theme/app_icons.dart` — import `:2`, glyph map `:42–54`.
 - `test/thematic_icon_test.dart` — import `:4` and the glyph assertions.
-- `docs/design_ui_direction.md` §7 — the SHIPPED STATE block documents the dependency and the `final class IconData` constraint. **Update it**: the constraint stays true and still explains why upstream was never viable, but the app no longer depends on either package. Say what it depends on now.
+- `docs/design_ui_direction.md` §8 — the SHIPPED STATE block documents the dependency and the `final class IconData` constraint. **Update it**: the constraint stays true and still explains why upstream was never viable, but the app no longer depends on either package. Say what it depends on now.
 - **`.gitignore` check:** confirm `assets/` is not ignored and the `.ttf` is actually tracked — `git check-ignore -v assets/fonts/phosphor/Phosphor-Light.ttf` must print nothing, and the file must appear in `git status`. A silently-ignored font is a blank-box crash on every other machine.
 
 ---
 
-## 6. Validation standard
+## 6. Task T2 — Drop the unused `cupertino_icons` dependency
+
+**What this means for the user:** a slightly smaller download. Nothing visible changes — if any icon changes or turns into a blank box, stop and revert.
+
+### The gap
+`pubspec.yaml:37` declares `cupertino_icons: ^1.0.2`, a leftover from the Flutter project template. It is **unused**: the August 6 survey found zero references to `CupertinoIcons`, zero imports of `package:flutter/cupertino.dart`, and zero `Cupertino*` widgets anywhere in `lib/` or `test/`.
+
+It nevertheless ships. Confirmed by inspecting the release bundle:
+```
+252 KB  Frameworks/App.framework/flutter_assets/packages/cupertino_icons/assets/CupertinoIcons.ttf
+```
+Full size, not subsetted — the same mechanism described in §5: `--tree-shake-icons` subsets font families that have used code points and ships families with none intact. **252 KB of a 46.7 MB `Runner.app`.**
+
+Note this is separate from `MaterialIcons-Regular.otf`, which ships at **4 KB** — tree-shaken, because Material icons *are* used (Flutter's own widgets reference them). Do not touch that one.
+
+### Implementation
+
+**Step 1 — re-verify before removing. Do not take the survey above on trust.** A "no X exists" claim that was never re-grepped is exactly what produced Issue 27:
+```bash
+grep -rn "CupertinoIcons\|package:flutter/cupertino.dart" lib test
+grep -rnoE "Cupertino[A-Za-z]+" lib test | sort -u
+```
+Both must return nothing. **If either returns a hit, STOP** — the dependency is live and this task is void. File that finding rather than proceeding.
+
+**Step 2 — remove it.**
+```bash
+flutter pub remove cupertino_icons
+```
+Also delete the two orphaned template comment lines immediately above it in `pubspec.yaml` ("The following adds the Cupertino Icons font…" / "Use with the CupertinoIcons class…"), which describe a dependency that no longer exists.
+
+### Validation
+
+**Layer 1 — automated.**
+```bash
+flutter analyze lib test && flutter test
+```
+Expect **0 errors** and no change in test count.
+
+**Layer 2 — the font is actually gone.** This is the falsifying check:
+```bash
+flutter build ios --release --no-codesign
+find build/ios/iphoneos/Runner.app -iname "CupertinoIcons.ttf"   # must return NOTHING
+du -sh build/ios/iphoneos/Runner.app
+```
+Record the size before and after. Expect roughly **−252 KB**. If Issue 29 has already landed, the baseline for this step is *its* post-change number, not 46.7 MB — measure, do not subtract on paper.
+
+**Layer 3 — visual smoke test.** Run on the iPhone 17 simulator and walk one full game loop (create room → DEBUG bots → craft → vote → reveal → game over). You are looking for a blank box anywhere an icon should be. Flutter falls back silently on a missing font, so a live Cupertino glyph that the greps missed would appear as tofu rather than an error. If you see one, revert and file it.
+
+### Ongoing constraint
+If a future change introduces any Cupertino widget or `CupertinoIcons` glyph, **this dependency must come back** — the SDK's `CupertinoIcons` class ships in `package:flutter/cupertino.dart`, but the *font that backs it* comes from this package. Recorded in §11.
+
+### Blast radius
+`pubspec.yaml`, `pubspec.lock`. Nothing in `lib/` or `test/`.
+
+---
+
+## 7. Validation standard
 
 **For a fix: write validation that fails against the broken state, and observe it fail.**
 ```bash
@@ -346,7 +404,7 @@ Prefer assertions on **counts, ranges, geometry and state transitions** over "it
 
 ---
 
-## 7. `.gitignore` maintenance
+## 8. `.gitignore` maintenance
 
 **Decision rule.** (1) Secret, or identifies a developer's machine/account? → **ignore, always.** (2) Would a fresh clone fail or build differently without it? → **commit.** Generated-and-reproducible (`build/`, `.dart_tool/`, `Pods/`, `functions/lib/`, `functions/node_modules/`) → ignore.
 
@@ -370,7 +428,7 @@ Prefer assertions on **counts, ranges, geometry and state transitions** over "it
 
 ---
 
-## 8. Already delivered — do NOT rework
+## 9. Already delivered — do NOT rework
 
 **Issues 23–28, independently verified August 5–6, 2026:**
 - **Issue 23** — hybrid icons: 11 functional glyphs render from a Phosphor font, 6 avatar sigils stay bespoke `CustomPainter`s. Fork at `app_icons.dart:33`/`:42`; no call site changed. *(Issue 29 changes where the font comes from, not the architecture.)*
@@ -392,7 +450,7 @@ Prefer assertions on **counts, ranges, geometry and state transitions** over "it
 
 ---
 
-## 9. Accepted equivalents — do NOT "fix" back
+## 10. Accepted equivalents — do NOT "fix" back
 
 - **Craft SUBMIT is in-flow** under the text field, not a bottom bar — deliberate keyboard exception (M5).
 - **Vote's CONFIRM is bottom-anchored via `Expanded`+`SafeArea`.**
@@ -405,7 +463,7 @@ Prefer assertions on **counts, ranges, geometry and state transitions** over "it
 
 ---
 
-## 10. Intentional decisions / invariants — do NOT change
+## 11. Intentional decisions / invariants — do NOT change
 
 - **Server-authoritative:** clients read Firestore streams; **all** mutations go through Cloud Functions callables; `firestore.rules` denies client room writes. Transactions read-before-write always; `advancePhaseInternal` never reads.
 - **Portrait-locked on phones**, iPad rotation retained.
@@ -415,22 +473,23 @@ Prefer assertions on **counts, ranges, geometry and state transitions** over "it
 - **`ThematicIcon` is the single public icon entry point.** Call sites must not reference the glyph table or font family directly.
 - **"Forgery Rounds" maps to `sabotageAnswersCount`** (forgeries per card). Renaming user-visible copy is a product decision.
 - **`_familyFriendlyOnly` is client-local and never synced.** Issue 30 Option C would have changed this and was **not** selected — do not route it through `updateLobbySettings`.
+- **`cupertino_icons` is deliberately absent after T2.** The SDK's `CupertinoIcons` class lives in `package:flutter/cupertino.dart`, but the font backing it comes from that package. If any Cupertino widget or glyph is ever introduced, **the dependency must be restored** or the glyph renders as a blank box with no error. Do not re-add it speculatively.
 
 ---
 
-## 11. Where the contracts live
+## 12. Where the contracts live
 
 | What | Where |
 |---|---|
 | Engineering history, all issues & selections | `docs/ongoing_general_errors.md` |
 | How to run / playtest (emulator + TestFlight) | `README.md` → "Testing & Running the Game" |
-| System design contracts | `docs/design_*.md` — `design_ui_direction.md` §7 carries the **SHIPPED STATE** block for the hybrid icon system and the `final class IconData` constraint. **Issue 29 must update it.** |
+| System design contracts | `docs/design_*.md` — `design_ui_direction.md` §8 carries the **SHIPPED STATE** block for the hybrid icon system and the `final class IconData` constraint. **Issue 29 must update it.** |
 | Manual test journeys | `docs/e2e_testing_journeys.md` |
 | Doc / commit / bug-filing conventions | `.agents/skills/` |
 
 ---
 
-## 12. Feedback loop — what earlier specs got wrong
+## 13. Feedback loop — what earlier specs got wrong
 
 Each is a spec failure, not an implementation failure. Read before writing any new spec.
 
@@ -450,7 +509,7 @@ Each is a spec failure, not an implementation failure. Read before writing any n
 (1) STUDY the item here + the rejected options in ongoing_general_errors.md + the
     exact files at the cited anchors (re-grep; line numbers drift).
 (2) IMPLEMENT exactly as specified.
-(3) VALIDATE per §6. For a fix, observe the test fail against the broken state.
+(3) VALIDATE per §7. For a fix, observe the test fail against the broken state.
     For a regression test, break the guarded thing and observe the failure.
     For anything tests cannot see, do the itemised manual pass.
     Then the full §1 battery.
@@ -469,13 +528,14 @@ Each is a spec failure, not an implementation failure. Read before writing any n
 - [ ] **Issue 30:** Family-Friendly moved out of the `IgnorePointer` block and wrapped in `if (isHost)`; still client-local (no `updateLobbySettings`); three tests added including the over-reach guard that genuine house rules still render for non-hosts; the `findsNothing` assertion was **observed to fail** against pre-change code.
 - [ ] **T1:** file renamed via `git mv` to `test/house_rules_panel_test.dart`; AppBar-count and 360×640 non-host cases added at scale 1.0 and 1.3; each proven non-vacuous by temporarily breaking what it guards, with the observed failures recorded in the commit body.
 - [ ] **Issue 29:** `Phosphor-Light.ttf` + `LICENSE` vendored under `assets/fonts/phosphor/` and **tracked by git**; `PhosphorLight` family declared in `pubspec.yaml`; glyph map rewritten as `const IconData` with `fontPackage` omitted; `grep -rn "phosphoricons_flutter\|PhosphorIconsLight" lib test pubspec.yaml` returns nothing; `fontPackage, isNull` assertion added.
-- [ ] **All 11 glyphs visually confirmed on the simulator** — none renders as a blank box.
+- [ ] **T2:** the two greps in §6 Step 1 were **re-run** and returned nothing before removing anything; `cupertino_icons` removed from `pubspec.yaml` along with its orphaned template comments; `find build/ios/iphoneos/Runner.app -iname "CupertinoIcons.ttf"` returns nothing; `MaterialIcons-Regular.otf` still present at ~4 KB.
+- [ ] **All 11 glyphs visually confirmed on the simulator** — none renders as a blank box. A full game loop (create → bots → craft → vote → reveal → game over) was walked after T2 with no tofu anywhere.
 - [ ] **App-size delta measured** before and after Issue 29 (`du -sh build/ios/iphoneos/Runner.app`), both numbers recorded in the commit body and the Resolved entry.
-- [ ] `docs/design_ui_direction.md` §7 SHIPPED STATE updated: the `final class IconData` constraint stays, but the app now vendors the font rather than depending on either package.
+- [ ] `docs/design_ui_direction.md` §8 SHIPPED STATE updated: the `final class IconData` constraint stays, but the app now vendors the font rather than depending on either package.
 - [ ] Full battery: `flutter analyze lib test` **0 errors** · `flutter test` **≥ 65** · `npm --prefix functions run build` clean · `npm --prefix functions test` **28/28** · `flutter build ios --simulator --debug` succeeds.
-- [ ] All three items moved to Resolved in `ongoing_general_errors.md`.
-- [ ] `git status --porcelain | grep "^??"` returns nothing (§7).
-- [ ] Three commits, one per item.
+- [ ] Both issues (29, 30) moved to Resolved in `ongoing_general_errors.md`; T1 and T2 recorded there as completed tasks.
+- [ ] `git status --porcelain | grep "^??"` returns nothing (§8).
+- [ ] Four commits, one per item.
 - [ ] This guide rewritten to **Queue Complete**, or to the next approved queue.
 
-**When all three are done and this guide is rewritten: the queue is empty. Do not invent work, and do not choose for the user.** The only legitimate triggers are (a) a filled-in `Your selection:` line in `ongoing_general_errors.md`, (b) a regression against the §1 baseline on a fresh checkout, or (c) an explicit user request. Store-readiness chores — app icons, store listing, privacy manifest, release signing — are user-driven.
+**When all four are done and this guide is rewritten: the queue is empty. Do not invent work, and do not choose for the user.** The only legitimate triggers are (a) a filled-in `Your selection:` line in `ongoing_general_errors.md`, (b) a regression against the §1 baseline on a fresh checkout, or (c) an explicit user request. Store-readiness chores — app icons, store listing, privacy manifest, release signing — are user-driven.
