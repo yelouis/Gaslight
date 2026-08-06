@@ -26,6 +26,7 @@ void main() {
       required bool isHost,
       int sabotageAnswersCount = 2,
       bool isTimerDisabled = false,
+      double textScale = 1.0,
     }) async {
       const roomCode = 'TEST';
       final currentUserId = 'player_1';
@@ -70,7 +71,10 @@ void main() {
           value: gameService,
           child: MaterialApp(
             home: MediaQuery(
-              data: const MediaQueryData(accessibleNavigation: true),
+              data: MediaQueryData(
+                accessibleNavigation: true,
+                textScaler: TextScaler.linear(textScale),
+              ),
               child: const LobbyScreen(),
             ),
           ),
@@ -185,6 +189,38 @@ void main() {
         expect(find.text('HOUSE RULES'), findsOneWidget);
         expect(find.text('Forgery Rounds:'), findsOneWidget);
         expect(find.text('Disable Game Timers'), findsOneWidget);
+      } finally {
+        gameService.dispose();
+      }
+    });
+
+    testWidgets('AppBar contains exactly one icon button and inline panel exists', (tester) async {
+      try {
+        await setupRoomAndPump(tester, isHost: true);
+        expect(
+          find.descendant(of: find.byType(AppBar), matching: find.byType(IconButton)),
+          findsOneWidget,
+        );
+        expect(find.text('HOUSE RULES'), findsOneWidget);
+      } finally {
+        gameService.dispose();
+      }
+    });
+
+    testWidgets('non-host Parlor layout fits 360x640 portrait without overflow at scale 1.0 and 1.3', (tester) async {
+      try {
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await setupRoomAndPump(tester, isHost: false, textScale: 1.0);
+        expect(tester.takeException(), isNull);
+
+        await setupRoomAndPump(tester, isHost: false, textScale: 1.3);
+        expect(tester.takeException(), isNull);
       } finally {
         gameService.dispose();
       }
