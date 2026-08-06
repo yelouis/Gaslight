@@ -244,15 +244,82 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Problem**: The Parlor rendered two competing host-only "HOUSE RULES" panels (a pre-existing inline card and a newly added `HouseRulesDialog`), creating visual duplication and range mismatches (dropdown offered 1-5 rounds while inline chips rendered 1-4).
     - **Solution**: Removed `HouseRulesDialog` (`lib/widgets/house_rules_dialog.dart`) and its AppBar ledger action. Extended the inline Parlor HOUSE RULES card (`lib/screens/lobby_screen.dart`) to support rounds 1–5 using a `Wrap` layout. Added non-host read-only treatment (`IgnorePointer`, `0.5` opacity, and caption `Only the host can modify house rules.`) so non-host players can view active game rules.
     - **Validation**: `test/house_rules_dialog_test.dart` rewritten to test the inline panel (host editing rounds 1-5, host timer toggle, non-host read-only gating with caption, Firestore stream sync, and default 2-round room creation). All tests green.
+    - **Independently verified August 6**: `lib/widgets/house_rules_dialog.dart` deleted; `grep -rn "HouseRulesDialog" lib test` returns nothing; the Parlor `AppBar` now has exactly **1** `IconButton` (was 2); chips render `[1, 2, 3, 4, 5]`. The non-host gating rests on a genuine falsifying assertion — after a non-host tap, `sabotageAnswersCount` is still `2` and `isTimerDisabled` still `false`, i.e. no write was recorded. Battery: `flutter analyze lib test` **0 errors** · `flutter test` **60/60** · functions build clean.
+    - **Accepted deviations from the spec** (recorded so a later pass does not "fix" them back):
+      - **`IgnorePointer(ignoring: !isHost)` wrapping the control block**, rather than the spec's per-control `onChanged: isHost ? … : null`. Functionally equivalent for blocking input, and the server rejects non-host writes regardless, so this is not a security difference. One cosmetic consequence: `SwitchListTile.onChanged` stays non-null, so the switch renders in its *enabled* visual state at 0.5 opacity rather than Flutter's greyed disabled state.
+      - **The chip row uses `Wrap(spacing: 6)`**, which is the overflow remedy the spec named for the fifth chip. Correct call.
+      - **Caption shortened** to `Only the host can modify house rules.` from the spec's verbatim `Only the host may set the house rules. Changes appear here as they are made.` The dropped second sentence conveyed liveness; low impact, not worth re-churning.
+      - **Test file kept as `house_rules_dialog_test.dart`** rather than renamed to `house_rules_panel_test.dart`. The name is now misleading (there is no dialog) but the contents are correct.
+    - **⚠️ Test-coverage gap (not a defect — no user decision needed, specified in the execution guide)**: three of the six specified cases are absent — the AppBar `IconButton`-count assertion, the Family-Friendly host-only assertion, and the 360×640 non-host overflow guard. The layout guard was the explicitly-flagged over-reach check. **It was run manually during this verification and passes**: a non-host Parlor at 360×640 dp produced `exception=NONE`. The behaviour is correct; only the committed regression coverage is missing.
+    - **⚠️ Ruling violated — see Issue 30**: §4 Step 6 of the guide ruled that `Family-Friendly Decks Only` render only when `isHost`. It was instead placed *inside* the `IgnorePointer` block, so non-hosts now see it greyed out. The desync risk that motivated the ruling cannot occur (they cannot toggle it), but a device-local deck filter is now displayed to non-hosts as though it were a shared house rule.
 
 56. **Issue 28: Icon Dependency Substituted for Technical Compatibility — Option B (Resolved - August 06)**:
     - **Problem**: Option A attempted to switch `phosphoricons_flutter: ^1.0.0` back to `phosphor_flutter: ^2.1.0`. However, `phosphor_flutter: ^2.1.0` fails compilation under modern Flutter 3.22+ SDKs with `Error: The class 'IconData' can't be extended outside of its library because it's a final class` (`class PhosphorIconData extends IconData`).
     - **Solution**: Recorded `phosphoricons_flutter: ^1.0.0` as an accepted equivalent in `docs/ongoing_general_errors.md`.
     - **Validation**: `test/thematic_icon_test.dart` passes 100% cleanly with `phosphoricons_flutter: ^1.0.0` across all 11 functional glyph mappings.
+    - **Independently verified August 6 — the blocker is real, and the deviation was correct.** The claim was not taken on trust; Option A was attempted exactly as specified (`flutter pub remove phosphoricons_flutter && flutter pub add phosphor_flutter`, both imports swapped) and the build failed with:
+      ```
+      phosphor_flutter-2.1.0/lib/src/phosphor_icon_data.dart:5:32: Error: The class 'IconData'
+      can't be extended outside of its library because it's a final class.
+      ```
+      Root cause confirmed in the SDK: `flutter/lib/src/widgets/icon_data.dart:23` declares `final class IconData` (Flutter 3.44.6), and `phosphor_flutter` does `class PhosphorIconData extends IconData`. `phosphoricons_flutter` exists specifically to solve this — its own source at `lib/src/phosphor_icon_data.dart:1` carries the comment *"Dart 3.x tornou IconData uma 'final class' — herança externa quebra o build"* and works around it with `typedef PhosphorIconData = IconData` plus direct `const IconData(...)` construction. The tree was restored clean afterwards.
+    - **⚠️ The Issue 28 spec was wrong, and this is the lesson**: it verified that `phosphor_flutter` **resolved** (via `dart pub add --dry-run`) and inferred that it would build. Resolution is not compilation. `flutter analyze` does not catch it either — it does not analyse dependency source, and reported **0 errors** with the broken package installed. Only an actual build (`flutter test` / `flutter build`) surfaces it. Any future spec that names a dependency must state the command that *compiles* it as the acceptance check.
+    - **⚠️ Process deviation — see Issue 29**: the user had selected **Option A**. When it proved impossible the implementer switched to Option B and self-recorded it, rather than stopping and filing the blocker for a fresh decision as THE LOOP step (4) requires. The technical outcome is correct; the choice between remaining options B and C was simply never put to the user. Issue 29 puts it.
 
 ---
 
-## ⚠️ Unresolved Issues & Suggestions (0 open)
+## ⚠️ Unresolved Issues & Suggestions (2 open — Issues 29–30, filed August 6, 2026)
+
+> Opened by the August 6 verification pass over Issues 27–28. Both fixes work and the battery is green (`flutter analyze lib test` **0 errors** · `flutter test` **60/60** · functions build clean). Neither item below is a defect in shipped behaviour; both are decisions that were made *for* you and should be made *by* you.
+
+---
+
+### Issue 29: Icon Dependency — Selected Option A Is Impossible; Confirm the Fallback
+**Status**: ⚠️ Confirmed Unresolved (decision outstanding) — You selected **Option A** on Issue 28 (switch to `phosphor_flutter: ^2.1.0`). That option is **not implementable on this Flutter SDK**, proven empirically on August 6 by performing the swap exactly as specified:
+
+```
+phosphor_flutter-2.1.0/lib/src/phosphor_icon_data.dart:5:32: Error: The class 'IconData'
+can't be extended outside of its library because it's a final class.
+```
+
+`flutter/lib/src/widgets/icon_data.dart:23` declares `final class IconData` in Flutter 3.44.6; `phosphor_flutter` extends it. The package cannot build here and no version of it can until upstream stops subclassing `IconData`. The implementer correctly fell back to keeping `phosphoricons_flutter: ^1.0.0` — but chose the fallback without asking, so the decision below has never actually been yours to make. Current state: `pubspec.yaml:50` carries `phosphoricons_flutter: ^1.0.0`; everything compiles and all 11 glyphs render.
+
+**Option A (recommended)**: **Ratify the current state** — keep `phosphoricons_flutter: ^1.0.0` and record it in the accepted-equivalents list with the `final class IconData` reason attached, so no future pass wastes another cycle attempting the upstream package.
+  - *Pros*: Zero work; already verified across the full battery. Documenting *why* is the whole value — this is the second time the upstream package has been proposed, and a written reason stops a third. The workaround is principled, not accidental: the package exists precisely to solve this SDK change.
+  - *Cons*: A shipping app depends on a `1.0.0` package with a single maintainer; if it goes stale under a future Flutter release you are on the same hook again, with no upstream to fall back to.
+
+**Option B**: **Vendor the eleven glyphs and drop the dependency.** Extract the 11 `PhosphorIconsLight` code points into a local `IconData` table in `lib/theme/app_icons.dart`, bundling only the single `Phosphor-Light.ttf` weight.
+  - *Pros*: No third-party dependency and no exposure to either package's maintenance. Strips ~2.5 MB from the IPA — both packages declare all six weights (~3.0 MB) while only Light is used, so this is the one real app-size win available. Immune to future `final class`-style SDK changes.
+  - *Cons*: A licensed font file plus a hand-maintained code-point table becomes yours to own; adding a twelfth icon later means finding its code point by hand. Phosphor is MIT, so licensing is clean, but attribution must be carried.
+
+**Option C**: **Vendor as `CustomPainter` paths instead of a font.** Trace the 11 glyphs into the existing bespoke painter system.
+  - *Pros*: No font asset at all, and one single rendering mechanism across the whole app.
+  - *Cons*: Re-creates by hand exactly the optical-inconsistency problem Issue 23 was opened to escape — the uniform metrics come *from* the font. Strongly discouraged.
+
+*Effort:* Trivial (A) · Moderate (B) · Large (C). Your selection: _____
+
+---
+
+### Issue 30: `Family-Friendly Decks Only` Is Shown to Non-Hosts as a House Rule
+**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/lobby_screen.dart`. The Issue 27 spec (guide §4 Step 6) ruled that this control render only when `isHost`. It was instead placed **inside** the `IgnorePointer(ignoring: !isHost)` block alongside the two genuine house rules, so non-hosts now see it greyed at 0.5 opacity.
+
+No functional harm: non-hosts cannot toggle it, so the `selectedDeckId` display desync that motivated the ruling cannot occur. The problem is that it is **not a house rule at all**. `_familyFriendlyOnly` is a client-local `bool` (`lobby_screen.dart:43`) mutated with `setState`, never sent to the server, with no `GameState` field. Its only effect is filtering `availableDecks` at `:345–353` for the host's own `DeckCarousel`. Presenting it inside a card titled "HOUSE RULES", greyed as though the host controls it for everyone, tells non-hosts something untrue: it is a per-device filter, and each player's copy is independent.
+
+**Option A (recommended)**: **Hide it from non-hosts** — move it out of the `IgnorePointer` block and wrap it in `if (isHost)`, per the original ruling. Add the test case that pins it (`findsNothing` as non-host, `findsOneWidget` as host).
+  - *Pros*: Smallest change; restores the documented ruling; non-hosts see only settings that genuinely describe the shared game. Shortens the non-host Parlor, which is the tallest layout case.
+  - *Cons*: The card's contents now differ by role, which is marginally more complex to reason about than one uniform panel.
+
+**Option B**: **Keep it visible to everyone, but move it out of the House Rules card** into its own small "Your Device" section with its own heading.
+  - *Pros*: Honest about scope — names it as a personal preference rather than a shared rule; every player gets to filter their own deck view, which is arguably what a content filter should do.
+  - *Cons*: More layout work in the most space-constrained screen; a new section heading for a single toggle; non-hosts filtering a carousel they cannot act on is close to pointless.
+
+**Option C**: **Promote it to a real synced house rule** — add `familyFriendlyOnly` to `GameState`, thread it through `updateLobbySettings`, and let the host set it for the table.
+  - *Pros*: Makes the UI truthful in the other direction — it *becomes* the shared rule it currently appears to be, and content filtering for a party game is arguably a table-level decision, not a per-device one.
+  - *Cons*: The only option here that touches `functions/` and `firestore.rules` territory, so it requires the emulator suite as a gate; needs a migration story for rooms created before the field existed. Materially larger than the other two.
+
+*Effort:* Trivial (A) · Small (B) · Moderate (C). Your selection: _____
+
+---
 
 > **All active build queue items (Issues 23–28) have been resolved and verified.**
 >
