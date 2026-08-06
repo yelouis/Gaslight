@@ -730,6 +730,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
       backgroundColor: Colors.transparent,
       body: LayoutBuilder(
         builder: (context, constraints) {
+          final isSmallHeight = constraints.maxHeight < 700;
           return SingleChildScrollView(
             child: ConstrainedBox(
               constraints: BoxConstraints(
@@ -737,16 +738,26 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 minWidth: constraints.maxWidth,
               ),
               child: Padding(
-                padding: const EdgeInsets.all(32.0),
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: isSmallHeight ? 6 : 16),
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const AnimatedLobbyLogo(),
-                      const SizedBox(height: 40),
+                      if (isSmallHeight)
+                        const SizedBox(
+                          height: 60,
+                          child: FittedBox(
+                            fit: BoxFit.contain,
+                            child: AnimatedLobbyLogo(),
+                          ),
+                        )
+                      else
+                        const AnimatedLobbyLogo(),
+                      SizedBox(height: isSmallHeight ? 8 : 24),
                       ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 420),
                         child: CrimsonShadowCard(
+                          padding: EdgeInsets.all(isSmallHeight ? 12 : 24),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
@@ -759,7 +770,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                   fontFamily: 'Lora',
                                 ),
                               ),
-                              const SizedBox(height: 24),
+                              SizedBox(height: isSmallHeight ? 8 : 16),
                               TextField(
                                 controller: _nameController,
                                 style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontSize: 16),
@@ -768,6 +779,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                   errorText: _nameError ? 'Please enter a name first' : null,
                                   labelStyle: TextStyle(color: ivoryColor.withOpacity(0.7), fontWeight: FontWeight.bold),
                                   errorStyle: const TextStyle(fontWeight: FontWeight.bold),
+                                  contentPadding: isSmallHeight ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8) : null,
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
@@ -785,15 +797,15 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                   if (_nameError) setState(() => _nameError = false);
                                 },
                               ),
-                              const SizedBox(height: 24),
+                              SizedBox(height: isSmallHeight ? 6 : 12),
                               Text(
                                 'Select Character Token',
                                 style: TextStyle(color: crimsonColor, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 6),
                               Wrap(
-                                spacing: 10,
-                                runSpacing: 10,
+                                spacing: 8,
+                                runSpacing: 6,
                                 alignment: WrapAlignment.center,
                                 children: List.generate(6, (index) {
                                   final isSelected = _selectedAvatarIndex == index;
@@ -817,20 +829,20 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                         child: PlayerAvatar.buildChip(
                                           colorValue: isSelected ? crimsonColor.value : Colors.grey.shade700.value,
                                           avatarIndex: index,
-                                          size: 48,
+                                          size: isSmallHeight ? 44 : 48,
                                         ),
                                       ),
                                     ),
                                   );
                                 }),
                               ),
-                              const SizedBox(height: 30),
+                              SizedBox(height: isSmallHeight ? 8 : 20),
                               PrimaryButton(
                                 text: 'CREATE ROOM',
                                 onPressed: _createRoom,
                               ),
                               Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                padding: EdgeInsets.symmetric(vertical: isSmallHeight ? 6 : 12),
                                 child: Row(
                                   children: [
                                     Expanded(child: Divider(color: crimsonColor.withOpacity(0.3), thickness: 1)),
@@ -852,6 +864,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                 decoration: InputDecoration(
                                   labelText: 'Room Code (4 Letters)',
                                   labelStyle: TextStyle(color: ivoryColor.withOpacity(0.7), fontWeight: FontWeight.bold, letterSpacing: 0),
+                                  contentPadding: isSmallHeight ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8) : null,
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
@@ -872,12 +885,12 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                 textCapitalization: TextCapitalization.characters,
                                 maxLength: 4,
                               ),
-                              const SizedBox(height: 18),
+                              SizedBox(height: isSmallHeight ? 6 : 12),
                               ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: theme.colorScheme.tertiary, // Emerald
                                   foregroundColor: ivoryColor, // Ivory Text
-                                  minimumSize: const Size(double.infinity, 58),
+                                  minimumSize: Size(double.infinity, isSmallHeight ? 44 : 58),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     side: BorderSide(color: crimsonColor.withOpacity(0.4), width: 1.5), // Crimson Border
@@ -885,9 +898,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                   elevation: 6,
                                 ),
                                 onPressed: _joinRoom,
-                                child: const Text('JOIN ROOM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 2.0)),
+                                child: const Text('JOIN ROOM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 2.0)),
                               ),
-                              const SizedBox(height: 18),
+                              SizedBox(height: isSmallHeight ? 6 : 12),
                               TextButton.icon(
                                 onPressed: _showInstructions,
                                 icon: ThematicIcon(type: ThematicIconType.ledger, color: crimsonColor),
