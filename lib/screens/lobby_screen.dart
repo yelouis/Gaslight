@@ -510,27 +510,28 @@ class _LobbyScreenState extends State<LobbyScreen> {
                                   },
                                 ),
                               ),
-                              Material(
-                                color: Colors.transparent,
-                                child: SwitchListTile(
-                                  title: const Text(
-                                    'Family-Friendly Decks Only',
-                                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
-                                  ),
-                                  value: _familyFriendlyOnly,
-                                  activeColor: AppColors.brass,
-                                  contentPadding: EdgeInsets.zero,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _familyFriendlyOnly = val;
-                                    });
-                                  },
-                                ),
-                              ),
                             ],
                           ),
                         ),
                       ),
+                      if (isHost)
+                        Material(
+                          color: Colors.transparent,
+                          child: SwitchListTile(
+                            title: const Text(
+                              'Family-Friendly Decks Only',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                            ),
+                            value: _familyFriendlyOnly,
+                            activeColor: AppColors.brass,
+                            contentPadding: EdgeInsets.zero,
+                            onChanged: (val) {
+                              setState(() {
+                                _familyFriendlyOnly = val;
+                              });
+                            },
+                          ),
+                        ),
                       if (!isHost) ...[
                         const SizedBox(height: 4),
                         Text(

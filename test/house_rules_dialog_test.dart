@@ -160,5 +160,34 @@ void main() {
         gameService.dispose();
       }
     });
+
+    testWidgets('Family-Friendly Decks Only is host-only', (tester) async {
+      try {
+        await setupRoomAndPump(tester, isHost: false);
+        expect(find.text('Family-Friendly Decks Only'), findsNothing);
+      } finally {
+        gameService.dispose();
+      }
+    });
+
+    testWidgets('Family-Friendly Decks Only is present for the host', (tester) async {
+      try {
+        await setupRoomAndPump(tester, isHost: true);
+        expect(find.text('Family-Friendly Decks Only'), findsOneWidget);
+      } finally {
+        gameService.dispose();
+      }
+    });
+
+    testWidgets('genuine house rules remain visible to non-hosts', (tester) async {
+      try {
+        await setupRoomAndPump(tester, isHost: false);
+        expect(find.text('HOUSE RULES'), findsOneWidget);
+        expect(find.text('Forgery Rounds:'), findsOneWidget);
+        expect(find.text('Disable Game Timers'), findsOneWidget);
+      } finally {
+        gameService.dispose();
+      }
+    });
   });
 }
