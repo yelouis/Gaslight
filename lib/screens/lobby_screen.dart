@@ -34,6 +34,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
   final _nameController = TextEditingController();
   final _roomCodeController = TextEditingController();
   final _customPromptController = TextEditingController();
+  final _sheetController = DraggableScrollableController();
   bool _nameError = false;
   int _selectedAvatarIndex = 0;
   bool _isNavigating = false;
@@ -544,9 +545,12 @@ class _LobbyScreenState extends State<LobbyScreen> {
               ),
             ),
             DraggableScrollableSheet(
+              controller: _sheetController,
               initialChildSize: 0.4,
               minChildSize: 0.25,
               maxChildSize: 0.7,
+              snap: true,
+              snapSizes: const [0.25, 0.4, 0.7],
               builder: (context, scrollController) {
                 return Container(
                   decoration: BoxDecoration(
@@ -571,44 +575,94 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   ),
                   child: Column(
                     children: [
-                      Center(
-                        child: Container(
-                          margin: const EdgeInsets.only(top: 8, bottom: 8),
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: AppColors.brass.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onVerticalDragUpdate: (details) {
+                          if (!_sheetController.isAttached) return;
+                          final h = MediaQuery.of(context).size.height;
+                          final next = (_sheetController.size - details.primaryDelta! / h).clamp(0.25, 0.7);
+                          _sheetController.jumpTo(next);
+                        },
+                        onVerticalDragEnd: (details) {
+                          if (!_sheetController.isAttached) return;
+                          final velocity = details.primaryVelocity ?? 0.0;
+                          final double target;
+                          if (velocity > 300) {
+                            target = 0.25;
+                          } else if (velocity < -300) {
+                            target = 0.7;
+                          } else {
+                            final current = _sheetController.size;
+                            const snapPoints = [0.25, 0.4, 0.7];
+                            target = snapPoints.reduce((a, b) => (a - current).abs() < (b - current).abs() ? a : b);
+                          }
+                          if (AppMotion.reduce(context)) {
+                            _sheetController.jumpTo(target);
+                          } else {
+                            _sheetController.animateTo(
+                              target,
+                              duration: AppMotion.standard,
+                              curve: Curves.easeOutCubic,
+                            );
+                          }
+                        },
+                        onTap: () {
+                          if (!_sheetController.isAttached) return;
+                          final target = _sheetController.size > 0.5 ? 0.25 : 0.7;
+                          if (AppMotion.reduce(context)) {
+                            _sheetController.jumpTo(target);
+                          } else {
+                            _sheetController.animateTo(
+                              target,
+                              duration: AppMotion.standard,
+                              curve: Curves.easeOutCubic,
+                            );
+                          }
+                        },
+                        child: Column(
+                          children: [
+                            Center(
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 8, bottom: 8),
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: AppColors.brass.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              child: Text(
+                                '${players.length} SUSPECTS JOINED',
+                                style: const TextStyle(
+                                  fontFamily: 'CormorantGaramond',
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 2,
+                                  color: AppColors.ink,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '($readyNonHostsCount/$totalNonHostsCount Ready)',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontFamily: 'Lora',
+                                fontStyle: FontStyle.italic,
+                                color: AppColors.ink.withOpacity(0.6),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Text(
-                          '${players.length} SUSPECTS JOINED',
-                          style: const TextStyle(
-                            fontFamily: 'CormorantGaramond',
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 2,
-                            color: AppColors.ink,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '($readyNonHostsCount/$totalNonHostsCount Ready)',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontFamily: 'Lora',
-                          fontStyle: FontStyle.italic,
-                          color: AppColors.ink.withOpacity(0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
                       Expanded(
                         child: GridView.builder(
                           controller: scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.all(16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 3,
@@ -1116,6 +1170,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   @override
   void dispose() {
+    _sheetController.dispose();
     _nameController.dispose();
     _roomCodeController.dispose();
     _customPromptController.dispose();
