@@ -47,7 +47,6 @@ dependencies:
   share_plus: ^13.2.1
   path_provider: ^2.1.2
   audioplayers: ^6.1.0
-  phosphoricons_flutter: ^1.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -101,3 +100,6 @@ flutter:
           weight: 700
         - asset: assets/fonts/lora/Lora-Italic.ttf
           style: italic
+    - family: PhosphorLight
+      fonts:
+        - asset: assets/fonts/phosphor/Phosphor-Light.ttf

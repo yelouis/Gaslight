@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'dart:math' as math;
 import 'dart:async';
 import 'app_colors.dart';
@@ -39,18 +38,23 @@ const Set<ThematicIconType> _bespokeSigils = {
   ThematicIconType.hourglass,
 };
 
+/// Vendored from Phosphor Icons (MIT) -- see assets/fonts/phosphor/LICENSE.
+/// `fontPackage` is deliberately omitted: the font is a first-party asset now,
+/// so Flutter must resolve the family from this app's own bundle.
+const String _kPhosphorLight = 'PhosphorLight';
+
 const Map<ThematicIconType, IconData> _phosphorGlyphs = {
-  ThematicIconType.writing:  PhosphorIconsLight.feather,
-  ThematicIconType.redraw:   PhosphorIconsLight.arrowsClockwise,
-  ThematicIconType.timer:    PhosphorIconsLight.hourglass,
-  ThematicIconType.secret:   PhosphorIconsLight.key,
-  ThematicIconType.ledger:   PhosphorIconsLight.bookOpen,
-  ThematicIconType.envelope: PhosphorIconsLight.envelope,
-  ThematicIconType.observe:  PhosphorIconsLight.magnifyingGlass,
-  ThematicIconType.confirm:  PhosphorIconsLight.sealCheck,
-  ThematicIconType.sound:    PhosphorIconsLight.bellRinging,
-  ThematicIconType.mute:     PhosphorIconsLight.bellSlash,
-  ThematicIconType.host:     PhosphorIconsLight.lamp,
+  ThematicIconType.writing:  IconData(0xe9c0, fontFamily: _kPhosphorLight), // feather
+  ThematicIconType.redraw:   IconData(0xe094, fontFamily: _kPhosphorLight), // arrowsClockwise
+  ThematicIconType.timer:    IconData(0xe2b2, fontFamily: _kPhosphorLight), // hourglass
+  ThematicIconType.secret:   IconData(0xe2d6, fontFamily: _kPhosphorLight), // key
+  ThematicIconType.ledger:   IconData(0xe0e6, fontFamily: _kPhosphorLight), // bookOpen
+  ThematicIconType.envelope: IconData(0xe214, fontFamily: _kPhosphorLight), // envelope
+  ThematicIconType.observe:  IconData(0xe30c, fontFamily: _kPhosphorLight), // magnifyingGlass
+  ThematicIconType.confirm:  IconData(0xe606, fontFamily: _kPhosphorLight), // sealCheck
+  ThematicIconType.sound:    IconData(0xe5e8, fontFamily: _kPhosphorLight), // bellRinging
+  ThematicIconType.mute:     IconData(0xe0d4, fontFamily: _kPhosphorLight), // bellSlash
+  ThematicIconType.host:     IconData(0xe638, fontFamily: _kPhosphorLight), // lamp
 };
 
 class ThematicIcon extends StatelessWidget {

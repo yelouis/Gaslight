@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gaslight/theme/app_icons.dart';
-import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 void main() {
   testWidgets('routes functional glyphs to Phosphor and keeps sigils painted', (tester) async {
@@ -22,7 +21,9 @@ void main() {
     expect(find.descendant(of: flame, matching: find.byType(CustomPaint)), findsOneWidget);
 
     final icon = tester.widget<Icon>(find.descendant(of: writing, matching: find.byType(Icon)));
-    expect(icon.icon, PhosphorIconsLight.feather);
+    expect(icon.icon!.codePoint, 0xe9c0);
+    expect(icon.icon!.fontFamily, 'PhosphorLight');
+    expect(icon.icon!.fontPackage, isNull);
     expect(icon.size, 20.0);
   });
 }
