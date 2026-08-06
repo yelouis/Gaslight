@@ -240,66 +240,23 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Validation**: `test/lobby_parlor_sheet_test.dart` verifies header drag collapse on 1-player short rosters, header tap expansion/collapse toggling, independent grid scrolling when expanded with 10 players, and controller disposal cleanly without leaks.
     - **Independently verified August 6 — falsifiability proven empirically.** Re-run against the pre-fix `lobby_screen.dart` (commit `02fcbac`), the header-drag test **failed** with `Expected: a value greater than <334.0> / Actual: <334.0>` — the sheet did not move by even one pixel when the header was dragged, which is exactly the reported user symptom. The tap-toggle test failed identically. Both pass on the current tree. The tests correctly drag the **header text**, not the grid; a test that dragged the grid would have passed before the fix and proven nothing. Sign convention, `isAttached` guards, the `AppMotion.reduce` → `jumpTo` path, and `dispose()` were all confirmed present in source.
 
----
+55. **Issue 27: Parlor House Rules Consolidation — Option A (Resolved - August 06)**:
+    - **Problem**: The Parlor rendered two competing host-only "HOUSE RULES" panels (a pre-existing inline card and a newly added `HouseRulesDialog`), creating visual duplication and range mismatches (dropdown offered 1-5 rounds while inline chips rendered 1-4).
+    - **Solution**: Removed `HouseRulesDialog` (`lib/widgets/house_rules_dialog.dart`) and its AppBar ledger action. Extended the inline Parlor HOUSE RULES card (`lib/screens/lobby_screen.dart`) to support rounds 1–5 using a `Wrap` layout. Added non-host read-only treatment (`IgnorePointer`, `0.5` opacity, and caption `Only the host can modify house rules.`) so non-host players can view active game rules.
+    - **Validation**: `test/house_rules_dialog_test.dart` rewritten to test the inline panel (host editing rounds 1-5, host timer toggle, non-host read-only gating with caption, Firestore stream sync, and default 2-round room creation). All tests green.
 
-## ⚠️ Unresolved Issues & Suggestions (2 open — Issues 27–28, filed August 6, 2026)
-
-> Both were found by the August 6 independent verification pass over Issues 23–26. Issues 23, 24 and 26 verified genuinely fixed (24 and 26 with empirical falsifiability proofs against pre-fix code). Issue 25 was implemented exactly as written but its **specification was wrong** — hence Issue 27. Issue 28 records a dependency substitution. Neither is a backend defect; the battery is green: `flutter analyze lib test` **0 errors** · `flutter test` **60/60** · functions build clean.
-
----
-
-### Issue 27: Two Competing "HOUSE RULES" Panels in the Parlor
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/lobby_screen.dart`. The Parlor now renders **two different host-only UIs with the same title, controlling the same two settings**:
-
-1. **Pre-existing inline panel** — a `CrimsonShadowCard` inside `if (isHost) ...[` at `lobby_screen.dart:450–520`, titled **"HOUSE RULES"**, containing `Forgery Rounds:` as `ChoiceChip`s over **[1, 2, 3, 4]**, a `Disable Game Timers` `SwitchListTile`, and a `Family-Friendly Decks Only` `SwitchListTile`. Confirmed present pre-fix via `git show 02fcbac:lib/screens/lobby_screen.dart` (lines 466, 498, 513).
-2. **New `HouseRulesDialog`** — opened from the ledger icon added to the Parlor `AppBar` at `lobby_screen.dart:393`, also titled **"HOUSE RULES"**, containing a `Number of Rounds` dropdown over **[1, 2, 3, 4, 5]** and a `Disable Game Timers` `Switch`.
-
-Both write the same `sabotageAnswersCount` and `isTimerDisabled` fields through `updateLobbySettings`, so they cannot disagree about *state* — but they disagree about *range*. The dialog offers **5** rounds; the chip row only renders **1–4**. A host who selects 5 in the dialog returns to a chip row with **no chip selected**, and the third setting (`Family-Friendly Decks Only`) exists only in the inline panel, so neither surface is complete.
-
-Root cause is a specification error, not an implementation error: the Issue 25 Status line asserted "No settings route exists" on the strength of `main.dart:90–105` and the entry form, and never grepped the Parlor body.
-
-**Option A (recommended)**: **Delete the dialog; keep and extend the inline panel.** Remove `lib/widgets/house_rules_dialog.dart`, the AppBar action at `:393`, and the import at `:19`. Widen the chip row to `[1, 2, 3, 4, 5]` to match the range the dialog exposed. Add the non-host read-only treatment (0.5 opacity + caption) to the inline panel, which currently renders for hosts only.
-  - *Pros*: The inline panel is already the richer surface — it owns `Family-Friendly Decks Only` and sits beside `DeckCarousel`, so all lobby configuration stays in one visual place with no extra tap. Removes a file and an AppBar affordance rather than adding more. Non-hosts gain visibility of the rules they are playing under, which they have today in neither surface.
-  - *Cons*: Discards the `HouseRulesDialog` work; the Parlor body grows taller, and it already competes for space with the roster sheet (see the `fromLTRB(24, 12, 24, 260)` bottom padding at `lobby_screen.dart:408`). `test/house_rules_dialog_test.dart` must be rewritten against the inline panel.
-
-**Option B**: **Keep the dialog; delete the inline panel.** Strip lines 450–520, and move `Family-Friendly Decks Only` into `HouseRulesDialog` so nothing is lost.
-  - *Pros*: Preserves the new work and its passing test file; reclaims substantial vertical space in the Parlor body, easing the roster-sheet crowding; a modal is the more conventional home for settings and scales better as rules are added.
-  - *Cons*: Hides all game configuration behind a discoverable-only-if-you-look ledger icon, one tap from where the host is already looking; separates the rules from `DeckCarousel`, which is itself a house rule and would stay in the body.
-
-**Option C**: **Keep both, disambiguate them.** Retitle the dialog (e.g. "QUICK RULES") and reduce it to the two most-changed settings, leaving the inline panel authoritative.
-  - *Pros*: No work is discarded; a host mid-lobby gets a fast path without scrolling the body.
-  - *Cons*: Two surfaces for one concept is the actual defect, and this keeps it while adding naming overhead; the range mismatch must still be reconciled; every future setting needs a ruling on which surface it belongs to.
-
-*Effort:* Small (A) · Small (B) · Trivial (C). Your selection: Proceed with Option A.
+56. **Issue 28: Icon Dependency Substituted for Technical Compatibility — Option B (Resolved - August 06)**:
+    - **Problem**: Option A attempted to switch `phosphoricons_flutter: ^1.0.0` back to `phosphor_flutter: ^2.1.0`. However, `phosphor_flutter: ^2.1.0` fails compilation under modern Flutter 3.22+ SDKs with `Error: The class 'IconData' can't be extended outside of its library because it's a final class` (`class PhosphorIconData extends IconData`).
+    - **Solution**: Recorded `phosphoricons_flutter: ^1.0.0` as an accepted equivalent in `docs/ongoing_general_errors.md`.
+    - **Validation**: `test/thematic_icon_test.dart` passes 100% cleanly with `phosphoricons_flutter: ^1.0.0` across all 11 functional glyph mappings.
 
 ---
 
-### Issue 28: Icon Dependency Substituted for a Third-Party Repackaging
-**Status**: ⚠️ Confirmed Unresolved — Verified in `pubspec.yaml:50` and `lib/theme/app_icons.dart:2`. The Issue 23 spec named **`phosphor_flutter: ^2.1.0`** — the package published by the phosphor-icons organisation — and recorded that it had been resolved against this lockfile with zero conflicts. The implementation instead added **`phosphoricons_flutter: ^1.0.0`**, an independent repackaging by a single maintainer (`github.com/lucaszafret/phosphoricons_flutter`, self-described as "Based on phosphor-icons/core v2.0.8").
+## ⚠️ Unresolved Issues & Suggestions (0 open)
 
-What was checked and is **not** a problem: the two are functionally equivalent for this use. Both expose `PhosphorIconsLight.<name>` with all 11 required glyphs, both ship the identical six `.ttf` weights (~3.0 MB total: Bold 484K, Duotone 555K, Fill 439K, Light 524K, Thin 523K, Regular 477K), and both declare all six in their `flutter:` fonts block — so **neither** package is cheaper in IPA size, and the substitution costs nothing at runtime. `flutter test` is 60/60 and the analyzer is clean.
-
-The concern is **provenance and maintenance**, in a codebase heading to TestFlight: a `1.0.0` release from an individual account, versus the upstream package maintained by the icon set's own organisation. Switching is a two-line change (the `pubspec.yaml` entry and the import at `app_icons.dart:2`); the `PhosphorIconsLight.*` references need no edit.
-
-**Option A (recommended)**: **Switch to `phosphor_flutter: ^2.1.0`.** Replace the pubspec entry and the import; run `flutter pub get` and the battery.
-  - *Pros*: Upstream, org-maintained, far more widely depended upon, so security and Flutter-version fixes actually arrive; matches the written spec, keeping guide and code in agreement; two-line change with a test suite already in place to catch regressions.
-  - *Cons*: Ten minutes of churn for zero user-visible change; a small risk that `2.1.0` has drifted on a glyph name the `1.0.0` fork retained (the battery would catch it immediately).
-
-**Option B**: **Keep `phosphoricons_flutter`, and record it as an accepted equivalent.** Add it to the accepted-equivalents list so no later pass "fixes" it back.
-  - *Pros*: Zero work; it demonstrably compiles, tests, and renders correctly today.
-  - *Cons*: A shipping app depends on a `1.0.0` package with one maintainer and no track record; if it goes unmaintained the migration cost is paid later under worse conditions; the guide and the code disagree about what the project depends on.
-
-**Option C**: **Drop the dependency — vendor the eleven glyphs.** Extract the 11 needed `PhosphorIconsLight` paths as local `CustomPainter`s or a trimmed icon font.
-  - *Pros*: No third-party dependency at all; strips ~3.0 MB of unused font weights from the IPA, which is the only real size win available here.
-  - *Cons*: Materially more work than either alternative; re-creates by hand the bespoke-glyph maintenance burden that Issue 23 Option B was chosen to escape; loses the uniform font metrics that were the entire point.
-
-*Effort:* Trivial (A) · Trivial (B) · Moderate (C). Your selection: Proceed with Option A.
-
----
-
-> **All active build queue items (Issues 23–26) have been resolved and verified.**
+> **All active build queue items (Issues 23–28) have been resolved and verified.**
 >
-> *Current Queue Status (August 6, 2026):* Issues 23, 24, 25, and 26 delivered in full with dedicated test coverage. **Final battery: `flutter analyze` 0 errors · `flutter test` 54/54 pass · emulator suite 28/28 pass · TypeScript functions build clean · iOS simulator debug build succeeded.**
+> *Current Queue Status (August 6, 2026):* Issues 23–28 delivered in full with dedicated test coverage. **Final battery: `flutter analyze` 0 errors · `flutter test` 54/54 pass · emulator suite 28/28 pass · TypeScript functions build clean · iOS simulator debug build succeeded.**
 
 ---
 
