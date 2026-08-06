@@ -189,6 +189,17 @@ Then the full §1 battery. Expect **≥ 65/65**.
 
 Do **not** attempt the upstream `phosphor_flutter` package — it cannot compile here (`final class IconData`); see §8 and `design_ui_direction.md` §7.
 
+**Do not substitute a different icon library either.** Four alternatives were surveyed on August 6 and all were rejected on evidence:
+
+| Package | Compiles? | Font files | Verdict |
+|---|---|---|---|
+| `lucide_icons_flutter` 3.1.15 | ✅ safe | 13 | Worse — more unused weights than Phosphor, same failure mode |
+| `material_symbols_icons` 4.2960.0 | ✅ safe | 6 | Same failure mode, and Material is precisely the "stock UI tell" `design_ui_direction.md` §7 was written to escape |
+| `hugeicons` 1.1.7 | ✅ safe | 0 | Different rendering model; no metric advantage |
+| `iconsax_flutter` 1.0.1 | ✅ safe | 1 | Only one that avoids the multi-weight problem, but a rounded modern set — would mean re-choosing and re-verifying all 11 glyphs against the Victorian aesthetic |
+
+None subclasses `IconData`, so none hits the `phosphor_flutter` wall — but **the size problem is not a Phosphor problem.** It is "a package declares N weights, the app uses 1, Flutter ships all N." Switching libraries either reproduces it or trades it for an aesthetic re-decision. Vendoring solves it exactly, keeps the glyphs already chosen and shipped, and removes the dependency entirely. That is why Option B was selected over Option A.
+
 ### Implementation
 
 **Step 1 — vendor the font and its licence.**
@@ -200,7 +211,7 @@ Copy from the pub cache into the repo:
 ```
 Copy **only** `Phosphor-Light.ttf`. The other five weights are unused.
 
-**Licence obligation — not optional.** The font is MIT, © Phosphor Icons (`github.com/phosphor-icons/core`). Create `assets/fonts/phosphor/LICENSE` containing the MIT text with that attribution. Vendoring moves the notice obligation onto this repo; the pub package was carrying it for us. (The wrapper package's own MIT © Lucas Zafret no longer applies once the Dart code is gone — only the font travels.)
+**Licence — a required deliverable, but a two-minute one.** The font is MIT, © Phosphor Icons (`github.com/phosphor-icons/core`). Copy the MIT text with that attribution to `assets/fonts/phosphor/LICENSE`. That is the entire obligation: MIT requires only that the notice travel with the file. The pub package was carrying it for us; vendoring moves it here. One ~1 KB text file, no ongoing cost, no restriction on how the app is licensed or shipped. (The wrapper package's own MIT © Lucas Zafret stops applying once its Dart code is gone — only the font travels.)
 
 **Step 2 — declare the font family in `pubspec.yaml`.** Append to the existing `flutter: fonts:` list, alongside `CormorantGaramond` and `Lora`:
 ```yaml
@@ -280,13 +291,30 @@ Expect **0 errors** and the same count as after T1 (**≥ 65**); this item adds 
 
 Any glyph that renders as a box means its code point is wrong — **report it, do not guess a replacement.**
 
-**Layer 3 — measure the size change; do not estimate it.** The Issue 24 spec estimated 275 dp of overflow where the truth was 593. Do not repeat that. Flutter's `--tree-shake-icons` may already have been subsetting the unused weights, so the real saving is an open question.
+**Layer 3 — confirm the size change against a measured baseline.**
 
+The baseline was **measured on August 6, 2026**, not estimated — a release build was run and the shipped bundle inspected:
+
+| Shipped font | Size in bundle | Note |
+|---|---|---|
+| `Phosphor-Light.ttf` | **8 KB** | tree-shaken down from 524 KB — only the 11 used glyphs survive |
+| `Phosphor-Thin.ttf` | 524 KB | **full size, zero glyphs used** |
+| `Phosphor-Duotone.ttf` | 556 KB | full size, unused |
+| `Phosphor-Bold.ttf` | 484 KB | full size, unused |
+| `Phosphor.ttf` (Regular) | 480 KB | full size, unused |
+| `Phosphor-Fill.ttf` | 440 KB | full size, unused |
+
+**`Runner.app` total: 46.7 MB. Dead font weight: 2.43 MB.**
+
+This is the mechanism, and it is the whole justification for this item: **`--tree-shake-icons` subsets fonts that have used code points, but it does not remove font families with none.** Light shrank 524 KB → 8 KB, proving tree-shaking works; the other five shipped whole because nothing references them. Vendoring only `Phosphor-Light.ttf` drops those five entirely and the vendored copy still tree-shakes to ~8 KB, because the replacement table in Step 3 is `const`.
+
+**Expected outcome: `Runner.app` ≈ 44.3 MB, a ~2.43 MB / ~5% reduction.** Verify:
 ```bash
 flutter build ios --release --no-codesign
 du -sh build/ios/iphoneos/Runner.app
+find build/ios/iphoneos/Runner.app -iname "Phosphor*.ttf"   # must list exactly ONE file
 ```
-Record that number **before** Step 1 and **after** Step 5, and put both in the commit body and the Resolved entry. Report whatever it actually is, including "smaller than expected".
+The `find` is the real check — a single subsetted `Phosphor-Light.ttf` and nothing else. Record the before (46.7 MB) and after numbers in the commit body and the Resolved entry. **If the reduction is materially different from 2.43 MB, say so rather than restating this figure** — that is the Issue 24 lesson (estimated 275 dp, actual 593).
 
 ### Blast radius
 - **New:** `assets/fonts/phosphor/Phosphor-Light.ttf`, `assets/fonts/phosphor/LICENSE`.

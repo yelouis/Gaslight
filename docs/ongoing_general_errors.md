@@ -298,6 +298,16 @@ can't be extended outside of its library because it's a final class.
 
 *Effort:* Trivial (A) · Moderate (B) · Large (C). Your selection: Proceed with Option B.
 
+> **Post-selection evidence (measured August 6, 2026) — Option B is confirmed correct, and the reasoning is now empirical rather than assumed.**
+>
+> A release build was produced and its bundle inspected. `--tree-shake-icons` **subsets fonts that have used code points but does not remove font families with none**: `Phosphor-Light.ttf` shipped at **8 KB** (down from 524 KB — proof tree-shaking works), while `Thin` 524 KB, `Duotone` 556 KB, `Bold` 484 KB, `Regular` 480 KB and `Fill` 440 KB all shipped **whole and entirely unused** — **2.43 MB of dead weight** in a **46.7 MB** `Runner.app` (~5%). The Option B pitch of "~2.5 MB" was close, but it was a guess; it is now a measurement.
+>
+> **Four alternative libraries were surveyed and all rejected:** `lucide_icons_flutter` (13 font files), `material_symbols_icons` (6, and Material is what `design_ui_direction.md` §7 exists to avoid), `hugeicons` (0 fonts, different rendering model), `iconsax_flutter` (1 font — the only one avoiding the multi-weight issue, but a rounded modern set requiring all 11 glyphs to be re-chosen). None subclasses `IconData`, so none hits the `phosphor_flutter` wall — but **the size problem is not specific to Phosphor.** It is "a package declares N weights, the app uses 1, Flutter ships all N." Switching libraries reproduces it or trades it for an aesthetic re-decision.
+>
+> **On the licence concern raised when this was filed:** it was overstated. MIT requires only that the notice travel with the font — one ~1 KB text file at `assets/fonts/phosphor/LICENSE`, with no ongoing cost and no constraint on how this app is licensed or distributed.
+>
+> **Adjacent finding, not part of this issue:** `cupertino_icons` ships **252 KB** and has **zero references in `lib/`**. Removing it would recover that on top of the 2.43 MB. Filed separately rather than folded in, to keep one item to one commit.
+
 ---
 
 ### Issue 30: `Family-Friendly Decks Only` Is Shown to Non-Hosts as a House Rule
