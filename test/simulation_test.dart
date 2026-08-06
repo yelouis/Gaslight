@@ -184,8 +184,8 @@ class FakeWriteBatch extends Fake implements WriteBatch {
   FakeWriteBatch(this.firestore);
 
   @override
-  void update(DocumentReference ref, Map<Object, Object?> data) {
-    operations.add(() => ref.update(data));
+  void update<T>(DocumentReference<T> ref, T data) {
+    operations.add(() => ref.update(data as Map<Object, Object?>));
   }
 
   @override

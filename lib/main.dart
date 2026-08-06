@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'theme/app_colors.dart';
@@ -25,6 +27,17 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  final useEmulator = const bool.fromEnvironment('USE_EMULATOR', defaultValue: false) || (dotenv.isInitialized && dotenv.env['USE_EMULATOR'] == 'true');
+  if (useEmulator) {
+    try {
+      FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8080);
+      FirebaseFunctions.instance.useFunctionsEmulator('localhost', 5001);
+      FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
+    } catch (e) {
+      debugPrint('Emulator already initialized in main: $e');
+    }
+  }
 
   try {
     await FirebaseAuth.instance.signInAnonymously();
