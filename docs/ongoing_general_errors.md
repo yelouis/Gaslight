@@ -266,68 +266,33 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **⚠️ The Issue 28 spec was wrong, and this is the lesson**: it verified that `phosphor_flutter` **resolved** (via `dart pub add --dry-run`) and inferred that it would build. Resolution is not compilation. `flutter analyze` does not catch it either — it does not analyse dependency source, and reported **0 errors** with the broken package installed. Only an actual build (`flutter test` / `flutter build`) surfaces it. Any future spec that names a dependency must state the command that *compiles* it as the acceptance check.
     - **⚠️ Process deviation — see Issue 29**: the user had selected **Option A**. When it proved impossible the implementer switched to Option B and self-recorded it, rather than stopping and filing the blocker for a fresh decision as THE LOOP step (4) requires. The technical outcome is correct; the choice between remaining options B and C was simply never put to the user. Issue 29 puts it.
 
----
+57. **Issue 29: Icon Dependency Vendored to Eliminate Third-Party Risk & Unused Font Weights — Option B (Resolved - August 06)**:
+    - **Problem**: `phosphoricons_flutter: ^1.0.0` declared all six font weight files (~3.0 MB total), shipping 2.43 MB of unused font weights (`Thin`, `Duotone`, `Bold`, `Regular`, `Fill`) in the IPA bundle. Upstream `phosphor_flutter: ^2.1.0` was unviable due to Flutter 3.22+ `IconData` final class compilation errors.
+    - **Solution**: Vendored `Phosphor-Light.ttf` (524 KB) and its MIT `LICENSE` into `assets/fonts/phosphor/`. Declared the `PhosphorLight` font family in `pubspec.yaml`. Mapped the 11 functional icons directly in `lib/theme/app_icons.dart` via `const IconData(..., fontFamily: 'PhosphorLight')` without `fontPackage`. Removed `phosphoricons_flutter` dependency.
+    - **Validation**: `test/thematic_icon_test.dart` updated to assert `icon.icon!.fontPackage` is `null` (proving first-party asset) and codePoint is `0xe9c0`. Full battery `flutter analyze lib test` **0 errors** · `flutter test` **65/65** pass.
 
-## ⚠️ Unresolved Issues & Suggestions (2 open — Issues 29–30, filed August 6, 2026)
+58. **Issue 30: Family-Friendly Deck Toggle Hidden from Non-Hosts — Option A (Resolved - August 06)**:
+    - **Problem**: `_familyFriendlyOnly` is a client-local `bool` state filtering the host's `DeckCarousel` and is not a synced server rule. Rendering it inside the "HOUSE RULES" card for non-hosts at 0.5 opacity misrepresented a local device preference as a shared table setting.
+    - **Solution**: Moved the `Family-Friendly Decks Only` `SwitchListTile` out of the `IgnorePointer` house rules block in `lib/screens/lobby_screen.dart` and wrapped it in `if (isHost)`.
+    - **Validation**: `test/house_rules_panel_test.dart` updated with tests confirming `find.text('Family-Friendly Decks Only')` returns `findsNothing` for non-host and `findsOneWidget` for host, while genuine house rules (`Forgery Rounds:`, `Disable Game Timers`) remain visible to non-hosts.
 
-> Opened by the August 6 verification pass over Issues 27–28. Both fixes work and the battery is green (`flutter analyze lib test` **0 errors** · `flutter test` **60/60** · functions build clean). Neither item below is a defect in shipped behaviour; both are decisions that were made *for* you and should be made *by* you.
+59. **Task T1: Closed Issue 27 Regression Test Coverage Gap (Resolved - August 06)**:
+    - **Problem**: Coverage gaps existed for Issue 27 (no test asserted a single Parlor AppBar `IconButton` or 360×640 dp non-host portrait layout without overflow).
+    - **Solution**: Renamed `test/house_rules_dialog_test.dart` to `test/house_rules_panel_test.dart` via `git mv`. Added Case A (asserts AppBar contains exactly 1 IconButton) and Case B (asserts non-host Parlor layout fits 360×640 portrait at text scales 1.0 and 1.3 without RenderFlex exceptions).
+    - **Validation**: Tested non-vacuousness by temporarily breaking each guarded behavior (adding dummy IconButton → failed with `Expected: 1 / Actual: 2`).
 
----
-
-### Issue 29: Icon Dependency — Selected Option A Is Impossible; Confirm the Fallback
-**Status**: ⚠️ Confirmed Unresolved (decision outstanding) — You selected **Option A** on Issue 28 (switch to `phosphor_flutter: ^2.1.0`). That option is **not implementable on this Flutter SDK**, proven empirically on August 6 by performing the swap exactly as specified:
-
-```
-phosphor_flutter-2.1.0/lib/src/phosphor_icon_data.dart:5:32: Error: The class 'IconData'
-can't be extended outside of its library because it's a final class.
-```
-
-`flutter/lib/src/widgets/icon_data.dart:23` declares `final class IconData` in Flutter 3.44.6; `phosphor_flutter` extends it. The package cannot build here and no version of it can until upstream stops subclassing `IconData`. The implementer correctly fell back to keeping `phosphoricons_flutter: ^1.0.0` — but chose the fallback without asking, so the decision below has never actually been yours to make. Current state: `pubspec.yaml:50` carries `phosphoricons_flutter: ^1.0.0`; everything compiles and all 11 glyphs render.
-
-**Option A (recommended)**: **Ratify the current state** — keep `phosphoricons_flutter: ^1.0.0` and record it in the accepted-equivalents list with the `final class IconData` reason attached, so no future pass wastes another cycle attempting the upstream package.
-  - *Pros*: Zero work; already verified across the full battery. Documenting *why* is the whole value — this is the second time the upstream package has been proposed, and a written reason stops a third. The workaround is principled, not accidental: the package exists precisely to solve this SDK change.
-  - *Cons*: A shipping app depends on a `1.0.0` package with a single maintainer; if it goes stale under a future Flutter release you are on the same hook again, with no upstream to fall back to.
-
-**Option B**: **Vendor the eleven glyphs and drop the dependency.** Extract the 11 `PhosphorIconsLight` code points into a local `IconData` table in `lib/theme/app_icons.dart`, bundling only the single `Phosphor-Light.ttf` weight.
-  - *Pros*: No third-party dependency and no exposure to either package's maintenance. Strips ~2.5 MB from the IPA — both packages declare all six weights (~3.0 MB) while only Light is used, so this is the one real app-size win available. Immune to future `final class`-style SDK changes.
-  - *Cons*: A licensed font file plus a hand-maintained code-point table becomes yours to own; adding a twelfth icon later means finding its code point by hand. Phosphor is MIT, so licensing is clean, but attribution must be carried.
-
-**Option C**: **Vendor as `CustomPainter` paths instead of a font.** Trace the 11 glyphs into the existing bespoke painter system.
-  - *Pros*: No font asset at all, and one single rendering mechanism across the whole app.
-  - *Cons*: Re-creates by hand exactly the optical-inconsistency problem Issue 23 was opened to escape — the uniform metrics come *from* the font. Strongly discouraged.
-
-*Effort:* Trivial (A) · Moderate (B) · Large (C). Your selection: Proceed with Option B.
-
-> **Post-selection evidence (measured August 6, 2026) — Option B is confirmed correct, and the reasoning is now empirical rather than assumed.**
->
-> A release build was produced and its bundle inspected. `--tree-shake-icons` **subsets fonts that have used code points but does not remove font families with none**: `Phosphor-Light.ttf` shipped at **8 KB** (down from 524 KB — proof tree-shaking works), while `Thin` 524 KB, `Duotone` 556 KB, `Bold` 484 KB, `Regular` 480 KB and `Fill` 440 KB all shipped **whole and entirely unused** — **2.43 MB of dead weight** in a **46.7 MB** `Runner.app` (~5%). The Option B pitch of "~2.5 MB" was close, but it was a guess; it is now a measurement.
->
-> **Four alternative libraries were surveyed and all rejected:** `lucide_icons_flutter` (13 font files), `material_symbols_icons` (6, and Material is what `design_ui_direction.md` §7 exists to avoid), `hugeicons` (0 fonts, different rendering model), `iconsax_flutter` (1 font — the only one avoiding the multi-weight issue, but a rounded modern set requiring all 11 glyphs to be re-chosen). None subclasses `IconData`, so none hits the `phosphor_flutter` wall — but **the size problem is not specific to Phosphor.** It is "a package declares N weights, the app uses 1, Flutter ships all N." Switching libraries reproduces it or trades it for an aesthetic re-decision.
->
-> **On the licence concern raised when this was filed:** it was overstated. MIT requires only that the notice travel with the font — one ~1 KB text file at `assets/fonts/phosphor/LICENSE`, with no ongoing cost and no constraint on how this app is licensed or distributed.
->
-> **Adjacent finding, not part of this issue:** `cupertino_icons` ships **252 KB** and has **zero references in `lib/`**. Removing it would recover that on top of the 2.43 MB. Filed separately rather than folded in, to keep one item to one commit.
+60. **Task T2: Removed Unused `cupertino_icons` Dependency (Resolved - August 06)**:
+    - **Problem**: `cupertino_icons: ^1.0.2` shipped a 252 KB unused `CupertinoIcons.ttf` font asset in the app bundle despite 0 references in `lib/` or `test/`.
+    - **Solution**: Audited codebase with `grep -rn "CupertinoIcons\|package:flutter/cupertino.dart" lib test` (0 hits) and removed `cupertino_icons` from `pubspec.yaml`.
+    - **Validation**: `flutter analyze lib test` **0 errors** · `flutter test` **65/65** pass.
 
 ---
 
-### Issue 30: `Family-Friendly Decks Only` Is Shown to Non-Hosts as a House Rule
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/lobby_screen.dart`. The Issue 27 spec (guide §4 Step 6) ruled that this control render only when `isHost`. It was instead placed **inside** the `IgnorePointer(ignoring: !isHost)` block alongside the two genuine house rules, so non-hosts now see it greyed at 0.5 opacity.
+## ⚠️ Unresolved Issues & Suggestions (0 open)
 
-No functional harm: non-hosts cannot toggle it, so the `selectedDeckId` display desync that motivated the ruling cannot occur. The problem is that it is **not a house rule at all**. `_familyFriendlyOnly` is a client-local `bool` (`lobby_screen.dart:43`) mutated with `setState`, never sent to the server, with no `GameState` field. Its only effect is filtering `availableDecks` at `:345–353` for the host's own `DeckCarousel`. Presenting it inside a card titled "HOUSE RULES", greyed as though the host controls it for everyone, tells non-hosts something untrue: it is a per-device filter, and each player's copy is independent.
-
-**Option A (recommended)**: **Hide it from non-hosts** — move it out of the `IgnorePointer` block and wrap it in `if (isHost)`, per the original ruling. Add the test case that pins it (`findsNothing` as non-host, `findsOneWidget` as host).
-  - *Pros*: Smallest change; restores the documented ruling; non-hosts see only settings that genuinely describe the shared game. Shortens the non-host Parlor, which is the tallest layout case.
-  - *Cons*: The card's contents now differ by role, which is marginally more complex to reason about than one uniform panel.
-
-**Option B**: **Keep it visible to everyone, but move it out of the House Rules card** into its own small "Your Device" section with its own heading.
-  - *Pros*: Honest about scope — names it as a personal preference rather than a shared rule; every player gets to filter their own deck view, which is arguably what a content filter should do.
-  - *Cons*: More layout work in the most space-constrained screen; a new section heading for a single toggle; non-hosts filtering a carousel they cannot act on is close to pointless.
-
-**Option C**: **Promote it to a real synced house rule** — add `familyFriendlyOnly` to `GameState`, thread it through `updateLobbySettings`, and let the host set it for the table.
-  - *Pros*: Makes the UI truthful in the other direction — it *becomes* the shared rule it currently appears to be, and content filtering for a party game is arguably a table-level decision, not a per-device one.
-  - *Cons*: The only option here that touches `functions/` and `firestore.rules` territory, so it requires the emulator suite as a gate; needs a migration story for rooms created before the field existed. Materially larger than the other two.
-
-*Effort:* Trivial (A) · Small (B) · Moderate (C). Your selection: Proceed with Option A.
+> **All active build queue items (Issues 23–30, Tasks T1–T2) have been resolved and verified.**
+>
+> *Current Queue Status (August 6, 2026):* Issues 23–30 delivered in full with dedicated test coverage. **Final battery: `flutter analyze` 0 errors · `flutter test` 65/65 pass · emulator suite 28/28 pass · TypeScript functions build clean · iOS simulator debug build succeeded.**
 
 ---
 
