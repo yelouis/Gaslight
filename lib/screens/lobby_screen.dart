@@ -16,7 +16,6 @@ import '../utils/prompt_decks.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_text_styles.dart';
-import '../widgets/house_rules_dialog.dart';
 import '../theme/app_icons.dart';
 import '../widgets/gaslight_route.dart';
 import '../widgets/room_code_plaque.dart';
@@ -389,11 +388,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: ThematicIcon(type: ThematicIconType.ledger, color: theme.colorScheme.secondary),
-            onPressed: () => HouseRulesDialog.show(context),
-            tooltip: 'House Rules',
-          ),
-          IconButton(
             icon: ThematicIcon(
               type: gs.soundEnabled ? ThematicIconType.sound : ThematicIconType.mute,
               color: theme.colorScheme.secondary,
@@ -447,91 +441,111 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   _buildCustomPromptsSection(theme, gs),
                   const SizedBox(height: 16),
                 ],
-                if (isHost) ...[
-                  CrimsonShadowCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'HOUSE RULES',
-                          style: TextStyle(
-                            fontFamily: 'CormorantGaramond',
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.secondary,
-                            letterSpacing: 2,
-                          ),
+                CrimsonShadowCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'HOUSE RULES',
+                        style: TextStyle(
+                          fontFamily: 'CormorantGaramond',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.secondary,
+                          letterSpacing: 2,
                         ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Forgery Rounds:',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory),
-                            ),
-                            Row(
-                              children: [1, 2, 3, 4].map((r) {
-                                final isSelected = rounds == r;
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  child: ChoiceChip(
-                                    label: Text('$r'),
-                                    selected: isSelected,
-                                    selectedColor: AppColors.brass,
-                                    labelStyle: TextStyle(
-                                      color: isSelected ? AppColors.ink : AppColors.ivory,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    onSelected: (selected) {
-                                      if (selected) {
-                                        gs.updateLobbySettings(sabotageAnswersCount: r);
-                                      }
-                                    },
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Material(
-                          color: Colors.transparent,
-                          child: SwitchListTile(
-                            title: const Text(
-                              'Disable Game Timers',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
-                            ),
-                            value: gs.gameState?.isTimerDisabled ?? false,
-                            activeColor: AppColors.brass,
-                            contentPadding: EdgeInsets.zero,
-                            onChanged: (val) {
-                              gs.updateLobbySettings(isTimerDisabled: val);
-                            },
-                          ),
-                        ),
-                        Material(
-                          color: Colors.transparent,
-                          child: SwitchListTile(
-                            title: const Text(
-                              'Family-Friendly Decks Only',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
-                            ),
-                            value: _familyFriendlyOnly,
-                            activeColor: AppColors.brass,
-                            contentPadding: EdgeInsets.zero,
-                            onChanged: (val) {
-                              setState(() {
-                                _familyFriendlyOnly = val;
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        ],
                       ),
-                    ),
+                      const SizedBox(height: 12),
+                      IgnorePointer(
+                        ignoring: !isHost,
+                        child: Opacity(
+                          opacity: isHost ? 1.0 : 0.5,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Forgery Rounds:',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 6,
+                                    children: [1, 2, 3, 4, 5].map((r) {
+                                      final isSelected = rounds == r;
+                                      return ChoiceChip(
+                                        label: Text('$r'),
+                                        selected: isSelected,
+                                        selectedColor: AppColors.brass,
+                                        labelStyle: TextStyle(
+                                          color: isSelected ? AppColors.ink : AppColors.ivory,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        onSelected: (selected) {
+                                          if (selected) {
+                                            gs.updateLobbySettings(sabotageAnswersCount: r);
+                                          }
+                                        },
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Material(
+                                color: Colors.transparent,
+                                child: SwitchListTile(
+                                  title: const Text(
+                                    'Disable Game Timers',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                                  ),
+                                  value: gs.gameState?.isTimerDisabled ?? false,
+                                  activeColor: AppColors.brass,
+                                  contentPadding: EdgeInsets.zero,
+                                  onChanged: (val) {
+                                    gs.updateLobbySettings(isTimerDisabled: val);
+                                  },
+                                ),
+                              ),
+                              Material(
+                                color: Colors.transparent,
+                                child: SwitchListTile(
+                                  title: const Text(
+                                    'Family-Friendly Decks Only',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
+                                  ),
+                                  value: _familyFriendlyOnly,
+                                  activeColor: AppColors.brass,
+                                  contentPadding: EdgeInsets.zero,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _familyFriendlyOnly = val;
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (!isHost) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Only the host can modify house rules.',
+                          style: TextStyle(
+                            color: AppColors.ivory.withOpacity(0.6),
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            fontFamily: 'Lora',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
                     if (players.length < 10)
                       Padding(
                         padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
@@ -541,9 +555,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         ),
                       ),
                   ],
-                ],
+                ),
               ),
-            ),
             DraggableScrollableSheet(
               controller: _sheetController,
               initialChildSize: 0.4,

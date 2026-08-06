@@ -5,14 +5,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/models/game_state.dart';
 import 'package:gaslight/models/player_state.dart';
-import 'package:gaslight/widgets/house_rules_dialog.dart';
+import 'package:gaslight/screens/lobby_screen.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('HouseRulesDialog Tests', () {
+  group('Inline House Rules Panel Tests', () {
     late FakeFirestore mockDb;
     late GameService gameService;
 
@@ -22,7 +22,7 @@ void main() {
       gameService = GameService(db: mockDb, functions: FakeFirebaseFunctions(mockDb));
     });
 
-    Future<void> setupRoom({
+    Future<void> setupRoomAndPump(WidgetTester tester, {
       required bool isHost,
       int sabotageAnswersCount = 2,
       bool isTimerDisabled = false,
@@ -60,33 +60,48 @@ void main() {
       await prefs.setString('room_code', roomCode);
       await prefs.setString('player_id', currentUserId);
       await gameService.tryRejoinSession();
-    }
 
-    testWidgets('Host can edit settings and writes to server', (tester) async {
-      try {
-        await setupRoom(isHost: true);
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
 
-        await tester.pumpWidget(
-          ChangeNotifierProvider<GameService>.value(
-            value: gameService,
-            child: const MaterialApp(
-              home: Scaffold(
-                body: HouseRulesDialog(),
-              ),
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(accessibleNavigation: true),
+              child: const LobbyScreen(),
             ),
           ),
-        );
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+    }
 
-        final switchWidget = tester.widget<Switch>(find.byType(Switch));
-        expect(switchWidget.onChanged, isNotNull);
+    testWidgets('Host can edit rounds 1-5 and toggle timers in inline panel', (tester) async {
+      try {
+        await setupRoomAndPump(tester, isHost: true);
 
-        final dropdownWidget = tester.widget<DropdownButtonFormField<int>>(find.byType(DropdownButtonFormField<int>));
-        expect(dropdownWidget.onChanged, isNotNull);
+        expect(find.text('HOUSE RULES'), findsOneWidget);
+        expect(find.text('5'), findsOneWidget);
 
-        // Tap switch to disable timers
-        await tester.tap(find.byType(Switch));
-        await tester.pumpAndSettle();
+        final chip5 = find.text('5');
+        await tester.ensureVisible(chip5);
+        await tester.pump();
+        await tester.tap(chip5);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(gameService.gameState?.sabotageAnswersCount, equals(5));
+
+        final timerSwitch = find.widgetWithText(SwitchListTile, 'Disable Game Timers');
+        await tester.ensureVisible(timerSwitch);
+        await tester.pump();
+        await tester.tap(timerSwitch);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
 
         expect(gameService.gameState?.isTimerDisabled, isTrue);
       } finally {
@@ -94,34 +109,28 @@ void main() {
       }
     });
 
-    testWidgets('Non-host cannot edit — controls disabled and explanation shown', (tester) async {
+    testWidgets('Non-host cannot edit — panel ignored and caption shown', (tester) async {
       try {
-        await setupRoom(isHost: false);
+        await setupRoomAndPump(tester, isHost: false);
 
-        await tester.pumpWidget(
-          ChangeNotifierProvider<GameService>.value(
-            value: gameService,
-            child: const MaterialApp(
-              home: Scaffold(
-                body: HouseRulesDialog(),
-              ),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
+        expect(find.text('HOUSE RULES'), findsOneWidget);
+        expect(find.text('Only the host can modify house rules.'), findsOneWidget);
 
-        // FALSIFYING ASSERTION — switch onChanged must be null for non-host
-        final switchWidget = tester.widget<Switch>(find.byType(Switch));
-        expect(switchWidget.onChanged, isNull);
+        final chip5 = find.text('5');
+        await tester.ensureVisible(chip5);
+        await tester.pump();
+        await tester.tap(chip5, warnIfMissed: false);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
 
-        final dropdownWidget = tester.widget<DropdownButtonFormField<int>>(find.byType(DropdownButtonFormField<int>));
-        expect(dropdownWidget.onChanged, isNull);
+        expect(gameService.gameState?.sabotageAnswersCount, equals(2));
 
-        expect(find.textContaining('Only the host may set the house rules'), findsOneWidget);
-
-        // Tapping switch should do nothing
-        await tester.tap(find.byType(Switch));
-        await tester.pumpAndSettle();
+        final timerSwitch = find.widgetWithText(SwitchListTile, 'Disable Game Timers');
+        await tester.ensureVisible(timerSwitch);
+        await tester.pump();
+        await tester.tap(timerSwitch, warnIfMissed: false);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
 
         expect(gameService.gameState?.isTimerDisabled, isFalse);
       } finally {
@@ -131,21 +140,10 @@ void main() {
 
     testWidgets('Values stream from Firestore game state', (tester) async {
       try {
-        await setupRoom(isHost: false, sabotageAnswersCount: 4);
+        await setupRoomAndPump(tester, isHost: false, sabotageAnswersCount: 5);
 
-        await tester.pumpWidget(
-          ChangeNotifierProvider<GameService>.value(
-            value: gameService,
-            child: const MaterialApp(
-              home: Scaffold(
-                body: HouseRulesDialog(),
-              ),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        expect(find.text('4 Rounds'), findsOneWidget);
+        final chip5 = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '5'));
+        expect(chip5.selected, isTrue);
       } finally {
         gameService.dispose();
       }
