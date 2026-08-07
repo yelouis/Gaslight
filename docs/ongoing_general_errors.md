@@ -348,7 +348,7 @@ To be clear about what is *not* wrong: the bird is genuinely visible now, so the
   - *Pros*: Keeps some of the airy, drawn quality while stopping the worst of the show-through.
   - *Cons*: The fiddliest option — semi-transparency over a busy, multi-coloured background is unpredictable and will need tuning per screen, which is the problem Option A removes outright.
 
-*Effort:* Small (A) · None (B) · Moderate (C). Your selection: _____
+*Effort:* Small (A) · None (B) · Moderate (C). Your selection: Proceed with Option A.
 
 ---
 >
