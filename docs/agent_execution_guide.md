@@ -1,10 +1,21 @@
-# Agent Execution Guide — Queue Complete (verified August 6, 2026)
+# Agent Execution Guide — Awaiting Selection: Issues 31–32 (August 7, 2026)
 
 **You are an engineering agent picking up Gaslight (Flutter party game, iOS + Android, server-authoritative Firebase backend). Assume you have no memory of this project.**
 
-**There is no outstanding engineering work.** Every issue and task ever selected — Issues 1–30 and Tasks T1–T2 — is implemented and independently verified. `ongoing_general_errors.md` has **0 open issues** and no blank `Your selection:` line anywhere.
+**Two open issues, both BLOCKED on the user's decision.** Issues 1–30 and Tasks T1–T2 are all implemented and independently verified. A live 3-simulator playtest on August 7 surfaced two new defects, filed with options in `ongoing_general_errors.md`:
 
-**If you were spawned to "continue the work": read §3, confirm the §2 baseline still holds, and report that the queue is empty.** Do not invent work. Do not refactor working, tested code for its own sake. Do not "fix" anything in §5, §6 or §7 — those lists exist because earlier passes kept undoing deliberate decisions.
+| Issue | What the user sees | Status |
+|---|---|---|
+| **31** | Changing any lobby setting silently wipes the others; START GAME then fails with `[firebase_functions/internal] INTERNAL` | ⛔ `Your selection: _____` blank |
+| **32** | The raven mascot is invisible — drawn at **1.02:1** contrast against the background, where 1.00 is identical | ⛔ `Your selection: _____` blank |
+
+**⛔ Do not start either one.** Both selection lines are blank; these are the user's decisions. Check them first — if still blank, report that and stop. **Issue 31 is a live production defect that makes the game unstartable after any settings change**, so if the user has not responded, say so plainly rather than quietly waiting.
+
+The root causes are already fully diagnosed — see §1a. Do not re-investigate; go straight to implementing the selected option when one lands.
+
+**A blocker is a filing event, not a licence to re-choose.** If a selected option turns out to be impossible, STOP and file that with fresh options. Do not substitute a different option on the user's behalf.
+
+Do not invent other work. Do not refactor working, tested code for its own sake. Do not "fix" anything in §5, §6 or §7 — those lists exist because earlier passes kept undoing deliberate decisions.
 
 ---
 
@@ -18,6 +29,43 @@
 | **T2** — `cupertino_icons` removed | Unused template leftover dropped | `CupertinoIcons.ttf` absent from the release bundle; `MaterialIcons-Regular.otf` still present at 4 KB |
 
 **Measured size result: `Runner.app` 46.7 MB → 44.0 MB, i.e. 2.7 MB (5.8%) smaller.** Exactly one Phosphor font ships, subsetted 536 KB → **8 KB** — proving `--tree-shake-icons` still works on the vendored asset because the glyph map stayed `const`.
+
+---
+
+## 1a. Diagnosis already completed for Issues 31–32 — do not re-investigate
+
+Both were traced to root cause on August 7. Options and full evidence are in `ongoing_general_errors.md`; this is the technical summary so whoever implements does not repeat the dig.
+
+### Issue 31 — one defect, two symptoms
+
+`lib/services/game_service.dart:361–368` sends **all three** lobby settings on every call, filling untouched ones with Dart `null`. `functions/src/index.ts:1006–1008` skips fields that are `undefined` — but a Dart `null` arrives as JSON `null`, and **`null !== undefined` is true**, so the nulls get written.
+
+Two consequences, and the second is the reported crash:
+1. `isTimerDisabled` → `null` → falsy → the toggle reads as off. Symmetric: changing rounds wipes the timer, changing the timer wipes the rounds.
+2. `sabotageAnswersCount` → `null` → in `functions/src/rotation_engine.ts`, the guard at `:7` (`playerIds.length <= sabotageRounds`) evaluates `3 <= null` → false, so it does **not** throw; the loop at `:15` (`r <= null`) then runs zero times and returns `{}`. `startGame` reads `stringRotations["1"]` → `undefined` → Firestore rejects it. Production log:
+   ```
+   Cannot use "undefined" as a Firestore value (found in field "currentCardAssignments")
+   ```
+   The client surfaces only `[firebase_functions/internal] INTERNAL`.
+
+**Whichever option is selected, the validation must include a test that sends an explicit `null`** — the existing 28/28 emulator suite calls the callable from TypeScript (`functions/test/game_e2e.spec.ts:643`) where omitted keys really are `undefined`, so it structurally cannot reproduce this. That gap is the point. A test asserting `updateLobbySettings` with a null field leaves the stored value unchanged is the falsifying assertion; it fails against today's backend.
+
+If Option A or C is selected, the change touches `functions/` and **the emulator suite becomes a required gate**, plus a redeploy:
+```bash
+npm --prefix functions run build && npm --prefix functions test
+npx firebase-tools deploy --only functions
+```
+No data migration is needed — rooms are created fresh per game.
+
+### Issue 32 — a contrast problem, not a drawing problem
+
+`lib/widgets/raven_mascot.dart` fills the body with `Color(0xFF171310)` at lines **293, 307, 323, 406**, on `AppColors.ground` `#14110E`. Measured contrast **1.02:1** (1.00 = identical). Only the brass beak and eye have real contrast, which is why the bird reads as two floating gold specks.
+
+Measured reference values against the background: warm charcoal `#3E3428` **1.55:1** · brass `#C9A24B` **7.84:1** · ivory `#F5EEDB` **16.25:1**.
+
+**Before touching this, know what it is:** a 485-line hand-animated widget with three animation controllers and five poses (`sleep`, `idle`, `hop`, `ruffle`, `fly`), used on five screens each passing a different pose — `lobby_screen.dart:424`, `phase2_craft.dart:304`, `phase3_vote.dart:382`, `phase4_reveal.dart:417`, `game_over_screen.dart:231`. Option A recolours it; Option B replaces it with the `bird` glyph already present in the vendored Phosphor font (no new dependency) and retires the animation. Option B therefore changes five call sites and deletes character work — it is not a like-for-like swap.
+
+Validation for either option must assert **measured contrast**, not "looks better": compute the ratio of the body fill against `AppColors.ground` and assert it exceeds a chosen threshold. A screenshot cannot regress-test this, which is exactly how it shipped invisible.
 
 ---
 
@@ -45,9 +93,9 @@ Measured on this tree, August 6, 2026. If a fresh checkout does not reproduce th
 
 ## 3. If you were spawned to "continue the work"
 
-These are the **only** legitimate triggers for action:
+**First check the `Your selection:` lines on Issues 31 and 32.** If both are still blank, there is no approved work — report that, and note that Issue 31 is a live defect blocking gameplay. These are the **only** legitimate triggers for action:
 
-1. **A new user selection landed** — check `ongoing_general_errors.md` for a fresh `### Issue N` block with a filled-in `Your selection:` line. If it is UI or animation work, write a detailed design spec (exact dimensions, durations, curves, tokens, guards, validation) into this guide **first**, then implement via THE LOOP in §8.
+1. **A new user selection landed** — check `ongoing_general_errors.md` for a fresh `### Issue N` block with a filled-in `Your selection:` line. For Issues 31–32 the diagnosis is already done (§1a) — go straight to implementation. If it is UI or animation work, write a detailed design spec (exact dimensions, durations, curves, tokens, guards, validation) into this guide **first**, then implement via THE LOOP in §8.
 2. **A baseline regression** — if §2 no longer passes on a fresh checkout, triage it, file it in `ongoing_general_errors.md` in `bug_documentation_guidelines` format with options, then fix per §8.
 3. **Store-readiness chores**, and only if the user asks: app icons, splash, store listing assets, privacy manifest, release signing. User-driven — do not start them unsolicited.
 4. **Nothing changed** — report the queue is complete and stop.
@@ -172,8 +220,14 @@ Read before writing any new spec. Each entry is a **spec** failure, not an imple
 ## Definition of Done — for this state
 
 - [x] Issues 1–30 and Tasks T1–T2 implemented and independently verified.
-- [x] `ongoing_general_errors.md` shows **0 open issues**; no blank `Your selection:` line remains.
+- [x] Issues 31–32 diagnosed to root cause with evidence, filed with options (§1a).
 - [x] Baseline in §2 measured on this tree and reproducible.
 - [x] `design_ui_direction.md` §7 reflects the shipped hybrid icon system and the vendored font.
+- [ ] **Issue 31 — awaiting the user's selection.**
+- [ ] **Issue 32 — awaiting the user's selection.**
 
-**The queue is empty. Do not invent work.** The only legitimate triggers are the four in §3.
+**Both open issues are blocked on the user. Do not choose for them, and do not invent other work.** When a selection lands, implement only that option, validate per §1a and §8, and rewrite this guide.
+
+### Feedback-loop entry from the August 7 playtest
+
+**A cross-language `undefined` check is not a null check.** Issue 31's server guard (`x !== undefined ? x : existing`) was correct-looking TypeScript that silently failed because the Dart client sends explicit `null`. The 28/28 emulator suite could not catch it — those tests are written in TypeScript, where an omitted key genuinely *is* `undefined`, so the failing shape was unreachable from the test harness. **When a boundary is crossed by two languages, at least one test must send the payload the way the real client sends it.** This is the same real-client blind spot that produced the non-host write gap; it has now cost two separate bugs.

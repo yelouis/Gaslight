@@ -295,7 +295,70 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ---
 
-## ⚠️ Unresolved Issues & Suggestions (0 open)
+## ⚠️ Unresolved Issues & Suggestions (2 open — Issues 31–32, filed August 7, 2026)
+
+> Found in a live 3-simulator playtest against the deployed backend. **Reported bugs 1 and 2 turned out to be a single defect** — Issue 31 — where bug 1 (START GAME crashes) is a downstream consequence of bug 2 (settings revert). Issue 32 covers the raven's visibility. Battery is green: `flutter analyze lib test` **0 errors** · `flutter test` **65/65**.
+
+---
+
+### Issue 31: Any Lobby Settings Change Wipes the Other Settings, Which Then Crashes START GAME
+**Status**: ⚠️ Confirmed Unresolved — root cause identified in production logs and confirmed in source. **This single defect causes both reported bugs.**
+
+**What happens, in plain terms:** the app sends all three lobby settings every time you change any one of them, and it fills in the ones you didn't touch with "empty". The server was written to skip settings that are *missing* — but "empty" is not the same as "missing", so it saves the empties over your real values. Change the deck and your timer setting and round count are both wiped. Then START GAME fails, because a wiped round count leaves the game with no card-passing plan.
+
+**The evidence:**
+- `lib/services/game_service.dart:361–368` sends all three keys unconditionally, so `updateLobbySettings(selectedDeckId: 'x')` transmits `sabotageAnswersCount: null` and `isTimerDisabled: null` alongside it.
+- `functions/src/index.ts:1006–1008` guards with `!== undefined`. A Dart `null` arrives as JSON `null`, and `null !== undefined` is **true**, so both nulls are written to Firestore.
+- **Reported bug 2 explained:** `isTimerDisabled` becomes `null`, which is falsy, so the toggle reads as off again. It is not "reverting" — it is being erased. Note this is symmetric: changing the rounds wipes the timer, and changing the timer wipes the rounds. Any one change wipes the other two.
+- **Reported bug 1 explained:** `sabotageAnswersCount` becomes `null`. In `functions/src/rotation_engine.ts:7` the guard `playerIds.length <= sabotageRounds` evaluates `3 <= null` → false, so it does **not** throw. Then the loop at `:15` runs `for (r = 1; r <= null)` → zero iterations → it returns `{}`. Back in `startGame`, `stringRotations["1"]` is therefore `undefined`, and Firestore rejects the write. Production log, verbatim:
+  ```
+  Unhandled error Error: ... Cannot use "undefined" as a Firestore value
+  (found in field "currentCardAssignments").
+  ```
+  The client only ever sees the opaque `[firebase_functions/internal] INTERNAL`.
+
+**Why the 28/28 emulator suite never caught this:** those tests call the callable from TypeScript (`functions/test/game_e2e.spec.ts:643`), where an omitted key genuinely *is* `undefined`. Only the Dart client sends an explicit `null`. The suite cannot reproduce the failing shape, which is the same real-client blind spot recorded against the fake-Firestore tests.
+
+**No data repair is needed** — rooms are created fresh per game, so no existing records require migration.
+
+**Option A (recommended)**: **Fix both sides, and make the failure loud.** Stop the app from sending empty values at all; make the server treat an empty value as "no change" even if one arrives; and add a check so an impossible round count fails immediately with a clear message instead of quietly producing a broken game.
+  - *Pros*: Closes the hole permanently and in the right place — the server is supposed to be the authority and should never trust the shape of what a client sends. Protects against any app version, including ones already installed on a tester's phone. Converts a baffling "INTERNAL" into a message that says what is actually wrong, so the next bug of this family takes minutes rather than a log dig.
+  - *Cons*: Needs a Cloud Functions redeploy (~5 minutes) and the emulator suite has to be run as a gate because backend code changes.
+
+**Option B**: **Fix only the app.** Stop sending empty values; leave the server exactly as it is.
+  - *Pros*: No redeploy, no backend risk; ships the moment you rebuild. The smallest possible change.
+  - *Cons*: The server still accepts a bad value from anyone. Any copy of the app already installed elsewhere keeps corrupting rooms, and you would have to be sure every tester updated. The confusing error message stays.
+
+**Option C**: **Fix only the server.** Treat empty as "no change" there.
+  - *Pros*: One place; instantly protects every version of the app including already-installed ones, with no app rebuild needed.
+  - *Cons*: Needs the redeploy anyway, and the app carries on sending meaningless empty values — which will confuse whoever reads this code next and leaves the same trap set for a future setting.
+
+*Effort:* Small (A) · Trivial (B) · Trivial (C). Your selection: _____
+
+---
+
+### Issue 32: The Raven Mascot Is Painted Almost Exactly the Background Colour
+**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/widgets/raven_mascot.dart`. The raven's body is filled with `Color(0xFF171310)` (lines 293, 307, 323, 406) and sits on `AppColors.ground` `#14110E`. Measured contrast ratio: **1.02:1**, where **1.00 means the two colours are identical.** It is, for practical purposes, being drawn in the background colour. On the raised card surface (`#1C1712`) it is 1.04:1 and slightly *darker* than the card. The brass beak and eye are the only parts with real contrast, which is why the bird reads as a couple of floating gold specks.
+
+**Important context before you choose.** The raven is not an icon. It is a **485-line hand-animated widget** with three animation controllers and **five poses** — `sleep`, `idle`, `hop`, `ruffle`, `fly` — and it appears on **five screens**, each passing a different pose: lobby (`lobby_screen.dart:424`), craft (`phase2_craft.dart:304`), vote (`phase3_vote.dart:382`), reveal (`phase4_reveal.dart:417`), game over (`game_over_screen.dart:231`). It was built as the V1 "Lamplighter's Raven" character piece.
+
+For reference, measured contrast against the background: current body **1.02:1** · warm charcoal `#3E3428` **1.55:1** · brass `#C9A24B` **7.84:1** · ivory `#F5EEDB` **16.25:1**.
+
+**Option A (recommended)**: **Just recolour it.** Change the body fill so the bird actually stands out and leave everything else alone. Suggested: a warm charcoal body with a brass rim-light along the back and head, keeping the existing brass beak and eye — it stays a dark bird in lamplight rather than becoming a gold ornament. A fully brass silhouette (7.84:1) is the bolder alternative if you want it to read from across the room.
+  - *Pros*: Fixes precisely what is wrong — you cannot see it — by changing a handful of colour constants. Keeps all the animation and all five poses, so the raven still reacts differently on each screen. No new dependency, nothing else to re-verify, and it is the smallest change on the table.
+  - *Cons*: You still have the hand-drawn bird. If what actually bothers you is the drawing rather than the visibility, recolouring will not address that.
+
+**Option B**: **Replace it with the `bird` icon from the font we already ship.** No new library is needed — the Phosphor set vendored last week contains a `bird` glyph, and adding it costs a few hundred bytes because the font is subsetted to only what we use.
+  - *Pros*: Instantly consistent with every other icon in the app, guaranteed to sit at the same visual weight, and you can set it to any theme colour. Deletes 485 lines you currently own and maintain.
+  - *Cons*: It becomes a **static picture**. You lose all the animation and all five poses, so the raven stops reacting — it will look identical on the lobby, the vote and the game-over screen. Five call sites change, and the V1 character work is retired. This is the option that changes the app's personality, not just its palette.
+
+**Option C**: **Add a different icon library with a crow.**
+  - *Pros*: A wider choice of bird artwork than the single `bird` glyph.
+  - *Cons*: Strictly worse than Option B — a whole new dependency for one picture, when the font already on board has one. It also re-opens the unused-font-weight bloat that Issue 29 was opened to fix, and every such package ships several weights. Not recommended.
+
+*Effort:* Trivial (A) · Small (B) · Moderate (C). Your selection: _____
+
+---
 
 > **All active build queue items (Issues 23–30, Tasks T1–T2) have been resolved and verified.**
 >
