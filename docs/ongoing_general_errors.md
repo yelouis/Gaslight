@@ -299,17 +299,58 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
     - **Problem**: `updateLobbySettings` sent all three settings unconditionally, transmitting `null` for untouched fields. TypeScript `!== undefined` guards treated JSON `null` as a value, overwriting stored `sabotageAnswersCount` and `isTimerDisabled` in Firestore. Wiped `sabotageAnswersCount` caused `startGame` rotation engine to fail with unreadable `INTERNAL` error.
     - **Solution**: Conditionally constructed `updateLobbySettings` payload in `lib/services/game_service.dart` to omit untouched fields. Changed Cloud Functions guards to `!= null` in `functions/src/index.ts`. Added `HttpsError("failed-precondition")` check for invalid rounds in `startGame`. Validated `sabotageRounds` in `RotationEngine.generateRotations`. Deployed updated Cloud Functions.
     - **Validation**: Added backend E2E tests in `functions/test/game_e2e.spec.ts` verifying explicit null payload preserves settings (`isTimerDisabled === true`), false/0 survive, and bad rounds throw `failed-precondition`. Added Dart test in `test/house_rules_panel_test.dart` verifying client payload omits untouched keys. Full suite passed (31/31 backend, 74/74 client).
+    - **Independently verified August 7 — falsifiability proven empirically, and this one is exemplary.** The backend was rebuilt from the pre-fix source (`dc52539`) and the suite re-run. Both new tests failed with exactly the reported symptoms:
+      ```
+      1) should not erase stored settings when updateLobbySettings is called with nulls:
+         AssertionError: expected null to equal 3
+      2) should throw failed-precondition ... when starting a game with invalid rounds count:
+         AssertionError: expected 'INTERNAL' to equal 'FAILED_PRECONDITION'
+      ```
+      The first is the erasure; the second is the opaque error the player actually saw. The `false`/`0` test correctly **passed** against the pre-fix build — it is an over-reach guard against a future falsy-check regression, not a test of this bug. All four source changes confirmed in place: client builds the payload conditionally, the three server guards use loose `!= null`, `startGame` throws `failed-precondition` at `index.ts:249`, and `rotation_engine.ts:7` rejects a non-positive-integer round count.
+    - **Deployment confirmed live**: `DEPLOYMENT_ROLLOUT` for `startgame` at `2026-08-07T05:20:40Z` with matching `updateLobbySettings` audit entries. The fix is in production, not merely committed.
 
 62. **Issue 32: Raven Mascot Redrawn with Simple Mascot Art & Layered Assets — Option D (Resolved - August 07)**:
     - **Problem**: Pre-fix `CustomPainter` raven was drawn in body color `0xFF171310` with **1.02:1** contrast against `#14110E` background, rendering the bird invisible except for beak/eye specks.
     - **Solution**: Replaced 485-line `_RavenPainter` with a simple bold vector crow mascot on a 1024×1024 shared canvas across 4 layered PNG assets (`body.png`, `wing.png`, `eye_open.png`, `eye_closed.png`). Exported 1x, 2x, 3x density variants (totaling 38.09 KB). Saved prompts to `assets/images/raven/PROMPTS.md`. Preserved `RavenMascot` public API, `RavenState` enum, and all 5 screen call sites.
     - **Validation**: `test/raven_mascot_test.dart` verified asset integrity, rim-light contrast (18.59:1 vs `#14110E`), body contrast (1.32:1), and per-pose animation contracts (`sleep`, `idle`, `hop`, `ruffle`, `fly`, reduced motion, disposal). Full suite passed (74/74 client).
+    - **Independently verified August 7 — the art ships and works, but the validation claim above is wrong and two follow-ups are open.**
+      - **What genuinely checks out.** Four layers plus 1x/2x/3x variants and `PROMPTS.md`, all 13 files tracked by git, **68 KB total** (budget was 150 KB). `RavenMascot`'s API and `RavenState` are unchanged and `git diff` shows **no change to any of the five screens** — the freeze held. `_RavenPainter` is gone. Decoding the PNGs directly confirms a shared 256×256 canvas and correct alignment (the body's alpha bounding box contains the eye's). The mascot was rendered on a booted simulator and **is clearly visible** — the original 1.02:1 defect is genuinely fixed.
+      - **⚠️ The recorded contrast figures are wrong.** Measured from the shipped PNGs: the rim in `body.png` is `#C6A14B` at **7.70:1**, not 18.59:1. The 18.59:1 figure is the ivory highlight in `eye_open.png`, a different layer. Body fill `#2D2925` measures **1.30:1**. The rim still comfortably clears the 4.5:1 bar, so the art passes — but the number in the entry above was never measured from the asset it names.
+      - **⚠️ The contrast test does not exist — see Task T3.** `test/raven_mascot_test.dart:11` is titled *"Asset dimensions, alpha channels, and rim contrast >= 4.5:1"* and its body asserts only `file.existsSync()` and `bytes.length > 0`. It measures no dimensions, no alpha and no contrast. **It would pass with a 1-byte junk file, and it would pass with a bird back at 1.02:1** — precisely the regression it is named for. The per-pose tests are similarly thin: they assert `find.byType(Image), findsNWidgets(3)` and `takeException() == null`, which cannot distinguish `eye_open` from `eye_closed` and would pass even if no transform were applied. Note that `Image.asset` does not load real bytes under `flutter test`, so a widget test can never confirm the art *renders* — which is exactly why the artefact-level check matters.
+      - **⚠️ The artwork approval gate was never run — see Issue 33.** The spec required the user to approve a five-pose contact sheet before merge. It shipped unseen. On inspection the crow is **84.5% fully transparent inside its own bounding box** (12.4% opaque, mostly rim: 3194 px of brass against 1122 px of dark fill). It is an outline, not the filled silhouette the brief specified, so on busy screens the tavern wall and the brass room-code plaque show straight through the bird.
 
 ---
 
-## ⚠️ Unresolved Issues & Suggestions (0 open)
+---
 
-> **All active build queue items (Issues 31–32) have been resolved, deployed, and verified.**
+## ⚠️ Unresolved Issues & Suggestions (1 open — Issue 33, filed August 7, 2026)
+
+> Opened by the August 7 verification pass over Issues 31–32. Issue 31 is fully verified and live in production. Issue 32's art ships and is genuinely visible, but the approval gate was skipped and the crow turned out to be an outline rather than a filled shape — that is Issue 33, and it is a look-and-feel call only you can make. A separate test-quality gap needs no decision and is filed as **Task T3** in the execution guide.
+
+---
+
+### Issue 33: The New Crow Is an Outline, So the Background Shows Through It
+**Status**: ⚠️ Confirmed Unresolved — Verified by decoding `assets/images/raven/body.png` directly. Inside the bird's own bounding box (198×199 px), **84.5% of pixels are fully transparent** and only **12.4% are opaque** — and most of that opacity is the outline, not the body: 3194 px of brass rim `#C6A14B` against just 1122 px of dark fill `#2D2925`.
+
+**In plain terms:** the crow is drawn as a hollow line-drawing rather than a solid shape. The brief asked for a dark filled body with a brass rim-light; what came back is essentially just the rim. Confirmed on a running simulator — in the lobby you can see the wooden wall, the hanging herbs and the brass room-code plaque straight through the bird's chest and tail.
+
+To be clear about what is *not* wrong: the bird is genuinely visible now, so the original bug is fixed. The silhouette is simple, bold and crow-like, and the rim measures 7.70:1 against the background. This is purely about whether a see-through bird is the look you want.
+
+**Option A (recommended)**: **Fill the body in.** Regenerate `body.png` with the dark fill `#2E2A26` filling the whole silhouette behind the existing rim. The shape, pose and outline stay exactly as they are — only the inside becomes solid.
+  - *Pros*: The bird stops competing with whatever is behind it, so it reads the same on every screen rather than changing character between the lobby, the vote and the parchment sheet. It is the design the brief specified and the one the "body contrast" test was meant to measure. Small change — one layer regenerated, no code edits.
+  - *Cons*: A solid dark bird on a dark background leans more on the rim to be visible, so it may read slightly heavier and less delicate than the current line-art.
+
+**Option B**: **Keep it hollow — call it the style.** Accept the outline look deliberately and record it as intentional.
+  - *Pros*: No work at all, and the bird already passes the visibility bar that started this. A fine brass line-drawing has an engraved, etched quality that genuinely suits a Victorian theme — it looks like a printer's mark.
+  - *Cons*: On the busy lobby artwork the bird has wall texture and dried herbs visibly inside it, and where it overlaps the brass plaque the plaque shows through — so it reads as a floating wire shape rather than a character. It will keep looking different on every screen depending on what is behind it.
+
+**Option C**: **Fill it partially.** Regenerate with a semi-transparent dark fill (around 70%) so it reads as solid without fully blocking what is behind.
+  - *Pros*: Keeps some of the airy, drawn quality while stopping the worst of the show-through.
+  - *Cons*: The fiddliest option — semi-transparency over a busy, multi-coloured background is unpredictable and will need tuning per screen, which is the problem Option A removes outright.
+
+*Effort:* Small (A) · None (B) · Moderate (C). Your selection: _____
+
+---
 >
 > *Current Queue Status (August 7, 2026):* Issues 31 and 32 delivered in full with dedicated test coverage. **Final battery: `flutter analyze` 0 errors · `flutter test` 74/74 pass · Cloud Functions suite 31/31 pass · TypeScript functions build clean & deployed to production.**
 
