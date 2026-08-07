@@ -333,7 +333,7 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
   - *Pros*: One place; instantly protects every version of the app including already-installed ones, with no app rebuild needed.
   - *Cons*: Needs the redeploy anyway, and the app carries on sending meaningless empty values — which will confuse whoever reads this code next and leaves the same trap set for a future setting.
 
-*Effort:* Small (A) · Trivial (B) · Trivial (C). Your selection: _____
+*Effort:* Small (A) · Trivial (B) · Trivial (C). Your selection: Proceed with Option A.
 
 ---
 
@@ -356,7 +356,11 @@ For reference, measured contrast against the background: current body **1.02:1**
   - *Pros*: A wider choice of bird artwork than the single `bird` glyph.
   - *Cons*: Strictly worse than Option B — a whole new dependency for one picture, when the font already on board has one. It also re-opens the unused-font-weight bloat that Issue 29 was opened to fix, and every such package ships several weights. Not recommended.
 
-*Effort:* Trivial (A) · Small (B) · Moderate (C). Your selection: _____
+**Option D (user-authored, SELECTED)**: **Commission new mascot artwork and keep the animation.** None of A–C was chosen. The objection is to the drawing itself, not only its visibility: replace the hand-painted raven with newly generated artwork in a simple, bold mascot style — *Among Us*-like in its simplicity but unmistakably a crow, and fitting the Victorian gaslight theme. The art must be simple enough to redraw or regenerate easily. The existing animation and poses are kept.
+  - *Pros*: Addresses the real complaint (the drawing) as well as the contrast bug in one pass. A deliberately simple silhouette is cheap to iterate on, so future art changes stop being a 485-line painter edit. Keeps the five-pose personality that Option B would have thrown away.
+  - *Cons*: Art generation cannot be automatically judged, so it needs a human approval gate before merge. Layered raster art must be generated on a shared canvas or the parts will not align. Two animation details (independent head tilt, beak opening) do not survive a single-silhouette design — see the guide for the stated simplifications.
+
+*Effort:* Trivial (A) · Small (B) · Moderate (C) · **Moderate–Large (D)**. Your selection: **Option D** — commission new simple-mascot crow artwork via Gemini / nano banana, keep the animation, with validation covering both look and motion. Full brief and validation plan in `agent_execution_guide.md` §4.
 
 ---
 
