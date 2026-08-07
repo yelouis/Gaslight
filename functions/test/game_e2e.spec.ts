@@ -815,4 +815,80 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(card.sabotageAnswers['p_host']).to.equal('sleeping in my bed all day');
     expect(card.sabotageAnswers['p_guest']).to.equal('playing video games');
   });
+
+  describe('Issue 31: updateLobbySettings & startGame null handling', () => {
+    it('should not erase stored settings when updateLobbySettings is called with nulls', async () => {
+      const hostUser = await createAnonUser();
+      const createRes = await callFn('createRoom', hostUser.idToken, {
+        playerName: 'Alice',
+        playerId: 'p_host',
+        sabotageAnswersCount: 3,
+        isTimerDisabled: true,
+        debugEnabled: true
+      });
+      const roomCode = createRes.roomCode;
+      const roomRef = db.collection('rooms').doc(roomCode);
+
+      // Call updateLobbySettings with explicit nulls for untouched fields
+      await callFn('updateLobbySettings', hostUser.idToken, {
+        roomCode,
+        selectedDeckId: 'custom',
+        sabotageAnswersCount: null,
+        isTimerDisabled: null
+      });
+
+      const roomSnap = await roomRef.get();
+      const data = roomSnap.data();
+      expect(data?.selectedDeckId).to.equal('custom');
+      expect(data?.sabotageAnswersCount).to.equal(3);
+      expect(data?.isTimerDisabled).to.be.true;
+    });
+
+    it('should preserve false and 0 values when updating settings', async () => {
+      const hostUser = await createAnonUser();
+      const createRes = await callFn('createRoom', hostUser.idToken, {
+        playerName: 'Alice',
+        playerId: 'p_host',
+        sabotageAnswersCount: 2,
+        isTimerDisabled: true,
+        debugEnabled: true
+      });
+      const roomCode = createRes.roomCode;
+      const roomRef = db.collection('rooms').doc(roomCode);
+
+      await callFn('updateLobbySettings', hostUser.idToken, {
+        roomCode,
+        isTimerDisabled: false
+      });
+
+      const roomSnap = await roomRef.get();
+      expect(roomSnap.data()?.isTimerDisabled).to.be.false;
+    });
+
+    it('should throw failed-precondition with a readable error message when starting a game with invalid rounds count', async () => {
+      const hostUser = await createAnonUser();
+      const guestUser = await createAnonUser();
+      const createRes = await callFn('createRoom', hostUser.idToken, {
+        playerName: 'Alice',
+        playerId: 'p_host'
+      });
+      const roomCode = createRes.roomCode;
+      await callFn('joinRoom', guestUser.idToken, {
+        roomCode,
+        playerName: 'Bob',
+        playerId: 'p_guest'
+      });
+
+      const roomRef = db.collection('rooms').doc(roomCode);
+      await roomRef.update({ sabotageAnswersCount: null });
+
+      try {
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+        expect.fail('Should have thrown failed-precondition for null sabotageAnswersCount');
+      } catch (err: any) {
+        expect(err.status).to.equal('FAILED_PRECONDITION');
+        expect(err.message).to.contain('invalid forgery-round count');
+      }
+    });
+  });
 });

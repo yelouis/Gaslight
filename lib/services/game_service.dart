@@ -360,12 +360,11 @@ class GameService extends ChangeNotifier {
 
   Future<void> updateLobbySettings({int? sabotageAnswersCount, bool? isTimerDisabled, String? selectedDeckId}) async {
     if (_gameState == null || currentPlayer?.isHost != true) return;
-    await _functions.httpsCallable('updateLobbySettings').call({
-      'roomCode': _gameState!.roomCode,
-      'sabotageAnswersCount': sabotageAnswersCount,
-      'isTimerDisabled': isTimerDisabled,
-      'selectedDeckId': selectedDeckId,
-    });
+    final payload = <String, dynamic>{'roomCode': _gameState!.roomCode};
+    if (sabotageAnswersCount != null) payload['sabotageAnswersCount'] = sabotageAnswersCount;
+    if (isTimerDisabled != null) payload['isTimerDisabled'] = isTimerDisabled;
+    if (selectedDeckId != null) payload['selectedDeckId'] = selectedDeckId;
+    await _functions.httpsCallable('updateLobbySettings').call(payload);
   }
 
   Future<void> submitUnmaskGuess(String guessedAuthorId) async {

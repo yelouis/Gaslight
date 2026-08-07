@@ -245,7 +245,15 @@ export const startGame = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "Cannot start: Need at least 2 active players.");
     }
 
-    if (activePlayers.length <= room.sabotageAnswersCount) {
+    const rounds = room.sabotageAnswersCount;
+    if (!Number.isInteger(rounds) || rounds < 1) {
+      throw new HttpsError(
+        "failed-precondition",
+        `This room has an invalid forgery-round count (${JSON.stringify(rounds)}). Re-set the house rules, then start again.`
+      );
+    }
+
+    if (activePlayers.length <= rounds) {
       throw new HttpsError("failed-precondition", "Cannot start: Need more players than forgery rounds.");
     }
 
@@ -357,7 +365,7 @@ export const startGame = onCall(async (request) => {
     }
 
     const pIds = activePlayers.map(p => p.id);
-    const nativeRotations = RotationEngine.generateRotations(pIds, room.sabotageAnswersCount);
+    const nativeRotations = RotationEngine.generateRotations(pIds, rounds);
     const stringRotations: Record<string, Record<string, string>> = {};
     for (const [key, val] of Object.entries(nativeRotations)) {
       stringRotations[key] = val;
@@ -1004,9 +1012,9 @@ export const updateLobbySettings = onCall(async (request) => {
 
     const data = roomSnap.data() as GameState;
     transaction.update(roomRef, {
-      sabotageAnswersCount: sabotageAnswersCount !== undefined ? sabotageAnswersCount : data.sabotageAnswersCount,
-      isTimerDisabled: isTimerDisabled !== undefined ? isTimerDisabled : data.isTimerDisabled,
-      selectedDeckId: selectedDeckId !== undefined ? selectedDeckId : (data.selectedDeckId || "the_daily_grind")
+      sabotageAnswersCount: sabotageAnswersCount != null ? sabotageAnswersCount : data.sabotageAnswersCount,
+      isTimerDisabled:      isTimerDisabled      != null ? isTimerDisabled      : data.isTimerDisabled,
+      selectedDeckId:       selectedDeckId       != null ? selectedDeckId       : (data.selectedDeckId || "the_daily_grind")
     });
 
     return { success: true };

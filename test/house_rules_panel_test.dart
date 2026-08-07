@@ -225,5 +225,40 @@ void main() {
         gameService.dispose();
       }
     });
+
+    testWidgets('client updateLobbySettings payload omits untouched keys', (tester) async {
+      try {
+        final fakeFunctions = FakeFirebaseFunctions(mockDb);
+        final customGameService = GameService(db: mockDb, functions: fakeFunctions);
+
+        const roomCode = 'TEST';
+        final currentUserId = 'player_1';
+        final hostPlayer = PlayerState(id: currentUserId, name: 'HostUser', isHost: true, joinedAt: 100);
+        final gameState = GameState(roomCode: roomCode, totalPlayers: 1, sabotageAnswersCount: 2, isTimerDisabled: false);
+
+        await mockDb.collection('rooms').doc(roomCode).set(gameState.toMap());
+        await mockDb.collection('rooms').doc(roomCode).collection('players').doc(hostPlayer.id).set(hostPlayer.toMap());
+
+        customGameService.listenToRoom(roomCode);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('room_code', roomCode);
+        await prefs.setString('player_id', currentUserId);
+        await customGameService.tryRejoinSession();
+
+        await customGameService.updateLobbySettings(selectedDeckId: 'custom');
+
+        expect(fakeFunctions.lastCallName, equals('updateLobbySettings'));
+        final payload = fakeFunctions.lastCallParams;
+        expect(payload, isNotNull);
+        expect(payload!.containsKey('roomCode'), isTrue);
+        expect(payload['selectedDeckId'], equals('custom'));
+        expect(payload.containsKey('sabotageAnswersCount'), isFalse);
+        expect(payload.containsKey('isTimerDisabled'), isFalse);
+
+        customGameService.dispose();
+      } finally {
+        gameService.dispose();
+      }
+    });
   });
 }

@@ -4,6 +4,9 @@ export class RotationEngine {
    * Returns a map of Rotation Round (1 to sabotageRounds) -> Map of holdingPlayerId -> targetPlayerId
    */
   static generateRotations(playerIds: string[], sabotageRounds: number): Record<number, Record<string, string>> {
+    if (!Number.isInteger(sabotageRounds) || sabotageRounds < 1) {
+      throw new Error(`sabotageRounds must be a positive integer, received: ${JSON.stringify(sabotageRounds)}`);
+    }
     if (playerIds.length <= sabotageRounds) {
       throw new Error('Total players must be strictly greater than sabotage rounds to prevent players from receiving their own cards.');
     }

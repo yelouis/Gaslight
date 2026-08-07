@@ -18,23 +18,31 @@ class FakeHttpsCallableResult<T> implements HttpsCallableResult<T> {
 
 class FakeFirebaseFunctions extends Fake implements FirebaseFunctions {
   final FirebaseFirestore db;
+  Map<String, dynamic>? lastCallParams;
+  String? lastCallName;
+
   FakeFirebaseFunctions(this.db);
 
   @override
   HttpsCallable httpsCallable(String name, {HttpsCallableOptions? options}) {
-    return FakeHttpsCallable(db, name);
+    return FakeHttpsCallable(db, name, onCall: (n, p) {
+      lastCallName = n;
+      lastCallParams = p;
+    });
   }
 }
 
 class FakeHttpsCallable extends Fake implements HttpsCallable {
   final FirebaseFirestore db;
   final String name;
+  final void Function(String name, Map<String, dynamic> params)? onCall;
 
-  FakeHttpsCallable(this.db, this.name);
+  FakeHttpsCallable(this.db, this.name, {this.onCall});
 
   @override
   Future<HttpsCallableResult<T>> call<T>([dynamic parameters]) async {
     final params = parameters as Map<String, dynamic>? ?? {};
+    onCall?.call(name, params);
     final roomCode = params['roomCode'] as String? ?? 'TEST';
 
     if (name == 'createRoom') {
