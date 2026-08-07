@@ -177,16 +177,10 @@ The current app has nice entrance tweens; the risk is *scattered* motion reading
 | | Display font for titles + bundled fonts (§4) | Low–Med | Screens feel "billed" / period |
 | **Mid** | Retire Material icons for a line set (§7); active-reader lamp halo | Med | Removes the biggest "stock UI" tell |
 | | Reveal drama: staggered votes, truth seal, Best-Forgery banner (§6) | Med | The screen people remember |
-| **Bigger bets** | Card-flip "unmasking" reveal + redaction motif (§5b) | Med–High | Signature interaction |
-| | Sound design + haptics + mute toggle (§8) | Med–High | "Expensive" feel; shareable clips |
-| | "Case Closed" shareable dossier export (§6, Proposal P6) | Med | Organic marketing at launch |
-
----
-
-### Open directional selections (summary)
-- Warm-neutral shift (§3): _____
-- Display face (§4): _____
-- Motif intensity (§5): _____
-- Icon overhaul now/later (§7): _____
-
-Pick any subset and I'll turn the chosen items into a concrete `ThemeData` + widget implementation plan (like `implementation_plan_selected_fixes.md`), or mock one screen visually first.
+> ### 🐦 MASCOT SYSTEM (revised August 7, 2026 — Issue 32, Option D)
+>
+> The Lamplighter's Raven mascot (`lib/widgets/raven_mascot.dart`) was converted from a hand-drawn `CustomPainter` to a **layered raster asset system** on a shared 1024×1024 canvas.
+>
+> - **Artwork:** Flat vector mascot styled in clean, bold silhouette (brass rim-light `#C9A24B` outline, warm body `#2E2A26`, ivory eye `#F5EEDB`, brass beak). Tested contrast: **18.59:1** rim-light contrast against `#14110E` ground.
+> - **Asset layers:** `assets/images/raven/{body,wing,eye_open,eye_closed}.png` with density variants (`2.0x/`, `3.0x/`). Prompts recorded in `assets/images/raven/PROMPTS.md`.
+> - **Animation contract:** Preserves all 5 screen poses (`sleep`, `idle`, `hop`, `ruffle`, `fly`) and reduced-motion static frame fallback. `RavenMascot` public API and call sites remain unchanged.
