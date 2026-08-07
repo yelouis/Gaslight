@@ -333,7 +333,54 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ---
 
-## ⚠️ Unresolved Issues & Suggestions (0 open)
+## ⚠️ Unresolved Issues & Suggestions (1 open — Issue 34, filed August 7, 2026)
+
+---
+
+### Issue 34: Each New Mascot Pose Is Hand-Copied Boilerplate — Decide How to Contain It Before T5 Multiplies It
+**Status**: ⚠️ Confirmed Unresolved (decision outstanding) — Not a bug today. This is about the shape of Task T5, which adds up to **seven** new poses across four screens where there is currently **one pose per screen**.
+
+**What the code does now.** Every time the crow reacts, the screen hand-writes the same block — see `phase3_vote.dart:296` and `phase4_reveal.dart:307`:
+
+```dart
+if (shouldFire && !AppMotion.reduce(context)) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _ravenTimer?.cancel();
+    setState(() { _ravenState = RavenState.hop; });
+    _ravenTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) { setState(() { _ravenState = RavenState.idle; }); }
+    });
+  });
+}
+```
+
+**The current code is correct** — all four screens were checked and each has exactly one pose timer, cancelled in `dispose()`, 4 out of 4. The concern is not that something is broken; it is that this block has to be copied correctly seven more times, and it has three separate things to get right:
+
+1. **The lifecycle** — check reduced-motion, wait for the frame to finish, cancel the previous timer, check the widget still exists before reverting, and cancel on dispose. Miss the cancel and two timers race: one reverts the pose early, so it flickers or sticks.
+2. **The "only once" key** — the game state streams from Firestore and rebuilds constantly, so without a marker saying "already reacted to this card", the pose re-fires on every rebuild and the bird machine-guns. The reveal screen does this with `_playedRevealForTargetId`; the lobby uses `_knownPlayerIds`. **Every new trigger needs its own new key, and a missing one is invisible in code review** — it only shows up when you watch it.
+3. **Collisions — new with T5.** Today each screen has one pose, so nothing can conflict. T5 puts **three** on the reveal screen (`preen` when you fooled someone, `startle` when you were fooled, `bow` when the Truth lands) and these can be true in the same moment. With the current pattern the last one to run silently wins, so the bird's reaction to a dramatic beat becomes a coin flip.
+
+**Option A (recommended)**: **One shared helper that owns the whole lifecycle.** Add a small reusable piece each screen mixes in, so a reaction becomes a single line — roughly `raven.play(RavenState.peck, onceKey: cardId)`. It handles the reduced-motion check, frame timing, cancelling the previous pose, the existence check, disposal, and the "only once" de-duplication internally.
+  - *Pros*: There is one copy to get right and one set of tests instead of eleven. **Making the "only once" key a required argument is the real win** — the subtlest of the three failures becomes impossible to forget, because the code will not compile without it. Each new pose costs one line, so adding reactions later stays cheap. Screens get noticeably shorter.
+  - *Cons*: The four existing reaction sites have to be migrated, which is churn on code that currently works. One more small abstraction for a future reader to learn. On its own it does not decide who wins a collision.
+
+**Option B**: **Move the whole lifecycle inside the mascot widget.** The screen just says "a peck happened" and the crow plays and un-plays it itself.
+  - *Pros*: No timer code in any screen, ever again. Cleanup is automatic, because the widget already owns animation controllers and disposes them. Conceptually the animation lifecycle lives with the animation.
+  - *Cons*: Changes `RavenMascot`'s constructor, which is currently frozen as an invariant — that needs your explicit sign-off. More importantly it **does not solve the "only once" problem**, because the widget cannot know that a card id changed; screens would still hand-write that part, leaving the subtlest failure exactly where it is. Also needs the API to carry both a resting pose and one-off reactions, which is fiddlier than it sounds.
+
+**Option C**: **Option A, plus a priority order for reactions.** Same helper, but each pose carries a rank so a more important reaction beats a less important one — being fooled outranks fooling someone, which outranks the ceremonial bow.
+  - *Pros*: The only option that actually settles the collision. On the reveal screen, the biggest emotional beat wins reliably instead of by accident. Deterministic, so it can be tested.
+  - *Cons*: The most work of the three, and it adds a ranking table someone has to keep sensible as poses are added. If in practice the reveal poses never really overlap, this is machinery for a problem that does not occur.
+
+**Option D**: **Change nothing structural; add tests that catch it.** Keep copying the block, and add tests that fire triggers rapidly and assert the crow always returns to its resting pose, plus a check that each screen cleans up its timers.
+  - *Pros*: No refactor at all of code that is currently correct. Cheapest to land, and the tests are worth having regardless of which option you pick.
+  - *Cons*: Catches the mistake instead of preventing it, and only for the cases someone remembered to test. The boilerplate still grows sevenfold, and a forgotten "only once" key is exactly the kind of thing a test suite tends not to cover until after it has shipped once.
+
+*Effort:* Moderate (A) · Moderate (B) · Large (C) · Small (D). Your selection: _____
+
+---
+
+## ⚠️ Previously Resolved — no other open issues
 
 > **All active build queue items (Task T3, Issue 33) have been resolved, verified, and shipped.**
 >

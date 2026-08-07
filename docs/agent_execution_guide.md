@@ -13,6 +13,12 @@ Nothing else is approved. Both specs are complete in §2 and §3.
 
 **T4 first** — it is small, it removes a 251 KB asset, and it makes the crow the app's face before T5 gives it more to do.
 
+> ### ⛔ T5 IS BLOCKED ON ISSUE 34 — read this before starting it
+>
+> T5's trigger code is hand-copied boilerplate with three separate things to get right per pose (lifecycle, a "only once" de-duplication key, and — new with T5 — collision between poses firing in the same moment). **Issue 34 in `ongoing_general_errors.md` asks the user how that should be contained**, and its `Your selection:` line is blank.
+>
+> **T4 is unaffected — do it now.** For T5: if Issue 34 is still unselected when you get there, **stop and report it** rather than picking a structure yourself. The §3 spec below describes *what* each pose does and *when* it fires, which is true under every option; Issue 34 decides *how* the trigger plumbing is written, which changes every trigger site in the task.
+
 **Specs are decisions, not suggestions.** **A blocker is a filing event, not a licence to re-choose on the user's behalf.**
 
 **Line numbers are anchors measured August 7, 2026** — re-grep rather than trusting them.
@@ -127,6 +133,10 @@ if (shouldHop && !AppMotion.reduce(context)) {
 ```
 
 Every new trigger must keep all four safety properties: the **`AppMotion.reduce` guard**, the **post-frame callback**, a **cancellable timer** (so rapid Firestore rebuilds cannot stack poses), and the **`mounted` check** before reverting. Cancel every new timer in `dispose()`.
+
+**It must also carry a "only once" key.** The game state streams from Firestore and rebuilds constantly, so a bare `if (condition)` re-fires the pose on every rebuild while the condition holds. Existing examples: `_playedRevealForTargetId` in `phase4_reveal.dart:307` and `_knownPlayerIds` in `lobby_screen.dart:341`. **Every new trigger needs its own key**, and a missing one is invisible in review — it only shows up as the bird machine-gunning on device.
+
+**How this plumbing is structured is Issue 34 and is the user's decision** — see the block at the top of this guide. The pose table and trigger table below hold under every option; only the mechanics of the trigger sites change.
 
 Current state fields: `lobby_screen.dart:43` (`sleep`), `phase3_vote.dart:47` (`idle`), `phase4_reveal.dart:62` (`idle`), `game_over_screen.dart`. `phase2_craft.dart:304` passes a `const RavenState.idle` and has no state field yet.
 
