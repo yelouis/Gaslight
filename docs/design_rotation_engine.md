@@ -33,3 +33,13 @@ If a player departs during voting or reveal, and they were the active card reade
 
 ### 4. Readiness Pruning
 The disconnected player's ID is removed from `readyPlayers` to ensure the host can evaluate readiness correctly.
+
+---
+
+## 5. Input validation — fail loudly, never silently (Issue 31)
+
+`generateRotations` originally guarded only `playerIds.length <= sabotageRounds`. When `sabotageRounds` arrived as `null` (see `design_database_and_security.md` §7), that comparison evaluated `3 <= null` → `false`, so it did **not** throw; the loop `for (r = 1; r <= null)` then ran zero times and the function returned `{}`. The caller read rotation `"1"`, got `undefined`, and Firestore rejected the write with an error the player saw only as `INTERNAL`.
+
+**The rule this leaves behind:** validate the *type and range* of numeric inputs before any comparison that a non-number could pass through. `generateRotations` now rejects a non-positive-integer `sabotageRounds` outright, and `startGame` validates the same value first so the player gets a readable `failed-precondition` message instead of an opaque failure.
+
+Silently returning an empty result for nonsense input is worse than throwing — it moves the failure far from its cause.

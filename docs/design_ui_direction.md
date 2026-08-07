@@ -181,6 +181,38 @@ The current app has nice entrance tweens; the risk is *scattered* motion reading
 >
 > The Lamplighter's Raven mascot (`lib/widgets/raven_mascot.dart`) was converted from a hand-drawn `CustomPainter` to a **layered raster asset system** on a shared 1024×1024 canvas.
 >
-> - **Artwork:** Flat vector mascot styled in clean, bold silhouette (brass rim-light `#C9A24B` outline, warm body `#2E2A26`, ivory eye `#F5EEDB`, brass beak). Tested contrast: **18.59:1** rim-light contrast against `#14110E` ground.
+> - **Artwork:** Flat vector mascot in a bold silhouette — brass rim-light outline, warm dark body, ivory eye, brass beak. **Measured from the shipped PNGs (August 7):** rim `#C6A14B` at **7.70:1** against `#14110E`; body fill `#2D2925` at 1.30:1. *(An earlier revision of this note claimed 18.59:1 for the rim — that figure is the ivory highlight in `eye_open.png`, a different layer. The rim still clears the 4.5:1 bar with headroom.)*
+> - **Body fill (Issue 33):** the first generation shipped as a hollow outline — 84.5% of the silhouette was transparent, so backgrounds showed through the bird. The interior is now filled, raising opaque coverage inside the bounding box from 12.4% to **44.9%**. **A flood-fill cannot be used to repair this**: the brass rim is not a closed loop (7–582 enclosed pixels depending on alpha threshold, against the ~20,000 a filled body needs), so any fill escapes. Regenerate via image-to-image editing instead.
 > - **Asset layers:** `assets/images/raven/{body,wing,eye_open,eye_closed}.png` with density variants (`2.0x/`, `3.0x/`). Prompts recorded in `assets/images/raven/PROMPTS.md`.
 > - **Animation contract:** Preserves all 5 screen poses (`sleep`, `idle`, `hop`, `ruffle`, `fly`) and reduced-motion static frame fallback. `RavenMascot` public API and call sites remain unchanged.
+
+---
+
+## 10. Delivered UI programme — consolidated record
+
+Absorbed from `ongoing_general_errors.md` during the August 7 doc consolidation. Every item below is **shipped and verified**; the detailed per-proposal specs were retired once delivered. Kept here because these are the design decisions a future change has to respect, not history for its own sake.
+
+### Mobile-first pass (M1–M5, shipped July 16)
+| # | Decision | Why it constrains future work |
+|---|---|---|
+| **M1** | **Portrait-locked on phones**; iPad rotation retained | Every screen is a portrait column design. Landscape was never laid out. |
+| **M2** | Waiting room is a scrollable sheet, not a fixed column | The Parlor roster must survive any player count on a 360×640 viewport. |
+| **M3** | **Text scale clamped 1.0–1.3** app-wide (`main.dart`) | A recorded accessibility trade-off: fixed-height widgets break above 1.3. Layouts must still survive 1.3. |
+| **M4** | Touch targets **≥ 48 dp** | Do not shrink an interactive element below this to win vertical space. |
+| **M5** | Safe-area and thumb-zone pass; bottom-anchored commit actions | Craft's SUBMIT is a deliberate in-flow exception for keyboard interplay. |
+
+### Character & custom widgets (V1–V5, shipped July 16)
+- **V1 — the Lamplighter's Raven**, now the app's single mascot (see the mascot block above, and §5's lamplight motif).
+- **V2 — living avatar sigils**: six bespoke `CustomPainter` house sigils (`flame`, `moth`, `key`, `raven`, `moon`, `hourglass`), pulsed by `SigilTicker`. These are the reason the icon system is a **hybrid** — see §7.
+- **V3 — deck selection as case files**; **V4 — "Lighting the Lamp" loading states**; **V5 — Victorian reaction medallions**. Reactions send **raw emoji strings** over the wire; the medallion is render-side only.
+
+### UI/UX programme (U1–U8, shipped July 15–16)
+Gaslight-flicker phase transitions · themed waiting moments instead of spinners · the card-dealt craft entrance · typography unification · the icon sweep and a real wax seal · game-over as a read-out ceremony · the room code as a tap-to-copy brass plaque · a live vote ticker during lockout.
+
+**The invariant these left behind:** every one of these animations is guarded by a **once-per-event key** (the `_advancedStateKeys` pattern) so it survives Firestore-stream rebuilds, and every one has an `AppMotion.reduce` path. **Never remove those guards** — without them the animation re-fires on every stream tick.
+
+### Sound (Decision 1, shipped)
+Bundled `.wav` effects in `assets/audio/` — quill scratch on submit, wax thunk on vote, the bell on the Truth reveal — with a single mute control. Sound is bundled, never fetched, so it works offline.
+
+### Motion tokens
+All durations come from `AppMotion`: `fast` 180 ms (presses, stamps) · `standard` 300 ms (fades, state swaps) · `scene` 450 ms (route transitions) · `emphasis` 600 ms (title settles, flips). No ad-hoc `Duration` values.

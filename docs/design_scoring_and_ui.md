@@ -87,3 +87,26 @@ To allow seamless recovery from app restarts, device sleep, or connection losses
 * **Voter Chip Wrap**: Uses Flutter's `Wrap` widget to display player avatars who voted for each option, preventing UI overflow.
 * **Points Delta**: Computes and overlays points awarded specifically during the current resolution using a localized scoring lookup.
 * **Cleanup**: Returning to the lobby triggers `leaveRoom()`, deleting active player records and shutting down subscriptions.
+
+---
+
+## 4. Delivered gameplay programme (P1–P11) — consolidated record
+
+Absorbed from `ongoing_general_errors.md`, August 7. All items below are **shipped and verified**; the per-proposal specs were retired once delivered. Retained because these define the game's shape.
+
+| # | Feature | Notes that constrain future work |
+|---|---|---|
+| **P1** | Running leaderboard between cards | Scores stream from Firestore; never computed client-side. |
+| **P2** | Reveal drama — sequential vote landing + "Best Lie" callout | The five-beat reveal contract; each beat is guarded by a once-per-event key so stream rebuilds cannot replay it. |
+| **P3** | Emoji reactions during reveal | **Raw emoji strings** travel over the wire; the Victorian medallion is render-side only (V5). |
+| **P4** | "I Can't Answer This" prompt re-roll | One re-roll per player per game, tracked by `hasRerolled` — a server-owned field clients cannot write. |
+| **P5** | Lobby warmth — live roster, ready-check, house rules | House rules live in **one** inline Parlor panel; non-hosts see it read-only. |
+| **P6** | Post-game shareable "Case File" card | Uses `share_plus`; rendered locally, nothing uploaded. |
+| **P8** | Unmask the Forger — the revenge guess | Fall for a lie, then guess its author before forgers are revealed. |
+| **P10** | Custom decks — players write prompts in the lobby | Server caps 3 custom prompts per player; you never receive your own prompt. See `design_prompt_system.md` §3. |
+
+**Not built (deliberately deferred, not forgotten):** **P7** confidence wager, **P9** house cards / round modifiers, **P11** the final-gambit comeback round. These were proposed and consciously not selected — do not treat their absence as an oversight or re-propose them unprompted.
+
+### Scoring invariants worth restating
+- **All scoring runs server-side** in `functions/src/scoring_logic.ts`. `totalScore`, `timesFooled` and `playersDeceived` are locked to server writes by `firestore.rules`.
+- **"Forgery Rounds" in the UI maps to `sabotageAnswersCount`** — the number of forgeries per card, not a round counter. Renaming that user-facing label is a product decision, not a cleanup.

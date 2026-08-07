@@ -13,11 +13,9 @@ Nothing else is approved. Both specs are complete in §2 and §3.
 
 **T4 first** — it is small, it removes a 251 KB asset, and it makes the crow the app's face before T5 gives it more to do.
 
-> ### ⛔ T5 IS BLOCKED ON ISSUE 34 — read this before starting it
+> ### ✅ Issue 34 resolved — T5 uses a shared pose helper (Option A)
 >
-> T5's trigger code is hand-copied boilerplate with three separate things to get right per pose (lifecycle, a "only once" de-duplication key, and — new with T5 — collision between poses firing in the same moment). **Issue 34 in `ongoing_general_errors.md` asks the user how that should be contained**, and its `Your selection:` line is blank.
->
-> **T4 is unaffected — do it now.** For T5: if Issue 34 is still unselected when you get there, **stop and report it** rather than picking a structure yourself. The §3 spec below describes *what* each pose does and *when* it fires, which is true under every option; Issue 34 decides *how* the trigger plumbing is written, which changes every trigger site in the task.
+> The trigger plumbing was a decision in its own right, filed as Issue 34, and the user selected **Option A: one shared helper that owns the whole pose lifecycle, with the "only once" key as a required argument.** That helper is specified in **§3, Step 1**, and every trigger in T5 must go through it. Do not hand-copy the old per-screen block — replacing it is the point.
 
 **Specs are decisions, not suggestions.** **A blocker is a filing event, not a licence to re-choose on the user's behalf.**
 
@@ -132,11 +130,55 @@ if (shouldHop && !AppMotion.reduce(context)) {
 }
 ```
 
-Every new trigger must keep all four safety properties: the **`AppMotion.reduce` guard**, the **post-frame callback**, a **cancellable timer** (so rapid Firestore rebuilds cannot stack poses), and the **`mounted` check** before reverting. Cancel every new timer in `dispose()`.
+This block gets **replaced** by the shared helper in Step 1. It is reproduced here because the helper must preserve all four of its safety properties — the **`AppMotion.reduce` guard**, the **post-frame callback**, a **cancellable timer**, and the **`mounted` check** — plus a fifth the old block leaves to each caller: a **"only once" key**. The game state streams from Firestore and rebuilds constantly, so a bare `if (condition)` re-fires the pose on every rebuild while the condition holds. Existing hand-rolled examples: `_playedRevealForTargetId` (`phase4_reveal.dart:307`) and `_knownPlayerIds` (`lobby_screen.dart:341`).
 
-**It must also carry a "only once" key.** The game state streams from Firestore and rebuilds constantly, so a bare `if (condition)` re-fires the pose on every rebuild while the condition holds. Existing examples: `_playedRevealForTargetId` in `phase4_reveal.dart:307` and `_knownPlayerIds` in `lobby_screen.dart:341`. **Every new trigger needs its own key**, and a missing one is invisible in review — it only shows up as the bird machine-gunning on device.
+### Step 1 — build the shared pose helper (Issue 34, Option A)
 
-**How this plumbing is structured is Issue 34 and is the user's decision** — see the block at the top of this guide. The pose table and trigger table below hold under every option; only the mechanics of the trigger sites change.
+Create `lib/widgets/raven_pose_host.dart` — a mixin on `State` that every mascot-bearing screen adopts:
+
+```dart
+mixin RavenPoseHost<T extends StatefulWidget> on State<T> {
+  RavenState _resting = RavenState.idle;
+  RavenState _pose = RavenState.idle;
+  Timer? _poseTimer;
+  final Set<String> _firedKeys = <String>{};
+
+  /// The pose the crow returns to. Lobby sets this to `sleep` until players arrive.
+  set ravenResting(RavenState p) { ... }   // also re-points _pose if currently resting
+  RavenState get ravenPose => _pose;
+
+  /// Play [pose] once per distinct [onceKey], then return to resting.
+  void playRavenPose(RavenState pose, {required String onceKey, Duration? hold}) { ... }
+
+  @override
+  void dispose() { _poseTimer?.cancel(); super.dispose(); }
+}
+```
+
+**`playRavenPose` must, in this order:**
+1. Return immediately if `_firedKeys` already contains `onceKey`; otherwise add it. **Do this before the reduced-motion check**, so the "have we reacted to this yet" bookkeeping is identical in both modes and tests behave the same way with motion on or off.
+2. Return if `AppMotion.reduce(context)` — skip the motion entirely, never play it faster.
+3. `WidgetsBinding.instance.addPostFrameCallback`, then re-check `mounted`. Doing this inside the helper is what lets callers invoke it straight from `build()` without a "setState during build" crash — the ergonomic reason this refactor pays for itself.
+4. Cancel `_poseTimer`, `setState` the pose.
+5. Start a new `_poseTimer` for `hold ?? _defaultHold(pose)`, which on completion re-checks `mounted` and reverts to `_resting`.
+
+**`onceKey` is a required named argument.** That is the entire point of Option A: the subtlest of the three failure modes — a forgotten de-duplication key, invisible in code review and visible only as the bird machine-gunning on device — becomes something the code will not compile without.
+
+**Key naming and unboundedness.** Namespace keys by trigger: `'join:$playerId'`, `'reveal:$targetCardId'`, `'vote:$cardId'`. `_firedKeys` grows with distinct events, which is bounded in practice (players per room, cards per game) — a game cannot generate unbounded keys. **Do not** add eviction logic; it would reintroduce the re-fire bug it was meant to prevent.
+
+**Default hold durations** live in one table in the helper, from the §3 pose spec, using `AppMotion` tokens.
+
+### Step 2 — migrate the four existing screens
+
+`lobby_screen.dart:43`, `phase3_vote.dart:47`, `phase4_reveal.dart:62` and `game_over_screen.dart` each drop their `_ravenState` field, their `_raven*Timer`, and their hand-rolled block, adopting the mixin and passing `ravenPose` to `RavenMascot`. The lobby sets `ravenResting = RavenState.sleep` until players arrive, then `idle` (`lobby_screen.dart:320`).
+
+Their existing de-dup guards become `onceKey` values: `_playedRevealForTargetId` → `onceKey: 'reveal:$targetId'`; the `_knownPlayerIds` delta → `onceKey: 'join:$playerId'`. **Delete the now-redundant fields** — leaving both mechanisms in place means two sources of truth about whether an event fired.
+
+### ⚠️ Known limitation of Option A — handle it at the call site
+
+Option A deliberately has **no priority arbitration** (that was Option C, not selected). Within a single frame, the last `playRavenPose` call wins. This only bites on `phase4_reveal.dart`, where `preen`, `startle` and `bow` can all be true in the same beat.
+
+**Mitigation, and it costs nothing:** on the reveal screen, chain the three triggers as `if / else if / else if` so exactly one fires per beat, ordered **`startle` → `preen` → `bow`** — being fooled is the sharpest reaction and should win, then fooling someone, then the ceremonial bow. Put a comment naming Issue 34 Option C as the upgrade path if this ever needs to be smarter.
 
 Current state fields: `lobby_screen.dart:43` (`sleep`), `phase3_vote.dart:47` (`idle`), `phase4_reveal.dart:62` (`idle`), `game_over_screen.dart`. `phase2_craft.dart:304` passes a `const RavenState.idle` and has no state field yet.
 
@@ -304,13 +346,20 @@ Must be `--debug`: `lobby_screen.dart:87` passes `debugEnabled: kDebugMode`, and
 
 ## 10. Where the contracts live
 
+**`ongoing_general_errors.md` was consolidated on August 7** from 903 lines to ~140. It is now the live queue plus the lessons that still bite — **not** a full history. Full history is `git log`; the design consequences were moved into the contracts below. Do not re-expand it with delivered work; record outcomes in the design doc that owns the behaviour.
+
 | What | Where |
 |---|---|
-| Engineering history, every issue and selection | `docs/ongoing_general_errors.md` |
-| How to run / playtest | `README.md` → "Testing & Running the Game" |
-| System design contracts | `docs/design_*.md` — `design_ui_direction.md` §5 carries the lamplight/wax-seal motif, §7 the icon **SHIPPED STATE** block. **T4 changes the app's mascot, so §5 must be updated.** |
+| Open queue, selections, live engineering traps | `docs/ongoing_general_errors.md` (§1 queue, §2 traps, §3 deliberately-not-built) |
+| Full history of any resolved item | `git log` |
+| Backend write contract, security rules, identity | `design_database_and_security.md` — **§7 is the `null` ≠ absent contract from Issue 31** |
+| Card passing, disconnect recalc, input validation | `design_rotation_engine.md` §5 |
+| Scoring, routing, gameplay programme P1–P11 | `design_scoring_and_ui.md` §4 |
+| Palette, typography, motif, icons, mascot, UI programme | `design_ui_direction.md` — §5 motif, §7 icons + `final class IconData`, §10 delivered programme, mascot block. **T4 changes the app's mascot, so the mascot block and §5 must be updated.** |
+| Prompt decks | `design_prompt_system.md` · **Duplicate answers** `design_semantic_integrity.md` |
 | Mascot art prompts | `assets/images/raven/PROMPTS.md` — **T5 appends the two new layer briefs here.** |
 | PNG decoding / contrast helper | `test/helpers/png_decoder.dart` |
+| Manual playtest journeys | `e2e_testing_journeys.md` |
 | Doc / commit / bug-filing conventions | `.agents/skills/` |
 
 ---
@@ -355,6 +404,9 @@ Must be `--debug`: `lobby_screen.dart:87` passes `debugEnabled: kDebugMode`, and
 - [ ] **🚦 User approved the new logo from a simulator screenshot, before the commit.**
 - [ ] **T5:** Tier 1 poses `alert`, `peck`, `preen`, `startle`, `bow` implemented with the specified durations and `AppMotion` tokens.
 - [ ] Tier 2 `caw` + `flap` implemented with `beak_open.png` and `wing_up.png` at three densities, passing the T3 asset battery; or explicitly deferred and filed.
+- [ ] **Issue 34 Option A:** `lib/widgets/raven_pose_host.dart` exists; `onceKey` is a **required** argument; all four screens migrated to it with their hand-rolled timers and de-dup fields deleted.
+- [ ] Helper tests: a repeated `onceKey` fires exactly once; a new key fires again; reduced motion plays nothing but still consumes the key; the pose reverts to the screen's resting pose; disposal mid-pose throws nothing.
+- [ ] Reveal screen chains `startle`/`preen`/`bow` as `if / else if` so only one fires per beat.
 - [ ] Every pose fires at its specified moment, guarded by `AppMotion.reduce`, post-frame, cancellable, `mounted`-checked, and cancelled in `dispose()`.
 - [ ] Tests driven off `RavenState.values` so a future pose cannot skip coverage; non-identity transform asserted mid-animation for each; reduced-motion static-frame guard for **every** pose.
 - [ ] Screen-level tests drive the real trigger conditions for at least `alert` and `peck`.

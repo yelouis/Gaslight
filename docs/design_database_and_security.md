@@ -63,3 +63,20 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
 ## 6. Historical Note: the Resolved Write-Architecture Clarification
 
 The original design had `firestore.rules` restricting room writes to the host while every client wrote the room directly — a contradiction that made non-host multiplayer non-functional (Issue 1). The clarification offered host-authoritative (A), server relay (B), and loosened rules (C); the user directed us to the industry standard, recorded as **Option D: server-authoritative Cloud Functions**, which is the architecture described above.
+
+---
+
+## 7. Callable payload contract — `null` is not "absent" (Issue 31)
+
+**This is the most expensive bug the project has shipped, and the shape of it will recur.** Absorbed from `ongoing_general_errors.md`, August 7.
+
+The Dart client and the TypeScript callables disagree about what "I am not changing this field" looks like. Dart sends an omitted optional as **`null`**, which crosses the wire as JSON `null` and arrives in Node as `null` — **not `undefined`**. A server guard written as `x !== undefined ? x : existing` therefore treats a Dart null as a real value and **writes it over the stored data**.
+
+Concretely: changing the deck erased `sabotageAnswersCount` and `isTimerDisabled`. The wiped round count then produced an empty rotation plan, and `startGame` died writing `undefined` to Firestore, surfacing to the player as an opaque `[firebase_functions/internal] INTERNAL`.
+
+**The contract, both sides:**
+1. **Clients build payloads conditionally** — omit a key entirely rather than sending `null`. See `GameService.updateLobbySettings`.
+2. **Callables guard with loose `!= null`**, which in TypeScript means "neither `null` nor `undefined`". **Never use a falsy check** (`if (x)`) as a shortcut: `false` and `0` are legitimate values for `isTimerDisabled` and `sabotageAnswersCount`, and a falsy check silently discards them — re-creating the bug in a new shape. An over-reach test asserting `false` survives an update guards this.
+3. **Validate before use, and fail readably.** Throw `HttpsError("failed-precondition", <human message>)` rather than letting a raw `Error` or a Firestore write failure bubble up — those flatten to `INTERNAL` and tell the player nothing.
+
+**Why the 31-test emulator suite never caught it:** those tests are written in TypeScript, where an omitted key genuinely *is* `undefined`. The failing payload was unreachable from the harness. **When a boundary is crossed by two languages, at least one test must send the payload exactly as the real client sends it** — including explicit nulls. The same real-client blind spot also hides non-host write behaviour, since the fake Firestore used by client tests does not enforce security rules.
