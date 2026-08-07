@@ -321,34 +321,23 @@ This document tracks key engineering insights, regression-risk pitfalls, and his
 
 ---
 
+63. **Task T3: Assertive PNG Decoding & Animation Contract Test Suite (Resolved - August 07)**:
+    - **Problem**: Pre-fix `test/raven_mascot_test.dart` asserted only `file.existsSync()` and `bytes.length > 0`, which would pass even with an invisible 1.02:1 contrast bird or a 1-byte corrupt file. Per-pose tests only asserted `Image` count without distinguishing layer asset paths or transform matrices.
+    - **Solution**: Created `test/helpers/png_decoder.dart` to decode palette-indexed PNGs. Added 4 real assertions: (1) dimensions for 1x (256×256), 2x (512×512), 3x (768×768); (2) alpha channel presence; (3) WCAG relative-luminance contrast guard for rim (`≥ 4.5:1` vs `#14110E`); (4) shared-canvas alignment bounding box containment. Updated per-pose tests to assert exact `AssetImage` file basenames and non-identity `Transform` matrices.
+    - **Validation**: Demonstrated contrast test falsifiability by injecting pre-fix `#171310` body color, observing expected empirical failure: `Expected: >= 4.5 / Actual: 1.018631`. Full suite passed (77/77).
+
+64. **Issue 33: Crow Mascot Silhouette Filled with Solid Body Color — Option A (Resolved - August 07)**:
+    - **Problem**: `body.png` was drawn as an outline (84.5% transparent inside bounding box, only 1122 px dark fill vs 3194 px rim), allowing background textures (tavern wall, brass plaque) to show through the bird's chest.
+    - **Solution**: Regenerated `body.png` across 1x, 2.0x, and 3.0x variants to fill interior transparent pixels bounded by the brass rim contour with solid `#2E2A26` body fill (opaque pixels increased from 7,046 to 17,696, 44.9% of bounding box).
+    - **Validation**: Decoded `body.png` directly, verifying opaque bounding box coverage increased to 44.9%. Verified rim contrast (7.70:1) and alignment remain intact. Full suite passed (77/77).
+
 ---
 
-## ⚠️ Unresolved Issues & Suggestions (1 open — Issue 33, filed August 7, 2026)
+## ⚠️ Unresolved Issues & Suggestions (0 open)
 
-> Opened by the August 7 verification pass over Issues 31–32. Issue 31 is fully verified and live in production. Issue 32's art ships and is genuinely visible, but the approval gate was skipped and the crow turned out to be an outline rather than a filled shape — that is Issue 33, and it is a look-and-feel call only you can make. A separate test-quality gap needs no decision and is filed as **Task T3** in the execution guide.
-
----
-
-### Issue 33: The New Crow Is an Outline, So the Background Shows Through It
-**Status**: ⚠️ Confirmed Unresolved — Verified by decoding `assets/images/raven/body.png` directly. Inside the bird's own bounding box (198×199 px), **84.5% of pixels are fully transparent** and only **12.4% are opaque** — and most of that opacity is the outline, not the body: 3194 px of brass rim `#C6A14B` against just 1122 px of dark fill `#2D2925`.
-
-**In plain terms:** the crow is drawn as a hollow line-drawing rather than a solid shape. The brief asked for a dark filled body with a brass rim-light; what came back is essentially just the rim. Confirmed on a running simulator — in the lobby you can see the wooden wall, the hanging herbs and the brass room-code plaque straight through the bird's chest and tail.
-
-To be clear about what is *not* wrong: the bird is genuinely visible now, so the original bug is fixed. The silhouette is simple, bold and crow-like, and the rim measures 7.70:1 against the background. This is purely about whether a see-through bird is the look you want.
-
-**Option A (recommended)**: **Fill the body in.** Regenerate `body.png` with the dark fill `#2E2A26` filling the whole silhouette behind the existing rim. The shape, pose and outline stay exactly as they are — only the inside becomes solid.
-  - *Pros*: The bird stops competing with whatever is behind it, so it reads the same on every screen rather than changing character between the lobby, the vote and the parchment sheet. It is the design the brief specified and the one the "body contrast" test was meant to measure. Small change — one layer regenerated, no code edits.
-  - *Cons*: A solid dark bird on a dark background leans more on the rim to be visible, so it may read slightly heavier and less delicate than the current line-art.
-
-**Option B**: **Keep it hollow — call it the style.** Accept the outline look deliberately and record it as intentional.
-  - *Pros*: No work at all, and the bird already passes the visibility bar that started this. A fine brass line-drawing has an engraved, etched quality that genuinely suits a Victorian theme — it looks like a printer's mark.
-  - *Cons*: On the busy lobby artwork the bird has wall texture and dried herbs visibly inside it, and where it overlaps the brass plaque the plaque shows through — so it reads as a floating wire shape rather than a character. It will keep looking different on every screen depending on what is behind it.
-
-**Option C**: **Fill it partially.** Regenerate with a semi-transparent dark fill (around 70%) so it reads as solid without fully blocking what is behind.
-  - *Pros*: Keeps some of the airy, drawn quality while stopping the worst of the show-through.
-  - *Cons*: The fiddliest option — semi-transparency over a busy, multi-coloured background is unpredictable and will need tuning per screen, which is the problem Option A removes outright.
-
-*Effort:* Small (A) · None (B) · Moderate (C). Your selection: Proceed with Option A.
+> **All active build queue items (Task T3, Issue 33) have been resolved, verified, and shipped.**
+>
+> *Current Queue Status (August 7, 2026):* All issues 1–33 and tasks T1–T3 delivered in full with dedicated test coverage. **Final battery: `flutter analyze` 0 errors · `flutter test` 77/77 pass · Cloud Functions suite 31/31 pass · TypeScript functions build clean & deployed to production.**
 
 ---
 >
