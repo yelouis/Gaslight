@@ -159,18 +159,38 @@ def render_frame(layers,
                  scale_x=1.0, scale_y=1.0,
                  wing_rot=0.0, ruffle_wave=0.0,
                  rotate=0.0, translate_x=0.0, translate_y=0.0,
-                 use_wing_up=False, use_beak_open=False, use_eye_closed=False):
-    # Enforce strict Task T7 wing-rotation cap |wing_rot| <= 0.12 rad
-    assert abs(wing_rot) <= 0.12001, f"Task T7 wing_rot cap violated: {wing_rot} > 0.12 rad"
+                 use_wing_up=False, use_beak_open=False, use_beak_semi_open=False,
+                 use_eye_closed=False, eye='open'):
+    """Render a single 256×256 frame by compositing layers in order:
+       body_base → wing variant → beak variant → eye variant.
+
+    Task T9: body_base has clean sockets where the beak and wing were; each
+    animated part is supplied as its own layer so variants can genuinely swap.
+    Beak has 3 states: closed (default), semi_open, open.
+    """
+    # Task T7's |wing_rot| <= 0.12 cap exists because wing_folded is a small
+    # marking that detaches from the silhouette when swung far. wing_up is a
+    # blade anchored at the shoulder and is *meant* to sweep, so the cap applies
+    # only to the folded wing.
+    if not use_wing_up:
+        assert abs(wing_rot) <= 0.12001, f"wing_folded rot cap violated: {wing_rot} > 0.12 rad"
 
     w, h = 256, 256
     frame = [(0, 0, 0, 0)] * (w * h)
     cx, cy = 128.0, 128.0  # Center for scale & whole-body rotation
 
-    body = layers['body']
-    wing = layers['wing_up'] if use_wing_up else layers['wing']
-    eye = layers['eye_closed'] if use_eye_closed else layers['eye_open']
-    beak_open = layers['beak_open']
+    # T9 layer selection: body_base is always the base; wing and beak variants swap.
+    body = layers['body_base']
+    wing = layers['wing_up'] if use_wing_up else layers['wing_folded']
+    if use_beak_open:
+        beak = layers['beak_open']
+    elif use_beak_semi_open:
+        beak = layers['beak_semi_open']
+    else:
+        beak = layers['beak_closed']
+    # Emotional eye variants. use_eye_closed stays supported for the blink.
+    eye_key = 'eye_closed' if use_eye_closed else f'eye_{eye}'
+    eye = layers.get(eye_key, layers['eye_open'])
 
     # Whole-body rotation matrix (inverse)
     cos_rot = math.cos(-rotate)
@@ -185,7 +205,7 @@ def render_frame(layers,
         ry = dx * sin_rot + dy * cos_rot + cy
         return rx, ry
 
-    # 1. Body layer with scale, whole-body rotation, translation & feather ruffle wave
+    # 1. Body base layer with scale, whole-body rotation, translation & feather ruffle wave
     body_layer = [(0, 0, 0, 0)] * (w * h)
     for y in range(h):
         for x in range(w):
@@ -197,18 +217,7 @@ def render_frame(layers,
             p = sample_bilinear(body[2], w, h, sx, sy)
             body_layer[y * w + x] = p
 
-    # 2. Beak Open overlay (if caw state)
-    beak_layer = [(0, 0, 0, 0)] * (w * h)
-    if use_beak_open:
-        for y in range(h):
-            for x in range(w):
-                rx, ry = map_coords(x, y)
-                sx = (rx - cx) / scale_x + cx
-                sy = (ry - cy) / scale_y + cy
-                p = sample_bilinear(beak_open[2], w, h, sx, sy)
-                beak_layer[y * w + x] = p
-
-    # 3. Wing layer with corrected shoulder attachment pivot (100.0, 118.0)
+    # 2. Wing layer with corrected shoulder attachment pivot (100.0, 118.0)
     px, py = 100.0, 118.0
     cos_w = math.cos(-wing_rot)
     sin_w = math.sin(-wing_rot)
@@ -226,6 +235,16 @@ def render_frame(layers,
             p = sample_bilinear(wing[2], w, h, sx, sy)
             wing_layer[y * w + x] = p
 
+    # 3. Beak layer with body scale, rotation & translation
+    beak_layer = [(0, 0, 0, 0)] * (w * h)
+    for y in range(h):
+        for x in range(w):
+            rx, ry = map_coords(x, y)
+            sx = (rx - cx) / scale_x + cx
+            sy = (ry - cy) / scale_y + cy
+            p = sample_bilinear(beak[2], w, h, sx, sy)
+            beak_layer[y * w + x] = p
+
     # 4. Eye layer with body scale, rotation & translation
     eye_layer = [(0, 0, 0, 0)] * (w * h)
     for y in range(h):
@@ -236,14 +255,13 @@ def render_frame(layers,
             p = sample_bilinear(eye[2], w, h, sx, sy)
             eye_layer[y * w + x] = p
 
-    # Composite layers
+    # Composite layers: body_base → wing variant → beak variant → eye variant
     for i in range(w * h):
-        b = blend(frame[i], body_layer[i])
-        if use_beak_open:
-            b = blend(b, beak_layer[i])
-        b = blend(b, wing_layer[i])
-        b = blend(b, eye_layer[i])
-        frame[i] = b
+        c = blend(frame[i], body_layer[i])
+        c = blend(c, wing_layer[i])
+        c = blend(c, beak_layer[i])
+        c = blend(c, eye_layer[i])
+        frame[i] = c
     return frame
 
 POSE_REGISTRY = {
@@ -265,10 +283,10 @@ POSE_REGISTRY = {
         'cols': 3, 'rows': 2,
         'frames': [
             {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
-            {'scale_x': 1.04, 'scale_y': 1.08, 'translate_y': -12.0, 'wing_rot': 0.08},
-            {'scale_x': 1.08, 'scale_y': 1.12, 'translate_y': -18.0, 'wing_rot': 0.11},
-            {'scale_x': 0.96, 'scale_y': 0.94, 'translate_y': -4.0, 'wing_rot': 0.04},
-            {'scale_x': 1.02, 'scale_y': 1.02, 'translate_y': -1.0, 'wing_rot': 0.01},
+            {'eye': 'wide', 'scale_x': 1.04, 'scale_y': 1.08, 'translate_y': -12.0, 'wing_rot': 0.08},
+            {'eye': 'wide', 'scale_x': 1.08, 'scale_y': 1.12, 'translate_y': -18.0, 'wing_rot': 0.11},
+            {'eye': 'wide', 'scale_x': 0.96, 'scale_y': 0.94, 'translate_y': -4.0, 'wing_rot': 0.04},
+            {'eye': 'wide', 'scale_x': 1.02, 'scale_y': 1.02, 'translate_y': -1.0, 'wing_rot': 0.01},
             {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
         ]
     },
@@ -289,10 +307,10 @@ POSE_REGISTRY = {
         'cols': 3, 'rows': 2,
         'frames': [
             {'rotate': 0.00, 'translate_x': 0.0, 'translate_y': 0.0},
-            {'rotate': -0.05, 'translate_x': -1.0, 'translate_y': -2.0},
-            {'rotate': 0.32, 'translate_x': 8.0, 'translate_y': 10.0, 'scale_x': 1.04, 'scale_y': 0.96},
-            {'rotate': 0.28, 'translate_x': 6.0, 'translate_y': 8.0},
-            {'rotate': 0.08, 'translate_x': 2.0, 'translate_y': 2.0},
+            {'eye': 'angry', 'rotate': -0.05, 'translate_x': -1.0, 'translate_y': -2.0},
+            {'eye': 'angry', 'rotate': 0.32, 'translate_x': 8.0, 'translate_y': 10.0, 'scale_x': 1.04, 'scale_y': 0.96},
+            {'eye': 'angry', 'rotate': 0.28, 'translate_x': 6.0, 'translate_y': 8.0},
+            {'eye': 'angry', 'rotate': 0.08, 'translate_x': 2.0, 'translate_y': 2.0},
             {'rotate': 0.00, 'translate_x': 0.0, 'translate_y': 0.0},
         ]
     },
@@ -313,10 +331,10 @@ POSE_REGISTRY = {
         'cols': 3, 'rows': 2,
         'frames': [
             {'rotate': 0.00, 'scale_y': 1.00, 'translate_y': 0.0},
-            {'rotate': -0.18, 'scale_y': 1.04, 'translate_y': -4.0},
-            {'rotate': -0.25, 'scale_y': 1.06, 'translate_y': -6.0},
-            {'rotate': -0.25, 'scale_y': 1.06, 'translate_y': -6.0},
-            {'rotate': -0.08, 'scale_y': 1.02, 'translate_y': -2.0},
+            {'eye': 'wide', 'rotate': -0.18, 'scale_y': 1.04, 'translate_y': -4.0},
+            {'eye': 'wide', 'rotate': -0.25, 'scale_y': 1.06, 'translate_y': -6.0},
+            {'eye': 'wide', 'rotate': -0.25, 'scale_y': 1.06, 'translate_y': -6.0},
+            {'eye': 'wide', 'rotate': -0.08, 'scale_y': 1.02, 'translate_y': -2.0},
             {'rotate': 0.00, 'scale_y': 1.00, 'translate_y': 0.0},
         ]
     },
@@ -326,48 +344,48 @@ POSE_REGISTRY = {
         'cols': 4, 'rows': 2,
         'frames': [
             {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'wing_rot': 0.00},
-            {'rotate': -0.08, 'scale_x': 1.02, 'scale_y': 0.97, 'wing_rot': 0.04},
-            {'rotate': -0.14, 'scale_x': 1.04, 'scale_y': 0.94, 'wing_rot': 0.08},
-            {'rotate': -0.18, 'scale_x': 1.05, 'scale_y': 0.93, 'wing_rot': 0.10},
-            {'rotate': -0.18, 'scale_x': 1.05, 'scale_y': 0.93, 'wing_rot': 0.10},
-            {'rotate': -0.12, 'scale_x': 1.03, 'scale_y': 0.96, 'wing_rot': 0.06},
-            {'rotate': -0.04, 'scale_x': 1.01, 'scale_y': 0.99, 'wing_rot': 0.02},
+            {'eye': 'happy', 'rotate': -0.08, 'scale_x': 1.02, 'scale_y': 0.97, 'wing_rot': 0.04},
+            {'eye': 'happy', 'rotate': -0.14, 'scale_x': 1.04, 'scale_y': 0.94, 'wing_rot': 0.08},
+            {'eye': 'happy', 'rotate': -0.18, 'scale_x': 1.05, 'scale_y': 0.93, 'wing_rot': 0.10},
+            {'eye': 'happy', 'rotate': -0.18, 'scale_x': 1.05, 'scale_y': 0.93, 'wing_rot': 0.10},
+            {'eye': 'happy', 'rotate': -0.12, 'scale_x': 1.03, 'scale_y': 0.96, 'wing_rot': 0.06},
+            {'eye': 'happy', 'rotate': -0.04, 'scale_x': 1.01, 'scale_y': 0.99, 'wing_rot': 0.02},
             {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'wing_rot': 0.00},
         ]
     },
     'fly': {
         'cols': 4, 'rows': 2,
         'frames': [
-            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00, 'use_wing_up': False},
-            {'scale_x': 1.04, 'scale_y': 0.92, 'translate_y': 2.0, 'wing_rot': -0.04, 'use_wing_up': False}, # Anticipation crouch
-            {'scale_x': 0.96, 'scale_y': 1.08, 'translate_y': -8.0, 'wing_rot': 0.04, 'use_wing_up': True}, # Launch stretch with raised wing
-            {'scale_x': 0.98, 'scale_y': 1.06, 'translate_y': -14.0, 'wing_rot': 0.06, 'use_wing_up': True},
-            {'scale_x': 1.00, 'scale_y': 1.04, 'translate_y': -16.0, 'wing_rot': 0.04, 'use_wing_up': True}, # Peak climb
-            {'scale_x': 1.02, 'scale_y': 1.00, 'translate_y': -10.0, 'wing_rot': -0.03, 'use_wing_up': False}, # Glide return
-            {'scale_x': 1.01, 'scale_y': 1.00, 'translate_y': -3.0, 'wing_rot': -0.01, 'use_wing_up': False},
-            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00, 'use_wing_up': False},
+            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'use_wing_up': False},
+            {'scale_x': 1.05, 'scale_y': 0.90, 'translate_y': 3.0, 'use_wing_up': False},                       # anticipation crouch
+            {'scale_x': 0.96, 'scale_y': 1.10, 'translate_y': -9.0, 'use_wing_up': True, 'wing_rot': -1.20},    # push off, wing still low
+            {'scale_x': 0.97, 'scale_y': 1.08, 'translate_y': -17.0, 'use_wing_up': True, 'wing_rot': -0.60},   # sweeping up
+            {'scale_x': 0.99, 'scale_y': 1.05, 'translate_y': -23.0, 'use_wing_up': True, 'wing_rot': 0.00},    # top of climb, wing high
+            {'scale_x': 1.01, 'scale_y': 1.02, 'translate_y': -16.0, 'use_wing_up': True, 'wing_rot': -0.45},   # wing sweeping down
+            {'scale_x': 1.02, 'scale_y': 0.99, 'translate_y': -5.0, 'use_wing_up': True, 'wing_rot': -1.15},    # descending, wing low
+            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'use_wing_up': False},
         ]
     },
     'flap': {
         'cols': 3, 'rows': 2,
         'frames': [
             {'scale_y': 1.00, 'scale_x': 1.00, 'translate_y': 0.0, 'use_wing_up': False},
-            {'scale_y': 1.06, 'scale_x': 0.96, 'translate_y': -14.0, 'use_wing_up': True}, # Beat 1 up
-            {'scale_y': 0.96, 'scale_x': 1.04, 'translate_y': -20.0, 'use_wing_up': False}, # Beat 1 down
-            {'scale_y': 1.06, 'scale_x': 0.96, 'translate_y': -24.0, 'use_wing_up': True}, # Beat 2 up
-            {'scale_y': 0.96, 'scale_x': 1.04, 'translate_y': -10.0, 'use_wing_up': False}, # Beat 2 down
+            {'eye': 'happy', 'scale_y': 1.04, 'scale_x': 0.97, 'translate_y': -12.0, 'use_wing_up': True, 'wing_rot': -1.25},  # wing low -- reads as folded, so no pop
+            {'eye': 'happy', 'scale_y': 0.97, 'scale_x': 1.03, 'translate_y': -22.0, 'use_wing_up': True, 'wing_rot': -0.15},  # beat 1 upstroke
+            {'eye': 'happy', 'scale_y': 1.05, 'scale_x': 0.96, 'translate_y': -24.0, 'use_wing_up': True, 'wing_rot': -1.25},  # beat 1 downstroke
+            {'eye': 'happy', 'scale_y': 0.97, 'scale_x': 1.03, 'translate_y': -11.0, 'use_wing_up': True, 'wing_rot': -0.20},  # beat 2 upstroke
             {'scale_y': 1.00, 'scale_x': 1.00, 'translate_y': 0.0, 'use_wing_up': False},
         ]
     },
     'caw': {
         'cols': 3, 'rows': 2,
         'frames': [
-            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'use_beak_open': False},
-            {'rotate': -0.08, 'scale_x': 1.04, 'scale_y': 1.05, 'translate_y': -2.0, 'use_beak_open': True},
-            {'rotate': -0.14, 'scale_x': 1.08, 'scale_y': 1.10, 'translate_y': -5.0, 'use_beak_open': True}, # Peak caw
-            {'rotate': -0.14, 'scale_x': 1.08, 'scale_y': 1.10, 'translate_y': -5.0, 'use_beak_open': True},
-            {'rotate': -0.05, 'scale_x': 1.02, 'scale_y': 1.03, 'translate_y': -1.0, 'use_beak_open': False},
-            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'use_beak_open': False},
+            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0},  # closed
+            {'eye': 'angry', 'rotate': -0.08, 'scale_x': 1.04, 'scale_y': 1.05, 'translate_y': -2.0, 'use_beak_semi_open': True},  # opening
+            {'eye': 'angry', 'rotate': -0.14, 'scale_x': 1.08, 'scale_y': 1.10, 'translate_y': -5.0, 'use_beak_open': True},  # peak caw
+            {'eye': 'angry', 'rotate': -0.14, 'scale_x': 1.08, 'scale_y': 1.10, 'translate_y': -5.0, 'use_beak_open': True},  # hold
+            {'eye': 'angry', 'rotate': -0.05, 'scale_x': 1.02, 'scale_y': 1.03, 'translate_y': -1.0, 'use_beak_semi_open': True},  # closing
+            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0},  # closed
         ]
     },
 }
@@ -375,12 +393,17 @@ POSE_REGISTRY = {
 def main():
     base_dir = 'assets/images/raven'
     layers = {
-        'body': read_png(os.path.join(base_dir, 'body.png')),
-        'wing': read_png(os.path.join(base_dir, 'wing.png')),
+        'body_base': read_png(os.path.join(base_dir, 'body_base.png')),
+        'wing_folded': read_png(os.path.join(base_dir, 'wing_folded.png')),
         'wing_up': read_png(os.path.join(base_dir, 'wing_up.png')),
+        'beak_closed': read_png(os.path.join(base_dir, 'beak_closed.png')),
+        'beak_semi_open': read_png(os.path.join(base_dir, 'beak_semi_open.png')),
+        'beak_open': read_png(os.path.join(base_dir, 'beak_open.png')),
         'eye_open': read_png(os.path.join(base_dir, 'eye_open.png')),
         'eye_closed': read_png(os.path.join(base_dir, 'eye_closed.png')),
-        'beak_open': read_png(os.path.join(base_dir, 'beak_open.png')),
+        'eye_wide': read_png(os.path.join(base_dir, 'eye_wide.png')),
+        'eye_happy': read_png(os.path.join(base_dir, 'eye_happy.png')),
+        'eye_angry': read_png(os.path.join(base_dir, 'eye_angry.png')),
     }
     
     out_dir = os.path.join(base_dir, 'frames')
