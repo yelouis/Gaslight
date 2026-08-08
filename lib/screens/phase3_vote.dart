@@ -22,6 +22,7 @@ import '../widgets/flipping_card.dart';
 import '../widgets/blinking_eye.dart';
 import '../widgets/lamp_loading.dart';
 import '../widgets/raven_mascot.dart';
+import '../widgets/raven_pose_host.dart';
 
 
 import '../theme/app_icons.dart';
@@ -39,13 +40,10 @@ class _AnonymizedAnswer {
   _AnonymizedAnswer(this.authorId, this.text);
 }
 
-class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
+class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<Phase3VoteScreen> {
   bool _submitted = false;
   bool _isNavigating = false;
   final Set<String> _sealedSoundPlayed = {};
-  final Set<String> _hoppedFor = {};
-  RavenState _ravenState = RavenState.idle;
-  Timer? _ravenHopTimer;
   String? _lastReaderId;
   List<_AnonymizedAnswer>? _shuffledAnswers;
   String? _shuffledCardId;
@@ -267,19 +265,16 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
 
       if (_lastReaderId != state.currentReaderId) {
         _sealedSoundPlayed.clear();
-        _hoppedFor.clear();
         _lastReaderId = state.currentReaderId;
         if (AppMotion.reduce(context)) {
           for (var voter in expectedVoters) {
             if (state.readyPlayers[voter.id] ?? false) {
               _sealedSoundPlayed.add(voter.id);
-              _hoppedFor.add(voter.id);
             }
           }
         }
       }
 
-      bool shouldHop = false;
       for (var voter in expectedVoters) {
         if (state.readyPlayers[voter.id] == true && !_sealedSoundPlayed.contains(voter.id)) {
           _sealedSoundPlayed.add(voter.id);
@@ -287,26 +282,9 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
             AudioService.instance.playVote(volume: 0.4);
           }
         }
-        if (state.readyPlayers[voter.id] == true && !_hoppedFor.contains(voter.id)) {
-          _hoppedFor.add(voter.id);
-          shouldHop = true;
+        if (state.readyPlayers[voter.id] == true) {
+          playRavenPose(RavenState.peck, onceKey: 'vote:${voter.id}:${currentCard?.targetPlayerId}');
         }
-      }
-
-      if (shouldHop && !AppMotion.reduce(context)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _ravenHopTimer?.cancel();
-          setState(() {
-            _ravenState = RavenState.hop;
-          });
-          _ravenHopTimer = Timer(const Duration(milliseconds: 300), () {
-            if (mounted) {
-              setState(() {
-                _ravenState = RavenState.idle;
-              });
-            }
-          });
-        });
       }
 
       final M = expectedVoters.length;
@@ -380,7 +358,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
                     right: -24,
                     top: -44,
                     child: RavenMascot(
-                      state: _ravenState,
+                      state: ravenPose,
                       size: 48,
                     ),
                   ),
@@ -579,7 +557,6 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> {
   }
   @override
   void dispose() {
-    _ravenHopTimer?.cancel();
     super.dispose();
   }
 }

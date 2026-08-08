@@ -21,6 +21,7 @@ import '../widgets/gaslight_route.dart';
 import '../widgets/room_code_plaque.dart';
 import '../widgets/deck_carousel.dart';
 import '../widgets/raven_mascot.dart';
+import '../widgets/raven_pose_host.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -29,7 +30,7 @@ class LobbyScreen extends StatefulWidget {
   State<LobbyScreen> createState() => _LobbyScreenState();
 }
 
-class _LobbyScreenState extends State<LobbyScreen> {
+class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScreen> {
   final _nameController = TextEditingController();
   final _roomCodeController = TextEditingController();
   final _customPromptController = TextEditingController();
@@ -40,8 +41,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
   String _selectedDeck = PromptDecks.availableDecks.first;
   Set<String> _knownPlayerIds = {};
   bool _familyFriendlyOnly = false;
-  RavenState _ravenState = RavenState.sleep;
-  Timer? _ravenWakeTimer;
 
   @override
   void initState() {
@@ -315,19 +314,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final newPlayers = players.where((p) => !_knownPlayerIds.contains(p.id)).toList();
     if (newPlayers.isNotEmpty && _knownPlayerIds.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _ravenWakeTimer?.cancel();
-        setState(() {
-          _ravenState = RavenState.idle;
-        });
-        _ravenWakeTimer = Timer(const Duration(seconds: 3), () {
-          if (mounted) {
-            setState(() {
-              _ravenState = RavenState.sleep;
-            });
-          }
-        });
-
         for (var p in newPlayers) {
+          playRavenPose(RavenState.alert, onceKey: 'join:${p.id}');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${p.name} has joined the lobby.'),
@@ -422,7 +410,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       right: 16,
                       top: -48,
                       child: RavenMascot(
-                        state: _ravenState,
+                        state: ravenPose,
                         size: 64,
                       ),
                     ),
@@ -760,6 +748,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     child: PrimaryButton(
                       text: 'START GAME',
                       onPressed: startWarning == null ? () async {
+                        playRavenPose(RavenState.caw, onceKey: 'startgame:${gs.gameState?.roomCode}');
                         try {
                           await gs.startGame(_selectedDeck);
                         } catch (e) {
@@ -1188,7 +1177,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
     _nameController.dispose();
     _roomCodeController.dispose();
     _customPromptController.dispose();
-    _ravenWakeTimer?.cancel();
     super.dispose();
   }
 }

@@ -21,6 +21,7 @@ import '../theme/app_motion.dart';
 import '../widgets/lamp_loading.dart';
 import '../widgets/shared_ui.dart';
 import '../widgets/raven_mascot.dart';
+import '../widgets/raven_pose_host.dart';
 
 class GameOverScreen extends StatefulWidget {
   const GameOverScreen({super.key});
@@ -29,32 +30,25 @@ class GameOverScreen extends StatefulWidget {
   State<GameOverScreen> createState() => _GameOverScreenState();
 }
 
-class _GameOverScreenState extends State<GameOverScreen> {
+class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<GameOverScreen> {
   final GlobalKey _globalKey = GlobalKey();
   bool _isSharing = false;
   bool _ceremonyComplete = false;
   bool _timerStarted = false;
   final Set<int> _soundedIndices = {};
   Timer? _ceremonyTimer;
-  RavenState _ravenState = RavenState.fly;
-  Timer? _ravenFlyTimer;
 
   @override
   void initState() {
     super.initState();
-    _ravenFlyTimer = Timer(const Duration(milliseconds: 900), () {
-      if (mounted) {
-        setState(() {
-          _ravenState = RavenState.idle;
-        });
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      playRavenPose(RavenState.flap, onceKey: 'gameover_flap');
     });
   }
 
   @override
   void dispose() {
     _ceremonyTimer?.cancel();
-    _ravenFlyTimer?.cancel();
     super.dispose();
   }
 
@@ -72,6 +66,7 @@ class _GameOverScreenState extends State<GameOverScreen> {
         setState(() {
           _ceremonyComplete = true;
         });
+        playRavenPose(RavenState.bow, onceKey: 'gameover_bow');
       }
     });
   }
@@ -229,7 +224,7 @@ class _GameOverScreenState extends State<GameOverScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             RavenMascot(
-                              state: _ravenState,
+                              state: ravenPose,
                               size: 72,
                             ),
                             const SizedBox(height: 12),

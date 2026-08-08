@@ -8,10 +8,10 @@ import 'helpers/png_decoder.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('Task T3 — Raven Mascot Asset & Contrast Integrity (PNG Decoded)', () {
-    final assets = ['body.png', 'wing.png', 'eye_open.png', 'eye_closed.png'];
+  group('Task T3 & T5 — Raven Mascot Asset & Contrast Integrity (PNG Decoded)', () {
+    final assets = ['body.png', 'wing.png', 'eye_open.png', 'eye_closed.png', 'beak_open.png', 'wing_up.png'];
 
-    test('T3.1: Dimensions for 1x (256x256), 2.0x (512x512), 3.0x (768x768)', () {
+    test('T3.1/T5.1: Dimensions for 1x (256x256), 2.0x (512x512), 3.0x (768x768)', () {
       for (final name in assets) {
         final f1x = File('assets/images/raven/$name');
         final f2x = File('assets/images/raven/2.0x/$name');
@@ -34,7 +34,7 @@ void main() {
       }
     });
 
-    test('T3.2: Real alpha channel presence (transparent and opaque pixels)', () {
+    test('T3.2/T5.2: Real alpha channel presence (transparent and opaque pixels)', () {
       for (final name in assets) {
         final img = decodePngFile(File('assets/images/raven/$name'));
         expect(img.transparentPixels, isNotEmpty, reason: '$name must have transparent background pixels');
@@ -46,7 +46,6 @@ void main() {
       final img = decodePngFile(File('assets/images/raven/body.png'));
       final bgLum = relativeLuminance(AppColors.ground.red, AppColors.ground.green, AppColors.ground.blue);
 
-      // Filter significant opaque pixels (a > 100) to find the brightest rim pixel
       final significantPixels = img.pixels.where((p) => p.a > 100).toList();
       expect(significantPixels, isNotEmpty);
 
@@ -80,118 +79,72 @@ void main() {
     });
   });
 
-  group('Task T3 — Raven Mascot Per-Pose Animation Contract Tests', () {
-    testWidgets('sleep state renders eye_closed.png asset', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: RavenMascot(state: RavenState.sleep, size: 64),
+  group('Task T5 — Raven Mascot Pose Contract & Animation Tests', () {
+    testWidgets('Every RavenState value renders without exception', (WidgetTester tester) async {
+      for (final state in RavenState.values) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: RavenMascot(state: state, size: 64),
+            ),
           ),
-        ),
-      );
-
-      final images = tester.widgetList<Image>(find.byType(Image)).toList();
-      expect(images, hasLength(3));
-
-      final eyeAsset = images.last.image as AssetImage;
-      expect(eyeAsset.assetName, endsWith('eye_closed.png'));
-      expect(tester.takeException(), isNull);
+        );
+        expect(find.byType(RavenMascot), findsOneWidget);
+        expect(tester.takeException(), isNull, reason: 'Pose $state must render without throwing');
+      }
     });
 
-    testWidgets('idle state renders eye_open.png asset at rest', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: RavenMascot(state: RavenState.idle, size: 64),
+    for (final state in RavenState.values) {
+      testWidgets('Reduced motion static frame stability for pose: ${state.name}', (WidgetTester tester) async {
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(accessibleNavigation: true),
+            child: MaterialApp(
+              home: Scaffold(
+                body: RavenMascot(state: state, size: 64),
+              ),
+            ),
           ),
-        ),
-      );
+        );
 
-      final images = tester.widgetList<Image>(find.byType(Image)).toList();
-      expect(images, hasLength(3));
+        final countFirst = tester.widgetList(find.byType(Image)).length;
+        await tester.pump(const Duration(milliseconds: 500));
+        final countSecond = tester.widgetList(find.byType(Image)).length;
 
-      final eyeAsset = images.last.image as AssetImage;
-      expect(eyeAsset.assetName, endsWith('eye_open.png'));
-      expect(tester.takeException(), isNull);
-    });
+        expect(countFirst, equals(countSecond), reason: 'Pose ${state.name} must remain static under reduced motion');
+        expect(tester.takeException(), isNull);
+      });
+    }
 
-    testWidgets('hop state applies non-identity Transform at mid-animation', (WidgetTester tester) async {
+    testWidgets('caw state renders beak_open.png asset', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: RavenMascot(state: RavenState.hop, size: 64),
+            body: RavenMascot(state: RavenState.caw, size: 64),
           ),
         ),
       );
 
       await tester.pump(const Duration(milliseconds: 150));
-      final transforms = tester.widgetList<Transform>(find.byType(Transform)).toList();
-      expect(transforms, isNotEmpty);
-
-      final bool hasActiveTransform = transforms.any((t) => t.transform != Matrix4.identity());
-      expect(hasActiveTransform, isTrue, reason: 'Mid-animation hop must apply non-identity transform');
-
-      await tester.pumpAndSettle();
+      final images = tester.widgetList<Image>(find.byType(Image)).toList();
+      final hasBeakOpen = images.any((img) => (img.image as AssetImage).assetName.contains('beak_open.png'));
+      expect(hasBeakOpen, isTrue, reason: 'Mid-animation caw must render beak_open.png');
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('ruffle state applies non-identity Transform at mid-animation', (WidgetTester tester) async {
+    testWidgets('flap state renders wing_up.png asset during flap cycle', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: RavenMascot(state: RavenState.ruffle, size: 64),
+            body: RavenMascot(state: RavenState.flap, size: 64),
           ),
         ),
       );
 
-      await tester.pump(const Duration(milliseconds: 250));
-      final transforms = tester.widgetList<Transform>(find.byType(Transform)).toList();
-      expect(transforms, isNotEmpty);
-
-      final bool hasActiveTransform = transforms.any((t) => t.transform != Matrix4.identity());
-      expect(hasActiveTransform, isTrue, reason: 'Mid-animation ruffle must apply non-identity transform');
-
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('fly state applies non-identity Transform at mid-animation', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: RavenMascot(state: RavenState.fly, size: 64),
-          ),
-        ),
-      );
-
-      await tester.pump(const Duration(milliseconds: 450));
-      final transforms = tester.widgetList<Transform>(find.byType(Transform)).toList();
-      expect(transforms, isNotEmpty);
-
-      final bool hasActiveTransform = transforms.any((t) => t.transform != Matrix4.identity());
-      expect(hasActiveTransform, isTrue, reason: 'Mid-animation fly must apply non-identity transform');
-
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('reduced motion renders static frame identical across pumps', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(accessibleNavigation: true),
-          child: const MaterialApp(
-            home: Scaffold(
-              body: RavenMascot(state: RavenState.sleep, size: 64),
-            ),
-          ),
-        ),
-      );
-
-      final countFirst = tester.widgetList(find.byType(Image)).length;
-      await tester.pump(const Duration(milliseconds: 500));
-      final countSecond = tester.widgetList(find.byType(Image)).length;
-
-      expect(countFirst, equals(countSecond));
+      await tester.pump(const Duration(milliseconds: 160));
+      final images = tester.widgetList<Image>(find.byType(Image)).toList();
+      final hasWingUp = images.any((img) => (img.image as AssetImage).assetName.contains('wing_up.png'));
+      expect(hasWingUp, isTrue, reason: 'Mid-flap state must render wing_up.png');
       expect(tester.takeException(), isNull);
     });
 

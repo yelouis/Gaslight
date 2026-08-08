@@ -24,6 +24,7 @@ import 'package:clock/clock.dart';
 import '../widgets/lamp_loading.dart';
 import '../theme/reaction_medallions.dart';
 import '../widgets/raven_mascot.dart';
+import '../widgets/raven_pose_host.dart';
 
 class Phase4RevealScreen extends StatefulWidget {
   const Phase4RevealScreen({super.key});
@@ -45,8 +46,7 @@ class _FloatingReaction {
   });
 }
 
-class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
-  bool _isInit = false;
+class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseHost<Phase4RevealScreen> {
   bool _isNavigating = false;
   
   late final int _mountTime;
@@ -59,8 +59,6 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
   String? _playedRevealForTargetId;
   String? _playedUnmaskForTargetId;
   Timer? _countdownTimer;
-  RavenState _ravenState = RavenState.idle;
-  Timer? _ravenRuffleTimer;
 
   int _computeStage(int now, GameState? state) {
     final elapsed = now - _revealStartTime;
@@ -112,7 +110,6 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
-    _ravenRuffleTimer?.cancel();
     try {
       context.read<GameService>().removeListener(_onGameServiceUpdate);
     } catch (_) {}
@@ -308,20 +305,20 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
       _playedRevealForTargetId = currentTargetId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         AudioService.instance.playReveal();
-        if (!AppMotion.reduce(context)) {
-          _ravenRuffleTimer?.cancel();
-          setState(() {
-            _ravenState = RavenState.ruffle;
-          });
-          _ravenRuffleTimer = Timer(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              setState(() {
-                _ravenState = RavenState.idle;
-              });
-            }
-          });
-        }
       });
+
+      final me = gs.currentPlayer;
+      final isFooled = me != null && currentCard != null && currentCard.votes[me.id] != null && currentCard.votes[me.id] != 'TRUTH';
+      final fooledSomeone = me != null && currentCard != null && currentCard.sabotageAnswers.containsKey(me.id) && currentCard.votes.values.contains(me.id);
+
+      // Chained trigger order per spec: startle (you were fooled) -> preen (you fooled someone) -> bow (truth landed)
+      if (isFooled) {
+        playRavenPose(RavenState.startle, onceKey: 'reveal_startle:$currentTargetId');
+      } else if (fooledSomeone) {
+        playRavenPose(RavenState.preen, onceKey: 'reveal_preen:$currentTargetId');
+      } else {
+        playRavenPose(RavenState.bow, onceKey: 'reveal_bow:$currentTargetId');
+      }
     }
 
     final me = gs.currentPlayer;
@@ -415,7 +412,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> {
                               child: Padding(
                                 padding: const EdgeInsets.only(bottom: 8.0, right: 16.0),
                                 child: RavenMascot(
-                                  state: _ravenState,
+                                  state: ravenPose,
                                   size: 48,
                                 ),
                               ),
