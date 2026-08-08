@@ -279,6 +279,43 @@ void main() {
       expect(hasBrassRim, isTrue, reason: 'beak_open lower mandible must have brass outline (#C9A24B)');
     });
   });
+
+  group('Task T8 — Real wing_up and beak_open Layer Art Acceptance Criteria', () {
+    test('T8.1: wing_up.png mass >= 1,200 px and >= 40% outside body.png silhouette', () {
+      final bodyImg = decodePngFile(File('assets/images/raven/body.png'));
+      final wingUpImg = decodePngFile(File('assets/images/raven/wing_up.png'));
+
+      final bodyCoords = bodyImg.pixels.where((p) => p.a > 0).map((p) => '${p.x},${p.y}').toSet();
+      final wingUpOpaque = wingUpImg.pixels.where((p) => p.a > 0).toList();
+
+      expect(wingUpOpaque.length, greaterThanOrEqualTo(1200),
+          reason: 'wing_up.png mass must be >= 1,200 px (measured: ${wingUpOpaque.length})');
+
+      final outsideCount = wingUpOpaque.where((p) => !bodyCoords.contains('${p.x},${p.y}')).length;
+      final outsideShare = outsideCount / wingUpOpaque.length;
+
+      expect(outsideShare, greaterThanOrEqualTo(0.40),
+          reason: 'wing_up.png share outside body silhouette must be >= 40% (measured: ${(outsideShare * 100).toStringAsFixed(1)}%)');
+    });
+
+    test('T8.2: beak_open.png mass >= 300 px and >= 50% outside body.png silhouette', () {
+      final bodyImg = decodePngFile(File('assets/images/raven/body.png'));
+      final beakOpenImg = decodePngFile(File('assets/images/raven/beak_open.png'));
+
+      final bodyCoords = bodyImg.pixels.where((p) => p.a > 0).map((p) => '${p.x},${p.y}').toSet();
+      final beakOpenOpaque = beakOpenImg.pixels.where((p) => p.a > 0).toList();
+
+      expect(beakOpenOpaque.length, greaterThanOrEqualTo(300),
+          reason: 'beak_open.png mass must be >= 300 px (measured: ${beakOpenOpaque.length})');
+
+      final outsideCount = beakOpenOpaque.where((p) => !bodyCoords.contains('${p.x},${p.y}')).length;
+      final outsideShare = outsideCount / beakOpenOpaque.length;
+
+      expect(outsideShare, greaterThanOrEqualTo(0.50),
+          reason: 'beak_open.png share outside body silhouette must be >= 50% (measured: ${(outsideShare * 100).toStringAsFixed(1)}%)');
+    });
+  });
 }
+
 
 

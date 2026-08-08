@@ -321,7 +321,7 @@ POSE_REGISTRY = {
         ]
     },
 
-    # Task T7 RE-AUTHORED POSES (preen, fly, flap, caw)
+    # Task T8 RE-AUTHORED POSES (preen, fly, flap, caw)
     'preen': {
         'cols': 4, 'rows': 2,
         'frames': [
@@ -338,25 +338,25 @@ POSE_REGISTRY = {
     'fly': {
         'cols': 4, 'rows': 2,
         'frames': [
-            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
-            {'scale_x': 1.04, 'scale_y': 0.92, 'translate_y': 2.0, 'wing_rot': -0.04}, # Anticipation crouch
-            {'scale_x': 0.96, 'scale_y': 1.08, 'translate_y': -8.0, 'wing_rot': 0.06}, # Launch stretch
-            {'scale_x': 0.98, 'scale_y': 1.06, 'translate_y': -14.0, 'wing_rot': 0.09},
-            {'scale_x': 1.00, 'scale_y': 1.04, 'translate_y': -16.0, 'wing_rot': 0.06}, # Peak climb inside cell
-            {'scale_x': 1.02, 'scale_y': 1.00, 'translate_y': -10.0, 'wing_rot': -0.03}, # Glide return
-            {'scale_x': 1.01, 'scale_y': 1.00, 'translate_y': -3.0, 'wing_rot': -0.01},
-            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
+            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00, 'use_wing_up': False},
+            {'scale_x': 1.04, 'scale_y': 0.92, 'translate_y': 2.0, 'wing_rot': -0.04, 'use_wing_up': False}, # Anticipation crouch
+            {'scale_x': 0.96, 'scale_y': 1.08, 'translate_y': -8.0, 'wing_rot': 0.04, 'use_wing_up': True}, # Launch stretch with raised wing
+            {'scale_x': 0.98, 'scale_y': 1.06, 'translate_y': -14.0, 'wing_rot': 0.06, 'use_wing_up': True},
+            {'scale_x': 1.00, 'scale_y': 1.04, 'translate_y': -16.0, 'wing_rot': 0.04, 'use_wing_up': True}, # Peak climb
+            {'scale_x': 1.02, 'scale_y': 1.00, 'translate_y': -10.0, 'wing_rot': -0.03, 'use_wing_up': False}, # Glide return
+            {'scale_x': 1.01, 'scale_y': 1.00, 'translate_y': -3.0, 'wing_rot': -0.01, 'use_wing_up': False},
+            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00, 'use_wing_up': False},
         ]
     },
     'flap': {
         'cols': 3, 'rows': 2,
         'frames': [
-            {'scale_y': 1.00, 'scale_x': 1.00, 'translate_y': 0.0},
-            {'scale_y': 1.06, 'scale_x': 0.96, 'translate_y': -14.0}, # Beat 1 up
-            {'scale_y': 0.96, 'scale_x': 1.04, 'translate_y': -20.0}, # Beat 1 down
-            {'scale_y': 1.06, 'scale_x': 0.96, 'translate_y': -24.0}, # Beat 2 up
-            {'scale_y': 0.96, 'scale_x': 1.04, 'translate_y': -10.0}, # Beat 2 down
-            {'scale_y': 1.00, 'scale_x': 1.00, 'translate_y': 0.0},
+            {'scale_y': 1.00, 'scale_x': 1.00, 'translate_y': 0.0, 'use_wing_up': False},
+            {'scale_y': 1.06, 'scale_x': 0.96, 'translate_y': -14.0, 'use_wing_up': True}, # Beat 1 up
+            {'scale_y': 0.96, 'scale_x': 1.04, 'translate_y': -20.0, 'use_wing_up': False}, # Beat 1 down
+            {'scale_y': 1.06, 'scale_x': 0.96, 'translate_y': -24.0, 'use_wing_up': True}, # Beat 2 up
+            {'scale_y': 0.96, 'scale_x': 1.04, 'translate_y': -10.0, 'use_wing_up': False}, # Beat 2 down
+            {'scale_y': 1.00, 'scale_x': 1.00, 'translate_y': 0.0, 'use_wing_up': False},
         ]
     },
     'caw': {

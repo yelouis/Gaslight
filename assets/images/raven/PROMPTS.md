@@ -46,3 +46,17 @@ python3 scripts/build_sprite_sheets.py
 ```
 Outputs `assets/images/raven/frames/{ruffle,startle,hop,peck,bow,alert,preen,fly,flap,caw}.png`.
 
+## Task T8 Layer Briefs (August 8, 2026)
+
+- **`wing_up.png` — genuinely raised wing**:
+  Using `body.png` and `wing.png` as exact references, near wing raised & extended upward from shoulder at roughly (100, 118), sweeping up and back into empty space above flank (x 55–95, y 45–100 on 256×256 canvas). Palette: `#2E2A26` fill, `#C9A24B` rim along top & outer edge. Mass ≥ 1,200 px, ≥ 40% outside body silhouette.
+- **`beak_open.png` — upper mandible open upward**:
+  Using `body.png` as exact reference, upper mandible lifted open hinging from (172, 80), tip rising into empty space above beak (x 175–215, y 35–70 on 256×256 canvas). Palette: brass fill `#C9A24B`. Mass ≥ 300 px, ≥ 50% outside body silhouette.
+
+### Layer Generation Command
+```bash
+python3 scripts/generate_raven_layers.py
+```
+Outputs `assets/images/raven/{wing_up,beak_open}.png` across 1x, 2.0x, and 3.0x densities.
+
+
