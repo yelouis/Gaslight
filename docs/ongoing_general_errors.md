@@ -10,50 +10,19 @@
 
 ## 1. Open & in-flight
 
-**0 open issues awaiting a decision.** One item is selected and being implemented:
+**0 open issues awaiting a decision.**
 
 ---
 
-### Issue 34: Each New Mascot Pose Is Hand-Copied Boilerplate — Contain It Before T5 Multiplies It
-**Status**: 🔵 **Selected (Option A) — in flight as part of Task T5.** Implementation spec: `agent_execution_guide.md` §3, Steps 1–2. — Not a bug today. This is about the shape of Task T5, which adds up to **seven** new poses across four screens where there is currently **one pose per screen**.
+## 🧪 Resolved Issues & Implementation Refinements
 
-**What the code does now.** Every time the crow reacts, the screen hand-writes the same block — see `phase3_vote.dart:296` and `phase4_reveal.dart:307`:
+1. **Logo Mascot Swap to Crow (Resolved - August 8, 2026)**:
+   - **Problem**: `lib/widgets/lobby_logo.dart` rendered `Image.asset('assets/images/gaslight_mascot.png')` (the old gas lantern character) wrapped in a `ClipRRect`, leaving a 251 KB orphaned image asset in the release build and visually misaligning with the crow mascot system. Furthermore, `body.png` contained baked-in white eyeball pixels and palette-indexed quantization transparency bugs.
+   - **Solution**: Replaced `gaslight_mascot.png` with `RavenMascot(state: RavenState.idle, size: 80)` inside an 80×80 container in `lib/widgets/lobby_logo.dart`, preserving the lamplight flicker glow animation and dropping `ClipRRect`. Deleted `assets/images/gaslight_mascot.png` (-251 KB savings). Re-exported `body.png` and `eye_closed.png` as 32-bit RGBA PNGs across 1x, 2x, and 3x densities with 100% solid dark body fill (`#2E2A26`), separating the white open eye art onto `eye_open.png` and the closed brass eyelid arc onto `eye_closed.png`. Added `test/lobby_logo_test.dart` asserting `RavenMascot` presence.
 
-```dart
-if (shouldFire && !AppMotion.reduce(context)) {
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    _ravenTimer?.cancel();
-    setState(() { _ravenState = RavenState.hop; });
-    _ravenTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) { setState(() { _ravenState = RavenState.idle; }); }
-    });
-  });
-}
-```
-
-**The current code is correct** — all four screens were checked and each has exactly one pose timer, cancelled in `dispose()`, 4 out of 4. The concern is not that something is broken; it is that this block has to be copied correctly seven more times, and it has three separate things to get right:
-
-1. **The lifecycle** — check reduced-motion, wait for the frame to finish, cancel the previous timer, check the widget still exists before reverting, and cancel on dispose. Miss the cancel and two timers race: one reverts the pose early, so it flickers or sticks.
-2. **The "only once" key** — the game state streams from Firestore and rebuilds constantly, so without a marker saying "already reacted to this card", the pose re-fires on every rebuild and the bird machine-guns. The reveal screen does this with `_playedRevealForTargetId`; the lobby uses `_knownPlayerIds`. **Every new trigger needs its own new key, and a missing one is invisible in code review** — it only shows up when you watch it.
-3. **Collisions — new with T5.** Today each screen has one pose, so nothing can conflict. T5 puts **three** on the reveal screen (`preen` when you fooled someone, `startle` when you were fooled, `bow` when the Truth lands) and these can be true in the same moment. With the current pattern the last one to run silently wins, so the bird's reaction to a dramatic beat becomes a coin flip.
-
-**Option A (recommended)**: **One shared helper that owns the whole lifecycle.** Add a small reusable piece each screen mixes in, so a reaction becomes a single line — roughly `raven.play(RavenState.peck, onceKey: cardId)`. It handles the reduced-motion check, frame timing, cancelling the previous pose, the existence check, disposal, and the "only once" de-duplication internally.
-  - *Pros*: There is one copy to get right and one set of tests instead of eleven. **Making the "only once" key a required argument is the real win** — the subtlest of the three failures becomes impossible to forget, because the code will not compile without it. Each new pose costs one line, so adding reactions later stays cheap. Screens get noticeably shorter.
-  - *Cons*: The four existing reaction sites have to be migrated, which is churn on code that currently works. One more small abstraction for a future reader to learn. On its own it does not decide who wins a collision.
-
-**Option B**: **Move the whole lifecycle inside the mascot widget.** The screen just says "a peck happened" and the crow plays and un-plays it itself.
-  - *Pros*: No timer code in any screen, ever again. Cleanup is automatic, because the widget already owns animation controllers and disposes them. Conceptually the animation lifecycle lives with the animation.
-  - *Cons*: Changes `RavenMascot`'s constructor, which is currently frozen as an invariant — that needs your explicit sign-off. More importantly it **does not solve the "only once" problem**, because the widget cannot know that a card id changed; screens would still hand-write that part, leaving the subtlest failure exactly where it is. Also needs the API to carry both a resting pose and one-off reactions, which is fiddlier than it sounds.
-
-**Option C**: **Option A, plus a priority order for reactions.** Same helper, but each pose carries a rank so a more important reaction beats a less important one — being fooled outranks fooling someone, which outranks the ceremonial bow.
-  - *Pros*: The only option that actually settles the collision. On the reveal screen, the biggest emotional beat wins reliably instead of by accident. Deterministic, so it can be tested.
-  - *Cons*: The most work of the three, and it adds a ranking table someone has to keep sensible as poses are added. If in practice the reveal poses never really overlap, this is machinery for a problem that does not occur.
-
-**Option D**: **Change nothing structural; add tests that catch it.** Keep copying the block, and add tests that fire triggers rapidly and assert the crow always returns to its resting pose, plus a check that each screen cleans up its timers.
-  - *Pros*: No refactor at all of code that is currently correct. Cheapest to land, and the tests are worth having regardless of which option you pick.
-  - *Cons*: Catches the mistake instead of preventing it, and only for the cases someone remembered to test. The boilerplate still grows sevenfold, and a forgotten "only once" key is exactly the kind of thing a test suite tends not to cover until after it has shipped once.
-
-*Effort:* Moderate (A) · Moderate (B) · Large (C) · Small (D). Your selection: Proceed with Option A.
+2. **Issue 34: Expanded Crow Pose Vocabulary & Game Moment Wiring (Resolved - August 8, 2026)**:
+   - **Problem**: Mascot animation timing, reduced motion checks, timer cancellation, and deduplication logic were hand-written per screen, threatening boilerplate explosion as Task T5 added seven new poses across four screens.
+   - **Solution**: Implemented `RavenPoseHost` mixin in `lib/widgets/raven_pose_host.dart` (Issue 34 Option A) with a required `onceKey` parameter for deduplication, automatic `AppMotion.reduce(context)` handling, post-frame callback execution, and timer disposal. Expanded `RavenState` enum and animation transform logic in `lib/widgets/raven_mascot.dart` for Tier 1 poses (`alert`, `peck`, `preen`, `startle`, `bow`) and Tier 2 poses (`caw`, `flap`). Generated Tier 2 assets (`beak_open.png`, `wing_up.png`) at 1x (256x256), 2.0x (512x512), and 3.0x (768x768). Migrated `lobby_screen.dart`, `phase3_vote.dart`, `phase4_reveal.dart`, and `game_over_screen.dart` to `RavenPoseHost`, chaining reveal triggers (`startle` -> `preen` -> `bow`) by event priority. Verified with unit/contract test suites in `test/raven_mascot_test.dart` and `test/raven_pose_host_test.dart`.
 
 ---
 
