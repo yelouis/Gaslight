@@ -183,8 +183,9 @@ The current app has nice entrance tweens; the risk is *scattered* motion reading
 >
 > - **Artwork:** Flat vector mascot in a bold silhouette — brass rim-light outline, warm dark body, ivory eye, brass beak. **Measured from the shipped PNGs (August 7):** rim `#C6A14B` at **7.70:1** against `#14110E`; body fill `#2D2925` at 1.30:1. *(An earlier revision of this note claimed 18.59:1 for the rim — that figure is the ivory highlight in `eye_open.png`, a different layer. The rim still clears the 4.5:1 bar with headroom.)*
 > - **Body fill (Issue 33):** the first generation shipped as a hollow outline — 84.5% of the silhouette was transparent, so backgrounds showed through the bird. The interior is now filled, raising opaque coverage inside the bounding box from 12.4% to **44.9%**. **A flood-fill cannot be used to repair this**: the brass rim is not a closed loop (7–582 enclosed pixels depending on alpha threshold, against the ~20,000 a filled body needs), so any fill escapes. Regenerate via image-to-image editing instead.
-> - **Asset layers:** `assets/images/raven/{body,wing,eye_open,eye_closed}.png` with density variants (`2.0x/`, `3.0x/`). Prompts recorded in `assets/images/raven/PROMPTS.md`.
-> - **Animation contract:** Preserves all 5 screen poses (`sleep`, `idle`, `hop`, `ruffle`, `fly`) and reduced-motion static frame fallback. `RavenMascot` public API and call sites remain unchanged.
+> - **Asset layers & sprite sheets:** Resting poses (`idle`, `sleep`) use layered PNGs (`assets/images/raven/{body,wing,eye_open,eye_closed}.png`). Transient poses (`ruffle`, etc.) use pre-rendered grid sprite sheets (`assets/images/raven/frames/*.png`, 256×256 px cells, 1x density). Prompts and assembly recorded in `assets/images/raven/PROMPTS.md`.
+> - **Dual-renderer architecture (Task T6, August 8, 2026):** Two renderers coexist by design — layered `Stack` for resting states (to support stochastic eye blinking and idle head tilts without long frame loops), and `CustomPaint` `drawImageRect` frame sequence sprite sheets for transient poses (to support rich deformation, squash, stretch, and feather ruffling).
+> - **Animation contract:** Preserves all 12 screen poses and reduced-motion static frame 0 fallback. `RavenMascot` public API (`state`, `size`) and `RavenPoseHost` `playRavenPose` remain unchanged.
 
 ---
 

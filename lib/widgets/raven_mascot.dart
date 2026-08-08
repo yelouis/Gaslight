@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'dart:math' as math;
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -16,6 +17,51 @@ enum RavenState {
   bow,
   caw,
   flap,
+}
+
+class _PoseSheet {
+  final String asset;
+  final int frames;
+  final int cols;
+  const _PoseSheet(this.asset, this.frames, this.cols);
+}
+
+const Map<RavenState, _PoseSheet> _poseSheets = {
+  RavenState.ruffle: _PoseSheet('assets/images/raven/frames/ruffle.png', 8, 4),
+};
+
+class _PosePainter extends CustomPainter {
+  final ui.Image image;
+  final int frameIndex;
+  final int cols;
+  final double cellSize;
+
+  _PosePainter({
+    required this.image,
+    required this.frameIndex,
+    required this.cols,
+    this.cellSize = 256.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final int col = frameIndex % cols;
+    final int row = frameIndex ~/ cols;
+    final Rect srcRect = Rect.fromLTWH(
+      col * cellSize,
+      row * cellSize,
+      cellSize,
+      cellSize,
+    );
+    final Rect dstRect = Offset.zero & size;
+    final Paint paint = Paint()..filterQuality = FilterQuality.medium;
+    canvas.drawImageRect(image, srcRect, dstRect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PosePainter oldDelegate) {
+    return oldDelegate.image != image || oldDelegate.frameIndex != frameIndex;
+  }
 }
 
 class RavenMascot extends StatefulWidget {
@@ -43,6 +89,9 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
   bool _idleTilt = false;
   bool _idleBlink = false;
 
+  // Precached ui.Image sheets for transient poses
+  final Map<RavenState, ui.Image> _loadedSheets = {};
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +110,28 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
+  }
+
+  void _loadPoseSheetIfNeeded(RavenState state) {
+    final sheet = _poseSheets[state];
+    if (sheet == null || _loadedSheets.containsKey(state)) return;
+
+    final imageStream = AssetImage(sheet.asset).resolve(createLocalImageConfiguration(context));
+    late ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (ImageInfo frame, bool syncCall) {
+        if (mounted) {
+          setState(() {
+            _loadedSheets[state] = frame.image.clone();
+          });
+        }
+        imageStream.removeListener(listener);
+      },
+      onError: (Object exception, StackTrace? stackTrace) {
+        imageStream.removeListener(listener);
+      },
+    );
+    imageStream.addListener(listener);
   }
 
   void _setupState(RavenState state) {
@@ -153,6 +224,7 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
     super.didUpdateWidget(oldWidget);
     if (widget.state != oldWidget.state) {
       _setupState(widget.state);
+      _loadPoseSheetIfNeeded(widget.state);
     }
   }
 
@@ -160,6 +232,7 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
   void didChangeDependencies() {
     super.didChangeDependencies();
     _setupState(widget.state);
+    _loadPoseSheetIfNeeded(widget.state);
   }
 
   @override
@@ -168,6 +241,10 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
     _actionController.dispose();
     _idleController.dispose();
     _idleTimer?.cancel();
+    for (final sheetImage in _loadedSheets.values) {
+      sheetImage.dispose();
+    }
+    _loadedSheets.clear();
     super.dispose();
   }
 
@@ -181,6 +258,25 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
       child: AnimatedBuilder(
         animation: Listenable.merge([_sleepController, _actionController, _idleController]),
         builder: (context, child) {
+          final sheetInfo = _poseSheets[widget.state];
+          final ui.Image? sheetImage = _loadedSheets[widget.state];
+
+          if (sheetInfo != null && sheetImage != null) {
+            final double actionT = _actionController.value;
+            final int frameIndex = prefersReducedMotion
+                ? 0
+                : (actionT * sheetInfo.frames).floor().clamp(0, sheetInfo.frames - 1);
+
+            return CustomPaint(
+              size: Size(widget.size, widget.size),
+              painter: _PosePainter(
+                image: sheetImage,
+                frameIndex: frameIndex,
+                cols: sheetInfo.cols,
+              ),
+            );
+          }
+
           double scaleY = 1.0;
           double scaleX = 1.0;
           double translateY = 0.0;
@@ -305,3 +401,4 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
     );
   }
 }
+

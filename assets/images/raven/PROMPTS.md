@@ -23,3 +23,19 @@ Every layer exported on shared 1024×1024 canvas for pixel-perfect Stack alignme
 - `wing.png`: Near wing with brass stroke.
 - `eye_open.png`: Ivory eye circle with pupil.
 - `eye_closed.png`: Downward curved brass arc for sleeping pose.
+
+## Task T6 Frame Briefs & Sheet Assembly (August 8, 2026)
+
+For transient poses (`ruffle`, `hop`, `fly`, `alert`, `peck`, `preen`, `startle`, `bow`, `caw`, `flap`), frame sequences are composite grid sheets (256×256 px cells, single 1x density, left-to-right top-to-bottom layout).
+
+### Ruffle Frame Sequence Brief (8 frames, 4 cols × 2 rows grid sheet)
+- **Frame 0**: Exact resting pose (`body.png` + `wing.png` + `eye_open.png`).
+- **Frames 1–6**: Authored ruffle expansion and feather wave displacement sequence (body puffing up to 1.18x, wing rotation up to 0.20 rad, feather wave oscillation).
+- **Frame 7**: Settled resting pose returning seamlessly to resting alignment.
+
+### Sheet Assembly Command
+```bash
+python3 scripts/build_sprite_sheets.py
+```
+Outputs `assets/images/raven/frames/ruffle.png` (1024×512, 8 cells).
+
