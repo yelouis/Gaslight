@@ -28,6 +28,15 @@ class _PoseSheet {
 
 const Map<RavenState, _PoseSheet> _poseSheets = {
   RavenState.ruffle: _PoseSheet('assets/images/raven/frames/ruffle.png', 8, 4),
+  RavenState.startle: _PoseSheet('assets/images/raven/frames/startle.png', 6, 3),
+  RavenState.hop: _PoseSheet('assets/images/raven/frames/hop.png', 8, 4),
+  RavenState.peck: _PoseSheet('assets/images/raven/frames/peck.png', 6, 3),
+  RavenState.bow: _PoseSheet('assets/images/raven/frames/bow.png', 8, 4),
+  RavenState.alert: _PoseSheet('assets/images/raven/frames/alert.png', 6, 3),
+  RavenState.preen: _PoseSheet('assets/images/raven/frames/preen.png', 8, 4),
+  RavenState.fly: _PoseSheet('assets/images/raven/frames/fly.png', 8, 4),
+  RavenState.flap: _PoseSheet('assets/images/raven/frames/flap.png', 6, 3),
+  RavenState.caw: _PoseSheet('assets/images/raven/frames/caw.png', 6, 3),
 };
 
 class _PosePainter extends CustomPainter {

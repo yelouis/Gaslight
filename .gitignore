@@ -76,4 +76,8 @@ test_output.txt
 # Gemini IDE
 .gemini/
 
+# Temporary scratch artifacts
+scratch/
+
+
 

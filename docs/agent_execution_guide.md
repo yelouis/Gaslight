@@ -1,22 +1,16 @@
-# Agent Execution Guide — Active Build: Task T6 rollout (August 8, 2026)
+# Agent Execution Guide — Queue Complete (August 8, 2026)
 
 **You are an engineering agent picking up Gaslight (Flutter party game, iOS + Android, server-authoritative Firebase backend). Assume you have no memory of this project.**
 
-**Approved work — one item:**
+**All approved queue items delivered and verified:**
 
-| # | Item | Scope | Selected |
+| # | Item | Scope | Status |
 |---|---|---|---|
-| 1 | **Task T6 rollout** — convert the **nine remaining transient poses** to sprite sheets | new sheets + `scripts/build_sprite_sheets.py` + `lib/widgets/raven_mascot.dart` + tests | Issue 35, **Option B** |
+| 1 | **Task T6 rollout** — pre-rendered frame sequences for all 10 transient crow poses | `assets/images/raven/frames/*.png` + `scripts/build_sprite_sheets.py` + `lib/widgets/raven_mascot.dart` + tests | ✅ **Delivered & Verified** |
 
-Nothing else is approved.
-
-> ### ✅ The pilot passed — roll out the rest
+> ### 🎉 Queue Complete
 >
-> `ruffle` was converted and **the user approved it**: frames clearly beat `Transform` motion on the pose that should benefit most, so the approach is validated and the remaining nine follow.
->
-> **📖 Follow `.agents/skills/mascot_pose_creation/SKILL.md`.** It is the authoritative pipeline — how frames are composed, the fixed conventions, the verified preview recipe, and the validation set. This guide gives the queue and the per-pose motion briefs; the skill gives the method. **Read the skill before touching anything.**
->
-> **⚠️ The pilot is currently uncommitted** — `assets/images/raven/frames/`, `scripts/`, and `scratch/` are untracked, and `raven_mascot.dart`, `test/raven_mascot_test.dart`, `pubspec.yaml`, `PROMPTS.md` and `design_ui_direction.md` are modified. Battery is green at **94/94**. **Commit the pilot as its own commit before starting the rollout** so `ruffle` is recoverable independently of the nine that follow.
+> All 10 transient raven poses (`ruffle`, `startle`, `hop`, `peck`, `bow`, `alert`, `preen`, `fly`, `flap`, `caw`) have been converted to pre-rendered grid sprite sheets and verified. `idle` and `sleep` remain on the layered `Stack` renderer. All client tests (94/94) and backend tests (31/31) pass clean.
 
 **Specs are decisions, not suggestions.** **A blocker is a filing event, not a licence to re-choose on the user's behalf.**
 

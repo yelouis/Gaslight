@@ -155,102 +155,261 @@ def blend(dst, src):
     out_a_int = int(round(out_a * 255.0))
     return (out_r, out_g, out_b, out_a_int)
 
-def render_frame(body, wing, eye, scale_x=1.0, scale_y=1.0, wing_rot=0.0, ruffle_wave=0.0):
+def render_frame(layers,
+                 scale_x=1.0, scale_y=1.0,
+                 wing_rot=0.0, ruffle_wave=0.0,
+                 rotate=0.0, translate_x=0.0, translate_y=0.0,
+                 use_wing_up=False, use_beak_open=False, use_eye_closed=False):
     w, h = 256, 256
     frame = [(0, 0, 0, 0)] * (w * h)
-    cx, cy = 128.0, 128.0
-    
-    # 1. Body layer with scale & feather ruffle displacement
+    cx, cy = 128.0, 128.0  # Center for scale & whole-body rotation
+
+    body = layers['body']
+    wing = layers['wing_up'] if use_wing_up else layers['wing']
+    eye = layers['eye_closed'] if use_eye_closed else layers['eye_open']
+    beak_open = layers['beak_open']
+
+    # Whole-body rotation matrix (inverse)
+    cos_rot = math.cos(-rotate)
+    sin_rot = math.sin(-rotate)
+
+    def map_coords(x, y):
+        # 1. Reverse translation
+        tx = x - translate_x
+        ty = y - translate_y
+        # 2. Reverse whole-body rotation around center (cx, cy)
+        dx = tx - cx
+        dy = ty - cy
+        rx = dx * cos_rot - dy * sin_rot + cx
+        ry = dx * sin_rot + dy * cos_rot + cy
+        return rx, ry
+
+    # 1. Body layer with scale, whole-body rotation, translation & feather ruffle wave
     body_layer = [(0, 0, 0, 0)] * (w * h)
     for y in range(h):
         for x in range(w):
-            sx = (x - cx) / scale_x + cx
-            sy = (y - cy) / scale_y + cy
+            rx, ry = map_coords(x, y)
+            sx = (rx - cx) / scale_x + cx
+            sy = (ry - cy) / scale_y + cy
             if ruffle_wave != 0.0:
-                sx += ruffle_wave * math.sin((y - 40) * 0.15)
+                sx += ruffle_wave * math.sin((ry - 40) * 0.15)
             p = sample_bilinear(body[2], w, h, sx, sy)
             body_layer[y * w + x] = p
-            
-    # 2. Wing layer with wing_rot around shoulder pivot (-0.25 * 256 + 128 = 64, 0.10 * 256 + 128 = 153.6)
+
+    # 2. Beak Open overlay (if caw state)
+    beak_layer = [(0, 0, 0, 0)] * (w * h)
+    if use_beak_open:
+        for y in range(h):
+            for x in range(w):
+                rx, ry = map_coords(x, y)
+                sx = (rx - cx) / scale_x + cx
+                sy = (ry - cy) / scale_y + cy
+                p = sample_bilinear(beak_open[2], w, h, sx, sy)
+                beak_layer[y * w + x] = p
+
+    # 3. Wing layer with wing_rot around shoulder pivot (64.0, 153.6) + whole body transform
     px, py = 64.0, 153.6
-    rad = wing_rot
-    cos_r = math.cos(-rad)
-    sin_r = math.sin(-rad)
+    cos_w = math.cos(-wing_rot)
+    sin_w = math.sin(-wing_rot)
     wing_layer = [(0, 0, 0, 0)] * (w * h)
     for y in range(h):
         for x in range(w):
-            dx = x - px
-            dy = y - py
-            rx = dx * cos_r - dy * sin_r + px
-            ry = dx * sin_r + dy * cos_r + py
-            sx = (rx - cx) / scale_x + cx
-            sy = (ry - cy) / scale_y + cy
+            rx, ry = map_coords(x, y)
+            # Reverse wing rotation around shoulder pivot (px, py)
+            dx = rx - px
+            dy = ry - py
+            wx = dx * cos_w - dy * sin_w + px
+            wy = dx * sin_w + dy * cos_w + py
+            sx = (wx - cx) / scale_x + cx
+            sy = (wy - cy) / scale_y + cy
             p = sample_bilinear(wing[2], w, h, sx, sy)
             wing_layer[y * w + x] = p
-            
-    # 3. Eye layer with body scale
+
+    # 4. Eye layer with body scale, rotation & translation
     eye_layer = [(0, 0, 0, 0)] * (w * h)
     for y in range(h):
         for x in range(w):
-            sx = (x - cx) / scale_x + cx
-            sy = (y - cy) / scale_y + cy
+            rx, ry = map_coords(x, y)
+            sx = (rx - cx) / scale_x + cx
+            sy = (ry - cy) / scale_y + cy
             p = sample_bilinear(eye[2], w, h, sx, sy)
             eye_layer[y * w + x] = p
 
     # Composite layers
     for i in range(w * h):
         b = blend(frame[i], body_layer[i])
+        if use_beak_open:
+            b = blend(b, beak_layer[i])
         b = blend(b, wing_layer[i])
         b = blend(b, eye_layer[i])
         frame[i] = b
     return frame
 
+POSE_REGISTRY = {
+    'ruffle': {
+        'cols': 4, 'rows': 2,
+        'frames': [
+            {'scale_x': 1.00, 'scale_y': 1.00, 'wing_rot': 0.00, 'ruffle_wave': 0.0},
+            {'scale_x': 1.05, 'scale_y': 1.02, 'wing_rot': 0.05, 'ruffle_wave': 1.5},
+            {'scale_x': 1.12, 'scale_y': 1.04, 'wing_rot': 0.12, 'ruffle_wave': 3.5},
+            {'scale_x': 1.18, 'scale_y': 1.08, 'wing_rot': 0.20, 'ruffle_wave': 5.0},
+            {'scale_x': 1.15, 'scale_y': 1.05, 'wing_rot': 0.15, 'ruffle_wave': 4.0},
+            {'scale_x': 1.08, 'scale_y': 1.02, 'wing_rot': 0.08, 'ruffle_wave': 2.0},
+            {'scale_x': 1.03, 'scale_y': 1.01, 'wing_rot': 0.03, 'ruffle_wave': 0.8},
+            {'scale_x': 1.00, 'scale_y': 1.00, 'wing_rot': 0.00, 'ruffle_wave': 0.0},
+        ]
+    },
+    'startle': {
+        'cols': 3, 'rows': 2,
+        'frames': [
+            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
+            {'scale_x': 1.04, 'scale_y': 1.08, 'translate_y': -12.0, 'wing_rot': 0.20},
+            {'scale_x': 1.08, 'scale_y': 1.12, 'translate_y': -18.0, 'wing_rot': 0.28},
+            {'scale_x': 0.96, 'scale_y': 0.94, 'translate_y': -4.0, 'wing_rot': 0.10},
+            {'scale_x': 1.02, 'scale_y': 1.02, 'translate_y': -1.0, 'wing_rot': 0.03},
+            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
+        ]
+    },
+    'hop': {
+        'cols': 4, 'rows': 2,
+        'frames': [
+            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
+            {'scale_x': 1.05, 'scale_y': 0.92, 'translate_y': 4.0, 'wing_rot': -0.05},
+            {'scale_x': 0.95, 'scale_y': 1.10, 'translate_y': -14.0, 'wing_rot': 0.25},
+            {'scale_x': 1.00, 'scale_y': 1.02, 'translate_y': -24.0, 'wing_rot': 0.35},
+            {'scale_x': 0.96, 'scale_y': 1.08, 'translate_y': -12.0, 'wing_rot': 0.15},
+            {'scale_x': 1.08, 'scale_y': 0.90, 'translate_y': 5.0, 'wing_rot': -0.10},
+            {'scale_x': 1.02, 'scale_y': 1.03, 'translate_y': -1.0, 'wing_rot': 0.03},
+            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
+        ]
+    },
+    'peck': {
+        'cols': 3, 'rows': 2,
+        'frames': [
+            {'rotate': 0.00, 'translate_x': 0.0, 'translate_y': 0.0},
+            {'rotate': -0.05, 'translate_x': -1.0, 'translate_y': -2.0},
+            {'rotate': 0.32, 'translate_x': 8.0, 'translate_y': 10.0, 'scale_x': 1.04, 'scale_y': 0.96},
+            {'rotate': 0.28, 'translate_x': 6.0, 'translate_y': 8.0},
+            {'rotate': 0.08, 'translate_x': 2.0, 'translate_y': 2.0},
+            {'rotate': 0.00, 'translate_x': 0.0, 'translate_y': 0.0},
+        ]
+    },
+    'bow': {
+        'cols': 4, 'rows': 2,
+        'frames': [
+            {'rotate': 0.00, 'translate_y': 0.0},
+            {'rotate': 0.08, 'translate_y': 2.0},
+            {'rotate': 0.22, 'translate_y': 5.0},
+            {'rotate': 0.38, 'translate_y': 9.0, 'scale_x': 1.02},
+            {'rotate': 0.38, 'translate_y': 9.0, 'scale_x': 1.02},
+            {'rotate': 0.24, 'translate_y': 6.0},
+            {'rotate': 0.10, 'translate_y': 2.0},
+            {'rotate': 0.00, 'translate_y': 0.0},
+        ]
+    },
+    'alert': {
+        'cols': 3, 'rows': 2,
+        'frames': [
+            {'rotate': 0.00, 'scale_y': 1.00, 'translate_y': 0.0},
+            {'rotate': -0.18, 'scale_y': 1.04, 'translate_y': -4.0},
+            {'rotate': -0.25, 'scale_y': 1.06, 'translate_y': -6.0},
+            {'rotate': -0.25, 'scale_y': 1.06, 'translate_y': -6.0},
+            {'rotate': -0.08, 'scale_y': 1.02, 'translate_y': -2.0},
+            {'rotate': 0.00, 'scale_y': 1.00, 'translate_y': 0.0},
+        ]
+    },
+    'preen': {
+        'cols': 4, 'rows': 2,
+        'frames': [
+            {'rotate': 0.00, 'wing_rot': 0.00},
+            {'rotate': -0.08, 'wing_rot': -0.15},
+            {'rotate': -0.14, 'wing_rot': -0.32, 'scale_x': 0.98},
+            {'rotate': -0.18, 'wing_rot': -0.44, 'scale_x': 0.96},
+            {'rotate': -0.18, 'wing_rot': -0.44, 'scale_x': 0.96},
+            {'rotate': -0.12, 'wing_rot': -0.28},
+            {'rotate': -0.04, 'wing_rot': -0.10},
+            {'rotate': 0.00, 'wing_rot': 0.00},
+        ]
+    },
+    'fly': {
+        'cols': 4, 'rows': 2,
+        'frames': [
+            {'translate_y': 0.0, 'wing_rot': 0.00},
+            {'translate_y': -8.0, 'wing_rot': -0.30, 'scale_y': 1.05},
+            {'translate_y': -18.0, 'wing_rot': 0.35, 'scale_y': 0.95},
+            {'translate_y': -30.0, 'wing_rot': -0.40, 'scale_y': 1.05},
+            {'translate_y': -40.0, 'wing_rot': 0.35, 'scale_y': 0.95},
+            {'translate_y': -22.0, 'wing_rot': 0.10},
+            {'translate_y': -6.0, 'wing_rot': -0.05},
+            {'translate_y': 0.0, 'wing_rot': 0.00},
+        ]
+    },
+    'flap': {
+        'cols': 3, 'rows': 2,
+        'frames': [
+            {'translate_y': 0.0, 'use_wing_up': False},
+            {'translate_y': -10.0, 'use_wing_up': True},
+            {'translate_y': -20.0, 'use_wing_up': False},
+            {'translate_y': -24.0, 'use_wing_up': True},
+            {'translate_y': -10.0, 'use_wing_up': False},
+            {'translate_y': 0.0, 'use_wing_up': False},
+        ]
+    },
+    'caw': {
+        'cols': 3, 'rows': 2,
+        'frames': [
+            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'use_beak_open': False},
+            {'rotate': -0.08, 'scale_x': 1.03, 'scale_y': 1.04, 'use_beak_open': True},
+            {'rotate': -0.15, 'scale_x': 1.06, 'scale_y': 1.08, 'translate_y': -4.0, 'use_beak_open': True},
+            {'rotate': -0.15, 'scale_x': 1.06, 'scale_y': 1.08, 'translate_y': -4.0, 'use_beak_open': True},
+            {'rotate': -0.05, 'scale_x': 1.02, 'scale_y': 1.02, 'use_beak_open': False},
+            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'use_beak_open': False},
+        ]
+    },
+}
+
 def main():
     base_dir = 'assets/images/raven'
-    body = read_png(os.path.join(base_dir, 'body.png'))
-    wing = read_png(os.path.join(base_dir, 'wing.png'))
-    eye = read_png(os.path.join(base_dir, 'eye_open.png'))
+    layers = {
+        'body': read_png(os.path.join(base_dir, 'body.png')),
+        'wing': read_png(os.path.join(base_dir, 'wing.png')),
+        'wing_up': read_png(os.path.join(base_dir, 'wing_up.png')),
+        'eye_open': read_png(os.path.join(base_dir, 'eye_open.png')),
+        'eye_closed': read_png(os.path.join(base_dir, 'eye_closed.png')),
+        'beak_open': read_png(os.path.join(base_dir, 'beak_open.png')),
+    }
     
-    # Ruffle sequence: 8 frames
-    # Frame 0: Exact resting pose (scale=1.0, rot=0.0)
-    # Frames 1-7: Authored ruffle sequence
-    frames_params = [
-        (1.00, 1.00, 0.00, 0.0),   # Frame 0: resting
-        (1.05, 1.02, 0.05, 1.5),   # Frame 1: start expansion & ruffle wave
-        (1.12, 1.04, 0.12, 3.5),   # Frame 2: puffing up
-        (1.18, 1.08, 0.20, 5.0),   # Frame 3: peak ruffle fluff
-        (1.15, 1.05, 0.15, 4.0),   # Frame 4: wave settling
-        (1.08, 1.02, 0.08, 2.0),   # Frame 5: easing back
-        (1.03, 1.01, 0.03, 0.8),   # Frame 6: subtle recovery
-        (1.00, 1.00, 0.00, 0.0),   # Frame 7: settled resting pose
-    ]
-    
-    cols = 4
-    rows = 2
-    sheet_w = cols * 256
-    sheet_h = rows * 256
-    sheet_pixels = bytearray(sheet_w * sheet_h * 4)
-    
-    for idx, (sx, sy, w_rot, r_wave) in enumerate(frames_params):
-        frame = render_frame(body, wing, eye, scale_x=sx, scale_y=sy, wing_rot=w_rot, ruffle_wave=r_wave)
-        col = idx % cols
-        row = idx // cols
-        ox = col * 256
-        oy = row * 256
-        for y in range(256):
-            for x in range(256):
-                p = frame[y * 256 + x]
-                dst_idx = ((oy + y) * sheet_w + (ox + x)) * 4
-                sheet_pixels[dst_idx] = p[0]
-                sheet_pixels[dst_idx+1] = p[1]
-                sheet_pixels[dst_idx+2] = p[2]
-                sheet_pixels[dst_idx+3] = p[3]
-                
-    out_path = os.path.join(base_dir, 'frames', 'ruffle.png')
-    png_bytes = write_png(sheet_w, sheet_h, sheet_pixels)
-    with open(out_path, 'wb') as f:
-        f.write(png_bytes)
-    print(f"Generated {out_path}: {sheet_w}x{sheet_h}, {len(png_bytes)} bytes")
+    out_dir = os.path.join(base_dir, 'frames')
+    os.makedirs(out_dir, exist_ok=True)
+
+    for pose_name, spec in POSE_REGISTRY.items():
+        frames = spec['frames']
+        cols = spec['cols']
+        rows = spec['rows']
+        sheet_w = cols * 256
+        sheet_h = rows * 256
+        sheet_pixels = bytearray(sheet_w * sheet_h * 4)
+
+        for idx, params in enumerate(frames):
+            frame = render_frame(layers, **params)
+            col = idx % cols
+            row = idx // cols
+            ox = col * 256
+            oy = row * 256
+            for y in range(256):
+                for x in range(256):
+                    p = frame[y * 256 + x]
+                    dst_idx = ((oy + y) * sheet_w + (ox + x)) * 4
+                    sheet_pixels[dst_idx] = p[0]
+                    sheet_pixels[dst_idx+1] = p[1]
+                    sheet_pixels[dst_idx+2] = p[2]
+                    sheet_pixels[dst_idx+3] = p[3]
+
+        out_path = os.path.join(out_dir, f'{pose_name}.png')
+        png_bytes = write_png(sheet_w, sheet_h, sheet_pixels)
+        with open(out_path, 'wb') as f:
+            f.write(png_bytes)
+        print(f"Generated {out_path}: {sheet_w}x{sheet_h} ({len(frames)} frames, {cols}x{rows} grid), {len(png_bytes)} bytes")
 
 if __name__ == '__main__':
     main()
