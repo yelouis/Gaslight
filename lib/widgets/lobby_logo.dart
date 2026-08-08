@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'raven_mascot.dart';
 
 class AnimatedLobbyLogo extends StatefulWidget {
   const AnimatedLobbyLogo({super.key});
@@ -60,14 +61,14 @@ class _AnimatedLobbyLogoState extends State<AnimatedLobbyLogo> with SingleTicker
                 children: [
                    Positioned(top: 8, left: 8, child: Text('A', style: TextStyle(color: primaryColor, fontSize: 24, fontWeight: FontWeight.bold))),
                    Positioned(bottom: 8, right: 8, child: RotatedBox(quarterTurns: 2, child: Text('A', style: TextStyle(color: primaryColor, fontSize: 24, fontWeight: FontWeight.bold)))),
-                   // The Gaslight Mascot
+                   // The Raven Mascot
                    Center(
                      child: AnimatedBuilder(
                        animation: _flickerController,
                        builder: (context, child) {
                          return Container(
                            width: 80,
-                           height: 100,
+                           height: 80,
                            decoration: BoxDecoration(
                              shape: BoxShape.circle,
                              boxShadow: [
@@ -78,12 +79,9 @@ class _AnimatedLobbyLogoState extends State<AnimatedLobbyLogo> with SingleTicker
                                )
                              ]
                            ),
-                           child: ClipRRect(
-                             borderRadius: BorderRadius.circular(12),
-                             child: Image.asset(
-                               'assets/images/gaslight_mascot.png',
-                               fit: BoxFit.cover,
-                             ),
+                           child: const RavenMascot(
+                             state: RavenState.idle,
+                             size: 80,
                            ),
                          );
                        },

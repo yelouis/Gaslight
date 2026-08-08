@@ -66,6 +66,7 @@ PngImageInfo decodePngBytes(List<int> data) {
   int offset = 8;
   int width = 0;
   int height = 0;
+  int colorType = 3;
   List<List<int>> palette = [];
   List<int> trns = [];
   List<int> idatBytes = [];
@@ -89,6 +90,7 @@ PngImageInfo decodePngBytes(List<int> data) {
           (chunkData[5] << 16) |
           (chunkData[6] << 8) |
           chunkData[7];
+      colorType = chunkData[9];
     } else if (type == 'PLTE') {
       for (int i = 0; i < chunkData.length; i += 3) {
         palette.add([chunkData[i], chunkData[i + 1], chunkData[i + 2]]);
@@ -102,45 +104,93 @@ PngImageInfo decodePngBytes(List<int> data) {
 
   final decompressed = zlib.decode(idatBytes);
   final List<PngPixel> pixels = [];
-  List<int> prevRow = List<int>.filled(width, 0);
-  int decompIdx = 0;
 
-  for (int y = 0; y < height; y++) {
-    final filterType = decompressed[decompIdx++];
-    final rawRow = decompressed.sublist(decompIdx, decompIdx + width);
-    decompIdx += width;
+  if (colorType == 6) {
+    // Truecolor with Alpha (RGBA, 4 bytes per pixel)
+    final bpp = 4;
+    List<int> prevRow = List<int>.filled(width * bpp, 0);
+    int decompIdx = 0;
 
-    final reconRow = List<int>.filled(width, 0);
-    for (int x = 0; x < width; x++) {
-      final filt = rawRow[x];
-      final a = x > 0 ? reconRow[x - 1] : 0;
-      final b = y > 0 ? prevRow[x] : 0;
-      final c = (y > 0 && x > 0) ? prevRow[x - 1] : 0;
+    for (int y = 0; y < height; y++) {
+      final filterType = decompressed[decompIdx++];
+      final rawRow = decompressed.sublist(decompIdx, decompIdx + width * bpp);
+      decompIdx += width * bpp;
 
-      int val;
-      if (filterType == 0) {
-        val = filt;
-      } else if (filterType == 1) {
-        val = (filt + a) & 0xFF;
-      } else if (filterType == 2) {
-        val = (filt + b) & 0xFF;
-      } else if (filterType == 3) {
-        val = (filt + ((a + b) ~/ 2)) & 0xFF;
-      } else if (filterType == 4) {
-        val = (filt + _paethPredictor(a, b, c)) & 0xFF;
-      } else {
-        throw FormatException('Unknown PNG filter type: $filterType');
+      final reconRow = List<int>.filled(width * bpp, 0);
+      for (int i = 0; i < width * bpp; i++) {
+        final filt = rawRow[i];
+        final a = i >= bpp ? reconRow[i - bpp] : 0;
+        final b = y > 0 ? prevRow[i] : 0;
+        final c = (y > 0 && i >= bpp) ? prevRow[i - bpp] : 0;
+
+        int val;
+        if (filterType == 0) {
+          val = filt;
+        } else if (filterType == 1) {
+          val = (filt + a) & 0xFF;
+        } else if (filterType == 2) {
+          val = (filt + b) & 0xFF;
+        } else if (filterType == 3) {
+          val = (filt + ((a + b) ~/ 2)) & 0xFF;
+        } else if (filterType == 4) {
+          val = (filt + _paethPredictor(a, b, c)) & 0xFF;
+        } else {
+          throw FormatException('Unknown PNG filter type: $filterType');
+        }
+        reconRow[i] = val;
       }
 
-      reconRow[x] = val;
-      final palIdx = val;
-      final r = palette[palIdx][0];
-      final g = palette[palIdx][1];
-      final bCol = palette[palIdx][2];
-      final aVal = palIdx < trns.length ? trns[palIdx] : 255;
-      pixels.add(PngPixel(r, g, bCol, aVal, x, y));
+      for (int x = 0; x < width; x++) {
+        final r = reconRow[x * bpp];
+        final g = reconRow[x * bpp + 1];
+        final bCol = reconRow[x * bpp + 2];
+        final aVal = reconRow[x * bpp + 3];
+        pixels.add(PngPixel(r, g, bCol, aVal, x, y));
+      }
+      prevRow = reconRow;
     }
-    prevRow = reconRow;
+  } else {
+    // Indexed-color (Palette, 1 byte per pixel)
+    List<int> prevRow = List<int>.filled(width, 0);
+    int decompIdx = 0;
+
+    for (int y = 0; y < height; y++) {
+      final filterType = decompressed[decompIdx++];
+      final rawRow = decompressed.sublist(decompIdx, decompIdx + width);
+      decompIdx += width;
+
+      final reconRow = List<int>.filled(width, 0);
+      for (int x = 0; x < width; x++) {
+        final filt = rawRow[x];
+        final a = x > 0 ? reconRow[x - 1] : 0;
+        final b = y > 0 ? prevRow[x] : 0;
+        final c = (y > 0 && x > 0) ? prevRow[x - 1] : 0;
+
+        int val;
+        if (filterType == 0) {
+          val = filt;
+        } else if (filterType == 1) {
+          val = (filt + a) & 0xFF;
+        } else if (filterType == 2) {
+          val = (filt + b) & 0xFF;
+        } else if (filterType == 3) {
+          val = (filt + ((a + b) ~/ 2)) & 0xFF;
+        } else if (filterType == 4) {
+          val = (filt + _paethPredictor(a, b, c)) & 0xFF;
+        } else {
+          throw FormatException('Unknown PNG filter type: $filterType');
+        }
+
+        reconRow[x] = val;
+        final palIdx = val;
+        final r = palette[palIdx][0];
+        final g = palette[palIdx][1];
+        final bCol = palette[palIdx][2];
+        final aVal = palIdx < trns.length ? trns[palIdx] : 255;
+        pixels.add(PngPixel(r, g, bCol, aVal, x, y));
+      }
+      prevRow = reconRow;
+    }
   }
 
   return PngImageInfo(width, height, pixels);
