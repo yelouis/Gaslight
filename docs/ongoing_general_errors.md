@@ -10,12 +10,12 @@
 
 ## 1. Open & in-flight
 
-**1 open issue awaiting your decision — Issue 35.**
+**0 open issues awaiting a decision.** One item is selected and in flight:
 
 ---
 
 ### Issue 35: How Should the Mascot Actually Be Animated?
-**Status**: ⚠️ Open — decision outstanding. Raised after a proposal to generate the crow's animations as GIFs (via Veo) rather than animating it in code. **Task T5 has already shipped code-driven motion**, so this is not blocking anything — it is the question of whether to *change renderer* now that you can watch the current one on a device. That is the right order: judge the real thing, then decide.
+**Status**: 🔵 **Selected (Option B) — in flight as Task T6.** Implementation spec: `agent_execution_guide.md` §2. Raised after a proposal to generate the crow's animations as GIFs (via Veo) rather than animating it in code. **Task T5 has already shipped code-driven motion**, so this is not blocking anything — it is the question of whether to *change renderer* now that you can watch the current one on a device. That is the right order: judge the real thing, then decide.
 
 **Everything below was measured on August 7, not estimated.**
 
@@ -49,7 +49,7 @@
   - *Pros*: Purpose-built for this exact problem: a rigged character with a named state machine you trigger at runtime, blending between states. Resolution-independent vector, so one file serves every size. `.riv` files are typically kilobytes. By far the richest motion ceiling.
   - *Cons*: **+4.5 MB measured** before any artwork, against an app that just spent two tasks recovering 2.7 MB — and **an agent cannot produce the artwork.**
 
-*Effort:* None (A) · Moderate (B) · Moderate (C) · Large (D). Your selection: _____
+*Effort:* None (A) · Moderate (B) · Moderate (C) · Large (D). Your selection: Proceed with Option B.
 
 #### Detail on Option D — Rive, since you asked
 
