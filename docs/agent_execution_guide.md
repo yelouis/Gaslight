@@ -1,6 +1,63 @@
-# Agent Execution Guide — Queue Complete (August 8, 2026)
+# Agent Execution Guide — Active Build: Task T7 (August 8, 2026)
 
 **You are an engineering agent picking up Gaslight (Flutter party game, iOS + Android, server-authoritative Firebase backend). Assume you have no memory of this project.**
+
+> ## 🔴 T7 — four poses do not read. Re-author them.
+>
+> All ten sheets shipped in `690d109`. On review the user **rejected `preen`, `fly`, `flap` and `caw`**. The other six — `ruffle`, `startle`, `hop`, `peck`, `bow`, `alert` — were accepted.
+>
+> **Do not touch the six that passed.** Re-authoring them is the easiest way to lose ground that is already won.
+>
+> **📖 `.agents/skills/mascot_pose_creation/SKILL.md` is still the method.** This section is the diagnosis and the per-pose brief.
+>
+> ### Root cause — one problem wearing four costumes
+>
+> Measured from the source layers, not inferred:
+>
+> | Layer | Opaque px | Share of body |
+> |---|---|---|
+> | `body.png` | 23,705 | 100% |
+> | `wing.png` | **476** | **2.0%** |
+> | `wing_up.png` | **496** | **2.1%** |
+> | `beak_open.png` | **47** | **0.2%** |
+>
+> **The moving parts are decorative slivers, not structural shapes.** At the size the mascot renders — 48–96 dp — only whole-silhouette change reads: scale, rotation, translation, and deformation of the outline itself. A 2%-mass detail cannot carry a pose; a 0.2% one carries nothing. All four rejected poses were authored as if the wing or beak were a limb. They are line details.
+>
+> This is the general lesson, and it should govern every future pose: **carry the pose in the silhouette; treat the wing as garnish.** A useful test — *would the pose still read if the wing layer were deleted entirely?* For the six that passed, yes. For these four, no.
+>
+> Per pose:
+> - **`preen`** — `wing_rot: -0.44` rad (−25°) swings the 476 px sliver clear of the body. It reads as a stray scratch beside the bird. Worse, the body rotates the *same* direction as the wing, so the two move **apart** — a preen is head-toward-flank, they should converge.
+> - **`fly`** — alternating `wing_rot` of ±0.35–0.40 makes the sliver flicker in and out of the silhouette rather than sweep, while the body merely slides up and down. No launch.
+> - **`flap`** — built as a `wing` ↔ `wing_up` swap, but the two differ by **20 px of mass**. The swap is invisible at render size. This pose cannot work as a layer swap at all.
+> - **`caw`** — `beak_open.png` is 47 px and **100% of it lies inside the body silhouette**. Overlaying it changes nothing. There is no visible opening.
+>
+> ### A second, independent bug: the wing pivot is on the wrong corner
+>
+> `render_frame` rotates the wing about **(64.0, 153.6)**, commented "shoulder pivot". It is not the shoulder. The wing's bbox is (52,104)–(104,171) and the body centroid is x=129, so the wing **attaches along its right edge, near (100, 118)**. (64, 153.6) is the lower-**left** — the free tip. Rotating about the free tip swings the *attached* end away from the body, which is backwards and is why even modest angles detach.
+>
+> **Move the pivot to ≈ (100, 118).** The farthest wing pixel is then ~72 px away, and the body outline leaves ~10 px of margin, giving a hard cap:
+>
+> **`|wing_rot| ≤ 0.12 rad (≈7°)`.** `preen` and `fly` currently run 3× over it.
+>
+> ### Per-pose re-authoring brief
+>
+> - **`preen`** — carry it in the body: whole-body `rotate` toward the flank with `scale_y ≈ 0.94` / `scale_x ≈ 1.04` so the bird visibly hunches. Rotate the wing **opposite** to the body rotation so they converge, within the 0.12 cap. Verify the pose still reads with the wing deleted.
+> - **`fly`** — a launch needs **anticipation**: one frame of crouch (`scale_y ≈ 0.90`, `translate_y ≈ +3`) *before* the climb, then stretch (`scale_y ≈ 1.12`) with a strong `translate_y`, then settle. Sliding upward without the crouch reads as being lifted, not leaping.
+> - **`flap`** — abandon the layer swap. Express wingbeats as a **rhythmic body bob**: alternate `scale_y` 1.06 / 0.96 with matching `translate_y` on a two-frame cadence while climbing. A pulsing silhouette reads as beating; a 20 px shape change never will.
+> - **`caw`** — the only one needing **new art as well as new numbers**.
+>   - *Art:* regenerate `beak_open.png` so the dropped lower mandible extends **outside** the closed beak's outline — it must break the silhouette, not sit inside it. Same canvas, palette and rim weight; edit the existing art per the skill, never generate a fresh bird.
+>   - *Motion:* head-thrust — `rotate` back and up, `scale ≈ 1.08`, slight `translate_y`, peaking on the frames where the beak is open.
+>
+> ### Validation — three new assertions on top of §2's
+>
+> 1. **Wing-rotation cap.** Over the whole pose registry, assert no frame exceeds `|wing_rot| = 0.12`. This is the guard that stops the detachment bug returning.
+> 2. **Silhouette containment.** For every frame of every pose, all opaque pixels must fall inside a ~6 px dilation of `body.png`'s silhouette. **This is the assertion that would have caught all four rejections**, and nothing in the current suite covers it.
+> 3. **`beak_open` must break the silhouette.** Assert containment **fails** for that layer specifically — do not exempt it from check 2, invert it. It is the only way to prove the new art actually opens the beak.
+>
+> ### 🚦 Preview and approval — still blocking
+> Re-render each fixed pose per skill §5 and get approval **before committing**. Send all four together: they are being judged as a set against the six that passed.
+
+---
 
 **All approved queue items delivered and verified:**
 

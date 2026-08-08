@@ -52,29 +52,53 @@ The last frame should also return to (or very near) resting, for the same reason
 
 ---
 
-## 3. Deformation primitives
+## 3. What actually reads at 48–96 dp — the rule that governs every pose
 
-`render_frame()` currently accepts `scale_x`, `scale_y`, `wing_rot` and `ruffle_wave`. Poses beyond `ruffle` need more; add them to `render_frame` as they are required, and keep each one a pure numeric parameter so a frame stays fully described by its tuple.
+**Carry the pose in the silhouette. Treat the wing and beak as garnish.**
+
+Measured masses of the layers:
+
+| Layer | Opaque px | Share of body |
+|---|---|---|
+| `body.png` | 23,705 | 100% |
+| `wing.png` | 476 | **2.0%** |
+| `wing_up.png` | 496 | **2.1%** |
+| `beak_open.png` | 47 | **0.2%** |
+
+The wing and beak are **line details, not limbs.** At the size the mascot renders, only whole-silhouette change reads: overall scale, rotation, translation, and deformation of the outline. Four poses were rejected in review for exactly this — `preen` and `fly` swung the wing so far it detached and read as a stray scratch; `flap` swapped `wing`↔`wing_up`, a 20 px difference nobody can see; `caw` overlaid a 47 px `beak_open` that sits **entirely inside** the body outline and therefore changes nothing.
+
+**The test before you author anything: would this pose still read if the wing layer were deleted?** If not, the pose is resting on a detail that cannot hold it — re-express it as body motion.
+
+**Hard limits, derived from the geometry:**
+- The wing attaches to the body along its **right** edge near **(100, 118)** — the body centroid is at x=129. Pivot there. *(A previous version pivoted at (64, 153.6), the wing's free tip, which swings the attached end away from the body. Backwards.)*
+- With a correct pivot the farthest wing pixel is ~72 px out, and the body outline leaves ~10 px of margin, so **`|wing_rot| ≤ 0.12 rad (≈7°)`**. Anything more detaches.
+- Any new part intended to *break* the silhouette — an opening beak, a raised crest — must be drawn to extend **outside** the body outline. A part drawn inside the outline is invisible when overlaid, no matter how large its motion parameter is.
+
+---
+
+## 4. Deformation primitives
+
+`render_frame()` accepts the parameters below. Keep every new one a pure numeric value so a frame stays fully described by its tuple.
 
 | Primitive | What it does | Poses that need it |
 |---|---|---|
 | `scale_x`, `scale_y` | squash and stretch about the body centre | `ruffle`, `startle`, `caw` |
-| `wing_rot` | rotate the wing about its shoulder | `ruffle`, `hop`, `preen`, `startle`, `fly` |
+| `wing_rot` | rotate the wing about its shoulder — **cap `|wing_rot| ≤ 0.12` rad, see §3** | `ruffle`, `hop`, `preen`, `startle`, `fly` |
 | `ruffle_wave` | horizontal displacement wave down the silhouette | `ruffle` |
-| `rotate` *(add)* | rotate the whole composite about the body base | `alert`, `peck`, `preen`, `bow`, `caw` |
-| `translate_x`, `translate_y` *(add)* | move the whole composite within the cell | `hop`, `fly`, `startle`, `flap` |
-| layer selection *(add)* | choose `wing` vs `wing_up`; `eye_open` vs `eye_closed`; overlay `beak_open` | `flap`, `caw`, and any blink beat |
+| `rotate` | rotate the whole composite about the body base | `alert`, `peck`, `preen`, `bow`, `caw` |
+| `translate_x`, `translate_y` | move the whole composite within the cell | `hop`, `fly`, `startle`, `flap` |
+| layer selection | choose `wing` vs `wing_up`; `eye_open` vs `eye_closed`; overlay `beak_open` | `flap`, `caw`, and any blink beat |
 
-**Rotation and translation must not clip.** The bird's bounding box inside a 256 px cell already sits close to the edges. Before authoring a pose that rotates more than ~20° or translates more than ~15% of the cell, check the composited frame still fits — the validation in §6 asserts this, but it is cheaper to catch while choosing numbers.
+**Rotation and translation must not clip.** The bird's bounding box inside a 256 px cell already sits close to the edges. Before authoring a pose that rotates more than ~20° or translates more than ~15% of the cell, check the composited frame still fits — the validation in §7 asserts this, but it is cheaper to catch while choosing numbers.
 
 ---
 
-## 4. Authoring the frames
+## 5. Authoring the frames
 
 1. **Decide the motion arc in words first.** For `ruffle` it was: rest → expand → peak fluff → settle → recover → rest. Writing the arc before the numbers keeps the sequence from becoming a random walk.
 2. **Write the parameter tuples**, one per frame, in a list. Follow the existing `ruffle` block as the model — it is commented per frame, and that comment is what makes the sequence editable six months later.
 3. **Ease, do not step linearly.** Real motion accelerates and decelerates. `ruffle` peaks at frame 3 of 8 and eases back over five frames rather than four, which is what stops it looking mechanical.
-4. **Generalise the script as you go.** It is currently hardcoded to `ruffle` in `main()`. Move poses into a registry keyed by pose name, each entry holding its frame list and grid shape, so adding the tenth pose is a data change rather than a code change.
+4. **Add the pose to the registry in `scripts/build_sprite_sheets.py`** — keyed by pose name, holding its frame list and grid shape. Adding a pose is a data change, not a code change; if you find yourself editing `render_frame` for anything but a genuinely new primitive, stop and reconsider.
 
 ```bash
 python3 scripts/build_sprite_sheets.py
@@ -82,7 +106,7 @@ python3 scripts/build_sprite_sheets.py
 
 ---
 
-## 5. 🚦 Render a preview and show the user — this BLOCKS the commit
+## 6. 🚦 Render a preview and show the user — this BLOCKS the commit
 
 **Never commit a pose the user has not seen animate.** Artwork has shipped unseen on this project before and was wrong; the guard is that the preview happens before the commit, not after.
 
@@ -114,7 +138,7 @@ Wait for explicit approval. If a pose is rejected, change the parameter tuples a
 
 ---
 
-## 6. Wire it up and validate
+## 7. Wire it up and validate
 
 **Register** the pose in `_poseSheets` (asset path, frame count, columns). A pose absent from that map falls through to the layered renderer, which is how poses can be converted one at a time.
 
@@ -128,16 +152,18 @@ Wait for explicit approval. If a pose is rejected, change the parameter tuples a
 6. **Reduced motion** renders frame 0 and never advances.
 7. **`idle` and `sleep` still render the layered stack** with the blink swap — the over-reach guard. The likeliest collateral damage is breaking the resting states while wiring a new sheet.
 8. **Memory budget.** Total decoded sheet area × 4 bytes stays under **12 MB**.
+9. **Silhouette containment.** Every opaque pixel of every frame falls inside a ~6 px dilation of `body.png`'s outline. **This is the assertion that catches a detached wing** — the failure mode that got four poses rejected — and nothing else in the suite covers it. A layer deliberately designed to break the outline (an opened beak) must be asserted to *fail* this check, not exempted from it.
+10. **Wing-rotation cap.** No frame in the registry exceeds `|wing_rot| = 0.12` rad.
 
 Then the full battery: `flutter analyze lib test` (0 errors) · `flutter test` · and measure `Runner.app` against the recorded baseline. A sheet of flat four-colour art should be tens of KB; hundreds of KB means gradients or noise crept in — re-export rather than accept it.
 
 ---
 
-## 7. What not to do
+## 8. What not to do
 
 - **Do not touch `raven_pose_host.dart`.** This skill changes how a pose is *drawn*, never how it is *chosen*. If you are editing the host, the split between orchestration and rendering is being broken.
 - **Do not convert `idle` or `sleep`.**
 - **Do not add density variants** for sheets.
 - **Do not generate frames with an image model.** See §1.
-- **Do not skip the preview.** See §5.
+- **Do not skip the preview.** See §6.
 - **Do not lower a validation threshold to make a sheet pass** — report the measured number and say the guard failed.
