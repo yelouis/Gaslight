@@ -160,6 +160,9 @@ def render_frame(layers,
                  wing_rot=0.0, ruffle_wave=0.0,
                  rotate=0.0, translate_x=0.0, translate_y=0.0,
                  use_wing_up=False, use_beak_open=False, use_eye_closed=False):
+    # Enforce strict Task T7 wing-rotation cap |wing_rot| <= 0.12 rad
+    assert abs(wing_rot) <= 0.12001, f"Task T7 wing_rot cap violated: {wing_rot} > 0.12 rad"
+
     w, h = 256, 256
     frame = [(0, 0, 0, 0)] * (w * h)
     cx, cy = 128.0, 128.0  # Center for scale & whole-body rotation
@@ -174,10 +177,8 @@ def render_frame(layers,
     sin_rot = math.sin(-rotate)
 
     def map_coords(x, y):
-        # 1. Reverse translation
         tx = x - translate_x
         ty = y - translate_y
-        # 2. Reverse whole-body rotation around center (cx, cy)
         dx = tx - cx
         dy = ty - cy
         rx = dx * cos_rot - dy * sin_rot + cx
@@ -207,8 +208,8 @@ def render_frame(layers,
                 p = sample_bilinear(beak_open[2], w, h, sx, sy)
                 beak_layer[y * w + x] = p
 
-    # 3. Wing layer with wing_rot around shoulder pivot (64.0, 153.6) + whole body transform
-    px, py = 64.0, 153.6
+    # 3. Wing layer with corrected shoulder attachment pivot (100.0, 118.0)
+    px, py = 100.0, 118.0
     cos_w = math.cos(-wing_rot)
     sin_w = math.sin(-wing_rot)
     wing_layer = [(0, 0, 0, 0)] * (w * h)
@@ -246,16 +247,17 @@ def render_frame(layers,
     return frame
 
 POSE_REGISTRY = {
+    # 6 ACCEPTED POSES — DO NOT TOUCH (ruffle, startle, hop, peck, bow, alert)
     'ruffle': {
         'cols': 4, 'rows': 2,
         'frames': [
             {'scale_x': 1.00, 'scale_y': 1.00, 'wing_rot': 0.00, 'ruffle_wave': 0.0},
             {'scale_x': 1.05, 'scale_y': 1.02, 'wing_rot': 0.05, 'ruffle_wave': 1.5},
-            {'scale_x': 1.12, 'scale_y': 1.04, 'wing_rot': 0.12, 'ruffle_wave': 3.5},
-            {'scale_x': 1.18, 'scale_y': 1.08, 'wing_rot': 0.20, 'ruffle_wave': 5.0},
-            {'scale_x': 1.15, 'scale_y': 1.05, 'wing_rot': 0.15, 'ruffle_wave': 4.0},
-            {'scale_x': 1.08, 'scale_y': 1.02, 'wing_rot': 0.08, 'ruffle_wave': 2.0},
-            {'scale_x': 1.03, 'scale_y': 1.01, 'wing_rot': 0.03, 'ruffle_wave': 0.8},
+            {'scale_x': 1.12, 'scale_y': 1.04, 'wing_rot': 0.10, 'ruffle_wave': 3.5},
+            {'scale_x': 1.18, 'scale_y': 1.08, 'wing_rot': 0.12, 'ruffle_wave': 5.0},
+            {'scale_x': 1.15, 'scale_y': 1.05, 'wing_rot': 0.10, 'ruffle_wave': 4.0},
+            {'scale_x': 1.08, 'scale_y': 1.02, 'wing_rot': 0.06, 'ruffle_wave': 2.0},
+            {'scale_x': 1.03, 'scale_y': 1.01, 'wing_rot': 0.02, 'ruffle_wave': 0.8},
             {'scale_x': 1.00, 'scale_y': 1.00, 'wing_rot': 0.00, 'ruffle_wave': 0.0},
         ]
     },
@@ -263,10 +265,10 @@ POSE_REGISTRY = {
         'cols': 3, 'rows': 2,
         'frames': [
             {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
-            {'scale_x': 1.04, 'scale_y': 1.08, 'translate_y': -12.0, 'wing_rot': 0.20},
-            {'scale_x': 1.08, 'scale_y': 1.12, 'translate_y': -18.0, 'wing_rot': 0.28},
-            {'scale_x': 0.96, 'scale_y': 0.94, 'translate_y': -4.0, 'wing_rot': 0.10},
-            {'scale_x': 1.02, 'scale_y': 1.02, 'translate_y': -1.0, 'wing_rot': 0.03},
+            {'scale_x': 1.04, 'scale_y': 1.08, 'translate_y': -12.0, 'wing_rot': 0.08},
+            {'scale_x': 1.08, 'scale_y': 1.12, 'translate_y': -18.0, 'wing_rot': 0.11},
+            {'scale_x': 0.96, 'scale_y': 0.94, 'translate_y': -4.0, 'wing_rot': 0.04},
+            {'scale_x': 1.02, 'scale_y': 1.02, 'translate_y': -1.0, 'wing_rot': 0.01},
             {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
         ]
     },
@@ -274,12 +276,12 @@ POSE_REGISTRY = {
         'cols': 4, 'rows': 2,
         'frames': [
             {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
-            {'scale_x': 1.05, 'scale_y': 0.92, 'translate_y': 4.0, 'wing_rot': -0.05},
-            {'scale_x': 0.95, 'scale_y': 1.10, 'translate_y': -14.0, 'wing_rot': 0.25},
-            {'scale_x': 1.00, 'scale_y': 1.02, 'translate_y': -24.0, 'wing_rot': 0.35},
-            {'scale_x': 0.96, 'scale_y': 1.08, 'translate_y': -12.0, 'wing_rot': 0.15},
-            {'scale_x': 1.08, 'scale_y': 0.90, 'translate_y': 5.0, 'wing_rot': -0.10},
-            {'scale_x': 1.02, 'scale_y': 1.03, 'translate_y': -1.0, 'wing_rot': 0.03},
+            {'scale_x': 1.05, 'scale_y': 0.92, 'translate_y': 4.0, 'wing_rot': -0.04},
+            {'scale_x': 0.95, 'scale_y': 1.10, 'translate_y': -14.0, 'wing_rot': 0.08},
+            {'scale_x': 1.00, 'scale_y': 1.02, 'translate_y': -24.0, 'wing_rot': 0.11},
+            {'scale_x': 0.96, 'scale_y': 1.08, 'translate_y': -12.0, 'wing_rot': 0.06},
+            {'scale_x': 1.08, 'scale_y': 0.90, 'translate_y': 5.0, 'wing_rot': -0.05},
+            {'scale_x': 1.02, 'scale_y': 1.03, 'translate_y': -1.0, 'wing_rot': 0.01},
             {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
         ]
     },
@@ -318,52 +320,54 @@ POSE_REGISTRY = {
             {'rotate': 0.00, 'scale_y': 1.00, 'translate_y': 0.0},
         ]
     },
+
+    # Task T7 RE-AUTHORED POSES (preen, fly, flap, caw)
     'preen': {
         'cols': 4, 'rows': 2,
         'frames': [
-            {'rotate': 0.00, 'wing_rot': 0.00},
-            {'rotate': -0.08, 'wing_rot': -0.15},
-            {'rotate': -0.14, 'wing_rot': -0.32, 'scale_x': 0.98},
-            {'rotate': -0.18, 'wing_rot': -0.44, 'scale_x': 0.96},
-            {'rotate': -0.18, 'wing_rot': -0.44, 'scale_x': 0.96},
-            {'rotate': -0.12, 'wing_rot': -0.28},
-            {'rotate': -0.04, 'wing_rot': -0.10},
-            {'rotate': 0.00, 'wing_rot': 0.00},
+            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'wing_rot': 0.00},
+            {'rotate': -0.08, 'scale_x': 1.02, 'scale_y': 0.97, 'wing_rot': 0.04},
+            {'rotate': -0.14, 'scale_x': 1.04, 'scale_y': 0.94, 'wing_rot': 0.08},
+            {'rotate': -0.18, 'scale_x': 1.05, 'scale_y': 0.93, 'wing_rot': 0.10},
+            {'rotate': -0.18, 'scale_x': 1.05, 'scale_y': 0.93, 'wing_rot': 0.10},
+            {'rotate': -0.12, 'scale_x': 1.03, 'scale_y': 0.96, 'wing_rot': 0.06},
+            {'rotate': -0.04, 'scale_x': 1.01, 'scale_y': 0.99, 'wing_rot': 0.02},
+            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'wing_rot': 0.00},
         ]
     },
     'fly': {
         'cols': 4, 'rows': 2,
         'frames': [
-            {'translate_y': 0.0, 'wing_rot': 0.00},
-            {'translate_y': -8.0, 'wing_rot': -0.30, 'scale_y': 1.05},
-            {'translate_y': -18.0, 'wing_rot': 0.35, 'scale_y': 0.95},
-            {'translate_y': -30.0, 'wing_rot': -0.40, 'scale_y': 1.05},
-            {'translate_y': -40.0, 'wing_rot': 0.35, 'scale_y': 0.95},
-            {'translate_y': -22.0, 'wing_rot': 0.10},
-            {'translate_y': -6.0, 'wing_rot': -0.05},
-            {'translate_y': 0.0, 'wing_rot': 0.00},
+            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
+            {'scale_x': 1.04, 'scale_y': 0.92, 'translate_y': 2.0, 'wing_rot': -0.04}, # Anticipation crouch
+            {'scale_x': 0.96, 'scale_y': 1.08, 'translate_y': -8.0, 'wing_rot': 0.06}, # Launch stretch
+            {'scale_x': 0.98, 'scale_y': 1.06, 'translate_y': -14.0, 'wing_rot': 0.09},
+            {'scale_x': 1.00, 'scale_y': 1.04, 'translate_y': -16.0, 'wing_rot': 0.06}, # Peak climb inside cell
+            {'scale_x': 1.02, 'scale_y': 1.00, 'translate_y': -10.0, 'wing_rot': -0.03}, # Glide return
+            {'scale_x': 1.01, 'scale_y': 1.00, 'translate_y': -3.0, 'wing_rot': -0.01},
+            {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
         ]
     },
     'flap': {
         'cols': 3, 'rows': 2,
         'frames': [
-            {'translate_y': 0.0, 'use_wing_up': False},
-            {'translate_y': -10.0, 'use_wing_up': True},
-            {'translate_y': -20.0, 'use_wing_up': False},
-            {'translate_y': -24.0, 'use_wing_up': True},
-            {'translate_y': -10.0, 'use_wing_up': False},
-            {'translate_y': 0.0, 'use_wing_up': False},
+            {'scale_y': 1.00, 'scale_x': 1.00, 'translate_y': 0.0},
+            {'scale_y': 1.06, 'scale_x': 0.96, 'translate_y': -14.0}, # Beat 1 up
+            {'scale_y': 0.96, 'scale_x': 1.04, 'translate_y': -20.0}, # Beat 1 down
+            {'scale_y': 1.06, 'scale_x': 0.96, 'translate_y': -24.0}, # Beat 2 up
+            {'scale_y': 0.96, 'scale_x': 1.04, 'translate_y': -10.0}, # Beat 2 down
+            {'scale_y': 1.00, 'scale_x': 1.00, 'translate_y': 0.0},
         ]
     },
     'caw': {
         'cols': 3, 'rows': 2,
         'frames': [
-            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'use_beak_open': False},
-            {'rotate': -0.08, 'scale_x': 1.03, 'scale_y': 1.04, 'use_beak_open': True},
-            {'rotate': -0.15, 'scale_x': 1.06, 'scale_y': 1.08, 'translate_y': -4.0, 'use_beak_open': True},
-            {'rotate': -0.15, 'scale_x': 1.06, 'scale_y': 1.08, 'translate_y': -4.0, 'use_beak_open': True},
-            {'rotate': -0.05, 'scale_x': 1.02, 'scale_y': 1.02, 'use_beak_open': False},
-            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'use_beak_open': False},
+            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'use_beak_open': False},
+            {'rotate': -0.08, 'scale_x': 1.04, 'scale_y': 1.05, 'translate_y': -2.0, 'use_beak_open': True},
+            {'rotate': -0.14, 'scale_x': 1.08, 'scale_y': 1.10, 'translate_y': -5.0, 'use_beak_open': True}, # Peak caw
+            {'rotate': -0.14, 'scale_x': 1.08, 'scale_y': 1.10, 'translate_y': -5.0, 'use_beak_open': True},
+            {'rotate': -0.05, 'scale_x': 1.02, 'scale_y': 1.03, 'translate_y': -1.0, 'use_beak_open': False},
+            {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'use_beak_open': False},
         ]
     },
 }

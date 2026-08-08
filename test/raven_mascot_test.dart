@@ -239,5 +239,46 @@ void main() {
           reason: 'Total decoded sheet memory across all 10 sheets must be < 20 MB (measured: ${totalMb.toStringAsFixed(2)} MB)');
     });
   });
+
+  group('Task T7 — Mascot Pose Re-authoring Validation Set', () {
+    test('T7.1: Wing rotation cap assertion (|wing_rot| <= 0.12 rad)', () {
+      final script = File('scripts/build_sprite_sheets.py').readAsStringSync();
+      expect(script, contains('assert abs(wing_rot) <= 0.12001'),
+          reason: 'build_sprite_sheets.py must enforce wing_rot <= 0.12 rad assertion');
+    });
+
+    test('T7.2: Silhouette cell boundary containment (no opaque pixel touches cell border)', () {
+      final poseSpecs = ['preen', 'fly', 'flap', 'caw'];
+      for (final pose in poseSpecs) {
+        final img = decodePngFile(File('assets/images/raven/frames/$pose.png'));
+        final cols = img.width ~/ 256;
+        final rows = img.height ~/ 256;
+        for (int r = 0; r < rows; r++) {
+          for (int c = 0; c < cols; c++) {
+            final cellPixels = img.pixels.where((p) =>
+                p.x >= c * 256 && p.x < (c + 1) * 256 &&
+                p.y >= r * 256 && p.y < (r + 1) * 256 &&
+                p.a > 100);
+            final touchesBorder = cellPixels.any((p) {
+              final localX = p.x % 256;
+              final localY = p.y % 256;
+              return localX == 0 || localX == 255 || localY == 0 || localY == 255;
+            });
+            expect(touchesBorder, isFalse, reason: '$pose cell ($c, $r) opaque pixels must not touch cell border');
+          }
+        }
+      }
+    });
+
+    test('T7.3: Beak open lower mandible structure assertion (beak_open contains dropped lower mandible & mouth cavity)', () {
+      final beakImg = decodePngFile(File('assets/images/raven/beak_open.png'));
+      final mouthPixels = beakImg.pixels.where((p) => p.a > 100 && p.x >= 144 && p.y >= 78).toList();
+      expect(mouthPixels, isNotEmpty,
+          reason: 'beak_open.png must contain dropped lower mandible pixels (y >= 78, x >= 144)');
+      final hasBrassRim = mouthPixels.any((p) => p.r > 180 && p.g > 140);
+      expect(hasBrassRim, isTrue, reason: 'beak_open lower mandible must have brass outline (#C9A24B)');
+    });
+  });
 }
+
 
