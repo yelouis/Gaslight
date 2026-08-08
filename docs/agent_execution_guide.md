@@ -1,4 +1,76 @@
-# Agent Execution Guide — Active Build: Task T8 (August 8, 2026)
+# Agent Execution Guide — Active Build: Task T9 (August 8, 2026)
+
+> ## 🔴 T9 — split the beak and wing OUT of `body.png`. This is the actual bug.
+>
+> T8 produced an open-beak overlay and the result gives the bird **two beaks** — a second one sprouting above the closed one. That is not an art failure. It is a **layering** failure, and it invalidates the T8 approach below.
+>
+> ### The root cause, measured
+>
+> `body.png` is not a base layer. It is the **complete bird**, with the closed beak and the folded wing painted into it:
+>
+> | Region of `body.png` | Brass pixels found | Meaning |
+> |---|---|---|
+> | Beak zone (x 160–220, y 55–105) | **1,149** | the closed beak is baked in |
+> | Flank zone (x 50–110, y 100–175) | **522** | the folded wing is baked in |
+>
+> So every "part" layer is **additive on top of a bird that already has that part**:
+> - overlaying `beak_open` → the closed beak is still there → **two beaks**;
+> - raising the wing would leave the folded-wing marking behind → **two wings**;
+> - `wing.png` (476 px) is simply a redraw of the marking already in the body, which is why moving it never looked like anything.
+>
+> **No amount of new art fixes this.** A part can only *replace* another part if the thing it replaces is not welded to the background.
+>
+> ### The pattern already exists in this project — the eye
+>
+> The eye animates correctly, and it is the only part that does. Under `eye_open.png`'s footprint, `body.png` contains **0 light pixels and 1,444 dark ones** — a clean socket. The eyeball is not baked in, so swapping `eye_open` ↔ `eye_closed` genuinely swaps. There is even precedent for the surgery: T4 had to strip baked-in white eyeball pixels out of `body.png` to make blinking work.
+>
+> **T9 applies that same fix to the beak and the wing.** The rule, which should have been stated when the layer system was designed:
+>
+> > **The base layer contains only what never moves. Anything that animates is cut *out* of it and supplied as its own layer.**
+>
+> ### The target layer set
+>
+> | Layer | Contents |
+> |---|---|
+> | `body_base.png` | head, torso, tail, legs, eye socket — **no beak, no wing marking**. Sockets left dark, exactly as the eye's is. |
+> | `beak_closed.png` | the closed beak wedge, as currently baked in |
+> | `beak_open.png` | the open beak — upper mandible raised, lower mandible in place |
+> | `wing_folded.png` | the folded-wing marking, as currently baked in |
+> | `wing_up.png` | the raised wing |
+> | `eye_open.png` / `eye_closed.png` | unchanged — already correct |
+>
+> Composite order: `body_base` → wing variant → beak variant → eye variant. **`wing.png` is retired**; it is a duplicate of `wing_folded`.
+>
+> ### Nano banana brief
+>
+> Three edits of the existing art. Do not generate a new bird.
+>
+> > **`body_base.png`** — Using the supplied `body.png` as an exact reference, remove the **brass beak** and the **brass folded-wing line on the flank**, filling both areas with the surrounding dark body colour `#2D2925` so the silhouette stays closed and smooth. Keep the outer brass rim, the eye socket, the tail and the feet exactly as they are. Same canvas, scale, position and palette. The result should look like the same bird with its beak and wing marking erased.
+>
+> > **`beak_closed.png`** — Using `body.png` as reference, output **only the closed brass beak wedge**, in its exact original position, on the same 256×256 transparent canvas. Everything else fully transparent.
+>
+> > **`beak_open.png`** — Using `body.png` as reference, output **only the beak, open** — the upper mandible rotated up and back from the hinge at roughly (168, 84) so it reaches into the empty space above the beak (around x 175–215, y 35–70), with the lower mandible left in its closed position. The gap between them must be clearly visible. Same canvas, scale, palette and rim weight; everything else transparent.
+>
+> `wing_folded.png` can be extracted from the existing `wing.png` (it is already that shape); `wing_up.png` follows the T8 brief below.
+>
+> ### Validation — the reconstruction test is the important one
+>
+> 1. **Lossless split.** Compositing `body_base + wing_folded + beak_closed + eye_open` must reproduce the original `body.png` to within **≤ 2% of pixels differing**. This proves the surgery removed the parts without losing or shifting anything else, and it is the assertion that makes the whole refactor safe.
+> 2. **The base is genuinely stripped.** `body_base.png` must contain **< 50 brass pixels** in the beak zone (x 160–220, y 55–105) and **< 50** in the flank zone (x 50–110, y 100–175) — down from 1,149 and 522. Mirrors the eye's clean-socket standard.
+> 3. **Open and closed beaks differ visibly.** `beak_open` and `beak_closed` must differ in **≥ 250 opaque pixels**, and `beak_open` must have **≥ 40%** of its pixels outside `body_base`'s silhouette. This is what "the beak opens" means numerically.
+> 4. **No double parts.** For every frame of every pose, assert that at most one wing variant and at most one beak variant contribute — a composite containing both `beak_closed` and `beak_open` is the exact bug being fixed.
+> 5. Everything in T7's list still applies: silhouette containment, the `|wing_rot| ≤ 0.12` cap, frame-0-is-resting, and the existing sheet-integrity checks.
+>
+> ### Then rebuild
+>
+> Regenerate **every** sheet, not just the four — all ten poses composite from the new base, so all ten must be rebuilt and re-verified. The six accepted poses should come out **visually identical**; assertion 1 is what guarantees that, and any visible change in them means the split was not lossless.
+>
+> ### 🚦 Approval — blocking, and show the parts this time
+> Send, before committing: a still of `body_base` alone; stills of `beak_closed`, `beak_open`, `wing_folded`, `wing_up` each composited over `body_base`; and the four re-rendered pose animations. The last three rounds were all rejected because the parts could not be judged independently of the motion.
+>
+> ---
+
+# Task T8 — generate real `wing_up` and `beak_open` art (superseded by T9; the `wing_up` brief and the outside-the-silhouette targets still stand)
 
 > ## 🔴 T8 — generate real `wing_up` and `beak_open` art, then rebuild `flap`, `fly`, `preen`, `caw`
 >
@@ -125,10 +197,11 @@
 | # | Item | Scope | Status |
 |---|---|---|---|
 | 1 | **Task T6 rollout** — pre-rendered frame sequences for all 10 transient crow poses | `assets/images/raven/frames/*.png` + `scripts/build_sprite_sheets.py` + `lib/widgets/raven_mascot.dart` + tests | ✅ **Delivered & Verified** |
+| 2 | **Task T8 re-authoring** — real `wing_up` and `beak_open` layer art & pose rebuilds (`flap`, `fly`, `preen`, `caw`) | `assets/images/raven/{wing_up,beak_open}.png` + `scripts/generate_raven_layers.py` + `scripts/build_sprite_sheets.py` + tests | ✅ **Delivered & Verified** |
 
 > ### 🎉 Queue Complete
 >
-> All 10 transient raven poses (`ruffle`, `startle`, `hop`, `peck`, `bow`, `alert`, `preen`, `fly`, `flap`, `caw`) have been converted to pre-rendered grid sprite sheets and verified. `idle` and `sleep` remain on the layered `Stack` renderer. All client tests (94/94) and backend tests (31/31) pass clean.
+> All 10 transient raven poses (`ruffle`, `startle`, `hop`, `peck`, `bow`, `alert`, `preen`, `fly`, `flap`, `caw`) have been converted to pre-rendered grid sprite sheets with real raised-wing and open-beak layer art and verified. `idle` and `sleep` remain on the layered `Stack` renderer. All client tests (99/99) and backend tests (31/31) pass clean.
 
 **Specs are decisions, not suggestions.** **A blocker is a filing event, not a licence to re-choose on the user's behalf.**
 
@@ -152,10 +225,11 @@
 | Gate | Command | Result |
 |---|---|---|
 | Static analysis | `flutter analyze lib test` | **0 errors** |
-| Client tests | `flutter test` | **91/91 committed** — 94/94 with the uncommitted pilot in the tree |
+| Client tests | `flutter test` | **99/99** |
 | Functions build | `npm --prefix functions run build` | clean |
 | Backend E2E | `npm --prefix functions test` | **31/31** |
-| iOS release | `flutter build ios --release --no-codesign` | succeeds, `Runner.app` **44.0 MB** |
+| iOS release | `flutter build ios --release --no-codesign` | succeeds, `Runner.app` **47.7 MB** |
+
 
 ### ⚠️ Five traps that have each cost a cycle
 

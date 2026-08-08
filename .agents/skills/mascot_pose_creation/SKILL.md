@@ -52,7 +52,21 @@ The last frame should also return to (or very near) resting, for the same reason
 
 ---
 
-## 3. What actually reads at 48–96 dp — the rule that governs every pose
+## 3. The layering rule — read this before anything else
+
+> **The base layer contains only what never moves. Anything that animates is cut *out* of it and supplied as its own layer.**
+
+A part layer **replaces** — it does not **add**. If the thing it is meant to replace is still painted into the base, you get two of them: overlay an open beak on a bird that already has a closed one and it grows a second beak.
+
+**The eye is the reference implementation.** Under `eye_open.png`'s footprint, the base contains 0 light pixels and 1,444 dark ones — a clean socket. That is why blinking works, and it is the only part that ever animated correctly. (It took surgery to get there: T4 had to strip baked-in white eyeball pixels out of `body.png`.)
+
+**This rule was discovered the expensive way.** The beak and the folded wing were painted into `body.png` — 1,149 and 522 brass pixels respectively — so every attempt to animate them was additive. Four review rounds were spent on new art and new motion parameters before anyone checked whether the parts were separable at all. **Before authoring a pose that moves a part, verify the part is not welded to the base:** sample the base layer under the part's footprint and confirm it is an empty socket, not a copy of the part.
+
+**When splitting a part out of the base, prove the split was lossless** — composite all the layers back together and diff against the original; ≤2% of pixels differing. Without that check a refactor of the base silently degrades every pose that was already accepted.
+
+---
+
+## 4. What actually reads at 48–96 dp — the rule that governs every pose
 
 **Carry the pose in the silhouette. Treat the wing and beak as garnish.**
 
@@ -85,24 +99,24 @@ The wing and beak are **line details, not limbs.** At the size the mascot render
 
 ---
 
-## 4. Deformation primitives
+## 5. Deformation primitives
 
 `render_frame()` accepts the parameters below. Keep every new one a pure numeric value so a frame stays fully described by its tuple.
 
 | Primitive | What it does | Poses that need it |
 |---|---|---|
 | `scale_x`, `scale_y` | squash and stretch about the body centre | `ruffle`, `startle`, `caw` |
-| `wing_rot` | rotate the wing about its shoulder — **cap `|wing_rot| ≤ 0.12` rad, see §3** | `ruffle`, `hop`, `preen`, `startle`, `fly` |
+| `wing_rot` | rotate the wing about its shoulder — **cap `|wing_rot| ≤ 0.12` rad, see §4** | `ruffle`, `hop`, `preen`, `startle`, `fly` |
 | `ruffle_wave` | horizontal displacement wave down the silhouette | `ruffle` |
 | `rotate` | rotate the whole composite about the body base | `alert`, `peck`, `preen`, `bow`, `caw` |
 | `translate_x`, `translate_y` | move the whole composite within the cell | `hop`, `fly`, `startle`, `flap` |
 | layer selection | choose `wing` vs `wing_up`; `eye_open` vs `eye_closed`; overlay `beak_open` | `flap`, `caw`, and any blink beat |
 
-**Rotation and translation must not clip.** The bird's bounding box inside a 256 px cell already sits close to the edges. Before authoring a pose that rotates more than ~20° or translates more than ~15% of the cell, check the composited frame still fits — the validation in §7 asserts this, but it is cheaper to catch while choosing numbers.
+**Rotation and translation must not clip.** The bird's bounding box inside a 256 px cell already sits close to the edges. Before authoring a pose that rotates more than ~20° or translates more than ~15% of the cell, check the composited frame still fits — the validation in §8 asserts this, but it is cheaper to catch while choosing numbers.
 
 ---
 
-## 5. Authoring the frames
+## 6. Authoring the frames
 
 1. **Decide the motion arc in words first.** For `ruffle` it was: rest → expand → peak fluff → settle → recover → rest. Writing the arc before the numbers keeps the sequence from becoming a random walk.
 2. **Write the parameter tuples**, one per frame, in a list. Follow the existing `ruffle` block as the model — it is commented per frame, and that comment is what makes the sequence editable six months later.
@@ -115,7 +129,7 @@ python3 scripts/build_sprite_sheets.py
 
 ---
 
-## 6. 🚦 Render a preview and show the user — this BLOCKS the commit
+## 7. 🚦 Render a preview and show the user — this BLOCKS the commit
 
 **Never commit a pose the user has not seen animate.** Artwork has shipped unseen on this project before and was wrong; the guard is that the preview happens before the commit, not after.
 
@@ -147,7 +161,7 @@ Wait for explicit approval. If a pose is rejected, change the parameter tuples a
 
 ---
 
-## 7. Wire it up and validate
+## 8. Wire it up and validate
 
 **Register** the pose in `_poseSheets` (asset path, frame count, columns). A pose absent from that map falls through to the layered renderer, which is how poses can be converted one at a time.
 
@@ -168,11 +182,12 @@ Then the full battery: `flutter analyze lib test` (0 errors) · `flutter test` �
 
 ---
 
-## 8. What not to do
+## 9. What not to do
 
 - **Do not touch `raven_pose_host.dart`.** This skill changes how a pose is *drawn*, never how it is *chosen*. If you are editing the host, the split between orchestration and rendering is being broken.
 - **Do not convert `idle` or `sleep`.**
 - **Do not add density variants** for sheets.
 - **Do not generate frames with an image model.** See §1.
-- **Do not skip the preview.** See §6.
+- **Do not overlay a part onto a base that already contains it.** See §3 — this is what produced a two-beaked bird.
+- **Do not skip the preview.** See §7.
 - **Do not lower a validation threshold to make a sheet pass** — report the measured number and say the guard failed.
