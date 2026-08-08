@@ -1,4 +1,4 @@
-# Agent Execution Guide — Active Build: Task T6 (August 8, 2026)
+# Agent Execution Guide — Active Build: Task T6 rollout (August 8, 2026)
 
 **You are an engineering agent picking up Gaslight (Flutter party game, iOS + Android, server-authoritative Firebase backend). Assume you have no memory of this project.**
 
@@ -6,9 +6,17 @@
 
 | # | Item | Scope | Selected |
 |---|---|---|---|
-| 1 | **Task T6** — render the crow's transient poses from pre-rendered frame sequences instead of `Transform` maths | new sprite-sheet assets + `lib/widgets/raven_mascot.dart` + tests | Issue 35, **Option B** |
+| 1 | **Task T6 rollout** — convert the **nine remaining transient poses** to sprite sheets | new sheets + `scripts/build_sprite_sheets.py` + `lib/widgets/raven_mascot.dart` + tests | Issue 35, **Option B** |
 
-Nothing else is approved. The spec is complete in §2.
+Nothing else is approved.
+
+> ### ✅ The pilot passed — roll out the rest
+>
+> `ruffle` was converted and **the user approved it**: frames clearly beat `Transform` motion on the pose that should benefit most, so the approach is validated and the remaining nine follow.
+>
+> **📖 Follow `.agents/skills/mascot_pose_creation/SKILL.md`.** It is the authoritative pipeline — how frames are composed, the fixed conventions, the verified preview recipe, and the validation set. This guide gives the queue and the per-pose motion briefs; the skill gives the method. **Read the skill before touching anything.**
+>
+> **⚠️ The pilot is currently uncommitted** — `assets/images/raven/frames/`, `scripts/`, and `scratch/` are untracked, and `raven_mascot.dart`, `test/raven_mascot_test.dart`, `pubspec.yaml`, `PROMPTS.md` and `design_ui_direction.md` are modified. Battery is green at **94/94**. **Commit the pilot as its own commit before starting the rollout** so `ruffle` is recoverable independently of the nine that follow.
 
 **Specs are decisions, not suggestions.** **A blocker is a filing event, not a licence to re-choose on the user's behalf.**
 
@@ -32,7 +40,7 @@ Nothing else is approved. The spec is complete in §2.
 | Gate | Command | Result |
 |---|---|---|
 | Static analysis | `flutter analyze lib test` | **0 errors** |
-| Client tests | `flutter test` | **91/91 pass** |
+| Client tests | `flutter test` | **91/91 committed** — 94/94 with the uncommitted pilot in the tree |
 | Functions build | `npm --prefix functions run build` | clean |
 | Backend E2E | `npm --prefix functions test` | **31/31** |
 | iOS release | `flutter build ios --release --no-codesign` | succeeds, `Runner.app` **44.0 MB** |
@@ -123,11 +131,31 @@ Append to `assets/images/raven/PROMPTS.md`. The existing layer art is the refere
 
 **Character drift across frames is the known risk here** — it already bit the layer generation. Always edit from the same master, never from the previous frame, or the bird will visibly morph across the sequence.
 
-### 🚦 Do one pose first, and prove it
+### The rollout queue — nine poses, easiest deformation first
 
-**Convert `ruffle` alone, then stop.** It is the most deformation-dependent pose in the set — a feather ruffle is precisely what a wing rotation cannot fake — so it is the honest test of whether this approach is worth ten poses of work.
+`ruffle` is done. Convert the rest **in this order**, because each group adds one new primitive to `render_frame()` and building them in dependency order means never writing two unproven primitives at once.
 
-Capture the new `ruffle` and the current transform-based `ruffle` **side by side on a simulator**, and get the user's explicit judgement before converting anything else. If frames do not clearly beat transforms on the pose that should benefit most, **stop and file that finding** rather than grinding through the remaining nine.
+| Order | Pose | Motion brief | New primitive needed |
+|---|---|---|---|
+| 1 | **`startle`** | Sharp scale to ~1.08 with a lift, wing flares, then an overshoot settle. Reads as a flinch. | none — reuses `scale_x/y` + `wing_rot` + `translate_y` |
+| 2 | **`hop`** | A vertical arc: up, brief hang, down, with the wing flaring on the rise and folding on descent. | `translate_y` |
+| 3 | **`peck`** | Fast forward-and-down rotation of the whole bird, snapping back. Sharp in, soft out. | `rotate` |
+| 4 | **`bow`** | Slow forward rotation to ~22°, a held beat, slow return. The ceremony pose — deliberately unhurried. | `rotate` |
+| 5 | **`alert`** | Quick rotational snap toward the roster, hold ~2 frames, ease back. Eye stays open throughout. | `rotate` |
+| 6 | **`preen`** | Wing rotates up to meet the body while the body tilts toward it; holds, then both return. Smug and slow. | `rotate` + `wing_rot` |
+| 7 | **`fly`** | Rise with the wing sweeping through its full arc; the bird leaves frame-bottom slightly. | `translate_y` + `wing_rot` |
+| 8 | **`flap`** | Alternate `wing` and `wing_up` every frame or two while rising — a real two-frame flap rather than a rotation. | **layer selection** |
+| 9 | **`caw`** | Body scales up and tilts back while `beak_open` overlays the closed beak; a call. | **layer selection** + `rotate` + `scale` |
+
+**Do `startle` first even though it needs no new primitive** — it proves the generalised pose registry in `build_sprite_sheets.py` works before any new deformation maths is layered on top. Getting the registry right on a pose with known-good primitives isolates the two risks.
+
+**`flap` and `caw` are last for a reason:** they are the only two needing layer *selection* rather than layer *deformation*, which means `render_frame()` gains a different kind of parameter. If that turns out to be awkward, seven poses are already shipped and the finding can be filed without blocking them.
+
+### 🚦 Preview and approval — per pose, blocking
+
+**Every pose gets an animated preview shown to the user before its commit**, per the skill's §5 recipe. Do not batch nine poses and show them at the end: a wrong motion arc caught at pose two is a five-minute fix, and caught at pose nine it is eight more.
+
+Group commits sensibly — one per pose, or one per primitive group — but **never commit a pose the user has not watched.**
 
 ### Validation
 
@@ -202,6 +230,10 @@ Must be `--debug`: `lobby_screen.dart` passes `debugEnabled: kDebugMode`, and th
 | `*.log`, `firebase-debug.log`, `firestore-debug.log` | Emulator logs; can contain room data and UIDs. |
 
 **Must stay tracked:** the vendored Phosphor font + `LICENSE`, all raven PNGs + `PROMPTS.md`, `.firebaserc`, `ios/Podfile.lock`, both `xcshareddata/swiftpm/Package.resolved`. **After adding sprite sheets, confirm with `git status` that they are staged** — a silently-ignored asset is a blank bird on every other machine.
+
+**New with T6, and currently undecided in the repo:**
+- **`scripts/` must be committed.** `build_sprite_sheets.py` is the only way to rebuild a sheet from source art; losing it makes every sheet an unreproducible binary. Commit it with the pilot.
+- **`scratch/` should be gitignored.** It holds throwaway preview artifacts. Add `scratch/` to `.gitignore` and verify with `git check-ignore -v scratch`. If a preview page is worth keeping as a reusable template, move it to `scripts/` rather than leaving it in a directory whose name promises it is disposable.
 
 **Trap: `.swiftpm/` does not match `swiftpm/`** — the real Xcode paths have no leading dot.
 
@@ -298,8 +330,13 @@ Must be `--debug`: `lobby_screen.dart` passes `debugEnabled: kDebugMode`, and th
 
 ## Definition of Done
 
-- [ ] **Pilot:** `ruffle` converted to a sprite sheet, captured side by side with the transform version on a simulator, and **the user has judged it before any other pose is converted.**
+- [ ] **Pilot committed on its own** before the rollout begins.
+- [ ] `scripts/build_sprite_sheets.py` generalised to a pose registry — adding a pose is a data change, not a code change.
+- [ ] All nine remaining transient poses converted in the §2 order; `idle` and `sleep` untouched.
+- [ ] **🚦 Every pose previewed as an animated GIF and approved by the user before its commit** (skill §5).
+- [ ] `.agents/skills/mascot_pose_creation/SKILL.md` followed and kept accurate if the pipeline changes.
 - [ ] Frame-index unit test passes and is written so a `round()` implementation would fail it.
+- [ ] Per pose: frame 0 matches the resting bounding box; no opaque pixel touches a cell border in any frame.
 - [ ] Sheet integrity asserted for every entry in `_poseSheets`: declared geometry matches file dimensions, alpha present, frame-0 rim contrast ≥ 4.5:1.
 - [ ] Total decoded sheet memory asserted under **12 MB**.
 - [ ] `idle` and `sleep` still render the layered stack with the blink swap — the over-reach guard.
