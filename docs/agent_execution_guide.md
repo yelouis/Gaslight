@@ -51,41 +51,6 @@
 >
 > ---
 
-> ## 🔴 T10 — stop `build_sprite_sheets.py` overwriting hand-edited sheets
->
-> **The user now edits `assets/images/raven/frames/*.png` directly in an image editor.** The game reads those sheets at runtime with no build step, so hand edits are live — and `scripts/build_sprite_sheets.py` regenerates every sheet from the layer art, **silently destroying them**. That is a data-loss bug, and it takes priority over T9.
->
-> Each sheet now has a sibling constraints doc — `assets/images/raven/frames/<pose>.md` — written for a human editing the grid. **Keep those accurate**: if grid geometry, timing, or the trigger site for a pose changes, update its `.md` in the same commit.
->
-> ### Implementation
->
-> **All ten poses opt out of regeneration by default.** Add an explicit skip set to the script and honour it:
->
-> ```python
-> # Hand-edited sheets. build_sprite_sheets.py must never overwrite these.
-> # Every pose is opted out by default -- the sheets in assets/images/raven/frames/
-> # are edited directly and are the source of truth for what ships.
-> HAND_EDITED = {'ruffle','startle','hop','peck','bow','alert','preen','fly','flap','caw'}
-> ```
->
-> Requirements:
-> 1. **Skip by default, and say so.** For each pose in `HAND_EDITED`, print a clear line — `SKIP <pose>: hand-edited, not regenerated` — so a silent no-op is never mistaken for a rebuild.
-> 2. **Require an explicit opt-in to overwrite.** Regenerating a hand-edited sheet must need `--force <pose>` (or `--force-all`). No bare invocation may ever write over one.
-> 3. **Back up before any forced overwrite.** Copy the existing sheet to `<pose>.png.bak` first and print the path. If the user forces a rebuild and dislikes it, the previous art must be one `mv` away.
-> 4. **Exit non-zero if the run wrote nothing**, so a CI or scripted call cannot quietly succeed while doing nothing.
->
-> ### Validation
->
-> - Running `python3 scripts/build_sprite_sheets.py` with no arguments leaves **every** file under `assets/images/raven/frames/` byte-identical. Assert this in a test by hashing the directory before and after — this is the falsifying check and it **fails against the current script**.
-> - `--force ruffle` rewrites only `ruffle.png` and creates `ruffle.png.bak`; no other sheet changes.
-> - `.gitignore` gains `*.png.bak` — backups are local safety, not repo content.
-> - The ten `.md` files stay in sync: a test asserting each `<pose>.md` exists and that the `frames`/`cols` it documents match `_poseSheets` in `raven_mascot.dart`. **Documentation that silently drifts from the code is worse than none**, and these files are the user's only map of the constraints.
->
-> ### Blast radius
-> `scripts/build_sprite_sheets.py`, `.gitignore`, one new test. No app code, no assets.
->
-> ---
-
 # Task T9 — split the beak and wing out of `body.png` (in flight)
 
 > ## 🔴 T9 — split the beak and wing OUT of `body.png`. This is the actual bug.
