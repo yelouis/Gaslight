@@ -1,4 +1,41 @@
-# Agent Execution Guide — Active Build: Task T10, then T9 (August 8, 2026)
+# Agent Execution Guide — Active Build: T11 (August 8, 2026)
+
+> ## ❌ T10 is cancelled
+>
+> The regeneration opt-out is **scrapped at the user's direction**. `scripts/build_sprite_sheets.py` regenerates all ten sheets and that is fine — the sheets are derived artefacts, and the layer art plus the frame parameters remain the source of truth. Do not implement a `HAND_EDITED` skip set.
+>
+> The per-sheet prompt docs at `assets/images/raven/frames/<pose>.md` **stay** — they are the briefs for editing a grid by hand when that is wanted, and they carry the measured constraints for each sheet.
+>
+> ---
+>
+> ## 🟢 Beak layers rebuilt (done) — and the acceptance criterion they broke
+>
+> `beak_open.png` and `beak_semi_open.png` were **fragmented**, not merely rough: ragged mandible edges plus stray slivers where the mouth line should be, at ~18% partial-alpha against the closed beak's 4%. They had been authored independently of `beak_closed.png`.
+>
+> **Fixed by deriving them from the closed beak** — `scripts/rebuild_beak_layers.py`. `beak_closed.png` decomposes into exactly three connected components (upper mandible 801 px, lower mandible 285 px, brow stroke 60 px); the script rotates **only the upper mandible** about the hinge at (165, 95), leaving the lower mandible and brow fixed, which is how a beak actually opens. `beak_open` is −20°, `beak_semi_open` −10°, regenerated at all three densities. Edge quality now matches the closed beak, and the sheets rebuilt from it read correctly.
+>
+> ### ⚠️ T11 — replace the wrong acceptance criterion with the right one
+>
+> **Three tests now fail, and the tests are wrong, not the art.** T8/T9 asserted that `beak_open` must have **≥40–50% of its pixels outside `body_base`'s silhouette**. The rebuilt beak measures **14.6%** and fails — yet it visibly opens.
+>
+> That criterion was a mistake in the spec. It was written on the assumption that an open beak has to protrude into empty space to be seen. It does not. **What makes the beak read is the dark mouth gap between the two mandibles** — internal contrast against brass — not silhouette protrusion. Measured on the rebuilt art:
+>
+> | Layer | Mouth-gap area | Widest gap |
+> |---|---|---|
+> | `beak_closed` | 298 px | 12 px |
+> | `beak_semi_open` | 423 px | 12 px |
+> | `beak_open` | **572 px** | **19 px** |
+>
+> **Replace the silhouette-share assertions with a mouth-gap assertion:**
+> 1. `beak_open`'s mouth-gap area is **≥ 1.6×** that of `beak_closed`, and its widest gap is **≥ 16 px**.
+> 2. `beak_semi_open` sits strictly between the two, so the three form a real progression.
+> 3. **Delete** the `≥40%` / `≥50%` outside-silhouette assertions for the beak. Keep them for `wing_up`, where protrusion genuinely is the mechanism — a raised wing does have to clear the body outline.
+>
+> Also fix **T9.5**, which asserts that `build_sprite_sheets.py` *contains a specific line of source text*. That is a grep, not a test: it passes if the string appears in a comment and fails whenever the script is refactored, which is why it is failing now. Assert the behaviour instead — that no composited frame contains both beak variants.
+>
+> **Do not "fix" the art to satisfy the old thresholds.** The art is correct; the numbers were measuring the wrong property.
+>
+> ---
 
 > ## 🔴 T10 — stop `build_sprite_sheets.py` overwriting hand-edited sheets
 >
