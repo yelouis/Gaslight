@@ -122,10 +122,16 @@ The wing and beak are **line details, not limbs.** At the size the mascot render
 2. **Write the parameter tuples**, one per frame, in a list. Follow the existing `ruffle` block as the model — it is commented per frame, and that comment is what makes the sequence editable six months later.
 3. **Ease, do not step linearly.** Real motion accelerates and decelerates. `ruffle` peaks at frame 3 of 8 and eases back over five frames rather than four, which is what stops it looking mechanical.
 4. **Add the pose to the registry in `scripts/build_sprite_sheets.py`** — keyed by pose name, holding its frame list and grid shape. Adding a pose is a data change, not a code change; if you find yourself editing `render_frame` for anything but a genuinely new primitive, stop and reconsider.
+5. **Author keyframes, not every frame.** Set `target` (final frame count) and `out_cols` on the pose and the builder resamples your keys up to it with a cosine ease. Six hand-written keys is the right amount of authoring; twenty is not. Aim `target` at **~30 fps against the pose's hold** — below about 20 fps the motion visibly steps.
+   - Flags in `DISCRETE` (`use_wing_up`, the beak variants, `eye`) snap at the midpoint instead of blending — you cannot half-swap a layer. Everything else glides.
+   - A key that omits a parameter takes its **rest** value, and rest is `1.0` for the scales, not `0.0`.
 
 ```bash
 python3 scripts/build_sprite_sheets.py
+python3 scripts/build_frame_prompts.py   # geometry in the .md prompts is derived, not typed
 ```
+
+Anything that restates a sheet's grid — the Dart `_poseSheets` entry, the preview table, the `.md` prompt, the T6.2 expectations — is a copy that will rot the next time the pose is re-timed. Derive it from `POSE_REGISTRY` instead of writing the numbers twice.
 
 ---
 

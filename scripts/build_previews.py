@@ -97,19 +97,23 @@ def render_preview_gif(pose_name, cols, rows, frames_cnt, fps=16):
 def main():
     build_stills()
 
-    # All 10 poses
-    previews = [
-        ('ruffle', 4, 2, 8, 16),
-        ('startle', 3, 2, 6, 16),
-        ('hop', 4, 2, 8, 16),
-        ('peck', 3, 2, 6, 16),
-        ('bow', 4, 2, 8, 16),
-        ('alert', 3, 2, 6, 16),
-        ('preen', 4, 2, 8, 16),
-        ('fly', 4, 2, 8, 16),
-        ('flap', 3, 2, 6, 16),
-        ('caw', 3, 2, 6, 16),
-    ]
+    # Derived from POSE_REGISTRY rather than restated here: the grid changes
+    # every time a pose is re-timed, and a stale copy silently untiles the sheet
+    # on the wrong geometry instead of failing.
+    holds_ms = {
+        'peck': 180, 'alert': 300, 'startle': 300, 'caw': 300,
+        'preen': 600, 'bow': 600, 'flap': 660,
+        'ruffle': 300, 'hop': 300, 'fly': 300,
+    }
+    previews = []
+    for pose, spec in bss.POSE_REGISTRY.items():
+        n = spec.get('target') or len(spec['frames'])
+        cols = spec['out_cols'] if spec.get('target') else spec['cols']
+        rows = -(-n // cols)
+        # Play the preview at the speed the game plays it.
+        fps = round(n / (holds_ms[pose] / 1000.0))
+        previews.append((pose, cols, rows, n, fps))
+
     for pose, cols, rows, n, fps in previews:
         render_preview_gif(pose, cols, rows, n, fps)
 

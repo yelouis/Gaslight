@@ -267,7 +267,7 @@ def render_frame(layers,
 POSE_REGISTRY = {
     # 6 ACCEPTED POSES — DO NOT TOUCH (ruffle, startle, hop, peck, bow, alert)
     'ruffle': {
-        'cols': 4, 'rows': 2,
+        'target': 10, 'out_cols': 5, 'cols': 4, 'rows': 2,
         'frames': [
             {'scale_x': 1.00, 'scale_y': 1.00, 'wing_rot': 0.00, 'ruffle_wave': 0.0},
             {'scale_x': 1.05, 'scale_y': 1.02, 'wing_rot': 0.05, 'ruffle_wave': 1.5},
@@ -280,7 +280,7 @@ POSE_REGISTRY = {
         ]
     },
     'startle': {
-        'cols': 3, 'rows': 2,
+        'target': 10, 'out_cols': 5, 'cols': 3, 'rows': 2,
         'frames': [
             {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
             {'eye': 'wide', 'scale_x': 1.04, 'scale_y': 1.08, 'translate_y': -12.0, 'wing_rot': 0.08},
@@ -291,7 +291,7 @@ POSE_REGISTRY = {
         ]
     },
     'hop': {
-        'cols': 4, 'rows': 2,
+        'target': 10, 'out_cols': 5, 'cols': 4, 'rows': 2,
         'frames': [
             {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'wing_rot': 0.00},
             {'scale_x': 1.05, 'scale_y': 0.92, 'translate_y': 4.0, 'wing_rot': -0.04},
@@ -304,7 +304,7 @@ POSE_REGISTRY = {
         ]
     },
     'peck': {
-        'cols': 3, 'rows': 2,
+        'target': 8, 'out_cols': 4, 'cols': 3, 'rows': 2,
         'frames': [
             {'rotate': 0.00, 'translate_x': 0.0, 'translate_y': 0.0},
             {'eye': 'angry', 'rotate': -0.05, 'translate_x': -1.0, 'translate_y': -2.0},
@@ -315,7 +315,7 @@ POSE_REGISTRY = {
         ]
     },
     'bow': {
-        'cols': 4, 'rows': 2,
+        'target': 18, 'out_cols': 6, 'cols': 4, 'rows': 2,
         'frames': [
             {'rotate': 0.00, 'translate_y': 0.0},
             {'rotate': 0.08, 'translate_y': 2.0},
@@ -328,7 +328,7 @@ POSE_REGISTRY = {
         ]
     },
     'alert': {
-        'cols': 3, 'rows': 2,
+        'target': 10, 'out_cols': 5, 'cols': 3, 'rows': 2,
         'frames': [
             {'rotate': 0.00, 'scale_y': 1.00, 'translate_y': 0.0},
             {'eye': 'wide', 'rotate': -0.18, 'scale_y': 1.04, 'translate_y': -4.0},
@@ -341,7 +341,7 @@ POSE_REGISTRY = {
 
     # Task T8 RE-AUTHORED POSES (preen, fly, flap, caw)
     'preen': {
-        'cols': 4, 'rows': 2,
+        'target': 18, 'out_cols': 6, 'cols': 4, 'rows': 2,
         'frames': [
             {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'wing_rot': 0.00},
             {'eye': 'happy', 'rotate': -0.08, 'scale_x': 1.02, 'scale_y': 0.97, 'wing_rot': 0.04},
@@ -354,7 +354,7 @@ POSE_REGISTRY = {
         ]
     },
     'fly': {
-        'cols': 4, 'rows': 2,
+        'target': 12, 'out_cols': 4, 'cols': 4, 'rows': 2,
         'frames': [
             {'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0, 'use_wing_up': False},
             {'scale_x': 1.05, 'scale_y': 0.90, 'translate_y': 3.0, 'use_wing_up': False},                       # anticipation crouch
@@ -367,7 +367,7 @@ POSE_REGISTRY = {
         ]
     },
     'flap': {
-        'cols': 3, 'rows': 2,
+        'target': 20, 'out_cols': 5, 'cols': 3, 'rows': 2,
         'frames': [
             {'scale_y': 1.00, 'scale_x': 1.00, 'translate_y': 0.0, 'use_wing_up': False},
             {'eye': 'happy', 'scale_y': 1.04, 'scale_x': 0.97, 'translate_y': -12.0, 'use_wing_up': True, 'wing_rot': -1.25},  # wing low -- reads as folded, so no pop
@@ -378,7 +378,7 @@ POSE_REGISTRY = {
         ]
     },
     'caw': {
-        'cols': 3, 'rows': 2,
+        'target': 10, 'out_cols': 5, 'cols': 3, 'rows': 2,
         'frames': [
             {'rotate': 0.00, 'scale_x': 1.00, 'scale_y': 1.00, 'translate_y': 0.0},  # closed
             {'eye': 'angry', 'rotate': -0.08, 'scale_x': 1.04, 'scale_y': 1.05, 'translate_y': -2.0, 'use_beak_semi_open': True},  # opening
@@ -389,6 +389,64 @@ POSE_REGISTRY = {
         ]
     },
 }
+
+
+# ─── Keyframe interpolation ──────────────────────────────────────────
+# The per-pose frame lists below are authored as KEYFRAMES. Sheets are
+# resampled up to `target` frames so the motion runs at roughly 30 fps in game
+# instead of the 9-13 fps some poses had. Continuous parameters are eased
+# between keys; discrete ones (layer choices, the eye variant) snap to the
+# nearest key, because a half-swapped wing is meaningless.
+
+DISCRETE = {'use_wing_up', 'use_beak_open', 'use_beak_semi_open', 'use_eye_closed', 'eye'}
+
+# A key that omits a parameter means "leave it at rest", and rest is not always
+# zero -- the scales sit at 1.0. Interpolating a missing scale toward 0 divides
+# by zero downstream, so defaults have to match render_frame's own.
+CONTINUOUS_DEFAULTS = {'scale_x': 1.0, 'scale_y': 1.0}
+
+
+def _smooth(t):
+    """Cosine ease -- softens the joins between authored keys."""
+    return (1 - math.cos(t * math.pi)) / 2
+
+
+def interpolate_frames(keys, target):
+    """Resample `keys` (list of param dicts) to `target` frames."""
+    if target <= len(keys):
+        return keys
+    names = set()
+    for k in keys:
+        names.update(k.keys())
+    out = []
+    last = len(keys) - 1
+    for i in range(target):
+        u = i / (target - 1) * last          # position in keyframe space
+        lo = min(int(math.floor(u)), last)
+        hi = min(lo + 1, last)
+        t = _smooth(u - lo)
+        frame = {}
+        for n in names:
+            a = keys[lo].get(n)
+            b = keys[hi].get(n)
+            if n in DISCRETE:
+                frame[n] = a if t < 0.5 else b
+                if frame[n] is None:
+                    frame[n] = False if n.startswith('use_') else 'open'
+            else:
+                d = CONTINUOUS_DEFAULTS.get(n, 0.0)
+                av = d if a is None else float(a)
+                bv = d if b is None else float(b)
+                frame[n] = av + (bv - av) * t
+        # Discrete flags snap while continuous values glide, so an in-between
+        # frame can end up "wing folded" while wing_rot is still mid-sweep from
+        # the raised arc. The cap exists to protect the folded marking, so
+        # honour it rather than emitting a frame that violates it.
+        if not frame.get('use_wing_up') and 'wing_rot' in frame:
+            frame['wing_rot'] = max(-0.12, min(0.12, frame['wing_rot']))
+        out.append(frame)
+    return out
+
 
 def main():
     base_dir = 'assets/images/raven'
@@ -411,8 +469,14 @@ def main():
 
     for pose_name, spec in POSE_REGISTRY.items():
         frames = spec['frames']
+        target = spec.get('target')
+        if target:
+            frames = interpolate_frames(frames, target)
         cols = spec['cols']
         rows = spec['rows']
+        if target:
+            cols = spec['out_cols']
+            rows = -(-target // cols)
         sheet_w = cols * 256
         sheet_h = rows * 256
         sheet_pixels = bytearray(sheet_w * sheet_h * 4)

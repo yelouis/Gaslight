@@ -39,6 +39,54 @@ class PngImageInfo {
   }
 }
 
+/// Area of transparent space that the artwork encloses vertically -- for each
+/// column, the transparent pixels lying between that column's topmost and
+/// bottommost opaque pixel.
+///
+/// This is how "the beak is open" is measured. Rotating the upper mandible about
+/// its hinge hardly changes the beak's mass or how far it protrudes, so those
+/// numbers cannot tell open from closed; the gap between the mandibles is the
+/// thing that actually changes, and the thing a viewer actually sees.
+///
+/// Pass [originX]/[originY]/[size] to measure one cell of a sprite sheet.
+int enclosedCavity(
+  PngImageInfo img, {
+  int originX = 0,
+  int originY = 0,
+  int? size,
+  int alphaThreshold = 0,
+}) {
+  final int x0 = originX;
+  final int y0 = originY;
+  final int x1 = size == null ? img.width : originX + size;
+  final int y1 = size == null ? img.height : originY + size;
+
+  // Column-major lookup of alpha, so the scan below stays O(pixels).
+  final alpha = List<int>.filled((x1 - x0) * (y1 - y0), 0);
+  for (final p in img.pixels) {
+    if (p.x < x0 || p.x >= x1 || p.y < y0 || p.y >= y1) continue;
+    alpha[(p.x - x0) * (y1 - y0) + (p.y - y0)] = p.a;
+  }
+
+  int total = 0;
+  final height = y1 - y0;
+  for (int cx = 0; cx < x1 - x0; cx++) {
+    int top = -1;
+    int bottom = -1;
+    for (int cy = 0; cy < height; cy++) {
+      if (alpha[cx * height + cy] > alphaThreshold) {
+        if (top < 0) top = cy;
+        bottom = cy;
+      }
+    }
+    if (top < 0 || bottom <= top) continue;
+    for (int cy = top; cy <= bottom; cy++) {
+      if (alpha[cx * height + cy] <= alphaThreshold) total++;
+    }
+  }
+  return total;
+}
+
 int _paethPredictor(int a, int b, int c) {
   final p = a + b - c;
   final pa = (p - a).abs();

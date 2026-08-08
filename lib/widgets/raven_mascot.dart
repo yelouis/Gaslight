@@ -27,16 +27,16 @@ class _PoseSheet {
 }
 
 const Map<RavenState, _PoseSheet> _poseSheets = {
-  RavenState.ruffle: _PoseSheet('assets/images/raven/frames/ruffle.png', 8, 4),
-  RavenState.startle: _PoseSheet('assets/images/raven/frames/startle.png', 6, 3),
-  RavenState.hop: _PoseSheet('assets/images/raven/frames/hop.png', 8, 4),
-  RavenState.peck: _PoseSheet('assets/images/raven/frames/peck.png', 6, 3),
-  RavenState.bow: _PoseSheet('assets/images/raven/frames/bow.png', 8, 4),
-  RavenState.alert: _PoseSheet('assets/images/raven/frames/alert.png', 6, 3),
-  RavenState.preen: _PoseSheet('assets/images/raven/frames/preen.png', 8, 4),
-  RavenState.fly: _PoseSheet('assets/images/raven/frames/fly.png', 8, 4),
-  RavenState.flap: _PoseSheet('assets/images/raven/frames/flap.png', 6, 3),
-  RavenState.caw: _PoseSheet('assets/images/raven/frames/caw.png', 6, 3),
+  RavenState.ruffle: _PoseSheet('assets/images/raven/frames/ruffle.png', 10, 5),
+  RavenState.startle: _PoseSheet('assets/images/raven/frames/startle.png', 10, 5),
+  RavenState.hop: _PoseSheet('assets/images/raven/frames/hop.png', 10, 5),
+  RavenState.peck: _PoseSheet('assets/images/raven/frames/peck.png', 8, 4),
+  RavenState.bow: _PoseSheet('assets/images/raven/frames/bow.png', 18, 6),
+  RavenState.alert: _PoseSheet('assets/images/raven/frames/alert.png', 10, 5),
+  RavenState.preen: _PoseSheet('assets/images/raven/frames/preen.png', 18, 6),
+  RavenState.fly: _PoseSheet('assets/images/raven/frames/fly.png', 12, 4),
+  RavenState.flap: _PoseSheet('assets/images/raven/frames/flap.png', 20, 5),
+  RavenState.caw: _PoseSheet('assets/images/raven/frames/caw.png', 10, 5),
 };
 
 class _PosePainter extends CustomPainter {
@@ -98,8 +98,28 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
   bool _idleTilt = false;
   bool _idleBlink = false;
 
-  // Precached ui.Image sheets for transient poses
+  // Decoded sheets for transient poses, most-recently-used last.
+  //
+  // These are big: a 20-frame sheet of 256 px cells decodes to 5 MB, and the
+  // ten poses together come to 31.5 MB. Loading is lazy, so nothing paid that
+  // cost up front -- but nothing evicted either, so a session that eventually
+  // played every pose held all of it. Keep only the sheet in play plus the one
+  // before it, so a pose that interrupts another does not have to re-decode.
+  static const int _maxResidentSheets = 2;
   final Map<RavenState, ui.Image> _loadedSheets = {};
+
+  void _evictStaleSheets(RavenState keep) {
+    while (_loadedSheets.length > _maxResidentSheets) {
+      final RavenState oldest =
+          _loadedSheets.keys.firstWhere((s) => s != keep, orElse: () => keep);
+      if (oldest == keep) return;
+      _loadedSheets.remove(oldest)?.dispose();
+      // The clone we dropped is not the only copy -- ImageCache still holds the
+      // decode that produced it, so the memory only comes back if both go.
+      final String? asset = _poseSheets[oldest]?.asset;
+      if (asset != null) AssetImage(asset).evict();
+    }
+  }
 
   @override
   void initState() {
@@ -132,6 +152,7 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
         if (mounted) {
           setState(() {
             _loadedSheets[state] = frame.image.clone();
+            _evictStaleSheets(state);
           });
         }
         imageStream.removeListener(listener);
@@ -298,13 +319,15 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
           bool useBeakOpen = false;
 
           if (prefersReducedMotion) {
+            // T9: body_base → wing_folded → beak_closed → eye variant
             final Widget eye = (widget.state == RavenState.sleep)
                 ? Image.asset('assets/images/raven/eye_closed.png', fit: BoxFit.contain)
                 : Image.asset('assets/images/raven/eye_open.png', fit: BoxFit.contain);
             return Stack(
               children: [
-                Image.asset('assets/images/raven/body.png', fit: BoxFit.contain),
-                Image.asset('assets/images/raven/wing.png', fit: BoxFit.contain),
+                Image.asset('assets/images/raven/body_base.png', fit: BoxFit.contain),
+                Image.asset('assets/images/raven/wing_folded.png', fit: BoxFit.contain),
+                Image.asset('assets/images/raven/beak_closed.png', fit: BoxFit.contain),
                 eye,
               ],
             );
@@ -378,7 +401,9 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
               ? Image.asset('assets/images/raven/eye_closed.png', fit: BoxFit.contain)
               : Image.asset('assets/images/raven/eye_open.png', fit: BoxFit.contain);
 
-          final String wingAsset = useWingUp ? 'assets/images/raven/wing_up.png' : 'assets/images/raven/wing.png';
+          // T9: body_base → wing variant → beak variant → eye variant
+          final String wingAsset = useWingUp ? 'assets/images/raven/wing_up.png' : 'assets/images/raven/wing_folded.png';
+          final String beakAsset = useBeakOpen ? 'assets/images/raven/beak_open.png' : 'assets/images/raven/beak_closed.png';
 
           return Transform.translate(
             offset: Offset(translateX, translateY),
@@ -390,15 +415,14 @@ class _RavenMascotState extends State<RavenMascot> with TickerProviderStateMixin
                 scaleY: scaleY,
                 child: Stack(
                   children: [
-                    Image.asset('assets/images/raven/body.png', fit: BoxFit.contain),
-                    if (useBeakOpen)
-                      Image.asset('assets/images/raven/beak_open.png', fit: BoxFit.contain),
+                    Image.asset('assets/images/raven/body_base.png', fit: BoxFit.contain),
                     Transform.rotate(
                       angle: wingRotation,
                       // Wing shoulder joint pivot on shared 1024x1024 canvas
                       alignment: const Alignment(-0.25, 0.10),
                       child: Image.asset(wingAsset, fit: BoxFit.contain),
                     ),
+                    Image.asset(beakAsset, fit: BoxFit.contain),
                     eyeWidget,
                   ],
                 ),
