@@ -10,7 +10,56 @@
 
 ## 1. Open & in-flight
 
-**0 open issues awaiting a decision.**
+**1 open issue awaiting your decision — Issue 35.**
+
+---
+
+### Issue 35: How Should the Mascot Actually Be Animated?
+**Status**: ⚠️ Open — decision outstanding. Raised after a proposal to generate the crow's animations as GIFs (via Veo) rather than animating it in code. **Task T5 has already shipped code-driven motion**, so this is not blocking anything — it is the question of whether to *change renderer* now that you can watch the current one on a device. That is the right order: judge the real thing, then decide.
+
+**Everything below was measured on August 7, not estimated.**
+
+| Fact | Measured |
+|---|---|
+| `Runner.app` today | **44.0 MB** |
+| Adding the `rive` package — runtime only, no artwork | **48.5 MB, i.e. +4.5 MB** |
+| `lobby_background.gif`, one animated loop already shipping here | **3.75 MB** |
+| The same background as a static PNG | 757 KB — the GIF costs **5× its still frame** |
+| The whole current raven asset system | ~300 KB |
+
+**Two hard technical facts about the GIF route specifically**, since that is what prompted this:
+- **Veo outputs video, and video carries no alpha channel.** The crow sits over the tavern wall *and* over the cream parchment sheet. With no transparency it must be chroma-keyed — and what you would be keying is a one-pixel anti-aliased brass rim. That fringes, and the fringe looks wrong against one of the two backgrounds.
+- **GIF transparency is 1-bit.** A pixel is fully opaque or fully gone; there is no partial alpha. Even a flawless key yields a jagged rim, degrading exactly the artwork Issue 33 was opened to fix.
+
+**One thing no option escapes:** something must still decide *which* pose, *when*, *once per event*, and *revert to resting*. The Issue 34 pose helper stays either way. Changing the renderer changes the drawing, not the orchestration.
+
+**Option A (recommended)**: **Keep what just shipped — code-driven `Transform` motion.**
+  - *Pros*: Zero new bytes and zero new dependencies. Full playback control — play once, hold, reverse, interrupt — because the app owns the `AnimationController`. Real 8-bit alpha, so the rim stays clean on both backgrounds. Reduced motion is a one-line early return. It is built, tested and live, so it is the only option with no unknowns left.
+  - *Cons*: Motion is limited to what transforms of flat layers can express — no secondary motion, no squash-and-stretch, no feather ruffle. If it reads mechanical on device, this option cannot fix that.
+
+**Option B**: **Pre-rendered PNG frame sequences.** Numbered frames, with the frame index driven off the controller you already have.
+  - *Pros*: Keeps full alpha and full playback control, and composes with everything already built — the pose helper is unchanged. Flat four-colour art compresses hard, so a ten-frame pose is likely tens of KB, not megabytes. **Veo still earns a place here as a motion reference to trace frames from**, which captures most of the appeal of your original idea without the format problems.
+  - *Cons*: Every pose becomes N drawings instead of one, and keeping the character consistent across frames is a real risk — the layer generation already showed that drift. Asset count grows quickly.
+
+**Option C**: **Animated WebP, one file per pose.** Strictly the better version of the GIF idea; Flutter plays it natively.
+  - *Pros*: Full 8-bit alpha and far better compression than GIF, so none of the format objections above apply. One file per pose is easy to reason about.
+  - *Cons*: Playback control is poor — `Image.asset` loops from first build, and "play once then hold" is precisely what a pose needs and precisely what is awkward. You would still ship a static frame per pose for reduced motion, so you maintain both.
+
+**Option D**: **Rive.** Detail below — read it before choosing, because one constraint is decisive.
+  - *Pros*: Purpose-built for this exact problem: a rigged character with a named state machine you trigger at runtime, blending between states. Resolution-independent vector, so one file serves every size. `.riv` files are typically kilobytes. By far the richest motion ceiling.
+  - *Cons*: **+4.5 MB measured** before any artwork, against an app that just spent two tasks recovering 2.7 MB — and **an agent cannot produce the artwork.**
+
+*Effort:* None (A) · Moderate (B) · Moderate (C) · Large (D). Your selection: _____
+
+#### Detail on Option D — Rive, since you asked
+
+**Is it like a GIF? Nearly the opposite.** A GIF is a flipbook — pre-rendered raster frames at a fixed resolution, played start to finish. A `.riv` file holds **vector shapes, a rig, and a state machine**; nothing is pre-rendered. The runtime draws it live at any size, and you drive it by firing named inputs ("peck", "startle") rather than playing a clip. It can blend one state into another mid-motion, which no frame-based format can do. That is why the files are kilobytes.
+
+**Can another agent implement it? The answer splits, and the split is the point.**
+
+- ✅ **The code: yes, comfortably.** Add the dependency, load the `.riv`, get a controller, fire a trigger on a game moment. Ordinary Flutter work, and it maps cleanly onto the existing pose helper — `playRavenPose` would fire a Rive trigger instead of setting a `Transform`.
+- ❌ **The artwork: no, and there is no workaround.** A `.riv` is authored in the **Rive editor**, a GUI design tool: you draw or import the crow, build a bone rig, define the state machine, name each input, export. **There is no generation API, and neither nano banana nor Veo can output Rive.** You or a designer must rig the bird by hand. Every other option here can be driven end-to-end by an agent; this one cannot. That is the decisive practical difference.
+- ⚠️ **A trap if you do pick it.** The Flutter package was rewritten. In `rive 0.14.11` the widely-known API — `RiveAnimation`, `StateMachineController`, `SMITrigger` — **no longer exists**; verified, it fails to compile. The current names are `RiveWidget`, `RiveWidgetController`, `StateMachineNamed`. An agent working from training memory will write the old API first; these verified names are recorded so that costs minutes instead of an afternoon.
 
 ---
 
