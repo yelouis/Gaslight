@@ -1,4 +1,65 @@
-# Agent Execution Guide — Active Build: Task T7 (August 8, 2026)
+# Agent Execution Guide — Active Build: Task T8 (August 8, 2026)
+
+> ## 🔴 T8 — generate real `wing_up` and `beak_open` art, then rebuild `flap`, `fly`, `preen`, `caw`
+>
+> T7 re-authored the four poses as body motion (`ef6fc70`) and the user reviewed again: **the wings still do not flap and the beak still does not open.** T7 was the right fix for *how the poses move*, but it could not fix the underlying problem — **there is no art to show a raised wing or an open beak.** This task generates that art.
+>
+> ### Why T7 could not have worked — measured
+>
+> | Layer | Opaque px | % of body | Pixels **outside** the body silhouette |
+> |---|---|---|---|
+> | `wing.png` | 476 | 2.0% | **0 (0%)** |
+> | `wing_up.png` | 496 | 2.1% | **37 (7%)** |
+> | `beak_open.png` | 115 | 0.5% | **0 (0%)** |
+>
+> **A part drawn entirely inside the body outline cannot be seen, no matter what you do with it.** `wing.png` has literally zero pixels outside the silhouette — rotating it can never produce a visible wing. T7 grew `beak_open` from 47 px to 115 px, but every one of those pixels is still *inside* the body, so the beak still cannot appear to open. That is the whole bug, and no parameter change reaches it.
+>
+> ### The geometric constraint that dictates the art
+>
+> The body is a single solid blob, which rules out the obvious designs:
+>
+> - **The beak must open UPWARD, not downward.** The chest sits directly below the beak, so a dropped lower mandible stays inside the silhouette and stays invisible. Above the beak there is open space: at x=185 the body starts at y=53, at x=205 it starts at y=78. **Lift the upper mandible into that gap.**
+> - **The raised wing must go UP over the flank.** At x=65 the body starts at y=126 and at x=75 at y=116, so there is 115–125 px of clear space directly above the wing's current position.
+>
+> ### Nano banana brief — two new reference layers
+>
+> Edit the **existing** art. Do not generate a new bird: the layers are the character, and a fresh generation reintroduces the drift that has already cost this project once. Copy these into `assets/images/raven/PROMPTS.md` when used.
+>
+> **`wing_up.png` — a genuinely raised wing**
+>
+> > Using the supplied `body.png` and `wing.png` as exact references, draw the crow's near wing **raised and extended upward**, as at the top of a wingbeat. The wing should sweep up and back from its shoulder at roughly (100, 118), with the tip reaching into the empty space above the bird's flank — around x 55–95, y 45–100 on the 256×256 canvas. **A substantial part of the wing must sit outside the body's outline**, clearly silhouetted against the background rather than lying flat on the body. Keep the same canvas, scale, position of the shoulder, palette (`#2D2925` fill, `#C6A14B` rim) and rim weight. Draw only the wing; everything else fully transparent.
+>
+> **`beak_open.png` — the beak open, hinging upward**
+>
+> > Using the supplied `body.png` as an exact reference, draw **only the crow's upper mandible, lifted open** as if calling — rotated up and back from the beak hinge at roughly (168, 84), with the tip rising into the empty space above the beak, around x 175–215, y 35–70 on the 256×256 canvas. **Most of this shape must fall outside the body's existing outline** so the open gap is clearly visible against the background. Match the beak's brass `#C6A14B` fill and rim weight. Draw only the lifted upper mandible; everything else fully transparent.
+>
+> ### Acceptance criteria — measurable, and non-negotiable
+>
+> Both new layers must pass, asserted in `test/raven_mascot_test.dart` using `test/helpers/png_decoder.dart`:
+>
+> | Layer | Minimum mass | Minimum share **outside** `body.png`'s silhouette |
+> |---|---|---|
+> | `wing_up.png` | **≥ 1,200 px** (≈5% of body; currently 496) | **≥ 40%** (currently 7%) |
+> | `beak_open.png` | **≥ 300 px** (currently 115) | **≥ 50%** (currently 0%) |
+>
+> **The "outside" figure is the one that matters** — mass alone is what T7 increased, and it changed nothing. If a regenerated layer misses these, regenerate it; **do not lower the threshold to make it pass.** These numbers are what "visible" means here, expressed so a test can check it.
+>
+> ### Then rebuild the four poses
+>
+> With art that can actually be seen, the poses can use it:
+> - **`flap`** — now genuinely alternate `wing` ↔ `wing_up` on a two-frame cadence. Keep the body bob T7 added; the two together read as a wingbeat. This is the pose the swap was always meant to serve.
+> - **`fly`** — sweep through `wing` → `wing_up` across the climb, keeping T7's anticipation crouch.
+> - **`preen`** — the wing can now be seen moving toward the body; keep it within **`|wing_rot| ≤ 0.12` rad** (§T7) since `wing.png` itself is unchanged and still sits inside the outline.
+> - **`caw`** — overlay the new `beak_open` on the frames where the bird calls, with T7's head-thrust motion beneath it.
+>
+> **Leave `ruffle`, `startle`, `hop`, `peck`, `bow`, `alert` alone.** They were accepted.
+>
+> ### 🚦 Preview and approval — still blocking
+> Re-render the four per `.agents/skills/mascot_pose_creation/SKILL.md` §6 and send them together for approval **before committing**. Since the last two rounds were both rejected on "can't see it", also send a **still of each new layer composited over `body.png`** so the raised wing and open beak can be judged directly, independently of the motion.
+>
+> ---
+
+# Task T7 — re-author four poses as silhouette motion (delivered `ef6fc70`, superseded by T8)
 
 **You are an engineering agent picking up Gaslight (Flutter party game, iOS + Android, server-authoritative Firebase backend). Assume you have no memory of this project.**
 

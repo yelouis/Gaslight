@@ -72,7 +72,16 @@ The wing and beak are **line details, not limbs.** At the size the mascot render
 **Hard limits, derived from the geometry:**
 - The wing attaches to the body along its **right** edge near **(100, 118)** — the body centroid is at x=129. Pivot there. *(A previous version pivoted at (64, 153.6), the wing's free tip, which swings the attached end away from the body. Backwards.)*
 - With a correct pivot the farthest wing pixel is ~72 px out, and the body outline leaves ~10 px of margin, so **`|wing_rot| ≤ 0.12 rad (≈7°)`**. Anything more detaches.
-- Any new part intended to *break* the silhouette — an opening beak, a raised crest — must be drawn to extend **outside** the body outline. A part drawn inside the outline is invisible when overlaid, no matter how large its motion parameter is.
+- Any new part intended to *break* the silhouette — an opening beak, a raised crest — must be drawn to extend **outside** the body outline. **A part drawn inside the outline is invisible when overlaid, no matter how large its motion parameter is.** This cost two full review rounds: `beak_open` was enlarged from 47 px to 115 px and still could not be seen, because 100% of it remained inside the body. Mass is not the metric — **share of pixels outside the silhouette** is.
+
+**When commissioning a new part layer, state a measurable target and assert it.** For reference, the values set in T8:
+
+| Layer | Minimum mass | Minimum share outside `body.png` |
+|---|---|---|
+| `wing_up.png` | ≥ 1,200 px (≈5% of body) | **≥ 40%** |
+| `beak_open.png` | ≥ 300 px | **≥ 50%** |
+
+**The body is a single solid blob, which constrains where a part can go.** Before briefing new art, measure the free space — the chest sits directly below the beak, so a beak must open *upward*; the flank has ~120 px of clearance above it, so a raised wing goes *up*. Compute the body's per-column top edge rather than assuming.
 
 ---
 
