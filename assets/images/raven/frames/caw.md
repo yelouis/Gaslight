@@ -1,109 +1,72 @@
-# `caw.png` — frame grid constraints
+# `caw.png` — edit prompt
 
-**Pose:** `RavenState.caw` · **The game starts.**
-`lobby_screen.dart:751` — fires when the host presses START GAME.
+**A call — the bird opens its beak and caws.  Fires when the game starts.**
 
-Edit this sheet directly in any image editor. The game reads it as-is at runtime — there is no build step between this file and what players see.
+Paste the block below into nano banana together with `caw.png`.
 
 ---
 
-## Grid geometry — must not change
+```text
+This image is a sprite sheet for a 2D game mascot: a simple, bold, flat-vector crow
+in a Victorian style. It contains 6 animation frames in a 3 × 2 grid, read left
+to right and then top to bottom. Each cell is exactly 256 × 256 pixels and the whole
+sheet is 768 × 512 pixels.
 
-| Property | Value |
+Redraw the frames so the animation reads clearly as: a call — the bird opens its beak and caws.
+
+Each frame should show:
+  Frame 0 (row 0, column 0) - the bird at complete rest, beak closed
+  Frame 1 (row 0, column 1) - the head starting to thrust back and up, the beak just parting
+  Frame 2 (row 0, column 2) - the beak wide open and the head thrown back — mid-call
+  Frame 3 (row 1, column 0) - held at the peak of the call, beak still wide
+  Frame 4 (row 1, column 1) - the beak closing, the head coming back down
+  Frame 5 (row 1, column 2) - back at complete rest
+
+Make the motion ease rather than step evenly: build to the strongest frame, then
+settle back more gradually than you built up.
+
+Keep all of the following exactly as they are:
+
+- Canvas 768 × 512 pixels, cells exactly 256 × 256, 3 columns by 2 rows, no padding
+  or gaps between cells.
+- The character's design and proportions. This is the same bird in every frame -
+  do not restyle it, do not change its shape language, do not redraw it as a
+  different crow.
+- The palette: body fill #2D2925, brass outline #C6A14B roughly 2-3 pixels thick,
+  eye ivory #F5EEDB with a #14110E pupil, beak brass #C6A14B.
+- Flat colour only. No gradients, no shading, no texture, no drop shadows, no glow.
+- A fully transparent background with soft 8-bit alpha edges. Do not flatten onto
+  a colour and do not use hard 1-bit transparency.
+- The bird stays centred in its cell at the same scale throughout. Do not zoom,
+  crop or reframe.
+
+Also observe these limits:
+
+- Frame 0 must show the bird at complete rest, and the final frame must return to
+  that same resting pose. These two frames are what the animation blends out of
+  and back into, so they must match.
+- Nothing may touch or cross a cell edge. In this sheet the artwork currently has
+  15 px of clearance at the top, 23 px at the bottom, 25 px on the left and 36 px on the
+  right. Stay inside that.
+- Keep the brass outline bright. It is what makes the bird visible against the very
+  dark background it sits on, so do not darken or thin it.
+- Movement should be carried by the whole silhouette - the body leaning, stretching,
+  compressing or turning. The wing and beak are small details and cannot carry the
+  motion on their own, though they should move along with it.
+
+Output the complete sheet at 768 × 512 pixels with the same 3 × 2 grid.
+```
+
+---
+
+## Reference
+
+| | |
 |---|---|
-| Sheet size | **768 × 512 px** |
-| Cell size | **256 × 256 px** |
-| Layout | **3 columns × 2 rows** |
-| Frame count | **6** |
-| Frame order | left → right, then top → bottom |
-| Padding between cells | **none** |
+| Sheet | **768 × 512 px** · cells **256 × 256** · **3 × 2** grid · **6** frames |
+| Reading order | left → right, then top → bottom |
+| Clearance left before clipping | top **15px** · bottom **23px** · left **25px** · right **36px** |
+| Palette | body `#2D2925` · outline `#C6A14B` · eye `#F5EEDB` / pupil `#14110E` |
+| Background it sits on | `#14110E` |
 
-**Changing any of these breaks the pose** unless `_poseSheets` in `lib/widgets/raven_mascot.dart` is updated to match:
-
-```dart
-RavenState.caw: _PoseSheet('assets/images/raven/frames/caw.png', 6, 3),
-//                                                              frames ^   ^ columns
-```
-
-The 256 px cell size is hardcoded in `_PosePainter` and is **not** configurable per pose. Keep every cell exactly 256 × 256.
-
----
-
-## Timing
-
-| Property | Value |
-|---|---|
-| Hold duration in game | **300 ms** (`_defaultHold` in `raven_pose_host.dart`) |
-| Time per frame | **50 ms** |
-| Effective frame rate | **20.0 fps** |
-
-Preview at this rate or you will misjudge the motion:
-
-```bash
-POSE=caw; COLS=3; ROWS=2; N=6; FPS=20
-mkdir -p /tmp/pose && rm -f /tmp/pose/f*.png
-ffmpeg -y -loglevel error -i assets/images/raven/frames/$POSE.png -vf "untile=${COLS}x${ROWS}" -frames:v $N /tmp/pose/f%02d.png
-ffmpeg -y -loglevel error -framerate $FPS -i /tmp/pose/f%02d.png -f lavfi -i color=c=0x14110E:s=256x256 \
-  -filter_complex "[1][0]overlay=shortest=1,scale=320:320:flags=neighbor,split[a][b];[a]palettegen=reserve_transparent=0[p];[b][p]paletteuse" \
-  -loop 0 /tmp/pose/${POSE}_preview.gif
-```
-
----
-
-## Current artwork bounds
-
-Measured across all 6 frames. Coordinates are **within a cell** (0–255), not the whole sheet.
-
-| Frame | Position in grid | Art bounds in cell | Note |
-|---|---|---|---|
-| 0 | row 0, col 0 | (25,31)–(218,225) | **resting — must match frame 0 of every other pose** |
-| 1 | row 0, col 1 | (27,24)–(219,229) |  |
-| 2 | row 0, col 2 | (28,15)–(219,232) |  |
-| 3 | row 1, col 0 | (28,15)–(219,232) |  |
-| 4 | row 1, col 1 | (27,27)–(218,228) |  |
-| 5 | row 1, col 2 | (25,31)–(218,225) | returns to rest |
-
-**Union across all frames:** (25,15)–(219,232)
-
-**Headroom before clipping:** left **25 px** · top **15 px** · right **36 px** · bottom **23 px**
-
----
-
-## Hard constraints — breaking these breaks the pose
-
-1. **Frame 0 must be the bird at rest.** Reduced-motion users see *only* frame 0, and the pose blends out of and back into `idle` from it. If frame 0 is a mid-motion extreme, the bird visibly jumps at both ends and accessibility users get a permanently distorted bird.
-2. **The last frame must return to rest** (or very near it), for the same blending reason.
-3. **Nothing may touch a cell border.** Any opaque pixel at x=0, x=255, y=0 or y=255 will be visibly cut off. Watch the tight edges listed above.
-4. **Stay inside the silhouette.** Every opaque pixel should sit within roughly 6 px of the bird's outline. A part that floats free of the body reads as a stray mark, not a limb — this is what got four poses rejected in review.
-5. **Keep the brass rim contrast.** The rim must stay at least **4.5:1** against the app background `#14110E`. The shipped rim is `#C6A14B` at 7.70:1. Darkening it is how the mascot became invisible the first time.
-6. **Transparent background, 8-bit alpha.** Save as PNG with alpha. Do not flatten onto a colour and do not use 1-bit transparency.
-7. **Do not resize the canvas.** See the grid table above.
-
----
-
-## Soft guidance
-
-- **Ease, do not step linearly.** Real motion accelerates and decelerates. Peak the action around 40% of the sequence and spend the remainder easing back.
-- **Carry the motion in the silhouette.** The wing and beak are small line details — at the size this renders (48–96 dp) they cannot carry a pose on their own. Scale, rotation and outline change are what read.
-- **Check it small.** Preview at 320 px, but also glance at it at 64 px, which is roughly what players see.
-
----
-
-## ⚠️ Regeneration will overwrite this file
-
-`scripts/build_sprite_sheets.py` rebuilds sheets from the layer art and **silently destroys hand edits**. All poses are opted out of regeneration; confirm `caw` is still listed under the script's skip set before running it, and keep a copy of your edited sheet regardless.
-
----
-
-## Validation
-
-```bash
-flutter test test/raven_mascot_test.dart   # geometry, contrast, containment, frame-0 rest
-flutter test                                # full suite
-```
-
-Then hot-restart (not hot reload — asset changes need a restart) or rebuild:
-
-```bash
-flutter run -d "iPhone 17"
-```
+**Each frame is a complete flat picture of the bird** — there are no layers here. If the beak should open or the wing should lift, simply draw it that way in the frame. The layering rules that apply elsewhere in the project do not apply to these sheets.
