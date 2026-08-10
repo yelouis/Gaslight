@@ -303,7 +303,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
           const SizedBox(height: 12),
           Text(
             'They are voting on your card. Keep a straight face.',
-            style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 16),
+            style: TextStyle(color: AppColors.ivory, fontSize: 16),
           ),
           const SizedBox(height: 32),
           Column(

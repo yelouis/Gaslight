@@ -398,7 +398,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                             style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.w900,
-                              color: theme.colorScheme.onSurface,
+                              color: AppColors.ivory,
                               fontFamily: 'Lora',
                             ),
                             textAlign: TextAlign.center,
@@ -1039,7 +1039,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                     style: TextStyle(
                       fontSize: 18, 
                       fontWeight: FontWeight.bold, 
-                      color: theme.colorScheme.onSurface,
+                      color: AppColors.ivory,
                       fontFamily: 'Lora',
                     ),
                   ),
