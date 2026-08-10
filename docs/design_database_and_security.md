@@ -58,6 +58,7 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
 ## 5. Identity Model
 
 * `playerId` is designed to be a **device-stable UUID** persisted in `SharedPreferences`, decoupled from Firebase Auth; the anonymous `authUid` is just the credential currently bound to that seat, and `joinRoom` re-binds it when the same `playerId` returns — so a reinstall or cleared storage keeps the player's seat and score.
+* The client implements this via persistent UUID generation and rejoins via the `joinRoom` server re-bind endpoint rather than clearing the local session (Issue 16).
 
 ---
 
@@ -70,13 +71,7 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
   gcloud firestore fields ttls update expiresAt --collection-group=rooms --enable-ttl
   gcloud firestore fields ttls update expiresAt --collection-group=players --enable-ttl
   ```
-* The client implements this via persistent UUID generation and rejoins via the `joinRoom` server re-bind endpoint rather than clearing the local session (Issue 16).
-
----
-
-## 6. Historical Note: the Resolved Write-Architecture Clarification
-
-The original design had `firestore.rules` restricting room writes to the host while every client wrote the room directly — a contradiction that made non-host multiplayer non-functional (Issue 1). The clarification offered host-authoritative (A), server relay (B), and loosened rules (C); the user directed us to the industry standard, recorded as **Option D: server-authoritative Cloud Functions**, which is the architecture described above.
+  Both policies were applied and verified `state: ACTIVE` on **August 10, 2026**. A policy acts only on documents where `expiresAt` **exists and is a Timestamp** — documents predating the field are ignored permanently, which is why the one-time backfill (`scripts/backfill_expires_at.js`, Issue 56) was needed. A fresh project never needs that backfill; it does need both `gcloud` commands re-run, since TTL policies live outside the repository.
 
 ---
 
@@ -94,3 +89,52 @@ Concretely: changing the deck erased `sabotageAnswersCount` and `isTimerDisabled
 3. **Validate before use, and fail readably.** Throw `HttpsError("failed-precondition", <human message>)` rather than letting a raw `Error` or a Firestore write failure bubble up — those flatten to `INTERNAL` and tell the player nothing.
 
 **Why the 31-test emulator suite never caught it:** those tests are written in TypeScript, where an omitted key genuinely *is* `undefined`. The failing payload was unreachable from the harness. **When a boundary is crossed by two languages, at least one test must send the payload exactly as the real client sends it** — including explicit nulls. The same real-client blind spot also hides non-host write behaviour, since the fake Firestore used by client tests does not enforce security rules.
+
+---
+
+## 8. Deployment, and how to prove a deploy actually happened
+
+Committing backend code changes nothing for users. Issue 55 sat green, tested and marked "Resolved" for a full day while production ran a build from two days earlier — because **no gate in the test battery can observe a deployment**. This section is the antidote.
+
+**Deploy:**
+
+```bash
+npx firebase-tools deploy --only functions,firestore:rules --project gaslight-46368
+```
+
+`firebase.json` carries a `predeploy` hook (`npm --prefix "$RESOURCE_DIR" run build`) added under Issue 55. Before that hook existed, the CLI uploaded whatever stale JavaScript happened to be sitting in the gitignored `functions/lib/` and still reported success. **Never remove the hook.**
+
+**Verify — four checks, none of which is "the command exited 0".** `gcloud` is not on the default `PATH`; it lives at `/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud`.
+
+1. **Every function's timestamp moved.**
+   ```bash
+   gcloud functions list --project=gaslight-46368 --format="table(name,state,updateTime)"
+   ```
+   All 14 must show the deploy time. One stale row means one function did not ship.
+
+2. **The deployed bundle really contains your change.** This is the strongest available evidence and needs no client:
+   ```bash
+   gcloud functions describe createRoom --project=gaslight-46368 \
+     --format="value(buildConfig.source.storageSource.bucket,buildConfig.source.storageSource.object)"
+   gcloud storage cp "gs://<bucket>/<object>" /tmp/deployed.zip && unzip -q /tmp/deployed.zip -d /tmp/deployed
+   grep -c "ROOM_TTL_MS" /tmp/deployed/lib/index.js
+   ```
+   Grep the deployed `lib/index.js` for a token unique to the change you shipped.
+
+3. **The rules ruleset moved, and contains your change.** Rules deploy on a separate track from functions and can silently lag. The Firebase Rules API needs a quota project supplied per-request:
+   ```bash
+   TOKEN=$(gcloud auth print-access-token)
+   curl -s -H "Authorization: Bearer $TOKEN" -H "x-goog-user-project: gaslight-46368" \
+     "https://firebaserules.googleapis.com/v1/projects/gaslight-46368/releases"
+   ```
+   Take `rulesetName` from the response and `GET .../rulesets/<id>` to read the deployed source back. Without the `x-goog-user-project` header this returns **403 SERVICE_DISABLED**, which reads like a permissions problem and is not one.
+
+4. **Behaviour on a real client.** Three simulators against production for anything user-visible — the emulator suite cannot see production at all.
+
+---
+
+## 9. Historical Note: the Resolved Write-Architecture Clarification
+
+The original design had `firestore.rules` restricting room writes to the host while every client wrote the room directly — a contradiction that made non-host multiplayer non-functional (Issue 1). The clarification offered host-authoritative (A), server relay (B), and loosened rules (C); the user directed us to the industry standard, recorded as **Option D: server-authoritative Cloud Functions**, which is the architecture described above.
+
+---
