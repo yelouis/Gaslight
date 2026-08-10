@@ -735,10 +735,10 @@ describe('Gaslight E2E Game Emulator Tests', () => {
 
     const roomSnap = await roomRef.get();
     const cards = roomSnap.data()?.cards as any[];
-    
+
     // Count how many cards got assigned a FLOOD_ prompt
     const floodPromptsDealt = cards.filter(c => c.promptText.startsWith('FLOOD_')).length;
-    
+
     // Since p_host submitted 10, but only at most 3 are harvested, and p_guest submitted 0 (with rest topped up from fallback deck),
     // the number of FLOOD_ prompts dealt can never be more than 3!
     expect(floodPromptsDealt).to.be.at.most(3);
@@ -891,4 +891,84 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       }
     });
   });
+
+  describe('Issue 51: Host Lobby Disconnect Lifecycle', () => {
+    it('closes the room when the host disconnects in the lobby', async () => {
+      const hostUser = await createAnonUser();
+      const guestUser = await createAnonUser();
+
+      const createRes = await callFn('createRoom', hostUser.idToken, {
+        playerName: 'Alice',
+        playerId: 'p_host',
+        sabotageAnswersCount: 2,
+        debugEnabled: true
+      });
+      const roomCode = createRes.roomCode;
+
+      await callFn('joinRoom', guestUser.idToken, {
+        roomCode,
+        playerName: 'Bob',
+        playerId: 'p_guest'
+      });
+
+      const roomRef = db.collection('rooms').doc(roomCode);
+      const hostPlayerRef = roomRef.collection('players').doc('p_host');
+
+      // Host disconnects in lobby phase
+      const disconnectRes = await callFn('handleDisconnect', hostUser.idToken, {
+        roomCode,
+        disconnectedPlayerId: 'p_host'
+      });
+      expect(disconnectRes.roomClosed).to.be.true;
+
+      const roomSnap = await roomRef.get();
+      const playersSnap = await roomRef.collection('players').get();
+
+      expect(roomSnap.exists).to.be.false;
+      expect(playersSnap.empty).to.be.true;
+    });
+
+    it('transfers host instead of closing when the game is in progress', async () => {
+      const hostUser = await createAnonUser();
+      const guestUser = await createAnonUser();
+
+      const createRes = await callFn('createRoom', hostUser.idToken, {
+        playerName: 'Alice',
+        playerId: 'p_host',
+        sabotageAnswersCount: 1,
+        debugEnabled: true
+      });
+      const roomCode = createRes.roomCode;
+
+      await callFn('joinRoom', guestUser.idToken, {
+        roomCode,
+        playerName: 'Bob',
+        playerId: 'p_guest'
+      });
+
+      // Start game so phase is no longer lobby
+      await callFn('startGame', hostUser.idToken, {
+        roomCode,
+        selectedDeckId: 'the_daily_grind'
+      });
+
+      const roomRef = db.collection('rooms').doc(roomCode);
+
+      // Host disconnects while game is in progress
+      await callFn('handleDisconnect', hostUser.idToken, {
+        roomCode,
+        disconnectedPlayerId: 'p_host'
+      });
+
+      const roomSnap = await roomRef.get();
+      expect(roomSnap.exists).to.be.true;
+
+      const playersSnap = await roomRef.collection('players').get();
+      const activePlayers = playersSnap.docs.map(d => d.data());
+      const hosts = activePlayers.filter(p => p.isHost === true);
+      expect(hosts.length).to.equal(1);
+      expect(hosts[0].id).to.equal('p_guest');
+    });
+  });
 });
+

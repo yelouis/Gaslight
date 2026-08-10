@@ -119,7 +119,7 @@ class FakeDocumentReference<T extends Object?> extends Fake implements DocumentR
 
   void _triggerListeners() {
     if (firestore._streams.containsKey(path)) {
-      firestore._streams[path]!.add(FakeDocumentSnapshot(path, Map<String, dynamic>.from(firestore.data[path] ?? {})));
+      firestore._streams[path]!.add(FakeDocumentSnapshot(path, firestore.data.containsKey(path) ? Map<String, dynamic>.from(firestore.data[path]!) : null));
     }
     // Also trigger collection queries
     final lastSlash = path.lastIndexOf('/');
@@ -557,6 +557,7 @@ void main() {
       await db.collection('rooms').doc(rCode).collection('players').doc(p2.id).set(p2.toMap());
       await db.collection('rooms').doc(rCode).collection('players').doc(p3.id).set(p3.toMap());
       await db.collection('rooms').doc(rCode).collection('players').doc(spec.id).set(spec.toMap());
+      await db.collection('rooms').doc(rCode).update({'currentPhase': 'forgery'});
       await Future.delayed(Duration(milliseconds: 100));
 
       // Disconnect host

@@ -20,6 +20,7 @@ class FakeFirebaseFunctions extends Fake implements FirebaseFunctions {
   final FirebaseFirestore db;
   Map<String, dynamic>? lastCallParams;
   String? lastCallName;
+  final Map<String, int> callableInvocations = {};
 
   FakeFirebaseFunctions(this.db);
 
@@ -28,6 +29,7 @@ class FakeFirebaseFunctions extends Fake implements FirebaseFunctions {
     return FakeHttpsCallable(db, name, onCall: (n, p) {
       lastCallName = n;
       lastCallParams = p;
+      callableInvocations[n] = (callableInvocations[n] ?? 0) + 1;
     });
   }
 }
@@ -510,6 +512,14 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
           disconnectedPlayer = p;
           break;
         }
+      }
+
+      if (disconnectedPlayer != null && disconnectedPlayer.isHost && state.currentPhase == GamePhase.lobby) {
+        for (var doc in playersSnap.docs) {
+          await roomRef.collection('players').doc(doc.id).delete();
+        }
+        await roomRef.delete();
+        return FakeHttpsCallableResult({'success': true, 'roomClosed': true} as T);
       }
 
       await roomRef.collection('players').doc(disconnectedPlayerId).delete();

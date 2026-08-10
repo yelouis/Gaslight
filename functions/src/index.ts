@@ -716,6 +716,7 @@ export const handleDisconnect = onCall(async (request) => {
     const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
     const callerPlayer = players.find(p => p.authUid === callerUid);
     const disconnectedPlayer = players.find(p => p.id === disconnectedPlayerId);
+    const phase = room.currentPhase;
     const isDead = disconnectedPlayer && disconnectedPlayer.lastSeen && (Date.now() - disconnectedPlayer.lastSeen) > 30000;
 
     if (!callerPlayer || (!callerPlayer.isHost && callerPlayer.id !== disconnectedPlayerId && !isDead)) {
@@ -723,8 +724,18 @@ export const handleDisconnect = onCall(async (request) => {
     }
 
     const hasCard = room.cards.some(c => c.targetPlayerId === disconnectedPlayerId);
+
+    // 1. Host leaves the lobby -> close the room entirely.
+    if (disconnectedPlayer?.isHost === true && phase === "lobby") {
+      for (const doc of playersSnap.docs) {
+        transaction.delete(doc.ref);
+      }
+      transaction.delete(roomRef);
+      return { success: true, roomClosed: true };
+    }
+
+    // 2. Already pruned (no card dealt for this player) -> unchanged behaviour.
     if (!hasCard) {
-      // Already pruned
       transaction.delete(playerRef);
       return { success: true };
     }
@@ -748,8 +759,6 @@ export const handleDisconnect = onCall(async (request) => {
       readyPlayers: newReadyPlayers,
       resolutionOrder: newResolutionOrder
     };
-
-    const phase = room.currentPhase;
 
     if (phase === "forgery") {
       const assignments = { ...room.currentCardAssignments };

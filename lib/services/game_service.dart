@@ -56,6 +56,13 @@ class GameService extends ChangeNotifier {
   GameState? _gameState;
   List<PlayerState> _players = [];
   String? _currentPlayerId;
+  bool _roomClosed = false;
+
+  bool get roomClosed => _roomClosed;
+
+  GameState? get gameState => _gameState;
+  List<PlayerState> get players => _players;
+  String? get currentPlayerId => _currentPlayerId;
 
   // Cleanup and Heartbeat
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _roomSubscription;
@@ -67,10 +74,6 @@ class GameService extends ChangeNotifier {
 
   // Disconnect in-flight guards
   final Set<String> _disconnectsInFlight = {};
-
-  GameState? get gameState => _gameState;
-  List<PlayerState> get players => _players;
-  String? get currentPlayerId => _currentPlayerId;
 
   PlayerState? get currentPlayer {
     try {
@@ -146,6 +149,7 @@ class GameService extends ChangeNotifier {
   }
 
   Future<void> createRoom(String playerName, String? playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex, bool isTimerDisabled = false, bool debugEnabled = false}) async {
+    _roomClosed = false;
     await ensureAuthenticated();
     final resolvedPlayerId = playerId ?? await getOrCreateStablePlayerId();
 
@@ -170,6 +174,7 @@ class GameService extends ChangeNotifier {
   }
 
   Future<void> joinRoom(String roomCode, String playerName, String? playerId, {int? avatarIndex}) async {
+    _roomClosed = false;
     await ensureAuthenticated();
     final resolvedPlayerId = playerId ?? await getOrCreateStablePlayerId();
 
@@ -255,6 +260,24 @@ class GameService extends ChangeNotifier {
     });
   }
 
+  Future<void> _clearLocalRoomState() async {
+    _roomSubscription?.cancel();
+    _playersSubscription?.cancel();
+    _heartbeatTimer?.cancel();
+    _roomSubscription = null;
+    _playersSubscription = null;
+    _heartbeatTimer = null;
+
+    _gameState = null;
+    _players = [];
+    _currentPlayerId = null;
+    _advancedStateKeys.clear();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('room_code');
+    await prefs.remove('player_id');
+  }
+
   Future<void> leaveRoom() async {
     final roomCode = _gameState?.roomCode;
     final playerId = _currentPlayerId;
@@ -277,15 +300,7 @@ class GameService extends ChangeNotifier {
       }
     }
 
-    _gameState = null;
-    _players = [];
-    _currentPlayerId = null;
-    _advancedStateKeys.clear();
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('room_code');
-    await prefs.remove('player_id');
-
+    await _clearLocalRoomState();
     notifyListeners();
   }
 
@@ -299,9 +314,13 @@ class GameService extends ChangeNotifier {
     }
 
     // Listen to Game State
-    _roomSubscription = _db.collection('rooms').doc(roomCode).snapshots().listen((snapshot) {
+    _roomSubscription = _db.collection('rooms').doc(roomCode).snapshots().listen((snapshot) async {
       if (snapshot.exists) {
         _gameState = GameState.fromMap(snapshot.data()!, snapshot.id);
+        notifyListeners();
+      } else if (_gameState != null) {
+        _roomClosed = true;
+        await _clearLocalRoomState();
         notifyListeners();
       }
     });

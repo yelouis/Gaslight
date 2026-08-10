@@ -41,6 +41,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
   String _selectedDeck = PromptDecks.availableDecks.first;
   Set<String> _knownPlayerIds = {};
   bool _familyFriendlyOnly = false;
+  String? _handledRoomClosedKey;
 
   @override
   void initState() {
@@ -285,6 +286,20 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final gs = context.watch<GameService>();
+    if (gs.roomClosed) {
+      if (_handledRoomClosedKey != 'closed') {
+        _handledRoomClosedKey = 'closed';
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('The host has left. This room has closed.')),
+            );
+          }
+        });
+      }
+    } else {
+      _handledRoomClosedKey = null;
+    }
 
     // If we're already in a room
     if (gs.gameState != null && gs.currentPlayer != null) {

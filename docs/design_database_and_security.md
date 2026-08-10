@@ -49,7 +49,9 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
 
 * Every client updates **only** `lastSeen` on its own player doc every 10 seconds (permitted by the rules).
 * Any client that observes a player with `lastSeen` older than 30 s calls the `handleDisconnect` callable. The function verifies staleness/authority itself, so duplicate or racing calls are safe (idempotent: if the player's card is already gone, it just deletes the doc). Client-side deletes no longer exist.
-* `handleDisconnect` performs, in one transaction: card removal, readiness/resolution-order pruning, forgery-phase assignment bridging + rotation regeneration (collapsing to TRUTH when too few players remain), vote/reveal reader re-indexing, and — if the departed player was the host — **host transfer to the earliest-joined non-spectator** (smallest `joinedAt`, ID tiebreak). Rationale: join order is deterministic, and spectators must never inherit the host role (they aren't playing and would stall the game).
+* `handleDisconnect` performs, in one transaction:
+  * **Lobby phase (`currentPhase == "lobby"`)**: host disconnect closes the room entirely by deleting all player subcollection documents and the room document, returning `{ success: true, roomClosed: true }`. Subscribed clients handle room deletion via their room snapshot listener, triggering local teardown, setting `roomClosed = true`, and routing to the entry screen with the exact notice: `"The host has left. This room has closed."`
+  * **In-game phases (`currentPhase != "lobby"`)**: host disconnect retains the room, performing card removal, readiness/resolution-order pruning, forgery-phase assignment bridging + rotation regeneration (collapsing to TRUTH when too few players remain), vote/reveal reader re-indexing, and **host transfer to the earliest-joined active non-spectator** (smallest `joinedAt`, ID tiebreak). Rationale: join order is deterministic, and spectators must never inherit the host role (they aren't playing and would stall the game).
 
 ---
 
