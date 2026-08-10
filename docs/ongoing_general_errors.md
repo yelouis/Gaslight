@@ -10,18 +10,18 @@
 
 ## 1. Open & in-flight
 
-**0 open issues.** Issues 63–66 were completed, tested, and deployed on August 10, 2026. All four selected Option A.
+**0 open issues.** Issues 63–67 have been completed, tested, and deployed to production.
 
-**Battery measured at `915cf4d`, clean tree (August 10, 2026):**
+**Battery measured at clean tree (August 10, 2026):**
 
 | Gate | Result |
 |---|---|
 | `flutter analyze lib test` | **0 errors** ✅ (272 infos) |
 | `flutter test` | **125/125** ✅ |
 | `npm --prefix functions run build` | clean ✅ |
-| `npm --prefix functions test` | **39/39** ✅ |
-| `flutter build ios --release --no-codesign` | **49.5 MB** (`Runner.app`) — delta 0.0 MB vs `56c183a` baseline |
-| Production functions | all 14 updated `2026-08-10T19:00 UTC` |
+| `npm --prefix functions test` | **40/40** ✅ |
+| `flutter build ios --release --no-codesign` | **49.5 MB** (`Runner.app`) — 49,545,165 bytes decimal |
+| Production functions | all 14 updated `2026-08-10T23:33 UTC` |
 
 ### Reference: the real minimum player count
 
@@ -35,6 +35,8 @@ So **at default settings the practical minimum is 3 players.** Two players only 
 ---
 
 *(No unresolved issues at this time.)*
+
+---
 
 ---
 
@@ -103,6 +105,13 @@ So **at default settings the practical minimum is 3 players.** Two players only 
      ```
    - **Over-reach Guard**: With everything restored, both new guards pass, the existing token-pair test still passes, and `flutter test` reports 125/125.
    - **Verification**: Commit `915cf4d`. `flutter test` — 125/125.
+
+10. **Issue 67: Per-Player Prompt Exclusion Accumulation & Deck Exhaustion Error Plumbing (Resolved - August 10, 2026)**:
+    - **Problem**: `rerollPrompt` built its exclusion set strictly from prompts currently on active cards (`room.cards.map(c => c.promptText)`). Because `deckSize >= activePlayers`, at least one candidate remained in the deck, so a re-roll could repeat a prompt a player had already seen and rejected. Furthermore, `PromptDecks.drawOneExcluding` threw a raw `Error`, which Cloud Functions flattened to `INTERNAL` with a scrubbed message.
+    - **Solution**: Implemented Option B. Added `seenPrompts?: string[]` to `CardModel` (TS interface & Dart model) and initialized it with `[prompts[idx]]` in `startGame`. In `rerollPrompt`, built `excluded` set containing all current card prompts PLUS all prompts in `targetCard.seenPrompts`. Updated `PromptDecks.drawOneExcluding` to throw `HttpsError("resource-exhausted", "No more prompts left in this deck.")` when `available.length === 0`. Updated `phase2_craft.dart` exception matcher to handle `resource-exhausted`. Updated `test/fake_functions.dart` to match.
+    - **Observed Falsifying Output**: E2E test asserting no prompt is repeated across consecutive re-rolls and that the 11th re-roll in a 12-prompt deck (2 players, 10 re-rolls) throws an `HttpsError` with message `"No more prompts left in this deck."`.
+    - **Over-reach Guard**: Normal single re-roll works; forgery-phase re-roll is rejected; 125/125 client tests and 40/40 backend tests pass.
+    - **Verification**: `npm --prefix functions test` (40/40 passing). Cloud Functions deployed to production `gaslight-46368` at `2026-08-10T23:33 UTC`.
 
 6. **Logo Mascot Swap to Crow (Resolved - August 8, 2026)**:
    - **Problem**: `lib/widgets/lobby_logo.dart` rendered `Image.asset('assets/images/gaslight_mascot.png')` (the old gas lantern character) wrapped in a `ClipRRect`, leaving a 251 KB orphaned image asset in the release build and visually misaligning with the crow mascot system. Furthermore, `body.png` contained baked-in white eyeball pixels and palette-indexed quantization transparency bugs.

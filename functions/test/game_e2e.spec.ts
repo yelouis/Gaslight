@@ -810,6 +810,58 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(threwPhaseGuard).to.be.true;
   });
 
+  it('Issue 67 Option B: should accumulate seenPrompts, never repeat prompts during re-rolls, and throw resource-exhausted HttpsError on deck exhaustion', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guestUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest'
+    });
+
+    // cah_dark_humor has exactly 12 prompts. With 2 players, 2 are drawn initially.
+    await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
+
+    const roomRef = db.collection('rooms').doc(roomCode);
+    let roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('truth');
+
+    const seenByHost = new Set<string>();
+    const hostCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+    seenByHost.add(hostCard.promptText);
+
+    // Re-roll 10 times to exhaust the remaining prompts in the 12-prompt deck (2 initially drawn, 10 remaining)
+    for (let i = 0; i < 10; i++) {
+      await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+      roomSnap = await roomRef.get();
+      const updatedHostCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+      expect(seenByHost.has(updatedHostCard.promptText)).to.be.false;
+      seenByHost.add(updatedHostCard.promptText);
+    }
+
+    // The host has now seen 11 prompts (1 initial + 10 re-rolled). The guest has 1 prompt.
+    // Total 12 prompts used. The 11th re-roll should fail with resource-exhausted HttpsError.
+    let threwExhaustion = false;
+    let errorMessage = '';
+    try {
+      await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+    } catch (e: any) {
+      threwExhaustion = true;
+      errorMessage = e.message || e.toString() || '';
+    }
+    expect(threwExhaustion).to.be.true;
+    expect(errorMessage).to.include('No more prompts');
+  });
+
   it('should enforce the server-side cap of at most 3 custom prompts per player', async () => {
     const hostUser = await createAnonUser();
     const guestUser = await createAnonUser();

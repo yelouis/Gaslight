@@ -1,10 +1,10 @@
-# Agent Execution Guide — Queue Complete: Issues 63–66 Delivered — August 10, 2026
+# Agent Execution Guide — Queue Complete: Issues 63–67 Delivered — August 10, 2026
 
-**All four issues in this build (63–66) have been implemented, tested with observed falsifying outputs, deployed to production, and documented.** The queue is empty. The §8 three-player playthrough is the only remaining manual verification — it requires a human operating three simulator clients and cannot be completed by an agent.
+**All issues in this build (63–67) have been implemented, tested with observed falsifying outputs, deployed to production, and documented.** The queue is empty. The §4 three-player playthrough is the only remaining manual verification — it requires a human operating three simulator clients.
 
 ---
 
-## Measured battery at `915cf4d` (August 10, 2026)
+## Measured battery at clean tree (August 10, 2026)
 
 ```text
 $ flutter analyze lib test
@@ -17,13 +17,13 @@ $ npm --prefix functions run build
 clean (tsc, no errors)
 
 $ npm --prefix functions test
-39 passing (8s)
+40 passing (8s)
 
 $ flutter build ios --release --no-codesign
-Runner.app: 49.5 MB (delta 0.0 MB vs 56c183a baseline)
+Runner.app: 49.5 MB (49,545,165 bytes decimal)
 ```
 
-Production: all 14 Cloud Functions updated `2026-08-10T19:00 UTC`. Firestore rules released.
+Production: all 14 Cloud Functions updated `2026-08-10T23:33 UTC`. Firestore rules released.
 
 ---
 
@@ -35,12 +35,13 @@ Production: all 14 Cloud Functions updated `2026-08-10T19:00 UTC`. Firestore rul
 | 5 | **63** — opaque option ids | `eaeb135` | Replaced `opt_truth_…`/`opt_<forgerId>` with `crypto.randomUUID()`. E2E assertion observed failing against old ids (player id and `/truth/i` present). Ids stable across vote→reveal. |
 | 6 | **64** — server re-roll alignment | `b9c45a5` | Removed `hasRerolled` (6 TS sites + Dart model). Added `truth` phase guard. 3 consecutive re-rolls succeed in truth; forgery re-roll rejected. |
 | 7 | **66** — guards & iOS size | `915cf4d` | Render-based contrast test observed failing at 1.10:1 with `onSurface`. Depart ink floor raised to 356 (half of measured 712), observed failing at 0 with empty painter. iOS Runner.app measured at 49.5 MB. |
+| 3 | **67** — per-player exclusion | working tree | Added `seenPrompts` to `CardModel`. Re-rolls accumulate seen prompts, preventing repeated prompts. `PromptDecks.drawOneExcluding` throws `HttpsError("resource-exhausted", "No more prompts left in this deck.")`. Client exception matcher handles `resource-exhausted`. 40/40 backend E2E tests passing. |
 
-Documentation: `82c7f41` — Issues 63–66 moved to Resolved in `ongoing_general_errors.md` with falsifying outputs; phase order and minimum-player rule added to `design_game_state_and_models.md`.
+Documentation: Issues 63–67 moved to Resolved in `ongoing_general_errors.md` with falsifying outputs; phase order and minimum-player rule added to `design_game_state_and_models.md`.
 
 ---
 
-## §8 — Playthrough (requires human)
+## §4 — Playthrough (requires human)
 
 The deploy is done. The three-player playthrough requires a human operating three simulator clients. These assertions are still unconfirmed on a real device:
 
@@ -52,7 +53,7 @@ The deploy is done. The three-player playthrough requires a human operating thre
 6. A newly created production room carries `expiresAt` ~8 h ahead on **both** the room and host player document.
 7. The reveal is readable — prompt and answers — at 360×640 dp.
 8. No overflow stripe anywhere, including the `REVENGE UNMASKING!` header.
-9. A full game completes end to end with three human clients.
+9. A full game completes end to end with three human clients, and the reveal attributes each forgery to the right author.
 
 **Anything that fails is a new issue filed with options**, not an inline fix.
 
@@ -74,7 +75,7 @@ The deploy is done. The three-player playthrough requires a human operating thre
 | What | Where |
 |---|---|
 | Open queue, selections, live traps | `docs/ongoing_general_errors.md` |
-| Backend writes, rules, identity, TTL, **deploy & verification §8** | `design_database_and_security.md` |
+| Backend writes, rules, identity, TTL, **deploy & verification §4** | `design_database_and_security.md` |
 | Card passing, disconnect recalculation, assignment timing | `design_rotation_engine.md` |
 | Scoring, routing, gameplay programme | `design_scoring_and_ui.md` |
 | Palette, typography, `onSurface` semantics, icons, mascot | `design_ui_direction.md` |

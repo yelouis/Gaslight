@@ -511,10 +511,10 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                                   } catch (e) {
                                     debugPrint('rerollMyPrompt error: $e');
                                     if (mounted) {
-                                      final String errStr = e.toString();
-                                      final String msg = errStr.contains('No more prompts')
-                                          ? 'No more prompts left in this deck.'
-                                          : 'Something went wrong. Try again.';
+                                       final String errStr = e.toString();
+                                       final String msg = (errStr.contains('No more prompts') || errStr.contains('resource-exhausted'))
+                                           ? 'No more prompts left in this deck.'
+                                           : 'Something went wrong. Try again.';
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Text(msg),

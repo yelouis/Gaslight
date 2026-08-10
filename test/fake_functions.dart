@@ -237,6 +237,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         startingCards.add(CardModel(
           targetPlayerId: pIds[i],
           promptText: prompts[i],
+          seenPrompts: [prompts[i]],
         ));
       }
 
@@ -484,10 +485,15 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final oldCard = cards[cardIndex];
 
         final deckId = currentState.selectedDeckId == 'custom' ? 'the_daily_grind' : currentState.selectedDeckId;
-        final currentPrompts = cards.map((c) => c.promptText).toSet();
-        final newPromptText = PromptDecks.drawOneExcluding(deckId, currentPrompts);
+        final cardSeenPrompts = oldCard.seenPrompts.isNotEmpty ? oldCard.seenPrompts : [oldCard.promptText];
+        final excludedPrompts = {
+          ...cards.map((c) => c.promptText),
+          ...cardSeenPrompts,
+        };
+        final newPromptText = PromptDecks.drawOneExcluding(deckId, excludedPrompts);
+        final updatedSeen = [...cardSeenPrompts, newPromptText];
 
-        cards[cardIndex] = oldCard.copyWith(promptText: newPromptText);
+        cards[cardIndex] = oldCard.copyWith(promptText: newPromptText, seenPrompts: updatedSeen);
 
         transaction.update(roomRef, {'cards': cards.map((c) => c.toMap()).toList()});
       });

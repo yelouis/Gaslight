@@ -1,3 +1,5 @@
+import { HttpsError } from "firebase-functions/v2/https";
+
 const DECKS: Record<string, string[]> = {
   the_daily_grind: [
     "The most embarrassing thing I've ever done on a Zoom call.",
@@ -147,13 +149,13 @@ export class PromptDecks {
 
   static drawOneExcluding(deckId: string, excludedPrompts: Set<string>): string {
     if (!DECKS[deckId]) {
-      throw new Error(`Failed to load deck: ${deckId}. Ensure it is defined in PromptDecks.`);
+      throw new HttpsError("not-found", `Failed to load deck: ${deckId}. Ensure it is defined in PromptDecks.`);
     }
 
     const deck = DECKS[deckId];
     const available = deck.filter((p) => !excludedPrompts.has(p));
     if (available.length === 0) {
-      throw new Error(`No remaining unique prompts in deck "${deckId}"`);
+      throw new HttpsError("resource-exhausted", "No more prompts left in this deck.");
     }
 
     const randomIndex = Math.floor(Math.random() * available.length);

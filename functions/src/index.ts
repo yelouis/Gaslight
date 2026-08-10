@@ -384,7 +384,8 @@ export const startGame = onCall(async (request) => {
       sabotageAnswers: {},
       options: [],
       votes: {},
-      unmaskGuesses: {}
+      unmaskGuesses: {},
+      seenPrompts: [prompts[idx]]
     }));
 
     const endTime = room.isTimerDisabled ? null : Date.now() + 60000;
@@ -672,11 +673,21 @@ export const rerollPrompt = onCall(async (request) => {
       throw new HttpsError("not-found", "Card not found for player.");
     }
 
-    const excluded = new Set(room.cards.map(c => c.promptText));
+    const targetCard = room.cards[cardIdx];
+    const cardSeen = targetCard.seenPrompts || [targetCard.promptText];
+
+    const excluded = new Set([
+      ...room.cards.map(c => c.promptText),
+      ...cardSeen
+    ]);
     const deckId = room.selectedDeckId === "custom" ? "the_daily_grind" : room.selectedDeckId;
     const newPrompt = PromptDecks.drawOneExcluding(deckId, excluded);
 
-    const updatedCard = { ...room.cards[cardIdx], promptText: newPrompt };
+    const updatedCard = {
+      ...targetCard,
+      promptText: newPrompt,
+      seenPrompts: [...cardSeen, newPrompt]
+    };
     const newCards = [...room.cards];
     newCards[cardIdx] = updatedCard;
 
