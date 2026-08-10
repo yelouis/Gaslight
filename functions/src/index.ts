@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { randomUUID } from "crypto";
 import { RotationEngine } from "./rotation_engine";
 import { ScoringLogic, GameState, CardModel } from "./scoring_logic";
 import { PromptDecks } from "./prompt_decks";
@@ -964,16 +965,17 @@ async function advancePhaseInternal(
       for (const card of currentCards) {
         const sealedData = sealedDataMap[card.targetPlayerId];
 
+        const truthOptId = randomUUID();
         const allAnswers: Array<{ id: string; text: string; authorId: string }> = [];
         allAnswers.push({
-          id: `opt_truth_${card.targetPlayerId}`,
+          id: truthOptId,
           text: sealedData.truthAnswer || kMissingAnswerPlaceholder,
           authorId: card.targetPlayerId
         });
 
         for (const [forgerId, text] of Object.entries(sealedData.sabotageAnswers || {})) {
           allAnswers.push({
-            id: `opt_${forgerId}`,
+            id: randomUUID(),
             text: (text as string) || kMissingAnswerPlaceholder,
             authorId: forgerId
           });
@@ -993,7 +995,7 @@ async function advancePhaseInternal(
         }
 
         sealedData.answerAuthors = answerAuthors;
-        sealedData.truthAnswerId = `opt_truth_${card.targetPlayerId}`;
+        sealedData.truthAnswerId = truthOptId;
         const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
         transaction.set(sealedRef, sealedData, { merge: true });
 

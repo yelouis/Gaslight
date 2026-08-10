@@ -169,6 +169,20 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(roomState.currentPhase).to.equal('vote');
     expect(roomState.resolutionOrder).to.have.lengthOf(2);
 
+    // Issue 63 / §5: Assert option IDs are opaque random UUIDs and leak neither player IDs nor truth
+    const playerIds = ['p_host', 'p_guest'];
+    const votePhaseOptionIds: string[] = [];
+    for (const card of roomState.cards) {
+      expect(card.options).to.be.an('array').that.is.not.empty;
+      for (const opt of card.options) {
+        votePhaseOptionIds.push(opt.id);
+        expect(opt.id).to.not.match(/truth/i);
+        for (const pId of playerIds) {
+          expect(opt.id).to.not.include(pId);
+        }
+      }
+    }
+
     // 6. Voting
     const currentReader = roomState.currentReaderId;
     const voter = currentReader === 'p_host' ? 'p_guest' : 'p_host';
@@ -180,7 +194,7 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       roomCode,
       targetCardId: currentReader,
       voterId: voter,
-      votedForId: 'TRUTH'
+      votedForId: currentReader
     });
     expect(voteRes.success).to.be.true;
 
@@ -191,10 +205,16 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       ready: true
     });
 
-    // Verify auto-advance to reveal phase
+    // Verify auto-advance to reveal phase & option ID stability
     roomSnap = await roomRef.get();
     roomState = roomSnap.data() as any;
     expect(roomState.currentPhase).to.equal('reveal');
+    let revealIdx = 0;
+    for (const card of roomState.cards) {
+      for (const opt of card.options) {
+        expect(opt.id).to.equal(votePhaseOptionIds[revealIdx++]);
+      }
+    }
 
     // Host advances to next resolution
     await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
