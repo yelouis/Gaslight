@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../lib/services/game_service.dart';
 import '../lib/models/game_state.dart';
 import '../lib/models/player_state.dart';
-import '../lib/models/card_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../lib/utils/text_similarity.dart';
 import 'fake_functions.dart';
