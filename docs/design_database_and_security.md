@@ -9,6 +9,7 @@ This document outlines the Firestore structure, the server-authoritative write a
 * `/rooms/{roomCode}`: the root `GameState` document (phase, cards, votes, readiness, rotation plan).
 * `/rooms/{roomCode}/players/{playerId}`: individual `PlayerState` documents. `playerId` is a client-chosen stable ID; the document stores `authUid` (the Firebase anonymous UID currently bound to that seat) for server-side ownership checks.
 * `/rooms/{roomCode}/embeddings/{answerHash}`: server-managed cache of Gemini embedding vectors (md5 of the normalized answer text → vector) for the semantic-similarity filter. No client rule → default deny; server-only.
+* `/rooms/{roomCode}/sealed/{cardId}`: server-managed answer keys (`truthAnswer` and `sabotageAnswers` forgery map) stored during `truth`, `forgery`, and `vote` phases to conceal answer origin until `reveal`. No client rule → default deny; server-only.
 
 ---
 
@@ -26,7 +27,7 @@ All game mutations are `onCall` Cloud Functions (`functions/src/index.ts`) that 
 | `setReady` | `setPlayerReady` | seat owner; auto-advances when all ready |
 | `advancePhase` | `forceAdvance`/`evaluateReadyState` | host only; applies timeout placeholders, per-card scoring, honor stats |
 | `advanceToNextResolution` | `advanceToNextResolution` | host only; steps the vote→reveal card sequence / game over |
-| `rerollPrompt` | `rerollMyPrompt` | seat owner; once per game (`hasRerolled`), truth phase only |
+| `rerollPrompt` | `rerollMyPrompt` | seat owner; unlimited re-rolls allowed during the `truth` phase |
 | `updateLobbySettings` | `updateLobbySettings` | host only |
 | `handleDisconnect` | `handlePlayerDisconnect` | host, self, or anyone for a heartbeat-dead player; idempotent; card pruning, assignment bridging, reader re-indexing, **host transfer** |
 

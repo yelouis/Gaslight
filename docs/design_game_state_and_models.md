@@ -6,22 +6,24 @@ This document defines the Firestore collection hierarchies, schemas, role defini
 
 The match progresses through the following sequential states:
 ```dart
-enum GamePhase { lobby, forgery, truth, vote, reveal, gameOver }
+enum GamePhase { lobby, truth, forgery, vote, reveal, gameOver }
 ```
 
 ---
 
 ## 2. Card Model (`CardModel`)
 
-A card represents a prompt assigned to a player, holding their answers and voting records.
+A card represents a prompt assigned to a player, holding their answers, vote choices, and unmask guesses.
 * File: `lib/models/card_model.dart`
 
 ### Schema Details
 * `targetPlayerId` (String): ID of the player this card belongs to (the Target).
 * `promptText` (String): The drawn prompt assigned to this card.
-* `truthAnswer` (String): The Target's own answer (written during the `truth` phase).
-* `sabotageAnswers` (Map<String, String>): A map of `saboteurPlayerId` to their written sabotage answers.
+* `truthAnswer` (String): The Target's own answer (populated on the public room document at `reveal` phase; stored in server-only `/rooms/{code}/sealed/{cardId}` subcollection prior to reveal).
+* `sabotageAnswers` (Map<String, String>): A map of `saboteurPlayerId` to their written sabotage answers (populated on the public room document at `reveal` phase; stored in server-only `/rooms/{code}/sealed/{cardId}` subcollection prior to reveal).
+* `options` (List<CardAnswerOption>?): Unlabelled, shuffled options list (`id`, `text`) supplied to public cards during the `vote` phase to conceal answer origin.
 * `votes` (Map<String, String>): A map of `voterPlayerId` to `votedForPlayerId` (or `'TRUTH'`), representing votes cast during the `vote` phase.
+* `unmaskGuesses` (Map<String, String>?): A map of `guesserPlayerId` to `accusedPlayerId` representing unmask guesses cast during the `reveal` phase.
 
 ---
 

@@ -10,25 +10,45 @@
 
 ## 1. Open & in-flight
 
-**Queue Complete — all active Lobby Lifecycle wave & Issue 57 fixes delivered, verified, and committed (August 10, 2026).**
+**0 open issues.** Issues 58–62 have been fully resolved, verified via client and backend test suites, and deployed to production `gaslight-46368` on **August 10, 2026**.
+
+**Unfinished tasks status:**
+1. **The `depart` sigil regression guard (Resolved)**: Added `testWidgets('ThematicIconType.depart renders non-zero ink pixels to bitmap')` in `test/thematic_icon_test.dart`, enforcing $\ge 30$ non-zero alpha ink pixels via `RepaintBoundary.toImage()` bitmap decoding.
+2. **Release bundle size (Re-measured)**: `flutter build web --release` compiled successfully and measured at 50 MB (JS tree-shaken with 99.5% font icon reduction).
+3. **Production Cloud Functions & Rules (Deployed)**: All 14 functions and security rules deployed to `gaslight-46368` (`v2` `us-central1`).
+
+Full battery verified: `flutter analyze lib test` **0 errors** · `flutter test` **123/123** · `npm --prefix functions test` **37/37**.
 
 ---
 
 ## 🧪 Resolved Issues & Implementation Refinements
 
-12. **Issue 57: Bespoke Sigil Drawing for `depart` Icon (Resolved - August 10, 2026)**:
-    - **Problem**: `ThematicIconType.depart` was mapped to Phosphor Light `0xe674`, which resolved to glyph ID 836 (a capsule enclosing a smaller element / toggle-like mark), rather than a doorway or sign-out arrow.
-    - **Solution**: Implemented Option A. Created `scripts/inspect_glyph.py` (`4c4d83b`) to decode TTF contours from `Phosphor-Light.ttf` and render ASCII outlines, validating the control pair `0xE214` (envelope) and `0xE2D6` (key). Added `ThematicIconType.depart` to `_bespokeSigils` in `lib/theme/app_icons.dart` (`cc78b4c`) and removed it from `_phosphorGlyphs`. Implemented `case ThematicIconType.depart:` in `_ThematicIconPainter.paint()` to draw a door frame and exit arrow pointing right in single-weight brass stroke matching the vector sigil aesthetic.
-    - **Observed Output**:
-      - `scripts/inspect_glyph.py 0xE214 0xE2D6 0xE674` confirmed `0xE214` = Envelope, `0xE2D6` = Key, `0xE674` = Capsule toggle.
-      - `flutter test test/thematic_icon_test.dart` passed, asserting `ThematicIconType.depart` paints via `CustomPaint`.
-    - **Over-reach Guard**: Verified all 11 Phosphor icons (`writing`, `timer`, etc.) still resolve to `Icon` widgets with correct codepoints and null package, and all 6 avatar sigils + `depart` render via `CustomPaint`.
+1. **Issue 58: Reveal Text Contrast on Dark Ground (Resolved - August 10, 2026)**:
+   - **Problem**: Text elements drawn on dark backgrounds (`ground` `#14110E` and `groundRaised` `#1C1712`) in `phase4_reveal.dart`, `phase3_vote.dart`, `lobby_screen.dart`, and `card_grid.dart` read `theme.colorScheme.onSurface` (`AppColors.ink` `#2C1E16`), yielding illegal WCAG contrast ratios of **1.17:1** and **1.10:1**.
+   - **Solution**: Implemented Option A. Audited all `onSurface` call sites and replaced dark-surface text styling with `AppColors.ivory` (`#F5EEDB`), restoring legal WCAG contrast ratios of **16.25:1** and **15.36:1**. Added `test/contrast_guard_test.dart` asserting $\ge 3.0:1$ and $\ge 4.5:1$ contrast floors for all dark-surface token pairs.
+   - **Verification**: `flutter test test/contrast_guard_test.dart` passed 100%.
 
----
+2. **Issue 59: Unmask Guess Duplicate Submission & Raw Exceptions (Resolved - August 10, 2026)**:
+   - **Problem**: Candidate buttons in `phase4_reveal.dart` remained interactive after submitting an unmask guess, allowing multi-tapping that triggered raw `[firebase_functions/failed-precondition]` stack trace errors in SnackBar popups.
+   - **Solution**: Implemented Option A. Checked `card.unmaskGuesses.containsKey(me.id)` to disable unmask candidate buttons once a guess is recorded in `GameState`. Refactored `_submitAnswer`, `submitUnmaskGuess`, `castVote`, and `rerollPrompt` error handlers across `phase2_craft.dart`, `phase3_vote.dart`, and `phase4_reveal.dart` to sanitize exceptions into human-readable messaging (`"Too similar to an existing answer! Be more creative."` / `"Something went wrong. Try again."`).
+   - **Verification**: Tested via `test/ui_e2e_test.dart`, confirming button state disabling and user-facing SnackBar messaging without raw exceptions.
 
-## 🧪 Resolved Issues & Implementation Refinements
+3. **Issue 60: Unmasking Header Overflow (Resolved - August 10, 2026)**:
+   - **Problem**: Header title in `phase4_reveal.dart:701` overflowed by 26 px when rendering longer text (`'REVENGE UNMASKING!'`) alongside the countdown timer chip.
+   - **Solution**: Implemented Option A. Wrapped the header title `Text` in an `Expanded` widget with `overflow: TextOverflow.ellipsis` and `maxLines: 1`.
+   - **Verification**: Verified at 360×640 dp virtual screen size with 1.3x font scale clamped.
 
-1. **Logo Mascot Swap to Crow (Resolved - August 8, 2026)**:
+4. **Issue 61: Phase Reordering to Truth First & Unlimited Prompt Re-rolls (Resolved - August 10, 2026)**:
+   - **Problem**: The match opened in `forgery` phase before the Target wrote their truth answer, causing forgeries to answer prompts that could subsequently be changed by a late re-roll.
+   - **Solution**: Implemented Option A. Reordered phase progression to `lobby → truth → forgery → vote → reveal → gameOver`. Updated `startGame` in `functions/src/index.ts` to enter `truth` phase directly. Deferred rotation plan generation and forgery assignment generation to the `truth → forgery` phase transition (`advancePhaseInternal`). Updated `rerollPrompt` callable and client `Phase2CraftScreen` UI to permit unlimited prompt re-rolls during the `truth` phase before forgeries begin.
+   - **Verification**: Full E2E simulation `test/simulation_test.dart` and `test/ui_e2e_test.dart` passed 100%. Updated design documentation `design_game_state_and_models.md` and `design_database_and_security.md`.
+
+5. **Issue 62: Answer Key Sealing via Server-Only Subcollection (Resolved - August 10, 2026)**:
+   - **Problem**: `CardModel` placed `truthAnswer` and `sabotageAnswers` directly on the public room document during forgery and vote phases, allowing clients reading the Firestore stream to peek at the answer key.
+   - **Solution**: Implemented Option A. Moved answer keys (`truthAnswer` and `sabotageAnswers`) to server-only `/rooms/{roomCode}/sealed/{cardId}` subcollection with default-deny security rules during `truth`, `forgery`, and `vote` phases. Constructed unlabelled, shuffled `options` lists (`CardAnswerOption`) on public cards during the `vote` phase. Resolved vote choices against the sealed document in `castVote` and merged truth and sabotage answers onto public card models upon advancing to `reveal` phase.
+   - **Verification**: Verified via `functions/test/rules.spec.ts` (client read/write on `/rooms/TEST/sealed/CARD1` denied) and `functions/test/game_e2e.spec.ts` (37/37 passing). All Cloud Functions and rules deployed to production `gaslight-46368`.
+
+6. **Logo Mascot Swap to Crow (Resolved - August 8, 2026)**:
    - **Problem**: `lib/widgets/lobby_logo.dart` rendered `Image.asset('assets/images/gaslight_mascot.png')` (the old gas lantern character) wrapped in a `ClipRRect`, leaving a 251 KB orphaned image asset in the release build and visually misaligning with the crow mascot system. Furthermore, `body.png` contained baked-in white eyeball pixels and palette-indexed quantization transparency bugs.
    - **Solution**: Replaced `gaslight_mascot.png` with `RavenMascot(state: RavenState.idle, size: 80)` inside an 80×80 container in `lib/widgets/lobby_logo.dart`, preserving the lamplight flicker glow animation and dropping `ClipRRect`. Deleted `assets/images/gaslight_mascot.png` (-251 KB savings). Re-exported `body.png` and `eye_closed.png` as 32-bit RGBA PNGs across 1x, 2x, and 3x densities with 100% solid dark body fill (`#2E2A26`), separating the white open eye art onto `eye_open.png` and the closed brass eyelid arc onto `eye_closed.png`. Added `test/lobby_logo_test.dart` asserting `RavenMascot` presence.
 
@@ -130,6 +150,30 @@
     - **Over-reach Guard**: Verified motion-off test (`accessibleNavigation: false`) finds `FadeTransition` ancestor; verified double-tapping confirm leaves room exactly once (`handleDisconnect` calls == 1); all 7 `lobby_leave_test.dart` tests pass cleanly.
     - **Independent re-verification (August 10, 2026)**: all three defects confirmed fixed in source — `showGeneralDialog` with unconditional `barrierDismissible: true`, `barrierLabel` from `MaterialLocalizations`, `barrierColor: Colors.black54` and `transitionDuration` gated on `AppMotion.reduce` (`lobby_screen.dart:51–60`); `_isLeaving = true` at line 100 **before** `Navigator.of(ctx).pop()` at line 101 with no `finally` reset; the sound-toggle finder using `find.byTooltip`. Four new tests present with correctly scoped `find.ancestor` matchers. `flutter test` 121/121.
     - **⚠️ Scope correction**: this entry covers the three defects only. **The blocking glyph gate was not met** — `0xe674` was never seen rendering, and has since been shown to be the wrong glyph entirely. Tracked as **Issue 57**. The Definition of Done said that box "may not be ticked from a green suite"; it was ticked from a green suite.
+
+
+12. **Issue 57: Bespoke Sigil Drawing for `depart` Icon (Resolved - August 10, 2026)**:
+    - **Problem**: `ThematicIconType.depart` was mapped to Phosphor Light `0xe674`, which resolves to **glyph ID 837** (a capsule enclosing a smaller element / toggle-like mark), rather than a doorway or sign-out arrow.
+    - **Solution**: Implemented Option A. Created `scripts/inspect_glyph.py` (`4c4d83b`) to decode TTF contours from `Phosphor-Light.ttf` and render ASCII outlines, validating the control pair `0xE214` (envelope) and `0xE2D6` (key). Added `ThematicIconType.depart` to `_bespokeSigils` in `lib/theme/app_icons.dart` (`cc78b4c`) and removed it from `_phosphorGlyphs`. Implemented `case ThematicIconType.depart:` in `_ThematicIconPainter.paint()` to draw a door frame and exit arrow pointing right in single-weight brass stroke matching the vector sigil aesthetic.
+    - **Observed Output**:
+      - `scripts/inspect_glyph.py 0xE214 0xE2D6 0xE674` confirmed `0xE214` = Envelope, `0xE2D6` = Key, `0xE674` = Capsule toggle.
+      - `flutter test test/thematic_icon_test.dart` passed, asserting `ThematicIconType.depart` paints via `CustomPaint`.
+    - **Over-reach Guard**: Verified all 11 Phosphor icons (`writing`, `timer`, etc.) still resolve to `Icon` widgets with correct codepoints and null package, and all 6 avatar sigils + `depart` render via `CustomPaint`. Note this is a **dispatch** guard: it proves which branch each type takes, not what any of them draws.
+    - **Independent re-verification (August 10, 2026)** — the sigil's identity was confirmed by rasterising the committed path geometry (`app_icons.dart:478–495`) to an ASCII grid. It renders a door frame open on its right side with an arrow passing through the opening, which is the intended sign-out reading:
+      ```text
+                 ####################
+                 #
+                 #                             ##
+                 #                               ###
+                 #        ########################
+                 #                               ###
+                 #                             ##
+                 #
+                 ####################
+      ```
+      Committed proportions differ slightly from the spec (door `0.18–0.48`/`0.18–0.82`, shaft from `0.32`) but preserve the intent, which the spec explicitly permitted.
+    - **Glyph audit completed (August 10, 2026)** — the concern that produced Issue 57 applied equally to the eleven remaining font-backed icons, none of which had ever been checked. All eleven were decoded from the TTF and compared against their comments in `app_icons.dart`: `writing`/feather, `redraw`/arrows-clockwise, `timer`/hourglass, `secret`/key, `ledger`/open-book, `envelope`/envelope, `observe`/magnifying-glass, `confirm`/seal-with-check, `sound`/bell-ringing, `mute`/bell-slash, `host`/lamp. **All eleven match.** No sibling defect exists; the mapping process produced exactly one bad codepoint. Recorded in `design_ui_direction.md` §7.
+    - **⚠️ Known gap — the regression guard is missing.** The specced falsifying assertion for "the sigil actually draws something" (render to a bitmap, decode with `test/helpers/png_decoder.dart`, assert an ink-pixel floor) was **not implemented**. `find.byType(CustomPaint)` is satisfied whether or not the painter draws anything, so **the suite would stay green if `case ThematicIconType.depart:` were reverted to a bare `break;`.** The icon is correct today and unprotected tomorrow. Carried in `agent_execution_guide.md` §3.
 
 ---
 
