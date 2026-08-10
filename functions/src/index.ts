@@ -435,26 +435,23 @@ export const submitAnswer = onCall(async (request) => {
     throw new HttpsError("permission-denied", "User does not own this player document.");
   }
 
-  // 1. Heuristic similarity check
-  const roomSnap = await roomRef.get();
-  if (roomSnap.exists) {
-    const room = roomSnap.data() as GameState;
-    const card = room.cards.find((c) => c.targetPlayerId === targetCardId);
-    if (card) {
-      const existing: string[] = [];
-      if (card.truthAnswer && isTruth === false) {
-        existing.push(card.truthAnswer);
-      }
-      for (const [sabId, sabotageText] of Object.entries(card.sabotageAnswers || {})) {
-        if (sabId !== authorId && sabotageText) {
-          existing.push(sabotageText);
-        }
-      }
+  // 1. Heuristic similarity check against sealed answer document
+  const sealedRef = roomRef.collection("sealed").doc(targetCardId);
+  const sealedSnap = await sealedRef.get();
+  const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
 
-      if (isTooSimilar(text, existing)) {
-        throw new HttpsError("invalid-argument", "Answer is too similar to another player's answer!");
-      }
+  const existing: string[] = [];
+  if (sealedData.truthAnswer && isTruth === false) {
+    existing.push(sealedData.truthAnswer);
+  }
+  for (const [sabId, sabotageText] of Object.entries(sealedData.sabotageAnswers || {})) {
+    if (sabId !== authorId && sabotageText) {
+      existing.push(sabotageText as string);
     }
+  }
+
+  if (isTooSimilar(text, existing)) {
+    throw new HttpsError("invalid-argument", "Answer is too similar to another player's answer!");
   }
 
   // 2. Perform write in a transaction to prevent race conditions
@@ -471,30 +468,27 @@ export const submitAnswer = onCall(async (request) => {
       throw new HttpsError("not-found", "Target card not found.");
     }
 
-    const card = room.cards[cardIdx];
-    let updatedCard: CardModel;
+    // Prepare sealed answer document in memory
+    const txSealedSnap = await transaction.get(sealedRef);
+    const txSealedData = txSealedSnap.exists ? (txSealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
+
     if (isTruth) {
-      updatedCard = { ...card, truthAnswer: text };
+      txSealedData.truthAnswer = text;
     } else {
-      const sabs = { ...card.sabotageAnswers, [authorId]: text };
-      updatedCard = { ...card, sabotageAnswers: sabs };
+      txSealedData.sabotageAnswers = { ...(txSealedData.sabotageAnswers || {}), [authorId]: text };
     }
 
-    const newCards = [...room.cards];
-    newCards[cardIdx] = updatedCard;
-
     const newReadyMap: Record<string, boolean> = { ...room.readyPlayers, [authorId]: true };
-
     const activePlayers = playersSnap.docs.map(doc => doc.data() as PlayerState).filter(p => p.role !== "spectator");
     const allReady = activePlayers.every(p => newReadyMap[p.id] === true);
 
-    transaction.update(roomRef, {
-      cards: newCards,
-      readyPlayers: newReadyMap
-    });
-
     if (allReady && activePlayers.length > 0) {
-      await advancePhaseInternal(transaction, roomRef, room, activePlayers, newCards);
+      await advancePhaseInternal(transaction, roomRef, room, activePlayers, room.cards, { [targetCardId]: txSealedData });
+    } else {
+      transaction.set(sealedRef, txSealedData, { merge: true });
+      transaction.update(roomRef, {
+        readyPlayers: newReadyMap
+      });
     }
 
     return { success: true };
@@ -549,13 +543,13 @@ export const castVote = onCall(async (request) => {
     const activePlayers = playersSnap.docs.map(doc => doc.data() as PlayerState).filter(p => p.role !== "spectator");
     const allReady = activePlayers.every(p => newReadyMap[p.id] === true);
 
-    transaction.update(roomRef, {
-      cards: newCards,
-      readyPlayers: newReadyMap
-    });
-
     if (allReady && activePlayers.length > 0) {
       await advancePhaseInternal(transaction, roomRef, room, activePlayers, newCards);
+    } else {
+      transaction.update(roomRef, {
+        cards: newCards,
+        readyPlayers: newReadyMap
+      });
     }
 
     return { success: true };
@@ -595,10 +589,10 @@ export const setReady = onCall(async (request) => {
     const activePlayers = playersSnap.docs.map(doc => doc.data() as PlayerState).filter(p => p.role !== "spectator");
     const allReady = activePlayers.every(p => newReadyMap[p.id] === true);
 
-    transaction.update(roomRef, { readyPlayers: newReadyMap });
-
     if (allReady && activePlayers.length > 0) {
       await advancePhaseInternal(transaction, roomRef, room, activePlayers, room.cards);
+    } else {
+      transaction.update(roomRef, { readyPlayers: newReadyMap });
     }
 
     return { success: true };
@@ -868,21 +862,42 @@ async function advancePhaseInternal(
   roomRef: FirebaseFirestore.DocumentReference,
   room: GameState,
   activePlayers: PlayerState[],
-  currentCards: CardModel[]
+  currentCards: CardModel[],
+  sealedDataOverrides: Record<string, any> = {}
 ) {
   const forgeryDuration = 60000;
   const voteDuration = 45000;
 
   const nextReadyPlayers: Record<string, boolean> = {};
 
+  // Fetch all sealed documents up front (READS BEFORE WRITES)
+  const sealedDataMap: Record<string, any> = {};
+  for (const card of currentCards) {
+    const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
+    const sealedSnap = await transaction.get(sealedRef);
+    const base = sealedSnap.exists ? (sealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
+    const override = sealedDataOverrides[card.targetPlayerId];
+    if (override) {
+      sealedDataMap[card.targetPlayerId] = {
+        ...base,
+        ...override,
+        sabotageAnswers: {
+          ...(base.sabotageAnswers || {}),
+          ...(override.sabotageAnswers || {})
+        }
+      };
+    } else {
+      sealedDataMap[card.targetPlayerId] = base;
+    }
+  }
+
   if (room.currentPhase === "truth") {
     // 1. Timeout placeholder fill for missing truth answers in sealed documents
     for (const card of currentCards) {
-      const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
-      const sealedSnap = await transaction.get(sealedRef);
-      const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
+      const sealedData = sealedDataMap[card.targetPlayerId];
       if (!sealedData.truthAnswer || sealedData.truthAnswer.trim().length === 0) {
         sealedData.truthAnswer = kMissingAnswerPlaceholder;
+        const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
         transaction.set(sealedRef, sealedData, { merge: true });
       }
     }
@@ -920,12 +935,11 @@ async function advancePhaseInternal(
       }
 
       if (holderId) {
-        const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
-        const sealedSnap = await transaction.get(sealedRef);
-        const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
+        const sealedData = sealedDataMap[card.targetPlayerId];
         const answer = sealedData.sabotageAnswers?.[holderId];
         if (!answer || answer.trim().length === 0) {
           sealedData.sabotageAnswers = { ...(sealedData.sabotageAnswers || {}), [holderId]: kMissingAnswerPlaceholder };
+          const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
           transaction.set(sealedRef, sealedData, { merge: true });
         }
       }
@@ -948,9 +962,7 @@ async function advancePhaseInternal(
       const updatedCards: CardModel[] = [];
 
       for (const card of currentCards) {
-        const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
-        const sealedSnap = await transaction.get(sealedRef);
-        const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
+        const sealedData = sealedDataMap[card.targetPlayerId];
 
         const allAnswers: Array<{ id: string; text: string; authorId: string }> = [];
         allAnswers.push({
@@ -982,6 +994,7 @@ async function advancePhaseInternal(
 
         sealedData.answerAuthors = answerAuthors;
         sealedData.truthAnswerId = `opt_truth_${card.targetPlayerId}`;
+        const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
         transaction.set(sealedRef, sealedData, { merge: true });
 
         updatedCards.push({
@@ -1049,9 +1062,7 @@ async function advancePhaseInternal(
     // Merge sealed data into public cards for the reveal screen
     const mergedCards: CardModel[] = [];
     for (const card of currentCards) {
-      const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
-      const sealedSnap = await transaction.get(sealedRef);
-      const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
+      const sealedData = sealedDataMap[card.targetPlayerId];
 
       mergedCards.push({
         ...card,
@@ -1336,41 +1347,43 @@ export const debugSimulateBotResponses = onCall(async (request) => {
     const readyPlayers = room.readyPlayers ? { ...room.readyPlayers } : {};
 
     if (phase === "forgery" || phase === "truth") {
+      const sealedDataOverrides: Record<string, any> = {};
+
       for (const p of players) {
         if (!p.id.startsWith("bot_")) continue;
 
         readyPlayers[p.id] = true;
 
-        const targetId = room.currentCardAssignments?.[p.id];
+        const targetId = phase === "truth" ? p.id : room.currentCardAssignments?.[p.id];
         if (targetId) {
-          const cardIdx = cards.findIndex(c => c.targetPlayerId === targetId);
-          if (cardIdx !== -1) {
-            const card = { ...cards[cardIdx] };
-            if (phase === "truth") {
-              card.truthAnswer = `Simulated Answer from ${p.name}`;
-            } else {
-              const sabotageAnswers = card.sabotageAnswers ? { ...card.sabotageAnswers } : {};
-              sabotageAnswers[p.id] = `Simulated Answer from ${p.name}`;
-              card.sabotageAnswers = sabotageAnswers;
-            }
-            cards[cardIdx] = card;
+          if (phase === "truth") {
+            sealedDataOverrides[targetId] = {
+              ...(sealedDataOverrides[targetId] || {}),
+              truthAnswer: `Simulated Answer from ${p.name}`
+            };
+          } else {
+            const currentSabs = sealedDataOverrides[targetId]?.sabotageAnswers || {};
+            sealedDataOverrides[targetId] = {
+              ...(sealedDataOverrides[targetId] || {}),
+              sabotageAnswers: { ...currentSabs, [p.id]: `Simulated Answer from ${p.name}` }
+            };
           }
         }
-
-        // Also update player document in transaction to make it ready
-        const pRef = roomRef.collection("players").doc(p.id);
-        transaction.update(pRef, { isReady: true });
       }
-
-      transaction.update(roomRef, {
-        cards,
-        readyPlayers
-      });
 
       const activePlayers = players.filter(p => p.role !== "spectator");
       const allReady = activePlayers.length > 0 && activePlayers.every(p => readyPlayers[p.id] === true);
+
       if (allReady) {
-        await advancePhaseInternal(transaction, roomRef, room, activePlayers, cards);
+        await advancePhaseInternal(transaction, roomRef, room, activePlayers, cards, sealedDataOverrides);
+      } else {
+        for (const [tId, sData] of Object.entries(sealedDataOverrides)) {
+          const sRef = roomRef.collection("sealed").doc(tId);
+          transaction.set(sRef, sData, { merge: true });
+        }
+        transaction.update(roomRef, {
+          readyPlayers
+        });
       }
     } else if (phase === "vote") {
       const currentTargetId = room.currentReaderId;
@@ -1395,22 +1408,20 @@ export const debugSimulateBotResponses = onCall(async (request) => {
         cards[cardIdx] = card;
       }
 
-      // If the current reader is a bot, mark them ready as well
       if (currentTargetId.startsWith("bot_")) {
         readyPlayers[currentTargetId] = true;
-        const readerRef = roomRef.collection("players").doc(currentTargetId);
-        transaction.update(readerRef, { isReady: true });
       }
-
-      transaction.update(roomRef, {
-        cards,
-        readyPlayers
-      });
 
       const activePlayers = players.filter(p => p.role !== "spectator");
       const allReady = activePlayers.length > 0 && activePlayers.every(p => readyPlayers[p.id] === true);
+
       if (allReady) {
         await advancePhaseInternal(transaction, roomRef, room, activePlayers, cards);
+      } else {
+        transaction.update(roomRef, {
+          cards,
+          readyPlayers
+        });
       }
     }
 
