@@ -24,9 +24,6 @@ class PlayerState {
   final String? lastReaction;
   final int? lastReactionAt; // Epoch timestamp in ms
 
-  // Prompt re-roll
-  final bool hasRerolled;
-
   // Custom Prompts contribution
   final List<String> customPrompts;
 
@@ -45,7 +42,6 @@ class PlayerState {
     this.lobbyReady = false,
     this.lastReaction,
     this.lastReactionAt,
-    this.hasRerolled = false,
     this.customPrompts = const [],
   });
 
@@ -64,7 +60,6 @@ class PlayerState {
     bool? lobbyReady,
     String? lastReaction,
     int? lastReactionAt,
-    bool? hasRerolled,
     List<String>? customPrompts,
   }) {
     return PlayerState(
@@ -82,7 +77,6 @@ class PlayerState {
       lobbyReady: lobbyReady ?? this.lobbyReady,
       lastReaction: lastReaction ?? this.lastReaction,
       lastReactionAt: lastReactionAt ?? this.lastReactionAt,
-      hasRerolled: hasRerolled ?? this.hasRerolled,
       customPrompts: customPrompts ?? this.customPrompts,
     );
   }
@@ -103,7 +97,6 @@ class PlayerState {
       'lobbyReady': lobbyReady,
       'lastReaction': lastReaction,
       'lastReactionAt': lastReactionAt,
-      'hasRerolled': hasRerolled,
       'customPrompts': customPrompts,
     };
   }
@@ -127,7 +120,6 @@ class PlayerState {
       lobbyReady: map['lobbyReady'] ?? false,
       lastReaction: map['lastReaction'],
       lastReactionAt: map['lastReactionAt']?.toInt(),
-      hasRerolled: map['hasRerolled'] ?? false,
       customPrompts: List<String>.from(map['customPrompts'] ?? []),
     );
   }

@@ -607,9 +607,6 @@ void main() {
       await gs.rerollMyPrompt();
       await Future.delayed(Duration(milliseconds: 100));
 
-      // Verify hasRerolled is false (unlimited re-rolls during truth phase under Issue 61)
-      expect(gs.currentPlayer!.hasRerolled, isFalse);
-
       // Verify prompt has changed
       final newCard = gs.gameState!.cards.firstWhere((c) => c.targetPlayerId == 'host_user');
       expect(newCard.promptText, isNot(originalPrompt));

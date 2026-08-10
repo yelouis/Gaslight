@@ -33,7 +33,6 @@ export interface PlayerState {
   lobbyReady: boolean;
   lastReaction: string | null;
   lastReactionAt: number | null;
-  hasRerolled: boolean;
   authUid: string;
   expiresAt?: any;
 }
@@ -123,7 +122,6 @@ export const createRoom = onCall(async (request) => {
     lobbyReady: false,
     lastReaction: null,
     lastReactionAt: null,
-    hasRerolled: false,
     authUid: callerUid,
     expiresAt: ttlFrom(nowMs)
   };
@@ -207,7 +205,6 @@ export const joinRoom = onCall(async (request) => {
       lobbyReady: false,
       lastReaction: null,
       lastReactionAt: null,
-      hasRerolled: false,
       authUid: callerUid,
       expiresAt: ttlFrom(nowMs)
     };
@@ -660,15 +657,13 @@ export const rerollPrompt = onCall(async (request) => {
     }
 
     const room = roomSnap.data() as GameState;
-    const playerSnap = await transaction.get(playerRef);
-
-    if (!playerSnap.exists || (playerSnap.data() as PlayerState).authUid !== callerUid) {
-      throw new HttpsError("permission-denied", "User does not own this player document.");
+    if (room.currentPhase !== "truth") {
+      throw new HttpsError("failed-precondition", "Prompt re-rolls are only allowed during the truth phase.");
     }
 
-    const player = playerSnap.data() as PlayerState;
-    if (player.hasRerolled) {
-      throw new HttpsError("failed-precondition", "Prompt already re-rolled once this game.");
+    const playerSnap = await transaction.get(playerRef);
+    if (!playerSnap.exists || (playerSnap.data() as PlayerState).authUid !== callerUid) {
+      throw new HttpsError("permission-denied", "User does not own this player document.");
     }
 
     // Find the player's card
@@ -686,7 +681,6 @@ export const rerollPrompt = onCall(async (request) => {
     newCards[cardIdx] = updatedCard;
 
     transaction.update(roomRef, { cards: newCards });
-    transaction.update(playerRef, { hasRerolled: true });
 
     return { success: true };
   });
@@ -1309,7 +1303,6 @@ export const debugAddBots = onCall(async (request) => {
       lastSeen: null,
       lastReaction: null,
       lastReactionAt: null,
-      hasRerolled: false,
       authUid: `bot_auth_${botId}`
     };
     const playerRef = roomRef.collection("players").doc(botId);

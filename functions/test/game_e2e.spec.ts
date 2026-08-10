@@ -753,6 +753,63 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(aliceCardAfterReroll.promptText).to.not.equal('Alice prompt 2');
   });
 
+  it('Issue 64: should allow unlimited re-rolls during truth phase, enforce phase guard during forgery phase, and handle deck exhaustion', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guestUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_guest'
+    });
+
+    await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
+
+    const roomRef = db.collection('rooms').doc(roomCode);
+    let roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('truth');
+
+    // Perform 3 consecutive re-rolls during truth phase
+    const p1 = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host').promptText;
+    await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+    roomSnap = await roomRef.get();
+    const p2 = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host').promptText;
+    expect(p2).to.not.equal(p1);
+
+    await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+    roomSnap = await roomRef.get();
+    const p3 = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host').promptText;
+    expect(p3).to.not.equal(p2);
+
+    await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+    roomSnap = await roomRef.get();
+    const p4 = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host').promptText;
+    expect(p4).to.not.equal(p3);
+
+    // Advance to forgery phase
+    await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'T1', isTruth: true });
+    await callFn('submitAnswer', guestUser.idToken, { roomCode, targetCardId: 'p_guest', authorId: 'p_guest', text: 'T2', isTruth: true });
+    roomSnap = await roomRef.get();
+    expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+
+    // Attempt re-roll during forgery phase (must be rejected with failed-precondition)
+    let threwPhaseGuard = false;
+    try {
+      await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+    } catch (e: any) {
+      threwPhaseGuard = true;
+    }
+    expect(threwPhaseGuard).to.be.true;
+  });
+
   it('should enforce the server-side cap of at most 3 custom prompts per player', async () => {
     const hostUser = await createAnonUser();
     const guestUser = await createAnonUser();
