@@ -33,6 +33,7 @@ class _DeckCarouselState extends State<DeckCarousel> with TickerProviderStateMix
   late final PageController _pageController;
   double _currentPage = 0.0;
   Timer? _debounceTimer;
+  DateTime? _lastSwipeTime;
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -72,7 +73,34 @@ class _DeckCarouselState extends State<DeckCarousel> with TickerProviderStateMix
     ]).animate(_pulseController);
   }
 
+  @override
+  void didUpdateWidget(DeckCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedDeckId != oldWidget.selectedDeckId) {
+      final targetIndex = widget.availableDecks.indexOf(widget.selectedDeckId);
+      if (targetIndex >= 0 && _pageController.hasClients) {
+        final now = DateTime.now();
+        final recentSwipe = _lastSwipeTime != null &&
+            now.difference(_lastSwipeTime!) < const Duration(seconds: 3);
+        if (!recentSwipe) {
+          if (AppMotion.reduce(context)) {
+            _pageController.jumpToPage(targetIndex);
+          } else {
+            _pageController.animateToPage(
+              targetIndex,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+            );
+          }
+        }
+      }
+    }
+  }
+
   void _onPageChanged(int index) {
+    _lastSwipeTime = DateTime.now();
+    if (!widget.isHost) return;
+
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 400), () {
       if (mounted) {
@@ -84,6 +112,7 @@ class _DeckCarouselState extends State<DeckCarousel> with TickerProviderStateMix
   }
 
   void _playStampPulse() {
+    if (!widget.isHost) return;
     if (!AppMotion.reduce(context)) {
       _pulseController.forward(from: 0.0);
     }
@@ -99,28 +128,7 @@ class _DeckCarouselState extends State<DeckCarousel> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isHost) {
-      // Non-host: single centered chosen folder labeled "THE CHOSEN FILE"
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'THE CHOSEN FILE',
-            style: AppTextStyles.sectionLabel,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: _FolderCard(
-              deckId: widget.selectedDeckId,
-              gameService: widget.gameService,
-            ),
-          ),
-        ],
-      );
-    }
-
-    return SizedBox(
+    final carouselWidget = SizedBox(
       height: 130,
       child: PageView.builder(
         controller: _pageController,
@@ -141,10 +149,42 @@ class _DeckCarouselState extends State<DeckCarousel> with TickerProviderStateMix
           );
 
           if (isSelected) {
-            card = ScaleTransition(
-              scale: _pulseAnimation,
-              child: card,
-            );
+            if (widget.isHost) {
+              card = ScaleTransition(
+                scale: _pulseAnimation,
+                child: card,
+              );
+            } else {
+              card = Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  card,
+                  Positioned(
+                    top: 14,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.oxblood,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppColors.brass, width: 1),
+                      ),
+                      child: const Text(
+                        'CHOSEN',
+                        style: TextStyle(
+                          fontFamily: 'Lora',
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.parchment,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
           }
 
           return GestureDetector(
@@ -166,6 +206,23 @@ class _DeckCarouselState extends State<DeckCarousel> with TickerProviderStateMix
         },
       ),
     );
+
+    if (!widget.isHost) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'THE CHOSEN FILE',
+            style: AppTextStyles.sectionLabel,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          carouselWidget,
+        ],
+      );
+    }
+
+    return carouselWidget;
   }
 }
 

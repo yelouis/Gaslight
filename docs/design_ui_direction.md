@@ -217,3 +217,9 @@ Bundled `.wav` effects in `assets/audio/` — quill scratch on submit, wax thunk
 
 ### Motion tokens
 All durations come from `AppMotion`: `fast` 180 ms (presses, stamps) · `standard` 300 ms (fades, state swaps) · `scene` 450 ms (route transitions) · `emphasis` 600 ms (title settles, flips). No ad-hoc `Duration` values.
+
+### Lobby Deck Carousel (Issue 52, shipped August 2026)
+- Non-hosts get the full 7-deck `PageView` carousel read-only, labeled with `THE CHOSEN FILE`. Selection affordances (`onDeckSelected` callable write, stamp pulse) are suppressed for non-hosts.
+- Host's selected deck is badged with `CHOSEN` on non-host carousels.
+- Non-host carousel does not snap back to host's selection when swiped within the last 3 seconds (`_lastSwipeTime`).
+

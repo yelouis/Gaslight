@@ -30,25 +30,17 @@ They are causally linked: Issue 51 is the root defect, it produced the state tha
      ```
    - **Over-reach Guard**: Verified sound toggle `IconButton` remains in `AppBar` actions and toggling sound state works as intended (`test/lobby_leave_test.dart`). Updated `house_rules_panel_test.dart` to assert 2 `IconButton`s in `AppBar`.
 
----
-
-### Issue 52: Non-hosts cannot see which decks exist
-
-**Status**: ⚠️ Working as designed — a UX change, not a defect. Verified August 9, 2026. `lib/widgets/deck_carousel.dart:102–121` returns early whenever `widget.isHost` is false, rendering a single centred `_FolderCard` under the label "THE CHOSEN FILE"; the seven-item `PageView` at lines 123–141 is host-only. Both deck registries are complete and in agreement — six decks in `functions/src/prompt_decks.ts` (`the_daily_grind`, `deep_fears_and_phobias`, `unhinged_quirks`, `romantic_disasters`, `rated_r_nsfw`, `cah_dark_humor`) mirrored in `lib/utils/prompt_decks.dart:7–126`, plus a synthetic `'custom'` entry appended at `lobby_screen.dart:339`. `_familyFriendlyOnly` defaults to `false` (`lobby_screen.dart:43`) and its filter (lines 332–340) drops only the two mature decks, and only while the toggle is on. Nothing is missing or mis-filtered. This was reported as "there is only one deck" because Issue 51 had stranded the reporter as a non-host in a hostless room, where no host was ever going to change the selection.
-
-**Option A: Keep the single card, add an explanatory caption**
-- Pros: Near-zero cost and no layout risk at 360×640; removes the confusion directly; preserves the deliberate information hierarchy where a non-host sees exactly the one fact that affects them.
-- Cons: Players still cannot see what the game offers, which matters most to a first-time player deciding whether to keep playing.
-
-**Option B (selected): Give non-hosts the full carousel, read-only**
-- Pros: Everyone can see the deck catalogue, which is a selling point of the game rather than a setting; makes the lobby feel less inert for non-hosts; the host's active choice can be badged so the actual state stays unambiguous.
-- Cons: A swipeable carousel implies agency the player does not have — the selection affordances must be actively suppressed (`onPageChanged` must not call `updateLobbySettings`, and the `_pulseController` stamp animation must not fire on swipe); a non-host swiping away from the host's pick must not lose track of it, so the badge and a snap-back or explicit indicator are load-bearing; more widget-test surface.
-
-**Option C: Change nothing**
-- Pros: No work, no risk; once Issue 51 is fixed a non-host always has a live host actively choosing, so the stranded state that caused the confusion cannot recur.
-- Cons: Leaves a genuinely opaque moment for anyone who is not the host.
-
-Your selection: **Option B** — selected August 9, 2026.
+7. **Issue 52: Non-Host Read-Only Deck Carousel (Resolved - August 9, 2026)**:
+   - **Problem**: Non-hosts were presented with a static single folder card ("THE CHOSEN FILE"), hiding the 6 built-in decks and custom deck catalog from non-host players.
+   - **Solution**: Removed non-host early return in `lib/widgets/deck_carousel.dart` (Option B), rendering the full 7-deck `PageView` carousel for non-hosts labeled with `THE CHOSEN FILE`. Suppressed selection write call (`updateLobbySettings`) and stamp pulse (`_pulseController`) when `!isHost`. Overlaid host's selected deck with an oxblood/brass `CHOSEN` badge on non-host carousels. Added 3-second swipe protection window (`_lastSwipeTime`) preventing Firestore selection stream updates from snapping page view away while non-host is actively swiping.
+   - **Observed Falsifying Output**:
+     ```text
+     ══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+     The following TestFailure was thrown running a test:
+     Expected: exactly one matching node in the widget tree
+       Actual: _WidgetTypeFinder:<Zero widgets found with type "PageView">
+     ```
+   - **Over-reach Guard**: Verified host deck selection still works, calling `updateLobbySettings` exactly once per settled page and triggering the stamp pulse (`test/deck_carousel_test.dart`). Verified 360x640 layout fit and `AppMotion.reduce` static card behavior.
 
 ---
 

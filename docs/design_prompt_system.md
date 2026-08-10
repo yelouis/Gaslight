@@ -59,3 +59,13 @@ Players can play on their **own prompts** instead of a built-in deck.
 
 ### Why it's designed this way
 Contributions ride the player's own document to avoid a new write path (rules already permit owner writes to non-protected fields); the assignment constraint preserves the core deduction (writing a "truth" for your own prompt would be trivial); the terminal fallback guarantees `startGame` never throws for custom decks regardless of contribution patterns.
+
+---
+
+## 4. Deck Carousel Presentation (Issue 52 — shipped August 2026)
+
+- **Host View**: The host sees the interactive 7-deck `PageView` carousel without a section label. Swiping pages updates the room's `selectedDeckId` via `updateLobbySettings` (debounced 400 ms) and triggers the scale pulse animation.
+- **Non-Host Read-Only View**: Non-hosts see the exact same 7-deck `PageView` carousel labeled with `THE CHOSEN FILE`. Page swipes allow non-hosts to browse the full catalog read-only without calling `updateLobbySettings` or triggering the stamp pulse.
+- **`CHOSEN` Badge**: On non-host carousels, the host's currently selected deck card is badged with an oxblood/brass `CHOSEN` label.
+- **3-Second Swipe Protection**: When the host updates `selectedDeckId` via Firestore stream, a non-host's carousel page position does not snap back to the chosen deck if the non-host swiped within the last 3 seconds (`_lastSwipeTime`).
+
