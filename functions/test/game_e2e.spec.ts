@@ -969,6 +969,70 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       expect(hosts.length).to.equal(1);
       expect(hosts[0].id).to.equal('p_guest');
     });
+
+    describe('Issue 53: 8-Hour Firestore TTL Policy', () => {
+      it('writes expiresAt on room and players at creation within a +-5-second window', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const nowMs = Date.now();
+        const expectedTtlMs = nowMs + 8 * 60 * 60 * 1000;
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+
+        await callFn('joinRoom', guestUser.idToken, {
+          roomCode,
+          playerName: 'Bob',
+          playerId: 'p_guest'
+        });
+
+        const roomRef = db.collection('rooms').doc(roomCode);
+        const roomSnap = await roomRef.get();
+        const roomData = roomSnap.data();
+
+        expect(roomData).to.have.property('expiresAt');
+        const roomExpiresMs = roomData?.expiresAt.toMillis();
+        expect(Math.abs(roomExpiresMs - expectedTtlMs)).to.be.below(5000);
+
+        const hostSnap = await roomRef.collection('players').doc('p_host').get();
+        const hostExpiresMs = hostSnap.data()?.expiresAt.toMillis();
+        expect(Math.abs(hostExpiresMs - expectedTtlMs)).to.be.below(5000);
+
+        const guestSnap = await roomRef.collection('players').doc('p_guest').get();
+        const guestExpiresMs = guestSnap.data()?.expiresAt.toMillis();
+        expect(Math.abs(guestExpiresMs - expectedTtlMs)).to.be.below(5000);
+      });
+
+      it('refreshes expiresAt on existing room writes', async () => {
+        const hostUser = await createAnonUser();
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        const initialSnap = await roomRef.get();
+        const initialExpiresMs = initialSnap.data()?.expiresAt.toMillis();
+
+        await new Promise(r => setTimeout(r, 200));
+
+        await callFn('updateLobbySettings', hostUser.idToken, {
+          roomCode,
+          selectedDeckId: 'unhinged_quirks'
+        });
+
+        const updatedSnap = await roomRef.get();
+        const updatedExpiresMs = updatedSnap.data()?.expiresAt.toMillis();
+
+        expect(updatedExpiresMs).to.be.gte(initialExpiresMs);
+      });
+    });
   });
 });
 

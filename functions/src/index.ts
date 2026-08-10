@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { RotationEngine } from "./rotation_engine";
 import { ScoringLogic, GameState, CardModel } from "./scoring_logic";
 import { PromptDecks } from "./prompt_decks";
@@ -10,6 +10,12 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const kMissingAnswerPlaceholder = "THE SOUL IS SILENT";
+
+const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
+
+function ttlFrom(nowMs: number): Timestamp {
+  return Timestamp.fromMillis(nowMs + ROOM_TTL_MS);
+}
 
 export interface PlayerState {
   id: string;
@@ -28,6 +34,7 @@ export interface PlayerState {
   lastReactionAt: number | null;
   hasRerolled: boolean;
   authUid: string;
+  expiresAt?: any;
 }
 
 function generateRoomCode(): string {
@@ -80,6 +87,7 @@ export const createRoom = onCall(async (request) => {
   const roomRef = db.collection("rooms").doc(roomCode);
   const playerRef = roomRef.collection("players").doc(playerId);
 
+  const nowMs = Date.now();
   const gameState = {
     roomCode,
     currentPhase: "lobby",
@@ -95,7 +103,8 @@ export const createRoom = onCall(async (request) => {
     readyPlayers: {},
     endTime: null,
     resolutionOrder: [],
-    debugEnabled
+    debugEnabled,
+    expiresAt: ttlFrom(nowMs)
   };
 
   const playerState = {
@@ -106,15 +115,16 @@ export const createRoom = onCall(async (request) => {
     isHost: true,
     colorValue,
     avatarIndex,
-    lastSeen: Date.now(),
+    lastSeen: nowMs,
     timesFooled: 0,
     playersDeceived: 0,
-    joinedAt: Date.now(),
+    joinedAt: nowMs,
     lobbyReady: false,
     lastReaction: null,
     lastReactionAt: null,
     hasRerolled: false,
-    authUid: callerUid
+    authUid: callerUid,
+    expiresAt: ttlFrom(nowMs)
   };
 
   const batch = db.batch();
@@ -157,13 +167,15 @@ export const joinRoom = onCall(async (request) => {
 
     if (playerSnap.exists) {
       // Rejoining player, update authUid and visual details
+      const nowMs = Date.now();
       const existing = playerSnap.data() as PlayerState;
       transaction.update(playerRef, {
         authUid: callerUid,
         name: playerName,
         colorValue,
         avatarIndex,
-        lastSeen: Date.now()
+        lastSeen: nowMs,
+        expiresAt: ttlFrom(nowMs)
       });
       return { role: existing.role };
     }
@@ -178,6 +190,7 @@ export const joinRoom = onCall(async (request) => {
       role = "spectator";
     }
 
+    const nowMs = Date.now();
     const playerState = {
       id: playerId,
       name: playerName,
@@ -186,15 +199,16 @@ export const joinRoom = onCall(async (request) => {
       isHost: false,
       colorValue,
       avatarIndex,
-      lastSeen: Date.now(),
+      lastSeen: nowMs,
       timesFooled: 0,
       playersDeceived: 0,
-      joinedAt: Date.now(),
+      joinedAt: nowMs,
       lobbyReady: false,
       lastReaction: null,
       lastReactionAt: null,
       hasRerolled: false,
-      authUid: callerUid
+      authUid: callerUid,
+      expiresAt: ttlFrom(nowMs)
     };
 
     transaction.set(playerRef, playerState);
@@ -393,7 +407,8 @@ export const startGame = onCall(async (request) => {
       rotationPlan: stringRotations,
       readyPlayers: {},
       endTime,
-      resolutionOrder: []
+      resolutionOrder: [],
+      expiresAt: ttlFrom(Date.now())
     });
 
     // Reset player readiness
@@ -899,7 +914,8 @@ async function advancePhaseInternal(
         currentRotationIndex: nextRot,
         currentCardAssignments: nextAssignments,
         readyPlayers: nextReadyPlayers,
-        endTime
+        endTime,
+        expiresAt: ttlFrom(Date.now())
       });
     } else {
       // Move to Truth Phase: Every active player gets their own card back
@@ -916,7 +932,8 @@ async function advancePhaseInternal(
         cards: nextCards,
         currentCardAssignments: truthAssignments,
         readyPlayers: nextReadyPlayers,
-        endTime
+        endTime,
+        expiresAt: ttlFrom(Date.now())
       });
     }
   } else if (room.currentPhase === "truth") {
@@ -943,7 +960,8 @@ async function advancePhaseInternal(
       currentReaderId: pIds.length > 0 ? pIds[0] : null,
       resolutionOrder: pIds,
       readyPlayers: nextReadyPlayers,
-      endTime
+      endTime,
+      expiresAt: ttlFrom(Date.now())
     });
   } else if (room.currentPhase === "vote") {
     // Tally scores and advance to Reveal
@@ -987,7 +1005,8 @@ async function advancePhaseInternal(
       currentPhase: "reveal",
       readyPlayers: nextReadyPlayers,
       endTime: null,
-      unmaskDeadline
+      unmaskDeadline,
+      expiresAt: ttlFrom(Date.now())
     });
   }
 }
@@ -1023,7 +1042,8 @@ export const updateLobbySettings = onCall(async (request) => {
     transaction.update(roomRef, {
       sabotageAnswersCount: sabotageAnswersCount != null ? sabotageAnswersCount : data.sabotageAnswersCount,
       isTimerDisabled:      isTimerDisabled      != null ? isTimerDisabled      : data.isTimerDisabled,
-      selectedDeckId:       selectedDeckId       != null ? selectedDeckId       : (data.selectedDeckId || "the_daily_grind")
+      selectedDeckId:       selectedDeckId       != null ? selectedDeckId       : (data.selectedDeckId || "the_daily_grind"),
+      expiresAt:            ttlFrom(Date.now())
     });
 
     return { success: true };

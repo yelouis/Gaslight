@@ -58,6 +58,18 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
 ## 5. Identity Model
 
 * `playerId` is designed to be a **device-stable UUID** persisted in `SharedPreferences`, decoupled from Firebase Auth; the anonymous `authUid` is just the credential currently bound to that seat, and `joinRoom` re-binds it when the same `playerId` returns — so a reinstall or cleared storage keeps the player's seat and score.
+
+---
+
+## 6. Firestore TTL Policy (Issue 53 — shipped August 2026)
+
+- **8-Hour TTL Expiration**: Rooms and player documents store `expiresAt: Firestore.Timestamp` computed at creation (`now + 8 hours`). Active games refresh `expiresAt` on room updates (`startGame`, `updateLobbySettings`, `advancePhaseInternal`).
+- **Security Rule Denylist**: `'expiresAt'` is added to the field write denylist in `firestore.rules`, preventing client devices from writing or altering `expiresAt` directly while preserving allowed client `lastSeen` updates.
+- **Production TTL Index Commands**:
+  ```bash
+  gcloud firestore fields ttls update expiresAt --collection-group=rooms --enable-ttl
+  gcloud firestore fields ttls update expiresAt --collection-group=players --enable-ttl
+  ```
 * The client implements this via persistent UUID generation and rejoins via the `joinRoom` server re-bind endpoint rather than clearing the local session (Issue 16).
 
 ---

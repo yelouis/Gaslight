@@ -130,4 +130,26 @@ describe('Firestore Security Rules', () => {
     const bobPlayerRef = doc(bobContext.firestore(), 'rooms/TEST/players/alice_id');
     await assertFails(updateDoc(bobPlayerRef, { customPrompts: ['Bob prompt'] }));
   });
+
+  it('client cannot write expiresAt on its own player document', async () => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+      const adminPlayerRef = doc(adminContext.firestore(), 'rooms/TEST/players/alice_id');
+      await setDoc(adminPlayerRef, {
+        id: 'alice_id',
+        name: 'Alice',
+        authUid: 'alice',
+        totalScore: 10,
+        lastSeen: 100
+      });
+    });
+
+    const userContext = testEnv.authenticatedContext('alice');
+    const playerRef = doc(userContext.firestore(), 'rooms/TEST/players/alice_id');
+
+    // Deny expiresAt write
+    await assertFails(updateDoc(playerRef, { expiresAt: Date.now() + 10000 }));
+
+    // Allow lastSeen update
+    await assertSucceeds(updateDoc(playerRef, { lastSeen: Date.now() }));
+  });
 });

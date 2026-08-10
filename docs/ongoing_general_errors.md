@@ -10,70 +10,21 @@
 
 ## 1. Open & in-flight
 
-**4 open issues — the Lobby Lifecycle wave.** All four were filed and selected on **August 9, 2026** after a live three-simulator playtest against production. Implementation specs live in `agent_execution_guide.md` §3–§6.
-
-They are causally linked: Issue 51 is the root defect, it produced the state that made Issue 50 inescapable and Issue 52 look like a bug. Fix 51 first.
+**Queue Complete — all 4 Lobby Lifecycle wave issues resolved (August 10, 2026).**
 
 ---
 
-## ⚠️ Unresolved Issues & Suggestions
+## 🧪 Resolved Issues & Implementation Refinements
 
-6. **Issue 50: Lobby Leave Control (Resolved - August 9, 2026)**:
-   - **Problem**: Joining a lobby was a one-way trip — `GameService.leaveRoom()` existed but `LobbyScreen` provided no leading exit button in `AppBar`.
-   - **Solution**: Added `ThematicIconType.depart` mapped to glyph `0xe674` in Phosphor Light font asset. Added `leading:` exit `IconButton` in `LobbyScreen`'s `AppBar` that triggers confirmation dialog `_confirmLeave`. Formatted dialog with role-specific copy (Guest: *"Leave this room? / You can rejoin with the room code as long as the game hasn't started. / STAY / LEAVE"*; Host: *"Close this room? / You are the host. Leaving will close the room for everyone. / STAY / CLOSE ROOM"*). Confirmed button touch target sizes $\ge 48\text{ dp}$, added double-tap guard `_isLeaving`, and ensured `AppMotion.reduce` accessibility path.
+8. **Issue 53: 8-Hour Firestore TTL Policy (Resolved - August 10, 2026)**:
+   - **Problem**: Rooms and player documents persisted indefinitely in production Firestore after clients abandoned them.
+   - **Solution**: Defined `ROOM_TTL_MS = 8 * 60 * 60 * 1000` (8 hours) and helper `ttlFrom(nowMs)` in `functions/src/index.ts`. Written `expiresAt: ttlFrom(nowMs)` at creation on room and host player documents in `createRoom`, on joining/rejoining player documents in `joinRoom`, and refreshed on room updates (`startGame`, `updateLobbySettings`, `advancePhaseInternal`). Added `'expiresAt'` to field write denylist in `firestore.rules`, enforcing backend-only write authority for TTL timestamps while keeping client `lastSeen` updates allowed.
    - **Observed Falsifying Output**:
      ```text
-     ══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
-     The following TestFailure was thrown running a test:
-     Expected: exactly one matching node in the widget tree
-       Actual: _TooltipFinder:<Zero widgets found with tooltip "Leave room".>
+     1) Issue 53: 8-Hour Firestore TTL Policy writes expiresAt on room and players at creation within a +-5-second window:
+        AssertionError: expected undefined to have property 'expiresAt'
      ```
-   - **Over-reach Guard**: Verified sound toggle `IconButton` remains in `AppBar` actions and toggling sound state works as intended (`test/lobby_leave_test.dart`). Updated `house_rules_panel_test.dart` to assert 2 `IconButton`s in `AppBar`.
-
-7. **Issue 52: Non-Host Read-Only Deck Carousel (Resolved - August 9, 2026)**:
-   - **Problem**: Non-hosts were presented with a static single folder card ("THE CHOSEN FILE"), hiding the 6 built-in decks and custom deck catalog from non-host players.
-   - **Solution**: Removed non-host early return in `lib/widgets/deck_carousel.dart` (Option B), rendering the full 7-deck `PageView` carousel for non-hosts labeled with `THE CHOSEN FILE`. Suppressed selection write call (`updateLobbySettings`) and stamp pulse (`_pulseController`) when `!isHost`. Overlaid host's selected deck with an oxblood/brass `CHOSEN` badge on non-host carousels. Added 3-second swipe protection window (`_lastSwipeTime`) preventing Firestore selection stream updates from snapping page view away while non-host is actively swiping.
-   - **Observed Falsifying Output**:
-     ```text
-     ══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
-     The following TestFailure was thrown running a test:
-     Expected: exactly one matching node in the widget tree
-       Actual: _WidgetTypeFinder:<Zero widgets found with type "PageView">
-     ```
-   - **Over-reach Guard**: Verified host deck selection still works, calling `updateLobbySettings` exactly once per settled page and triggering the stamp pulse (`test/deck_carousel_test.dart`). Verified 360x640 layout fit and `AppMotion.reduce` static card behavior.
-
----
-
-### Issue 53: Nothing reaps rooms that every client has abandoned
-
-**Status**: ⚠️ Confirmed Unresolved — verified August 9, 2026. `functions/src/index.ts` exports fourteen callables and **no** scheduled or triggered function; a grep for `onSchedule|pubsub|scheduler|onDocument|TTL` across `functions/src/` returns zero matches. Room cleanup is therefore entirely client-driven: the staleness sweep at `lib/services/game_service.dart:310–328` only runs inside a client that is currently subscribed to the room, and it can only prune players *other* than itself (line 317). When the last client closes the app, nothing remains to call `handleDisconnect`, and the room document plus its `players` subcollection persist in production Firestore indefinitely. Fixing Issue 51 removes the common path to an abandoned room but not this one.
-
-**Option A: A scheduled cleanup function**
-- Pros: Can delete the room document *and* recursively delete its `players` subcollection, which is the only way to fully remove a room; the deletion criterion is expressible in code (all players stale past a threshold) and testable in the emulator suite; runs on a predictable cadence.
-- Cons: A recurring scheduled invocation to pay for and monitor; needs a Cloud Scheduler job on the Blaze plan; adds a new class of test to `functions/test/`.
-
-**Option B (selected): A native Firestore TTL policy**
-- Pros: No function to write, run, pay for or monitor — the platform performs the deletion; the only application-side change is writing an `expiresAt` timestamp; cannot fail at runtime the way a scheduled function can.
-- Cons: **TTL does not cascade to subcollections** — a policy on `rooms` deletes the room document and orphans every document under `rooms/{code}/players`, which then becomes unreachable through the parent but still stored and still billable. A second TTL policy on the `players` collection group is mandatory, not optional. Deletion timing is best-effort and may lag the expiry by up to 24 hours, so a stale room can still be joinable well past its nominal expiry. TTL policies are configured out-of-band via `gcloud`/console, so they are not captured in the repo and will not exist in the emulator or in a fresh project unless someone re-runs the command.
-
-**Option C: Defer**
-- Pros: Fixing Issue 51 removes the common case; storage cost of a few orphaned rooms is negligible at current scale.
-- Cons: Leaves production Firestore accumulating dead rooms; a 4-letter room code space is small enough that collisions with dead rooms eventually matter.
-
-Your selection: **Option B, at an 8-hour interval** — Option B selected August 9, 2026. The interval was revised twice the same day: +24 h → +1 h → **+8 h**, which is the value in force. TTL is also the more scalable of the two: its work is absorbed by Firestore rather than by a function that must query, batch under a 500-operation limit, and finish inside a wall-clock timeout. What it trades away is semantic precision — it cannot express *"no client is watching"*, only *"this timestamp passed."*
-
-Two consequences are accepted knowingly and are specified in `agent_execution_guide.md` §6:
-
-1. **The second TTL policy on the `players` collection group is mandatory**, because TTL never cascades to subcollections. Skip it and every player document behind a deleted room is orphaned permanently.
-2. **Deletion is best-effort** and may lag expiry by up to 24 hours, so an expired room can still be joinable. The emulator does not enforce TTL, so only the writing and refreshing of `expiresAt` is testable.
-
-**Why the interval matters more than it looks — the record of the 1-hour detour.** Nothing in this system tracks presence. A player document's `expiresAt` is written once at join and never refreshed, because the 10-second heartbeat writes `lastSeen` and only `lastSeen`. Room documents are refreshed by writes that already happen, but an idle lobby produces none. The whole design therefore rests on one bet: **every realistic session ends before the timer expires.**
-
-At **+1 h** that bet loses routinely. An idle lobby — players waiting for friends, generating no room writes — would be deleted with people sitting in it, and because Issue 51 turns deletion into a client eviction they would all be thrown to the entry screen. Worse, any game running past sixty minutes would have its **active players' documents deleted mid-play**. That interval consequently required a host-only `touchRoom` callable on a 5-minute client timer, refreshing the room and every player document; it was correct precisely because Issue 51 guarantees a live room always has exactly one host, and it cost roughly 12 invocations per room-hour.
-
-At **+8 h** both failure modes are unreachable — phones sleep and apps background long before an eight-hour idle lobby, and a party game does not run for eight hours — so the keepalive was removed as dead weight, along with all client-side work for this issue.
-
-**The keepalive design is recorded here rather than deleted, because it becomes necessary again the moment the interval drops below roughly 4 hours.** `agent_execution_guide.md` §7 carries that trigger.
+   - **Over-reach Guard**: Verified client updates to `lastSeen` on player documents still succeed while client updates supplying `expiresAt` are rejected by security rules (`functions/test/rules.spec.ts`). Documented production `gcloud firestore fields ttls update` commands in `docs/design_database_and_security.md`.
 
 ---
 

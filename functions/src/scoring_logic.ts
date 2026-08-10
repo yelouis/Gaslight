@@ -23,6 +23,7 @@ export interface GameState {
   endTime: number | null;
   resolutionOrder: string[];
   debugEnabled?: boolean;
+  expiresAt?: any;
   unmaskDeadline?: number | null;
 }
 
