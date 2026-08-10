@@ -48,10 +48,13 @@ app.*.map.json
 # Dotenv
 .env
 
-# Firebase config
+# Firebase config & Admin SDK keys
 **/google-services.json
 **/GoogleService-Info.plist
 web_config.txt
+*serviceAccount*.json
+*-adminsdk-*.json
+*.pem
 
 # Local ChromeDriver binaries
 chromedriver/
