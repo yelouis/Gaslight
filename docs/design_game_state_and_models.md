@@ -9,7 +9,18 @@ The match progresses through the following sequential states:
 enum GamePhase { lobby, truth, forgery, vote, reveal, gameOver }
 ```
 
----
+### Phase order
+
+`startGame` opens in `truth` — every player answers their own prompt before any forgery is written. The full progression is: **lobby → truth → forgery → vote → reveal → gameOver**. The `vote → reveal` cycle repeats once per card in `resolutionOrder`.
+
+### Minimum player count
+
+`startGame` enforces two floors:
+
+1. `activePlayers.length < 2` → rejected (`functions/src/index.ts`).
+2. `activePlayers.length <= sabotageAnswersCount` → rejected, where `sabotageAnswersCount` defaults to **2**.
+
+At default settings the practical minimum is **3 players**. Two players only works if the host lowers forgery rounds to 1, which is exactly what the 2-player E2E test does. The lobby states this honestly (`lobby_screen.dart:444`, *"Need more players than forgery rounds"*). **This is a configuration-dependent floor, not a defect.**
 
 ## 2. Card Model (`CardModel`)
 

@@ -10,14 +10,31 @@
 
 ## 1. Open & in-flight
 
-**0 open issues.** Issues 58–62 have been fully resolved, verified via client and backend test suites, and deployed to production `gaslight-46368` on **August 10, 2026**.
+**0 open issues.** Issues 63–66 were completed, tested, and deployed on August 10, 2026. All four selected Option A.
 
-**Unfinished tasks status:**
-1. **The `depart` sigil regression guard (Resolved)**: Added `testWidgets('ThematicIconType.depart renders non-zero ink pixels to bitmap')` in `test/thematic_icon_test.dart`, enforcing $\ge 30$ non-zero alpha ink pixels via `RepaintBoundary.toImage()` bitmap decoding.
-2. **Release bundle size (Re-measured)**: `flutter build web --release` compiled successfully and measured at 50 MB (JS tree-shaken with 99.5% font icon reduction).
-3. **Production Cloud Functions & Rules (Deployed)**: All 14 functions and security rules deployed to `gaslight-46368` (`v2` `us-central1`).
+**Battery measured at `915cf4d`, clean tree (August 10, 2026):**
 
-Full battery verified: `flutter analyze lib test` **0 errors** · `flutter test` **123/123** · `npm --prefix functions test` **37/37**.
+| Gate | Result |
+|---|---|
+| `flutter analyze lib test` | **0 errors** ✅ (272 infos) |
+| `flutter test` | **125/125** ✅ |
+| `npm --prefix functions run build` | clean ✅ |
+| `npm --prefix functions test` | **39/39** ✅ |
+| `flutter build ios --release --no-codesign` | **49.5 MB** (`Runner.app`) — delta 0.0 MB vs `56c183a` baseline |
+| Production functions | all 14 updated `2026-08-10T19:00 UTC` |
+
+### Reference: the real minimum player count
+
+Queried during this build and easy to get wrong, so recorded once. `startGame` enforces **two** floors:
+
+- `activePlayers.length < 2` → rejected (`functions/src/index.ts:258`);
+- `activePlayers.length <= sabotageAnswersCount` → rejected (line 270), and forgery rounds **default to 2**.
+
+So **at default settings the practical minimum is 3 players.** Two players only works when the host lowers forgery rounds to 1 — which is exactly what the "2-player" E2E test does. The lobby already says so honestly (`lobby_screen.dart:444`). **This is a configuration-dependent floor, not a defect.** It belongs in `design_game_state_and_models.md`.
+
+---
+
+*(No unresolved issues at this time.)*
 
 ---
 
@@ -47,6 +64,45 @@ Full battery verified: `flutter analyze lib test` **0 errors** · `flutter test`
    - **Problem**: `CardModel` placed `truthAnswer` and `sabotageAnswers` directly on the public room document during forgery and vote phases, allowing clients reading the Firestore stream to peek at the answer key.
    - **Solution**: Implemented Option A. Moved answer keys (`truthAnswer` and `sabotageAnswers`) to server-only `/rooms/{roomCode}/sealed/{cardId}` subcollection with default-deny security rules during `truth`, `forgery`, and `vote` phases. Constructed unlabelled, shuffled `options` lists (`CardAnswerOption`) on public cards during the `vote` phase. Resolved vote choices against the sealed document in `castVote` and merged truth and sabotage answers onto public card models upon advancing to `reveal` phase.
    - **Verification**: Verified via `functions/test/rules.spec.ts` (client read/write on `/rooms/TEST/sealed/CARD1` denied) and `functions/test/game_e2e.spec.ts` (37/37 passing). All Cloud Functions and rules deployed to production `gaslight-46368`.
+
+6. **Issue 63: Opaque Answer-Option IDs (Resolved - August 10, 2026)**:
+   - **Problem**: Issue 62's sealed subcollection correctly blanked `truthAnswer` and `sabotageAnswers` on the room card, but the option ids (`opt_truth_${targetPlayerId}` and `opt_${forgerId}`) leaked the truth and every forger's identity through their naming scheme.
+   - **Solution**: Implemented Option A. Replaced all option id generation in `functions/src/index.ts` with `crypto.randomUUID()` — opaque v4 UUIDs carrying no information about truth, authorship, or position. The existing sealed mapping (`sealedData.answerAuthors` and `sealedData.truthAnswerId`) was populated with the new ids.
+   - **Observed Falsifying Output**: E2E test asserting no option id contains a player id or matches `/truth/i` — before the fix, ids like `opt_truth_p_host` and `opt_p_guest` immediately failed both conditions.
+   - **Over-reach Guard**: Ids are stable across the vote→reveal transition (captured during vote, asserted unchanged at reveal). Scoring and attribution are unchanged for a fixed scenario. 39/39 backend tests passing.
+   - **Verification**: Commit `eaeb135`. `npm --prefix functions test` — 39/39 passing.
+
+7. **Issue 64: Server-Side Re-roll Alignment (Resolved - August 10, 2026)**:
+   - **Problem**: Issue 61's "unlimited re-rolls during truth phase" was implemented on the client only. The server still enforced `hasRerolled` (once-per-game) and lacked a phase guard, so the second re-roll tap was rejected and the player saw the generic error fallback.
+   - **Solution**: Implemented Option A. Removed the `hasRerolled` check and write from all 6 occurrences in `functions/src/index.ts`. Added `room.currentPhase === "truth"` phase guard rejecting with `HttpsError("failed-precondition", ...)`. Removed `hasRerolled` from `lib/models/player_state.dart` (field, constructor, `copyWith`, `toMap`, `fromMap`). Left `'hasRerolled'` in `firestore.rules` denylist as a harmless no-op.
+   - **Observed Falsifying Output**: E2E test performing 3 consecutive re-rolls during truth phase — before the fix, the second call threw `"Prompt already re-rolled once this game."`. Forgery-phase re-roll attempt correctly rejected with `failed-precondition` after the fix.
+   - **Over-reach Guard**: A single re-roll still works; the re-roll control is absent during forgery; `flutter test` stays green (125/125) after `hasRerolled` removal from the model.
+   - **Verification**: Commit `b9c45a5`. `npm --prefix functions test` — 39/39. `flutter test` — 125/125.
+
+8. **Issue 65: Deploy Gate — Red Suite Blocks Deploy (Resolved - August 10, 2026)**:
+   - **Problem**: The backend E2E suite was red (5 failing) and production was deployed anyway. `firebase.json`'s `predeploy` hook ran the build but not the tests.
+   - **Solution**: Implemented Option A. Appended `"npm --prefix \"$RESOURCE_DIR\" test"` to `firebase.json`'s `predeploy` array. Documented the rules-only bypass and emulator dependency in the commit body and `design_database_and_security.md` §8.
+   - **Observed Falsifying Output**: A deliberately broken assertion (`expect(roomData.currentPhase).to.equal('BROKEN')`) caused `firebase deploy --only functions` to abort before any function was uploaded — the emulator suite exited with code 1 and the deploy pipeline stopped.
+   - **Over-reach Guard**: With the suite green, a real deploy succeeded and all 14 function timestamps advanced.
+   - **Verification**: Commit `a3cfd99`. Deploy verified at `2026-08-10T19:00 UTC` with all 14 functions updated.
+
+9. **Issue 66: Guards That Assert Usage, and the iOS Size Measurement (Resolved - August 10, 2026)**:
+   - **Problem**: (1) The iOS release size was recorded from `flutter build web --release` — a different artefact. (2) The contrast guard tested token pairs, not rendered widget pixels, so reverting to `onSurface` left the guard green. (3) The `depart` ink floor was 30 px instead of half the measured value.
+   - **Solution**: Implemented Option A. (1) Measured `Runner.app` via `flutter build ios --release --no-codesign` at **49.5 MB** (delta 0.0 MB vs `56c183a` baseline). (2) Added render-based contrast test in `test/contrast_tokens_test.dart` decoding PNG bitmaps via `test/helpers/png_decoder.dart` and verifying ≥ 4.5:1 ratio. (3) Measured depart ink pixels (712 at size 64) and raised floor to 356 in `test/thematic_icon_test.dart`.
+   - **Observed Falsifying Output (contrast)**: With text colour reverted to `AppColors.ink` (simulating `onSurface` on `groundRaised`), the render-based test failed:
+     ```text
+     Expected: a value greater than or equal to <4.5>
+       Actual: <1.1047890143354189>
+     Rendered reveal answer text body on groundRaised background must have contrast ratio >= 4.5:1. Got 1.1047890143354189
+     ```
+   - **Observed Falsifying Output (depart ink)**: With the depart painter emptied to a bare `break;`, the ink guard failed:
+     ```text
+     Expected: a value greater than or equal to <356>
+       Actual: <0>
+     depart sigil must render visible line art pixels (measured 712, floor 356)
+     ```
+   - **Over-reach Guard**: With everything restored, both new guards pass, the existing token-pair test still passes, and `flutter test` reports 125/125.
+   - **Verification**: Commit `915cf4d`. `flutter test` — 125/125.
 
 6. **Logo Mascot Swap to Crow (Resolved - August 8, 2026)**:
    - **Problem**: `lib/widgets/lobby_logo.dart` rendered `Image.asset('assets/images/gaslight_mascot.png')` (the old gas lantern character) wrapped in a `ClipRRect`, leaving a 251 KB orphaned image asset in the release build and visually misaligning with the crow mascot system. Furthermore, `body.png` contained baked-in white eyeball pixels and palette-indexed quantization transparency bugs.
