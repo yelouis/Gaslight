@@ -46,64 +46,73 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
 
   void _confirmLeave(BuildContext context, GameService gs, bool isHost) {
     if (_isLeaving) return;
-    final reduceMotion = AppMotion.reduce(context);
+    final bool reduce = AppMotion.reduce(context);
 
-    showDialog(
+    showGeneralDialog<void>(
       context: context,
-      barrierDismissible: !reduceMotion,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: AppColors.groundRaised,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.brass, width: 1),
-          ),
-          title: Text(
-            isHost ? 'Close this room?' : 'Leave this room?',
-            style: AppTextStyles.cardHeader.copyWith(color: AppColors.brass),
-          ),
-          content: Text(
-            isHost
-                ? 'You are the host. Leaving will close the room for everyone.'
-                : "You can rejoin with the room code as long as the game hasn't started.",
-            style: AppTextStyles.bodyIvory,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              style: TextButton.styleFrom(
-                minimumSize: const Size(64, 48),
-              ),
-              child: Text(
-                'STAY',
-                style: AppTextStyles.bodyIvory.copyWith(fontWeight: FontWeight.bold),
-              ),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.of(ctx).pop();
-                if (_isLeaving) return;
-                _isLeaving = true;
-                try {
-                  await gs.leaveRoom();
-                } finally {
-                  _isLeaving = false;
-                }
-              },
-              style: TextButton.styleFrom(
-                minimumSize: const Size(64, 48),
-              ),
-              child: Text(
-                isHost ? 'CLOSE ROOM' : 'LEAVE',
-                style: AppTextStyles.bodyIvory.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: isHost ? AppColors.oxblood : AppColors.brass,
-                ),
-              ),
-            ),
-          ],
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black54,
+      transitionDuration: reduce ? Duration.zero : const Duration(milliseconds: 150),
+      pageBuilder: (ctx, animation, secondaryAnimation) =>
+          _buildLeaveDialog(ctx, gs, isHost),
+      transitionBuilder: (ctx, animation, secondaryAnimation, child) {
+        if (reduce) return child;
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: child,
         );
       },
+    );
+  }
+
+  Widget _buildLeaveDialog(BuildContext ctx, GameService gs, bool isHost) {
+    return AlertDialog(
+      backgroundColor: AppColors.groundRaised,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.brass, width: 1),
+      ),
+      title: Text(
+        isHost ? 'Close this room?' : 'Leave this room?',
+        style: AppTextStyles.cardHeader.copyWith(color: AppColors.brass),
+      ),
+      content: Text(
+        isHost
+            ? 'You are the host. Leaving will close the room for everyone.'
+            : "You can rejoin with the room code as long as the game hasn't started.",
+        style: AppTextStyles.bodyIvory,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          style: TextButton.styleFrom(
+            minimumSize: const Size(64, 48),
+          ),
+          child: Text(
+            'STAY',
+            style: AppTextStyles.bodyIvory.copyWith(fontWeight: FontWeight.bold),
+          ),
+        ),
+        TextButton(
+          onPressed: () async {
+            if (_isLeaving) return;
+            _isLeaving = true;
+            Navigator.of(ctx).pop();
+            await gs.leaveRoom();
+          },
+          style: TextButton.styleFrom(
+            minimumSize: const Size(64, 48),
+          ),
+          child: Text(
+            isHost ? 'CLOSE ROOM' : 'LEAVE',
+            style: AppTextStyles.bodyIvory.copyWith(
+              fontWeight: FontWeight.bold,
+              color: isHost ? AppColors.oxblood : AppColors.brass,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
