@@ -37,6 +37,7 @@ const Set<ThematicIconType> _bespokeSigils = {
   ThematicIconType.raven,
   ThematicIconType.moon,
   ThematicIconType.hourglass,
+  ThematicIconType.depart,
 };
 
 /// Vendored from Phosphor Icons (MIT) -- see assets/fonts/phosphor/LICENSE.
@@ -56,7 +57,6 @@ const Map<ThematicIconType, IconData> _phosphorGlyphs = {
   ThematicIconType.sound:    IconData(0xe5e8, fontFamily: _kPhosphorLight), // bellRinging
   ThematicIconType.mute:     IconData(0xe0d4, fontFamily: _kPhosphorLight), // bellSlash
   ThematicIconType.host:     IconData(0xe638, fontFamily: _kPhosphorLight), // lamp
-  ThematicIconType.depart:   IconData(0xe674, fontFamily: _kPhosphorLight), // signOut
 };
 
 class ThematicIcon extends StatelessWidget {
@@ -476,6 +476,22 @@ class _ThematicIconPainter extends CustomPainter {
         break;
 
       case ThematicIconType.depart:
+        // Doorway / Archway frame on left
+        final doorFrame = Path()
+          ..moveTo(w * 0.48, h * 0.18)
+          ..lineTo(w * 0.18, h * 0.18)
+          ..lineTo(w * 0.18, h * 0.82)
+          ..lineTo(w * 0.48, h * 0.82);
+        canvas.drawPath(doorFrame, paint);
+
+        // Exit arrow pointing right
+        final arrowPath = Path()
+          ..moveTo(w * 0.32, h * 0.5)
+          ..lineTo(w * 0.82, h * 0.5)
+          ..moveTo(w * 0.66, h * 0.34)
+          ..lineTo(w * 0.82, h * 0.5)
+          ..lineTo(w * 0.66, h * 0.66);
+        canvas.drawPath(arrowPath, paint);
         break;
     }
   }

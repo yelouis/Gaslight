@@ -3,22 +3,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gaslight/theme/app_icons.dart';
 
 void main() {
-  testWidgets('routes functional glyphs to Phosphor and keeps sigils painted', (tester) async {
+  testWidgets('routes functional glyphs to Phosphor and keeps sigils painted including depart', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Column(children: [
       ThematicIcon(type: ThematicIconType.writing, size: 20),
       ThematicIcon(type: ThematicIconType.flame,   size: 20),
+      ThematicIcon(type: ThematicIconType.depart,  size: 20),
     ]))));
 
     final writing = find.byWidgetPredicate(
       (w) => w is ThematicIcon && w.type == ThematicIconType.writing);
     final flame = find.byWidgetPredicate(
       (w) => w is ThematicIcon && w.type == ThematicIconType.flame);
+    final depart = find.byWidgetPredicate(
+      (w) => w is ThematicIcon && w.type == ThematicIconType.depart);
 
     expect(find.descendant(of: writing, matching: find.byType(CustomPaint)), findsNothing);
     expect(find.descendant(of: writing, matching: find.byType(Icon)), findsOneWidget);
 
-    // Guard against over-reach: sigils must still be painted.
+    // Guard against over-reach: sigils and depart must still be painted.
     expect(find.descendant(of: flame, matching: find.byType(CustomPaint)), findsOneWidget);
+    expect(find.descendant(of: depart, matching: find.byType(CustomPaint)), findsOneWidget);
 
     final icon = tester.widget<Icon>(find.descendant(of: writing, matching: find.byType(Icon)));
     expect(icon.icon!.codePoint, 0xe9c0);
