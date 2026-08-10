@@ -66,8 +66,9 @@ void main() {
       }
     }
 
-    // Assert that the doorway & arrow line art renders at least 30 visible ink pixels
-    expect(nonZeroAlphaCount, greaterThanOrEqualTo(30),
-        reason: 'depart sigil must render visible line art pixels');
+    // Measured depart ink pixels at size 64: 712 pixels.
+    // Floor is set to half the measured value (356).
+    expect(nonZeroAlphaCount, greaterThanOrEqualTo(356),
+        reason: 'depart sigil must render visible line art pixels (measured 712, floor 356)');
   });
 }
