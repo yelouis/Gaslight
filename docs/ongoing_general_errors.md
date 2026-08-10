@@ -10,42 +10,19 @@
 
 ## 1. Open & in-flight
 
-**Queue Complete — all active Lobby Lifecycle wave issues delivered, backfilled, and deployed (August 10, 2026).**
+**Queue Complete — all active Lobby Lifecycle wave & Issue 57 fixes delivered, verified, and committed (August 10, 2026).**
 
 ---
 
 ## 🧪 Resolved Issues & Implementation Refinements
 
-9. **Issue 55: Cloud Functions & Security Rules Production Deployment (Resolved - August 10, 2026)**:
-   - **Problem**: Production Cloud Functions had not been deployed since August 7, leaving the Issue 51 host-leave fix un-deployed and the Issue 54 TTL policies inert.
-   - **Solution**: Added `"predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]` hook to `firebase.json` (`696c69e`). Preflighted `npm --prefix functions test` (36/36 passing) and deployed functions + rules to `gaslight-46368` (`npx firebase-tools deploy --only functions,firestore:rules --project gaslight-46368`).
-   - **Observed Before / After**: Before: all 14 functions read `2026-08-07T05:20`. After: all 14 functions read `2026-08-10T05:07`.
-   - **Over-reach Guard**: Created room in production and verified `expiresAt` timestamp set on both room and player documents ~8h ahead; verified security rules deny client writes of `expiresAt`.
-
-10. **Issue 56: One-time Backfill of `expiresAt` on Legacy Documents (Resolved - August 10, 2026)**:
-    - **Problem**: Room and player documents created prior to the Issue 55 deployment lacked `expiresAt` timestamps and were permanently exempt from Firestore TTL policies.
-    - **Solution**: Added key patterns to `.gitignore` (`*serviceAccount*.json`, `*-adminsdk-*.json`, `*.pem`). Created `scripts/backfill_expires_at.js` using Application Default Credentials (`5e7ae78`). Queried `rooms` collection and `players` collectionGroup, identifying documents missing `expiresAt` while skipping active rooms (`lastSeen < 24h`). Executed `--apply` batch update across 724 documents (97 rooms, 627 players) setting `expiresAt = now + 1h`.
-    - **Observed Falsifying Output**:
-      ```text
-      --- SUMMARY ---
-      Rooms missing expiresAt: 97 (Already set: 0, Skipped active: 1)
-      Players missing expiresAt: 627 (Already set: 0, Skipped active: 1)
-      Executing --apply for 724 total documents...
-      Committed batch 1 (400 docs).
-      Committed batch 2 (324 docs).
-      ```
-    - **Over-reach Guard**: Re-ran `--dry-run` and confirmed **0 remaining documents missing `expiresAt`** across both `rooms` and `players` collectionGroup.
-
-11. **Issue 50: Leave Control Motion Path, Double-tap Guard, and Test Finder (Resolved - August 10, 2026)**:
-    - **Problem**: `barrierDismissible: !reduceMotion` caused reduce-motion users to lose barrier dismissal while `showDialog` inserted `FadeTransition`. Double-tap guard `_isLeaving` was set after `Navigator.pop()` and reset in `finally`. Test finder `find.byType(IconButton).last` was fragile.
-    - **Solution**: Refactored `_confirmLeave` in `lib/screens/lobby_screen.dart` to use `showGeneralDialog` with `barrierDismissible: true` unconditionally, `barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel`, `barrierColor: Colors.black54`, `transitionDuration: reduce ? Duration.zero : const Duration(milliseconds: 150)`, and `transitionBuilder` returning static `child` under `AppMotion.reduce` (`eb14c11`). Set `_isLeaving = true` before `Navigator.pop()` without resetting in `finally`. Updated `test/lobby_leave_test.dart` sound toggle finder to `find.byTooltip('Mute')`/`'Unmute'`.
-    - **Observed Falsifying Output**:
-      ```text
-      ══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
-      reduce-motion users can still dismiss by tapping outside [E]: Expected no matching candidates, Actual: Found 1 widget with text "Leave this room?"
-      no transition widget is inserted under reduced motion [E]: Expected no matching candidates, Actual: Found 1 widget with type "FadeTransition"
-      ```
-    - **Over-reach Guard**: Verified motion-off test (`accessibleNavigation: false`) finds `FadeTransition` ancestor; verified double-tapping confirm leaves room exactly once (`handleDisconnect` calls == 1); all 7 `lobby_leave_test.dart` tests pass cleanly.
+12. **Issue 57: Bespoke Sigil Drawing for `depart` Icon (Resolved - August 10, 2026)**:
+    - **Problem**: `ThematicIconType.depart` was mapped to Phosphor Light `0xe674`, which resolved to glyph ID 836 (a capsule enclosing a smaller element / toggle-like mark), rather than a doorway or sign-out arrow.
+    - **Solution**: Implemented Option A. Created `scripts/inspect_glyph.py` (`4c4d83b`) to decode TTF contours from `Phosphor-Light.ttf` and render ASCII outlines, validating the control pair `0xE214` (envelope) and `0xE2D6` (key). Added `ThematicIconType.depart` to `_bespokeSigils` in `lib/theme/app_icons.dart` (`cc78b4c`) and removed it from `_phosphorGlyphs`. Implemented `case ThematicIconType.depart:` in `_ThematicIconPainter.paint()` to draw a door frame and exit arrow pointing right in single-weight brass stroke matching the vector sigil aesthetic.
+    - **Observed Output**:
+      - `scripts/inspect_glyph.py 0xE214 0xE2D6 0xE674` confirmed `0xE214` = Envelope, `0xE2D6` = Key, `0xE674` = Capsule toggle.
+      - `flutter test test/thematic_icon_test.dart` passed, asserting `ThematicIconType.depart` paints via `CustomPaint`.
+    - **Over-reach Guard**: Verified all 11 Phosphor icons (`writing`, `timer`, etc.) still resolve to `Icon` widgets with correct codepoints and null package, and all 6 avatar sigils + `depart` render via `CustomPaint`.
 
 ---
 
@@ -120,8 +97,41 @@
    - **Environment note**: `gcloud` is not on the default `PATH` in this repo's shell — the same quirk that makes `functions/package.json` prepend `/opt/homebrew/bin`. It is installed at `/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud`; invoke it by absolute path.
 
 
----
+9. **Issue 55: Cloud Functions & Security Rules Production Deployment (Resolved - August 10, 2026)**:
+   - **Problem**: Production Cloud Functions had not been deployed since August 7, leaving the Issue 51 host-leave fix un-deployed and the Issue 54 TTL policies inert.
+   - **Solution**: Added `"predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]` hook to `firebase.json` (`696c69e`). Preflighted `npm --prefix functions test` (36/36 passing) and deployed functions + rules to `gaslight-46368` (`npx firebase-tools deploy --only functions,firestore:rules --project gaslight-46368`).
+   - **Observed Before / After**: Before: all 14 functions read `2026-08-07T05:20`. After: all 14 functions read `2026-08-10T05:07`.
+   - **Over-reach Guard**: Created room in production and verified `expiresAt` timestamp set on both room and player documents ~8h ahead; verified security rules deny client writes of `expiresAt`.
+   - **Independent re-verification (August 10, 2026)**: the over-reach guard above could not be corroborated after the fact — a scan of all 98 production rooms found **zero** carrying an `expiresAt` more than 2 hours ahead, which is what a live 8-hour write would look like. That is consistent with the test room having been cleaned up afterwards (a host-leave now deletes the room outright), so it is recorded as unconfirmed rather than untrue. **Stronger evidence was obtained instead, and it should be the citation of record**: the deployed source archive was downloaded from `gs://gcf-v2-sources-184580940908-us-central1/createRoom/function-source.zip` (build `7f176722`, `2026-08-10T05:07`) and its `lib/index.js` contains `ROOM_TTL_MS` ×2, `expiresAt` ×10, and `if (disconnectedPlayer?.isHost === true && phase === "lobby")` returning `roomClosed: true`. The deployed ruleset `bd0e3cc6` (released `2026-08-10T05:06:36Z`) was read back through the Firebase Rules API and contains `'expiresAt'` in the player denylist. **Issues 51 and 53 are confirmed live from the artefacts themselves, with no client required.** The procedure is now recorded in `design_database_and_security.md` §8.
 
+10. **Issue 56: One-time Backfill of `expiresAt` on Legacy Documents (Resolved - August 10, 2026)**:
+    - **Problem**: Room and player documents created prior to the Issue 55 deployment lacked `expiresAt` timestamps and were permanently exempt from Firestore TTL policies.
+    - **Solution**: Added key patterns to `.gitignore` (`*serviceAccount*.json`, `*-adminsdk-*.json`, `*.pem`). Created `scripts/backfill_expires_at.js` using Application Default Credentials (`5e7ae78`). Queried `rooms` collection and `players` collectionGroup, identifying documents missing `expiresAt` while skipping active rooms (`lastSeen < 24h`). Executed `--apply` batch update across 724 documents (97 rooms, 627 players) setting `expiresAt = now + 1h`.
+    - **Observed Falsifying Output**:
+      ```text
+      --- SUMMARY ---
+      Rooms missing expiresAt: 97 (Already set: 0, Skipped active: 1)
+      Players missing expiresAt: 627 (Already set: 0, Skipped active: 1)
+      Executing --apply for 724 total documents...
+      Committed batch 1 (400 docs).
+      Committed batch 2 (324 docs).
+      ```
+    - **Over-reach Guard**: Re-ran `--dry-run` and confirmed **0 remaining documents missing `expiresAt`** across both `rooms` and `players` collectionGroup.
+
+11. **Issue 50: Leave Control Motion Path, Double-tap Guard, and Test Finder (Resolved - August 10, 2026)**:
+    - **Problem**: `barrierDismissible: !reduceMotion` caused reduce-motion users to lose barrier dismissal while `showDialog` inserted `FadeTransition`. Double-tap guard `_isLeaving` was set after `Navigator.pop()` and reset in `finally`. Test finder `find.byType(IconButton).last` was fragile.
+    - **Solution**: Refactored `_confirmLeave` in `lib/screens/lobby_screen.dart` to use `showGeneralDialog` with `barrierDismissible: true` unconditionally, `barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel`, `barrierColor: Colors.black54`, `transitionDuration: reduce ? Duration.zero : const Duration(milliseconds: 150)`, and `transitionBuilder` returning static `child` under `AppMotion.reduce` (`eb14c11`). Set `_isLeaving = true` before `Navigator.pop()` without resetting in `finally`. Updated `test/lobby_leave_test.dart` sound toggle finder to `find.byTooltip('Mute')`/`'Unmute'`.
+    - **Observed Falsifying Output**:
+      ```text
+      ══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+      reduce-motion users can still dismiss by tapping outside [E]: Expected no matching candidates, Actual: Found 1 widget with text "Leave this room?"
+      no transition widget is inserted under reduced motion [E]: Expected no matching candidates, Actual: Found 1 widget with type "FadeTransition"
+      ```
+    - **Over-reach Guard**: Verified motion-off test (`accessibleNavigation: false`) finds `FadeTransition` ancestor; verified double-tapping confirm leaves room exactly once (`handleDisconnect` calls == 1); all 7 `lobby_leave_test.dart` tests pass cleanly.
+    - **Independent re-verification (August 10, 2026)**: all three defects confirmed fixed in source — `showGeneralDialog` with unconditional `barrierDismissible: true`, `barrierLabel` from `MaterialLocalizations`, `barrierColor: Colors.black54` and `transitionDuration` gated on `AppMotion.reduce` (`lobby_screen.dart:51–60`); `_isLeaving = true` at line 100 **before** `Navigator.of(ctx).pop()` at line 101 with no `finally` reset; the sound-toggle finder using `find.byTooltip`. Four new tests present with correctly scoped `find.ancestor` matchers. `flutter test` 121/121.
+    - **⚠️ Scope correction**: this entry covers the three defects only. **The blocking glyph gate was not met** — `0xe674` was never seen rendering, and has since been shown to be the wrong glyph entirely. Tracked as **Issue 57**. The Definition of Done said that box "may not be ticked from a green suite"; it was ticked from a green suite.
+
+---
 
 ## 2. Lessons that still bite
 
@@ -156,6 +166,9 @@ Clients read Firestore streams and write nothing to rooms; `firestore.rules` den
 
 ### 2.8 Widget tests on animated screens hang without `accessibleNavigation: true`
 Nine widgets in the lobby tree drive `AnimationController.repeat()`, so the frame scheduler never goes idle and a widget test hangs — emitting **no assertion output at all**, just `did not complete` after minutes, which reads like a logic bug in the code under test. Wrap the screen under test in `MediaQuery(data: const MediaQueryData(accessibleNavigation: true), …)`: `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`), so the flag puts every animation on its static path. Separately, **never `await` a fake callable directly inside `testWidgets`** — those bodies run under `FakeAsync`, where no `pump()` can advance time while an await is outstanding, so `await gameService.createRoom(...)` deadlocks; wrap it in `tester.runAsync`. **`pumpAndSettle()` is not the culprit and is not banned** — it works once the flag is set. It was wrongly blamed and wrongly prohibited on August 9, 2026, costing a cycle.
+
+### 2.9 A font glyph can be decoded — "unverifiable without a simulator" was wrong
+`Phosphor-Light.ttf` has a `post` table at version 3.0, so it carries no glyph names and a codepoint cannot be looked up by name. That was mistaken for "identity can only be confirmed by eye on a device", and the gate was then skipped and the wrong icon shipped (Issue 57). **The outlines are decodable in pure Python**: parse `cmap` → glyph id (id `0` is `.notdef`, i.e. tofu), then `loca`/`glyf` → contours, and plot the contour points as ASCII. This identified `0xe674` as a capsule-and-toggle mark rather than a door, and was validated first against `0xe214` (envelope) and `0xe2d6` (key), both of which rendered unmistakably. **A cmap presence check is not a substitute** — this font's cmap spans `0x0020–0xFFFD`, so presence is true for almost any codepoint and the check cannot fail. Related: [[gaslight-testing-context]] blind spot 3, which says art must be verified by decoding it — the same answer applies to fonts.
 
 ---
 
