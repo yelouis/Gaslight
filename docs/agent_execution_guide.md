@@ -1,264 +1,11 @@
-# Agent Execution Guide — Active Build: T11 (August 8, 2026)
+# Agent Execution Guide — Build Complete: Lobby Lifecycle (Issues 50–53) — August 10, 2026
 
-> ## ❌ T10 is cancelled
->
-> The regeneration opt-out is **scrapped at the user's direction**. `scripts/build_sprite_sheets.py` regenerates all ten sheets and that is fine — the sheets are derived artefacts, and the layer art plus the frame parameters remain the source of truth. Do not implement a `HAND_EDITED` skip set.
->
-> The per-sheet prompt docs at `assets/images/raven/frames/<pose>.md` **stay** — they are the briefs for editing a grid by hand when that is wanted, and they carry the measured constraints for each sheet.
->
-> ---
->
-> ## 🟢 Beak layers rebuilt (done) — and the acceptance criterion they broke
->
-> `beak_open.png` and `beak_semi_open.png` were **fragmented**, not merely rough: ragged mandible edges plus stray slivers where the mouth line should be, at ~18% partial-alpha against the closed beak's 4%. They had been authored independently of `beak_closed.png`.
->
-> **Fixed by deriving them from the closed beak** — `scripts/rebuild_beak_layers.py`. `beak_closed.png` decomposes into exactly three connected components (upper mandible 801 px, lower mandible 285 px, brow stroke 60 px); the script rotates **only the upper mandible** about the hinge at (165, 95), leaving the lower mandible and brow fixed, which is how a beak actually opens. `beak_open` is −20°, `beak_semi_open` −10°, regenerated at all three densities. Edge quality now matches the closed beak, and the sheets rebuilt from it read correctly.
->
-> ### ⚠️ T11 — replace the wrong acceptance criterion with the right one
->
-> **Three tests now fail, and the tests are wrong, not the art.** T8/T9 asserted that `beak_open` must have **≥40–50% of its pixels outside `body_base`'s silhouette**. The rebuilt beak measures **14.6%** and fails — yet it visibly opens.
->
-> That criterion was a mistake in the spec. It was written on the assumption that an open beak has to protrude into empty space to be seen. It does not. **What makes the beak read is the dark mouth gap between the two mandibles** — internal contrast against brass — not silhouette protrusion. Measured on the rebuilt art:
->
-> | Layer | Mouth-gap area | Widest gap |
-> |---|---|---|
-> | `beak_closed` | 298 px | 12 px |
-> | `beak_semi_open` | 423 px | 12 px |
-> | `beak_open` | **572 px** | **19 px** |
->
-> **Replace the silhouette-share assertions with a mouth-gap assertion:**
-> 1. `beak_open`'s mouth-gap area is **≥ 1.6×** that of `beak_closed`, and its widest gap is **≥ 16 px**.
-> 2. `beak_semi_open` sits strictly between the two, so the three form a real progression.
-> 3. **Delete** the `≥40%` / `≥50%` outside-silhouette assertions for the beak (**T8.2**, **T9.4**). Protrusion is not the mechanism there.
->
-> ### The wing threshold was arbitrary — correct it too, but keep the criterion
->
-> `wing_up` **has also been rebuilt** — `scripts/rebuild_wing_up.py`. The previous one cleared its numeric targets while reading as a leaf: too narrow, near-vertical, apparently sprouting from the top of the back. The replacement is a broad blade anchored at the shoulder (102, 132), swept up and back to a tip at (38, 72), with a convex leading edge and concave trailing edge — the asymmetry is what separates a wing from a leaf. Verified by eye at **64 dp**, the actual render size, where the flap alternation now reads.
->
-> It measures **3,668 px, 38% outside** the body silhouette, and fails **T8.1**'s `≥40%`.
->
-> **Unlike the beak, the criterion here is right — protrusion genuinely is how a raised wing reads.** What is wrong is the specific number: 40% was a figure I invented before any wing existed, with no empirical basis. The guard's job is to catch a wing that does not clear the body at all — the broken one was at **7%** — not to enforce a number picked from the air.
->
-> **Set the threshold to ≥ 30%**, which still fails the old 7% wing by a wide margin while not rejecting art that demonstrably works. Record that 38% is the measured value of art that passed visual review.
->
-> **This is a correction, not a climbdown.** The rule against lowering a threshold to make a test pass stands: it forbids papering over art that does not work. It does not require defending a number that was a guess, against art that visibly does. If you find yourself adjusting the *art* to reach 40%, you have it backwards.
->
-> ### Also fix T9.5
->
-> **T9.5** asserts that `build_sprite_sheets.py` *contains a specific line of source text*. That is a grep, not a test: it passes if the string appears in a comment and fails whenever the script is refactored, which is why it is failing now. Assert the behaviour instead — that no composited frame contains both beak variants.
->
-> **Do not "fix" the art to satisfy the old thresholds.** The art is correct; the numbers were measuring the wrong property.
->
-> ---
 
-# Task T9 — split the beak and wing out of `body.png` (in flight)
+**You are an engineering agent with no memory of this project.** Everything approved is below. Four issues are queued, all four already selected by the user — the rejected options are recorded in `docs/ongoing_general_errors.md` §1, and re-litigating them is wasted work.
 
-> ## 🔴 T9 — split the beak and wing OUT of `body.png`. This is the actual bug.
->
-> T8 produced an open-beak overlay and the result gives the bird **two beaks** — a second one sprouting above the closed one. That is not an art failure. It is a **layering** failure, and it invalidates the T8 approach below.
->
-> ### The root cause, measured
->
-> `body.png` is not a base layer. It is the **complete bird**, with the closed beak and the folded wing painted into it:
->
-> | Region of `body.png` | Brass pixels found | Meaning |
-> |---|---|---|
-> | Beak zone (x 160–220, y 55–105) | **1,149** | the closed beak is baked in |
-> | Flank zone (x 50–110, y 100–175) | **522** | the folded wing is baked in |
->
-> So every "part" layer is **additive on top of a bird that already has that part**:
-> - overlaying `beak_open` → the closed beak is still there → **two beaks**;
-> - raising the wing would leave the folded-wing marking behind → **two wings**;
-> - `wing.png` (476 px) is simply a redraw of the marking already in the body, which is why moving it never looked like anything.
->
-> **No amount of new art fixes this.** A part can only *replace* another part if the thing it replaces is not welded to the background.
->
-> ### The pattern already exists in this project — the eye
->
-> The eye animates correctly, and it is the only part that does. Under `eye_open.png`'s footprint, `body.png` contains **0 light pixels and 1,444 dark ones** — a clean socket. The eyeball is not baked in, so swapping `eye_open` ↔ `eye_closed` genuinely swaps. There is even precedent for the surgery: T4 had to strip baked-in white eyeball pixels out of `body.png` to make blinking work.
->
-> **T9 applies that same fix to the beak and the wing.** The rule, which should have been stated when the layer system was designed:
->
-> > **The base layer contains only what never moves. Anything that animates is cut *out* of it and supplied as its own layer.**
->
-> ### The target layer set
->
-> | Layer | Contents |
-> |---|---|
-> | `body_base.png` | head, torso, tail, legs, eye socket — **no beak, no wing marking**. Sockets left dark, exactly as the eye's is. |
-> | `beak_closed.png` | the closed beak wedge, as currently baked in |
-> | `beak_open.png` | the open beak — upper mandible raised, lower mandible in place |
-> | `wing_folded.png` | the folded-wing marking, as currently baked in |
-> | `wing_up.png` | the raised wing |
-> | `eye_open.png` / `eye_closed.png` | unchanged — already correct |
->
-> Composite order: `body_base` → wing variant → beak variant → eye variant. **`wing.png` is retired**; it is a duplicate of `wing_folded`.
->
-> ### Nano banana brief
->
-> Three edits of the existing art. Do not generate a new bird.
->
-> > **`body_base.png`** — Using the supplied `body.png` as an exact reference, remove the **brass beak** and the **brass folded-wing line on the flank**, filling both areas with the surrounding dark body colour `#2D2925` so the silhouette stays closed and smooth. Keep the outer brass rim, the eye socket, the tail and the feet exactly as they are. Same canvas, scale, position and palette. The result should look like the same bird with its beak and wing marking erased.
->
-> > **`beak_closed.png`** — Using `body.png` as reference, output **only the closed brass beak wedge**, in its exact original position, on the same 256×256 transparent canvas. Everything else fully transparent.
->
-> > **`beak_open.png`** — Using `body.png` as reference, output **only the beak, open** — the upper mandible rotated up and back from the hinge at roughly (168, 84) so it reaches into the empty space above the beak (around x 175–215, y 35–70), with the lower mandible left in its closed position. The gap between them must be clearly visible. Same canvas, scale, palette and rim weight; everything else transparent.
->
-> `wing_folded.png` can be extracted from the existing `wing.png` (it is already that shape); `wing_up.png` follows the T8 brief below.
->
-> ### Validation — the reconstruction test is the important one
->
-> 1. **Lossless split.** Compositing `body_base + wing_folded + beak_closed + eye_open` must reproduce the original `body.png` to within **≤ 2% of pixels differing**. This proves the surgery removed the parts without losing or shifting anything else, and it is the assertion that makes the whole refactor safe.
-> 2. **The base is genuinely stripped.** `body_base.png` must contain **< 50 brass pixels** in the beak zone (x 160–220, y 55–105) and **< 50** in the flank zone (x 50–110, y 100–175) — down from 1,149 and 522. Mirrors the eye's clean-socket standard.
-> 3. **Open and closed beaks differ visibly.** `beak_open` and `beak_closed` must differ in **≥ 250 opaque pixels**, and `beak_open` must have **≥ 40%** of its pixels outside `body_base`'s silhouette. This is what "the beak opens" means numerically.
-> 4. **No double parts.** For every frame of every pose, assert that at most one wing variant and at most one beak variant contribute — a composite containing both `beak_closed` and `beak_open` is the exact bug being fixed.
-> 5. Everything in T7's list still applies: silhouette containment, the `|wing_rot| ≤ 0.12` cap, frame-0-is-resting, and the existing sheet-integrity checks.
->
-> ### Then rebuild
->
-> Regenerate **every** sheet, not just the four — all ten poses composite from the new base, so all ten must be rebuilt and re-verified. The six accepted poses should come out **visually identical**; assertion 1 is what guarantees that, and any visible change in them means the split was not lossless.
->
-> ### 🚦 Approval — blocking, and show the parts this time
-> Send, before committing: a still of `body_base` alone; stills of `beak_closed`, `beak_open`, `wing_folded`, `wing_up` each composited over `body_base`; and the four re-rendered pose animations. The last three rounds were all rejected because the parts could not be judged independently of the motion.
->
-> ---
+**Every number, literal string and field name here is a decision, not a suggestion.** Implement them as written; copy quoted strings verbatim including punctuation and capitalisation. If a value proves impossible, keep the intent, deviate minimally, and say so in the commit body. **If the design itself cannot work, STOP** and file it in `ongoing_general_errors.md` with options and a `Your selection: _____` line — never choose on the user's behalf.
 
-# Task T8 — generate real `wing_up` and `beak_open` art (superseded by T9; the `wing_up` brief and the outside-the-silhouette targets still stand)
-
-> ## 🔴 T8 — generate real `wing_up` and `beak_open` art, then rebuild `flap`, `fly`, `preen`, `caw`
->
-> T7 re-authored the four poses as body motion (`ef6fc70`) and the user reviewed again: **the wings still do not flap and the beak still does not open.** T7 was the right fix for *how the poses move*, but it could not fix the underlying problem — **there is no art to show a raised wing or an open beak.** This task generates that art.
->
-> ### Why T7 could not have worked — measured
->
-> | Layer | Opaque px | % of body | Pixels **outside** the body silhouette |
-> |---|---|---|---|
-> | `wing.png` | 476 | 2.0% | **0 (0%)** |
-> | `wing_up.png` | 496 | 2.1% | **37 (7%)** |
-> | `beak_open.png` | 115 | 0.5% | **0 (0%)** |
->
-> **A part drawn entirely inside the body outline cannot be seen, no matter what you do with it.** `wing.png` has literally zero pixels outside the silhouette — rotating it can never produce a visible wing. T7 grew `beak_open` from 47 px to 115 px, but every one of those pixels is still *inside* the body, so the beak still cannot appear to open. That is the whole bug, and no parameter change reaches it.
->
-> ### The geometric constraint that dictates the art
->
-> The body is a single solid blob, which rules out the obvious designs:
->
-> - **The beak must open UPWARD, not downward.** The chest sits directly below the beak, so a dropped lower mandible stays inside the silhouette and stays invisible. Above the beak there is open space: at x=185 the body starts at y=53, at x=205 it starts at y=78. **Lift the upper mandible into that gap.**
-> - **The raised wing must go UP over the flank.** At x=65 the body starts at y=126 and at x=75 at y=116, so there is 115–125 px of clear space directly above the wing's current position.
->
-> ### Nano banana brief — two new reference layers
->
-> Edit the **existing** art. Do not generate a new bird: the layers are the character, and a fresh generation reintroduces the drift that has already cost this project once. Copy these into `assets/images/raven/PROMPTS.md` when used.
->
-> **`wing_up.png` — a genuinely raised wing**
->
-> > Using the supplied `body.png` and `wing.png` as exact references, draw the crow's near wing **raised and extended upward**, as at the top of a wingbeat. The wing should sweep up and back from its shoulder at roughly (100, 118), with the tip reaching into the empty space above the bird's flank — around x 55–95, y 45–100 on the 256×256 canvas. **A substantial part of the wing must sit outside the body's outline**, clearly silhouetted against the background rather than lying flat on the body. Keep the same canvas, scale, position of the shoulder, palette (`#2D2925` fill, `#C6A14B` rim) and rim weight. Draw only the wing; everything else fully transparent.
->
-> **`beak_open.png` — the beak open, hinging upward**
->
-> > Using the supplied `body.png` as an exact reference, draw **only the crow's upper mandible, lifted open** as if calling — rotated up and back from the beak hinge at roughly (168, 84), with the tip rising into the empty space above the beak, around x 175–215, y 35–70 on the 256×256 canvas. **Most of this shape must fall outside the body's existing outline** so the open gap is clearly visible against the background. Match the beak's brass `#C6A14B` fill and rim weight. Draw only the lifted upper mandible; everything else fully transparent.
->
-> ### Acceptance criteria — measurable, and non-negotiable
->
-> Both new layers must pass, asserted in `test/raven_mascot_test.dart` using `test/helpers/png_decoder.dart`:
->
-> | Layer | Minimum mass | Minimum share **outside** `body.png`'s silhouette |
-> |---|---|---|
-> | `wing_up.png` | **≥ 1,200 px** (≈5% of body; currently 496) | **≥ 40%** (currently 7%) |
-> | `beak_open.png` | **≥ 300 px** (currently 115) | **≥ 50%** (currently 0%) |
->
-> **The "outside" figure is the one that matters** — mass alone is what T7 increased, and it changed nothing. If a regenerated layer misses these, regenerate it; **do not lower the threshold to make it pass.** These numbers are what "visible" means here, expressed so a test can check it.
->
-> ### Then rebuild the four poses
->
-> With art that can actually be seen, the poses can use it:
-> - **`flap`** — now genuinely alternate `wing` ↔ `wing_up` on a two-frame cadence. Keep the body bob T7 added; the two together read as a wingbeat. This is the pose the swap was always meant to serve.
-> - **`fly`** — sweep through `wing` → `wing_up` across the climb, keeping T7's anticipation crouch.
-> - **`preen`** — the wing can now be seen moving toward the body; keep it within **`|wing_rot| ≤ 0.12` rad** (§T7) since `wing.png` itself is unchanged and still sits inside the outline.
-> - **`caw`** — overlay the new `beak_open` on the frames where the bird calls, with T7's head-thrust motion beneath it.
->
-> **Leave `ruffle`, `startle`, `hop`, `peck`, `bow`, `alert` alone.** They were accepted.
->
-> ### 🚦 Preview and approval — still blocking
-> Re-render the four per `.agents/skills/mascot_pose_creation/SKILL.md` §6 and send them together for approval **before committing**. Since the last two rounds were both rejected on "can't see it", also send a **still of each new layer composited over `body.png`** so the raised wing and open beak can be judged directly, independently of the motion.
->
-> ---
-
-# Task T7 — re-author four poses as silhouette motion (delivered `ef6fc70`, superseded by T8)
-
-**You are an engineering agent picking up Gaslight (Flutter party game, iOS + Android, server-authoritative Firebase backend). Assume you have no memory of this project.**
-
-> ## 🔴 T7 — four poses do not read. Re-author them.
->
-> All ten sheets shipped in `690d109`. On review the user **rejected `preen`, `fly`, `flap` and `caw`**. The other six — `ruffle`, `startle`, `hop`, `peck`, `bow`, `alert` — were accepted.
->
-> **Do not touch the six that passed.** Re-authoring them is the easiest way to lose ground that is already won.
->
-> **📖 `.agents/skills/mascot_pose_creation/SKILL.md` is still the method.** This section is the diagnosis and the per-pose brief.
->
-> ### Root cause — one problem wearing four costumes
->
-> Measured from the source layers, not inferred:
->
-> | Layer | Opaque px | Share of body |
-> |---|---|---|
-> | `body.png` | 23,705 | 100% |
-> | `wing.png` | **476** | **2.0%** |
-> | `wing_up.png` | **496** | **2.1%** |
-> | `beak_open.png` | **47** | **0.2%** |
->
-> **The moving parts are decorative slivers, not structural shapes.** At the size the mascot renders — 48–96 dp — only whole-silhouette change reads: scale, rotation, translation, and deformation of the outline itself. A 2%-mass detail cannot carry a pose; a 0.2% one carries nothing. All four rejected poses were authored as if the wing or beak were a limb. They are line details.
->
-> This is the general lesson, and it should govern every future pose: **carry the pose in the silhouette; treat the wing as garnish.** A useful test — *would the pose still read if the wing layer were deleted entirely?* For the six that passed, yes. For these four, no.
->
-> Per pose:
-> - **`preen`** — `wing_rot: -0.44` rad (−25°) swings the 476 px sliver clear of the body. It reads as a stray scratch beside the bird. Worse, the body rotates the *same* direction as the wing, so the two move **apart** — a preen is head-toward-flank, they should converge.
-> - **`fly`** — alternating `wing_rot` of ±0.35–0.40 makes the sliver flicker in and out of the silhouette rather than sweep, while the body merely slides up and down. No launch.
-> - **`flap`** — built as a `wing` ↔ `wing_up` swap, but the two differ by **20 px of mass**. The swap is invisible at render size. This pose cannot work as a layer swap at all.
-> - **`caw`** — `beak_open.png` is 47 px and **100% of it lies inside the body silhouette**. Overlaying it changes nothing. There is no visible opening.
->
-> ### A second, independent bug: the wing pivot is on the wrong corner
->
-> `render_frame` rotates the wing about **(64.0, 153.6)**, commented "shoulder pivot". It is not the shoulder. The wing's bbox is (52,104)–(104,171) and the body centroid is x=129, so the wing **attaches along its right edge, near (100, 118)**. (64, 153.6) is the lower-**left** — the free tip. Rotating about the free tip swings the *attached* end away from the body, which is backwards and is why even modest angles detach.
->
-> **Move the pivot to ≈ (100, 118).** The farthest wing pixel is then ~72 px away, and the body outline leaves ~10 px of margin, giving a hard cap:
->
-> **`|wing_rot| ≤ 0.12 rad (≈7°)`.** `preen` and `fly` currently run 3× over it.
->
-> ### Per-pose re-authoring brief
->
-> - **`preen`** — carry it in the body: whole-body `rotate` toward the flank with `scale_y ≈ 0.94` / `scale_x ≈ 1.04` so the bird visibly hunches. Rotate the wing **opposite** to the body rotation so they converge, within the 0.12 cap. Verify the pose still reads with the wing deleted.
-> - **`fly`** — a launch needs **anticipation**: one frame of crouch (`scale_y ≈ 0.90`, `translate_y ≈ +3`) *before* the climb, then stretch (`scale_y ≈ 1.12`) with a strong `translate_y`, then settle. Sliding upward without the crouch reads as being lifted, not leaping.
-> - **`flap`** — abandon the layer swap. Express wingbeats as a **rhythmic body bob**: alternate `scale_y` 1.06 / 0.96 with matching `translate_y` on a two-frame cadence while climbing. A pulsing silhouette reads as beating; a 20 px shape change never will.
-> - **`caw`** — the only one needing **new art as well as new numbers**.
->   - *Art:* regenerate `beak_open.png` so the dropped lower mandible extends **outside** the closed beak's outline — it must break the silhouette, not sit inside it. Same canvas, palette and rim weight; edit the existing art per the skill, never generate a fresh bird.
->   - *Motion:* head-thrust — `rotate` back and up, `scale ≈ 1.08`, slight `translate_y`, peaking on the frames where the beak is open.
->
-> ### Validation — three new assertions on top of §2's
->
-> 1. **Wing-rotation cap.** Over the whole pose registry, assert no frame exceeds `|wing_rot| = 0.12`. This is the guard that stops the detachment bug returning.
-> 2. **Silhouette containment.** For every frame of every pose, all opaque pixels must fall inside a ~6 px dilation of `body.png`'s silhouette. **This is the assertion that would have caught all four rejections**, and nothing in the current suite covers it.
-> 3. **`beak_open` must break the silhouette.** Assert containment **fails** for that layer specifically — do not exempt it from check 2, invert it. It is the only way to prove the new art actually opens the beak.
->
-> ### 🚦 Preview and approval — still blocking
-> Re-render each fixed pose per skill §5 and get approval **before committing**. Send all four together: they are being judged as a set against the six that passed.
-
----
-
-**All approved queue items delivered and verified:**
-
-| # | Item | Scope | Status |
-|---|---|---|---|
-| 1 | **Task T6 rollout** — pre-rendered frame sequences for all 10 transient crow poses | `assets/images/raven/frames/*.png` + `scripts/build_sprite_sheets.py` + `lib/widgets/raven_mascot.dart` + tests | ✅ **Delivered & Verified** |
-| 2 | **Task T8 re-authoring** — real `wing_up` and `beak_open` layer art & pose rebuilds (`flap`, `fly`, `preen`, `caw`) | `assets/images/raven/{wing_up,beak_open}.png` + `scripts/generate_raven_layers.py` + `scripts/build_sprite_sheets.py` + tests | ✅ **Delivered & Verified** |
-
-> ### 🎉 Queue Complete
->
-> All 10 transient raven poses (`ruffle`, `startle`, `hop`, `peck`, `bow`, `alert`, `preen`, `fly`, `flap`, `caw`) have been converted to pre-rendered grid sprite sheets with real raised-wing and open-beak layer art and verified. `idle` and `sleep` remain on the layered `Stack` renderer. All client tests (99/99) and backend tests (31/31) pass clean.
-
-**Specs are decisions, not suggestions.** **A blocker is a filing event, not a licence to re-choose on the user's behalf.**
-
-**Line numbers are anchors measured August 8, 2026** — re-grep rather than trusting them.
+**Do not touch anything in §10–§12.** Those are delivered work, accepted equivalents, and standing invariants.
 
 ---
 
@@ -267,285 +14,586 @@
 1. **Portrait phone is the target.** Validate every layout at **360×640 dp portrait**.
 2. **Design tokens are law.** `AppColors`, `AppTextStyles`, `AppMotion`. No raw hex in widget code, no ad-hoc `Duration`.
 3. **Every animation needs an `AppMotion.reduce(context)` path** — a static frame, never a faster animation.
-4. **Text scale clamped 1.0–1.3.** **Touch targets ≥ 48 dp** (M4).
-5. **T6 touches no backend.** `functions/` and `firestore.rules` are out of scope; if you are editing them you have left the spec — STOP.
-6. **One item = one commit**, Conventional Commits, WHY in the body.
+4. **Text scale clamped 1.0–1.3.** **Touch targets ≥ 48 dp.**
+5. **Scope by item.** Issues 51 and 53 change `functions/` and `firestore.rules`. **Issues 50 and 52 are client-only — if you are editing `functions/` while implementing them, you have left the spec. STOP.**
+6. **Server-authoritative, always.** Clients read Firestore streams and write nothing to room documents. The **single** sanctioned client write is a player's own `lastSeen` heartbeat on their own player document. `expiresAt` is server-owned (§6). Every other mutation goes through a callable that validates `context.auth.uid`.
+7. **One item = one commit**, Conventional Commits, WHY in the body.
 
 ---
 
 ## 1. Verified baseline — the regression bar
 
+Run in this session at commit `185b961`, clean tree. **No change may lower any of these numbers.**
+
 | Gate | Command | Result |
 |---|---|---|
-| Static analysis | `flutter analyze lib test` | **0 errors** |
-| Client tests | `flutter test` | **99/99** |
+| Static analysis | `flutter analyze lib test` | **0 errors** (270 infos/warnings, all pre-existing) |
+| Client tests | `flutter test` | **106/106** |
 | Functions build | `npm --prefix functions run build` | clean |
-| Backend E2E | `npm --prefix functions test` | **31/31** |
-| iOS release | `flutter build ios --release --no-codesign` | succeeds, `Runner.app` **47.7 MB** |
+| Backend E2E | `npm --prefix functions test` | **31/31** (7 s, boots its own emulators) |
+| iOS simulator build | `flutter build ios --simulator --debug` | succeeds (34.7 s) |
+| iOS release build | `flutter build ios --release --no-codesign` | succeeds (`Runner.app` size **49.5 MB**) |
 
+### ⚠️ Seven traps that have each cost a cycle
 
-### ⚠️ Five traps that have each cost a cycle
-
-1. **Analyzer scope.** Run `flutter analyze lib test`, **never bare `flutter analyze`** — the bare form reports ~678 errors from vendored plugin source under gitignored `build/`.
+1. **Analyzer scope.** Run `flutter analyze lib test`, **never bare `flutter analyze`** — the bare form walks `build/ios/SourcePackages` and reports ~678 phantom errors from vendored plugin source under gitignored `build/`. This has misled in both directions.
 2. **Analyze ≠ compile.** Only `flutter test` or `flutter build` surfaces a broken dependency. A package resolving proves nothing.
 3. **Working directory persists** between Bash calls. Use absolute paths or `npm --prefix functions run build`.
 4. **BSD `sed` does not support `\b`** — silently matches nothing and exits 0. Use `python3`.
-5. **`Image.asset` loads no bytes under `flutter test`.** `find.byType(Image)` counts widgets whether or not art exists, and a golden render of the mascot comes out **blank**. Verify art by decoding the PNG (`test/helpers/png_decoder.dart`) or on a simulator. **This applies to sprite sheets too** — a widget test can prove the frame *index* is right, never that the frame *looks* right.
+5. **`Image.asset` loads no bytes under `flutter test`**, and a wrong icon codepoint renders as an empty tofu box. Neither is visible to any widget test. Verify on a simulator.
+6. **`test/fake_functions.dart` does not enforce `firestore.rules`.** Non-host writes and `authUid` checks are never really exercised there, and bots are server-seeded documents that never touch the client path. Anything security- or multiplayer-critical must be proven in `functions/test/` or on real simulator clients.
+7. **`tester.pumpAndSettle()` NEVER RETURNS on any screen in this app.** Nine widgets in the lobby tree alone drive `AnimationController.repeat()` — `raven_mascot`, `lobby_background`, `lamp_loading`, `lobby_logo`, `shared_ui`, `waiting_indicator`, `player_avatar`, `thinking_background`, `auto_advance_timer`. `pumpAndSettle` waits for the frame scheduler to go idle, which never happens, so it spins until its own 10-minute timeout. **Every existing lobby-family test uses this idiom instead, and no test in this repo uses `pumpAndSettle`:**
+
+   ```dart
+   await tester.pump();
+   await tester.pump(const Duration(milliseconds: 500));
+   ```
+
+   Two companion rules travel with it, and all three are needed together — fixing only the pump still hangs (measured):
+
+   - **Wrap the screen in `MediaQuery(data: const MediaQueryData(accessibleNavigation: true), …)`.** `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`), so this is the switch that puts every animation on its static path. Eleven test files already do it.
+   - **Never `await` a fake callable inside `testWidgets`.** `testWidgets` bodies run under `FakeAsync`; awaiting `gameService.createRoom(...)` or `Future.delayed(Duration.zero)` deadlocks because no `pump()` can advance fake time while the await is outstanding. Seed `FakeFirestore` directly, then escape the zone once with `await tester.runAsync(() async { await Future.delayed(const Duration(milliseconds: 100)); });`.
+
+   Cost so far: one full cycle. `test/lobby_leave_test.dart` hung for **6 m 06 s** without completing a single test, reporting only `did not complete` — which reads like a logic bug and is not one. Precedent to copy: **`lobby_parlor_sheet_test.dart:25–74`**, plus `lobby_entry_test.dart:42` and `house_rules_panel_test.dart:83`.
 
 ---
 
-## 2. Task T6 — Pre-rendered frame sequences for transient poses
+## 2. Execution order
 
-**What this means for the user:** the crow's reactions currently move by rotating and sliding flat layers. That can slide and tilt, but it cannot squash, stretch or ruffle — so the motion reads a bit mechanical. Pre-drawn frames let the animation do things geometry cannot.
-
-### What exists today
-`lib/widgets/raven_mascot.dart` renders a `Stack` of `Image.asset` layers — `body`, `wing`, `wing_up`, `eye_open`, `eye_closed`, `beak_open` — wrapped in `Transform.translate/rotate/scale`, driven by three `AnimationController`s. Twelve poses: `sleep`, `idle`, `hop`, `ruffle`, `fly`, `alert`, `peck`, `preen`, `startle`, `bow`, `caw`, `flap`. Assets total **304 KB** across three densities. `lib/widgets/raven_pose_host.dart` owns pose orchestration via `playRavenPose(pose, {required onceKey, hold})`.
-
-### ⚠️ Do not convert all twelve poses — the split is deliberate
-
-**Keep `idle` and `sleep` on the existing layered renderer. Convert only the ten transient poses.**
-
-This is not a shortcut, it is the correct division:
-- **Resting poses need *stochastic* behaviour.** `idle` blinks and tilts at randomised intervals, driven by its own controller. A fixed frame loop cannot do "blink at an unpredictable moment" without either a very long sheet or a visible cycle. Layers do it for free by swapping `eye_open`/`eye_closed`.
-- **Transient poses need *authored* behaviour.** `peck`, `ruffle`, `preen`, `startle`, `flap` are exactly where deformation matters and where transforms fall short. They play once, on demand, with a fixed shape.
-
-Two renderers, each doing what it is good at. Say so in a comment so a later pass does not "unify" them.
-
-### Architecture — sprite sheets, not loose frames
-
-**One PNG per pose containing all its frames in a grid**, not N separate files.
-
-| Decision | Value | Why |
+| # | Item | Why this position |
 |---|---|---|
-| Cell size | **256×256** | The mascot renders at 48–96 dp; at 3× that is 288 physical px worst case. 256 is the right ceiling — larger is wasted. |
-| Densities | **One only** — no `2.0x`/`3.0x` | A single 256 px source scaled by Flutter is ample at these sizes, and three densities would triple an already large asset count. This deliberately differs from the layer system. |
-| Layout | Left-to-right, top-to-bottom, no padding | Index → cell is then plain arithmetic. |
-| Frames per pose | **6–10** | At `AppMotion.fast` (180 ms) 6 frames is 33 ms each; at `emphasis` (600 ms) 10 frames is 60 ms each. Beyond ~10 the file grows without reading better at this size. |
+| 1 | ✅ **Issue 51** — host exit closes the lobby | **DELIVERED** in `5bb9d2c`, with `functions/test/game_e2e.spec.ts` and `test/room_closed_test.dart`. Do not rework it. |
+| 2 | 🔧 **Issue 50** — leave control in the lobby | **IN FLIGHT, uncommitted, blocked on a test-harness trap — see §4's IN FLIGHT block first.** Depends on 51: the host dialog promises "will close the room for everyone", true only once 51 ships. |
+| 3 | **Issue 52** — browsable read-only deck carousel | Client-only, dependency-free, lowest risk. Third so it does not delay the two correctness fixes. |
+| 4 | **Issue 53** — 8-hour TTL on abandoned rooms | Last because 51 removes the common source of orphaned rooms, so the residual volume this must handle is only knowable once 51 has landed. Backend-and-rules only, and it blocks nothing else. |
 
-**Why a sheet rather than loose frames:** a 256×256 frame decodes to 256 KB in memory. Ten poses × 8 loose frames, all cached, is ~20 MB of decoded images and ten times the file handles and decode calls. A sheet is one decode, one cache entry, one handle per pose — and lets you precache exactly the poses a screen can play.
+---
 
-### Implementation
+## 3. Issue 51 — a host who leaves the lobby must close it
 
-**Step 1 — declare the frame data in one place.** A `const` map in `raven_mascot.dart`, keyed by `RavenState`, giving sheet path, frame count, and columns:
+**What this means for the user:** today, when the host leaves a lobby, everyone still in it is trapped in a room that can never start and can never be left.
 
-```dart
-class _PoseSheet {
-  final String asset; final int frames; final int cols;
-  const _PoseSheet(this.asset, this.frames, this.cols);
+### The gap
+
+- **`functions/src/index.ts:725–730`.** `handleDisconnect` computes `hasCard` and, when false, deletes the player document and **returns at line 729 — before the host-transfer block at lines 829–841 ever runs.**
+- **`index.ts:91`** initialises `cards: []`; **`index.ts:391`** is the first write that populates it, inside `startGame`. So throughout `currentPhase == "lobby"`, `hasCard` is false for **every** player, and the early return is always taken.
+- The room cannot self-heal: **`index.ts:186`** sets `isHost: false` for every joiner, and **`index.ts:239`** rejects `startGame` from a non-host.
+- **`lib/services/game_service.dart:302–307`.** The room snapshot listener is `if (snapshot.exists) { … }` with **no `else`**. When the room document is deleted the client silently keeps its last `_gameState` forever. **Closing the room server-side evicts nobody until this is fixed** — this is the half that is easy to miss.
+
+### Implementation — backend
+
+**`functions/src/index.ts`, inside `handleDisconnect`'s transaction.**
+
+**Step 1.** Move `const phase = room.currentPhase;` (currently line 752) to immediately after `const disconnectedPlayer = …` (line 718), i.e. **above** the `hasCard` computation.
+
+**Step 2.** Replace lines 725–730 with this three-way branch, in exactly this order:
+
+```ts
+const hasCard = room.cards.some(c => c.targetPlayerId === disconnectedPlayerId);
+
+// 1. Host leaves the lobby -> close the room entirely.
+if (disconnectedPlayer?.isHost === true && phase === "lobby") {
+  for (const doc of playersSnap.docs) {
+    transaction.delete(doc.ref);          // playersSnap was read at line 715 — no new read
+  }
+  transaction.delete(roomRef);
+  return { success: true, roomClosed: true };
 }
-const Map<RavenState, _PoseSheet> _poseSheets = {
-  RavenState.peck: _PoseSheet('assets/images/raven/frames/peck.png', 6, 3),
-  // ... one per transient pose
-};
-```
-A pose absent from this map falls through to the existing layered renderer — that is how `idle` and `sleep` keep working, and how you can convert poses one at a time.
 
-**Step 2 — render a cell with `drawImageRect`.** A small `CustomPainter` — nothing like the 485-line path painter that was deleted:
+// 2. Already pruned (no card dealt for this player) -> unchanged behaviour.
+if (!hasCard) {
+  transaction.delete(playerRef);
+  return { success: true };
+}
+
+// 3. Otherwise fall through to the existing in-game logic, unchanged.
+```
+
+**Step 3.** **Leave lines 829–841 exactly as they are.** Host transfer now serves only the in-game case, which is the selected behaviour (Issue 51 Option A).
+
+> **Transaction invariant** (`index.ts:848`): *must never call `transaction.get` — callers complete all reads first.* `playersSnap` is already in hand from line 715, so iterating it adds no read. **Do not add a `.get()` in this branch.**
+
+> **Ordering matters.** Branch 1 must precede branch 2. A host in the lobby satisfies **both** conditions, and if `!hasCard` wins the race you have reimplemented the bug.
+
+### Implementation — client
+
+**`lib/services/game_service.dart`.**
+
+**Step 4.** Extract the teardown currently inline in `leaveRoom()` (lines 262–288) into a private method. It must do exactly what `leaveRoom()` does today, minus the callable:
 
 ```dart
-canvas.drawImageRect(sheet, srcRect /* the current cell */, dstRect /* the widget box */, Paint());
-```
-`srcRect` = `Rect.fromLTWH((i % cols) * 256, (i ~/ cols) * 256, 256, 256)`. Use `FilterQuality.medium` so downscaling stays clean.
+Future<void> _clearLocalRoomState() async {
+  _roomSubscription?.cancel();
+  _playersSubscription?.cancel();
+  _heartbeatTimer?.cancel();
+  _roomSubscription = null;
+  _playersSubscription = null;
+  _heartbeatTimer = null;
 
-**Step 3 — drive the index from the controller that already exists.**
+  _gameState = null;
+  _players = [];
+  _currentPlayerId = null;
+  _advancedStateKeys.clear();
+
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove('room_code');
+  await prefs.remove('player_id');
+}
+```
+
+`leaveRoom()` then becomes: capture `roomCode`/`playerId` → cancel subscriptions → call `handleDisconnect` → `await _clearLocalRoomState()` → `notifyListeners()`. **Its observable behaviour must not change**; its only current caller is `lib/screens/game_over_screen.dart:289`.
+
+**Step 5.** Add the missing `else` to the room listener at 302–307:
+
 ```dart
-final i = (t * frames).floor().clamp(0, frames - 1);
+_roomSubscription = _db.collection('rooms').doc(roomCode).snapshots().listen((snapshot) async {
+  if (snapshot.exists) {
+    _gameState = GameState.fromMap(snapshot.data()!, snapshot.id);
+    notifyListeners();
+  } else if (_gameState != null) {
+    _roomClosed = true;
+    await _clearLocalRoomState();
+    notifyListeners();
+  }
+});
 ```
-`t` is the existing `_actionController.value` (0→1). **Use `floor()` with a `clamp`, not `round()`** — `round()` at `t = 1.0` yields `frames`, one past the end, and every frame gets uneven screen time except the first and last. This off-by-one is the single most likely defect in this task; the unit test in Validation exists specifically to catch it.
 
-**Step 4 — load the sheet as a `dart:ui.Image`.** `Image.asset` will not do; you need the raw image for `drawImageRect`. Resolve via `AssetImage(...).resolve(ImageConfiguration.empty)` and keep the `ui.Image` in state. **Precache in `didChangeDependencies`**, not `build`. Precache only the poses that screen can play — the pose host knows which those are.
+**Do not call `handleDisconnect` here.** The room is already gone; the call fails with "Room not found."
 
-**Step 5 — reduced motion.** When `AppMotion.reduce(context)` is true, draw **frame 0** and never advance. Frame 0 must therefore be a sensible resting-adjacent pose, not a mid-motion extreme — state that requirement in the art brief.
+The `_gameState != null` guard is load-bearing: without it, the listener's first emission for a room that never existed would fire a spurious eviction.
 
-**Step 6 — dispose.** `ui.Image` is not garbage-collected like a widget; call `dispose()` on every loaded sheet in the state's `dispose()`. Leaking these is a real memory leak, unlike a leaked `Image.asset`.
+**Step 6.** Add `bool _roomClosed = false;` with `bool get roomClosed => _roomClosed;`, and set it back to `false` at the top of both the create-room and join-room paths. A stale `true` blocks the next room the player joins.
 
-### Art generation
+### Implementation — routing
 
-Append to `assets/images/raven/PROMPTS.md`. The existing layer art is the reference — **do not generate a new bird.**
+**`lib/screens/lobby_screen.dart`.**
 
-1. **Use Veo as a motion reference, not as a source of assets.** Generate a short clip of the motion you want to see so there is a concrete target. Do **not** try to key frames out of the video: video carries no alpha, and keying a one-pixel anti-aliased brass rim fringes badly (this is exactly why Issue 35 rejected the GIF route).
-2. **Produce each frame by editing the existing art**, the same image-to-image approach that Issue 33 used, on the same canvas:
-   > Using the supplied `body.png` as an exact reference, redraw the crow at frame *N* of *M* of a *[peck / ruffle / …]* motion — *[describe the deformation for that frame]*. Keep the same canvas, scale, position, palette and outline weight. Change only the shape of the bird.
-3. **Assemble the frames into a grid sheet** with any deterministic tool; record the exact command in `PROMPTS.md` so the sheet can be rebuilt.
+**Step 7.** When `gs.roomClosed` turns true, route to the entry screen and surface exactly:
 
-**Character drift across frames is the known risk here** — it already bit the layer generation. Always edit from the same master, never from the previous frame, or the bird will visibly morph across the sequence.
+> `The host has left. This room has closed.`
 
-### The rollout queue — nine poses, easiest deformation first
-
-`ruffle` is done. Convert the rest **in this order**, because each group adds one new primitive to `render_frame()` and building them in dependency order means never writing two unproven primitives at once.
-
-| Order | Pose | Motion brief | New primitive needed |
-|---|---|---|---|
-| 1 | **`startle`** | Sharp scale to ~1.08 with a lift, wing flares, then an overshoot settle. Reads as a flinch. | none — reuses `scale_x/y` + `wing_rot` + `translate_y` |
-| 2 | **`hop`** | A vertical arc: up, brief hang, down, with the wing flaring on the rise and folding on descent. | `translate_y` |
-| 3 | **`peck`** | Fast forward-and-down rotation of the whole bird, snapping back. Sharp in, soft out. | `rotate` |
-| 4 | **`bow`** | Slow forward rotation to ~22°, a held beat, slow return. The ceremony pose — deliberately unhurried. | `rotate` |
-| 5 | **`alert`** | Quick rotational snap toward the roster, hold ~2 frames, ease back. Eye stays open throughout. | `rotate` |
-| 6 | **`preen`** | Wing rotates up to meet the body while the body tilts toward it; holds, then both return. Smug and slow. | `rotate` + `wing_rot` |
-| 7 | **`fly`** | Rise with the wing sweeping through its full arc; the bird leaves frame-bottom slightly. | `translate_y` + `wing_rot` |
-| 8 | **`flap`** | Alternate `wing` and `wing_up` every frame or two while rising — a real two-frame flap rather than a rotation. | **layer selection** |
-| 9 | **`caw`** | Body scales up and tilts back while `beak_open` overlays the closed beak; a call. | **layer selection** + `rotate` + `scale` |
-
-**Do `startle` first even though it needs no new primitive** — it proves the generalised pose registry in `build_sprite_sheets.py` works before any new deformation maths is layered on top. Getting the registry right on a pose with known-good primitives isolates the two risks.
-
-**`flap` and `caw` are last for a reason:** they are the only two needing layer *selection* rather than layer *deformation*, which means `render_frame()` gains a different kind of parameter. If that turns out to be awkward, seven poses are already shipped and the finding can be filed without blocking them.
-
-### 🚦 Preview and approval — per pose, blocking
-
-**Every pose gets an animated preview shown to the user before its commit**, per the skill's §5 recipe. Do not batch nine poses and show them at the end: a wrong motion arc caught at pose two is a five-minute fix, and caught at pose nine it is eight more.
-
-Group commits sensibly — one per pose, or one per primitive group — but **never commit a pose the user has not watched.**
+**Step 8.** **Gate it with a once-per-event key.** Firestore streams rebuild constantly; a bare `if (gs.roomClosed)` fires the route and the message on every tick, stacking routes. Follow the `_advancedStateKeys` / `_knownPlayerIds` pattern already in this file, and perform the navigation in a post-frame callback so it does not run during build.
 
 ### Validation
 
-**Unit — the frame index, no rendering needed.** This is the falsifying test and it is pure arithmetic, so there is no excuse for skipping it:
-- `t = 0.0` → frame `0`; `t = 1.0` → frame `frames - 1`; never `< 0` or `>= frames` for any `t` in `[0, 1]`.
-- Sweep `t` in 0.01 steps across the whole range and assert the index stays in range and never decreases.
-- **Assert `round()` semantics fail this test** — i.e. write it so a `round()` implementation would produce `frames` at `t = 1.0` and be caught.
+**Backend — `functions/test/game_e2e.spec.ts`:**
 
-**Asset integrity — reuse `test/helpers/png_decoder.dart`.** For every sheet in `_poseSheets`:
-- width `== cols * 256` and height `== ceil(frames / cols) * 256`, so the declared geometry and the file agree. A mismatch here renders garbage cells, and nothing else would catch it.
-- a real alpha channel is present;
-- **rim contrast on frame 0 is still ≥ 4.5:1** against `#14110E`, reusing the T3 assertion. The whole mascot programme started with a bird at 1.02:1 — do not let regenerated art regress it.
+- `"closes the room when the host disconnects in the lobby"` — create a room, join a second client, call `handleDisconnect` for the host while `currentPhase === "lobby"`, then assert **both**:
+  - `(await roomRef.get()).exists === false`
+  - `(await roomRef.collection("players").get()).empty === true`
+  
+  **This is the falsifying assertion.** Against today's code the room document survives and the second player's document is still present, so it fails on `exists === false`. **Run it before the fix and record the output** in the Resolved entry.
 
-**Memory budget.** Assert the sum of all sheet pixel areas × 4 bytes stays under **12 MB**. At 256 px cells and ≤10 frames per pose that is comfortable; the assertion exists so a later "let's use 512 px cells" is caught by CI rather than by a crash on an old phone.
+- `"transfers host instead of closing when the game is in progress"` — **the over-reach guard.** Start a game so `currentPhase !== "lobby"`, disconnect the host, assert the room **still exists** and that exactly one remaining player has `isHost === true`. Must pass both before and after; it proves in-game transfer was not collateral damage.
 
-**Widget contract.** Per converted pose: mid-animation renders a non-zero frame index; completion settles; `AppMotion.reduce` renders frame 0 and never advances; disposal throws nothing. Drive these off `RavenState.values` so a future pose cannot skip coverage.
+**Client — `flutter test`, new file `test/room_closed_test.dart`:**
 
-**Unconverted poses still work.** `idle` and `sleep` must still render the layered `Stack` with the blink swap. This is the over-reach guard — the most likely collateral damage is breaking the resting states while wiring the new renderer.
+- Seed a room in `FakeFirestore`, attach the service, delete the room document, pump, assert `gameService.gameState == null` **and** `gameService.roomClosed == true`.
+- Over-reach guard: assert `leaveRoom()` still performs its full teardown and still invokes `handleDisconnect` exactly once — the refactor in step 4 must not have dropped the callable.
 
-**Size.** Measure `Runner.app` against the **44.0 MB** baseline and record the real number. Flat four-colour art should make each sheet tens of KB; if a sheet lands in the hundreds of KB, something is emitting gradients or noise and should be re-exported, not accepted.
+**Manual, three simulators** (neither suite can see this — §1 trap 6): host creates, two clients join, host taps leave. Both non-hosts must land on the entry screen showing the exact copy, within one Firestore round-trip.
 
-**Simulator pass.** Play a full loop across three simulators (§4) and confirm each converted pose fires at its moment, plays once, and returns to resting.
+### Blast radius — same commit
 
-### Blast radius
-New `assets/images/raven/frames/*.png`; `lib/widgets/raven_mascot.dart` (frame map, painter, sheet loading, dispose); `assets/images/raven/PROMPTS.md`; `test/raven_mascot_test.dart`. **`raven_pose_host.dart` should not need to change** — T6 changes how a pose is drawn, not how it is chosen. If you find yourself editing the host, stop and re-read: that is a sign the split between orchestration and rendering is being broken.
+`functions/src/index.ts` · `lib/services/game_service.dart` · `lib/screens/lobby_screen.dart` · `functions/test/game_e2e.spec.ts` · **`test/fake_functions.dart`** (must mirror the close behaviour or the client test cannot exercise it) · `docs/design_database_and_security.md` §4–§5 (the disconnect/host-handoff contract now has a phase gate).
 
 ---
 
-## 3. Validation standard
+## 4. Issue 50 — a leave control in the lobby
+
+**What this means for the user:** today, joining a room is one-way. The only exits are finishing a whole game or force-quitting the app.
+
+### 🔧 IN FLIGHT — read this before touching anything
+
+An implementation attempt is uncommitted in the working tree: `lib/theme/app_icons.dart` (+5), `lib/screens/lobby_screen.dart` (+72), `docs/design_ui_direction.md`, and a new `test/lobby_leave_test.dart`. **The production code is essentially correct. Do not rewrite it.** Four specific things are wrong, diagnosed 9 Aug 2026.
+
+**BLOCKER — the test hangs; it is not failing on logic. There are three independent causes, and fixing only one leaves it hanging** (measured: swapping just the pump idiom still hung past 7 minutes).
+
+Observed on the current file: **6 m 06 s elapsed, zero tests completed**, all three reporting `did not complete [E]`, and a `TestDeviceException … SIGTERM` that came from the run being killed — not from the app. No assertion ever executed, so **nothing about the assertions is yet known to be right or wrong.**
+
+1. **`await gameService.createRoom(...)` deadlocks inside the fake-async zone.** `testWidgets` runs its body under `FakeAsync`, where timers only fire when fake time advances. Awaiting a fake callable — and the `await Future.delayed(Duration.zero)` calls that follow it — blocks forever because no `pump()` can run while the await is outstanding. The log confirms execution reached `listenToRoom` (`DEBUG HEARTBEAT: started timer for room: TEST, player: p_guest`) and stopped there.
+2. **No `MediaQuery(accessibleNavigation: true)`.** `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`). Eleven test files set it, and that is how they quiet the repeating animations. Without it every `.repeat()` controller runs.
+3. **`pumpAndSettle()` × 7** — §1 trap 7.
+
+**Do not invent a harness. Copy `lobby_parlor_sheet_test.dart:25–74` — it is the working precedent for pumping `LobbyScreen`.** Its shape:
+
+```dart
+Future<void> setupAndPump(WidgetTester tester, {required bool isHost}) async {
+  const roomCode = 'TEST';
+  // 1. Seed FakeFirestore DIRECTLY. Do not call createRoom() — it deadlocks (cause 1),
+  //    and seeding is how you get a non-host without mutating state afterwards.
+  final me = PlayerState(id: 'host_user', name: 'Me', isHost: isHost, joinedAt: 100);
+  await mockDb.collection('rooms').doc(roomCode).set(
+        GameState(roomCode: roomCode, totalPlayers: 1, sabotageAnswersCount: 2).toMap());
+  await mockDb.collection('rooms').doc(roomCode).collection('players').doc(me.id).set(me.toMap());
+
+  gameService.listenToRoom(roomCode);
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('room_code', roomCode);
+  await prefs.setString('player_id', me.id);
+  await gameService.tryRejoinSession();
+
+  // 2. Escape the fake-async zone so the fake's futures actually resolve.
+  await tester.runAsync(() async {
+    await Future.delayed(const Duration(milliseconds: 100));
+  });
+
+  await tester.pumpWidget(
+    ChangeNotifierProvider<GameService>.value(
+      value: gameService,
+      child: MaterialApp(
+        home: MediaQuery(                                  // 3. quiets every .repeat()
+          data: const MediaQueryData(accessibleNavigation: true),
+          child: const LobbyScreen(),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();                                     // 4. never pumpAndSettle
+  await tester.pump(const Duration(milliseconds: 500));
+}
+```
+
+Note a non-host needs **`isHost: false` seeded up front**, not `createRoom` followed by an `update`. Dispose in a `try/finally` around each test body, as the precedent does, rather than in `tearDown`.
+
+**Consequence to expect:** with `accessibleNavigation: true`, `AppMotion.reduce` is `true` in every test, so Defect 1 below means `barrierDismissible` will be `false` throughout the suite. Tapping the buttons still works; tapping the barrier will not.
+
+**Defect 1 — the reduce-motion requirement is not implemented, and an unrelated behaviour was changed instead.** `_confirmLeave` computes `final reduceMotion = AppMotion.reduce(context);` and spends it on `barrierDismissible: !reduceMotion`. Those are unrelated concerns, and the effect is backwards: a reduce-motion user *loses* the ability to dismiss by tapping outside, which is an accessibility regression. Step 6 asks for the dialog's **entry animation** to be suppressed. Set `barrierDismissible: true` unconditionally, and route the reduce-motion path through the transition duration instead.
+
+**Defect 2 — the double-tap guard does not guard anything.** `_isLeaving` is set inside the confirm handler *after* `Navigator.of(ctx).pop()` has already removed the button, and is reset in a `finally`. Both `if (_isLeaving) return;` checks are therefore unreachable as guards: the outer one cannot be true because a modal dialog covers the `AppBar` button, and the inner one cannot be true because the pop is synchronous. The real risk is two taps on the confirm `TextButton` landing in the same frame. **Fix: set the flag before `Navigator.pop()` and do not reset it** — the screen is being torn down — or capture a plain `bool` in the dialog builder's closure.
+
+**Defect 3 — the test's over-reach guard is fragile and semantically wrong.** It locates the sound toggle with `find.byType(IconButton).last`, which now depends on tree ordering between `leading:` and `actions:`. The sound button has a tooltip (`lobby_screen.dart:471`). Use `find.byTooltip('Mute')` / `find.byTooltip('Unmute')`, matching how the test already finds the leave control.
+
+**Still open:** the glyph at `0xe674` has **not** been seen on a simulator. Step 2's gate is unmet, and per the Definition of Done it cannot be ticked from a green suite.
+
+### The gap
+
+`GameService.leaveRoom()` (`game_service.dart:258–290`) is correct and complete — and the lobby never calls it. `lobby_screen.dart:377–386` declares one `AppBar` action, the sound toggle, and no `leading:`. A grep across `lobby_screen.dart`, `gaslight_route.dart` and `main.dart` for `PopScope|WillPopScope|Navigator.pop|maybePop|leading:|BackButton|Leave|Exit|Quit` returns **zero matches**.
+
+### Implementation
+
+**Step 1.** `lib/theme/app_icons.dart` — add `depart,` to `ThematicIconType` after `redraw` (line 29).
+
+**Step 2.** Add its entry to `_phosphorGlyphs` (lines 46–58), matching the existing style:
+
+```dart
+ThematicIconType.depart: IconData(0xe674, fontFamily: _kPhosphorLight), // signOut
+```
+
+> ### ⚠️ The codepoint cannot be verified from this repo — only on a simulator
+>
+> The vendored `Phosphor-Light.ttf` has a `post` table at **version 3.0, which stores no glyph names** (confirmed 9 Aug 2026: 1,543 cmap entries, 0 recoverable names). A cmap presence check is **near-worthless here** — the font's cmap spans `0x0020–0xFFFD`, and three unrelated candidate codepoints all tested PRESENT. Presence rules out nothing.
+>
+> `0xe674` is the value proposed by the user and is present in the font, but **presence is not identity**. A wrong codepoint renders a plausible-looking but incorrect glyph, or an empty tofu box, and **no widget test in this project can detect either** (§1 trap 5).
+>
+> **The blocking gate is visual:** build to a simulator, open the lobby, and confirm the leading icon reads as a door / sign-out arrow. If it does not, try `0xe668`, then source the correct value from upstream Phosphor. **Do not commit this item without having seen the glyph.**
+
+**Step 3.** `lib/screens/lobby_screen.dart` — add to the `AppBar` (which currently has no `leading:`):
+
+```dart
+leading: IconButton(
+  icon: ThematicIcon(
+    type: ThematicIconType.depart,
+    color: theme.colorScheme.secondary,
+  ),
+  onPressed: () => _confirmLeave(context, gs, isHost),
+  tooltip: 'Leave room',
+),
+```
+
+`isHost` is already computed at `lobby_screen.dart:310`. **Leave the existing sound toggle in `actions:` untouched.**
+
+**Step 4.** Implement `_confirmLeave`. Copy is verbatim — punctuation and capitalisation included:
+
+| | Non-host | Host |
+|---|---|---|
+| Title | `Leave this room?` | `Close this room?` |
+| Body | `You can rejoin with the room code as long as the game hasn't started.` | `You are the host. Leaving will close the room for everyone.` |
+| Dismiss | `STAY` | `STAY` |
+| Confirm | `LEAVE` | `CLOSE ROOM` |
+
+**Step 5.** On confirm: `await gs.leaveRoom()`, then route to the entry screen. On dismiss: nothing changes. Guard against a double-tap producing two `leaveRoom()` calls.
+
+**Step 6.** The dialog needs an `AppMotion.reduce(context)` path; both actions ≥ 48 dp; re-verify the lobby still fits at 360×640 dp with `leading:` present.
+
+### Validation
+
+**`test/lobby_leave_test.dart`** — already exists, uncommitted, and currently hangs. See the IN FLIGHT block above before editing it. (`test/lobby_screen_test.dart` does not exist and should not be created.) Copy the pump idiom from `lobby_entry_test.dart:42` or `lobby_parlor_sheet_test.dart:73`; **`pumpAndSettle()` is banned in this repo — §1 trap 7.** `FakeFirestore` comes from `simulation_test.dart` and `FakeFirebaseFunctions` from `fake_functions.dart`, which is the established import pattern across eleven test files; `fakeFunctions.callableInvocations` is the existing call counter and the fake room code is always `TEST`.
+
+- `"non-host can leave from the lobby"` — pump the lobby as a non-host, `find.byTooltip('Leave room')`, tap; assert the dialog shows the exact title `Leave this room?`; tap `STAY`, assert still in the lobby and `leaveRoom()` **not** called; reopen, tap `LEAVE`, assert `leaveRoom()` called **exactly once**. **Falsifying:** today `find.byTooltip('Leave room')` matches nothing and the test fails at the first tap.
+- `"host sees the room-closing copy"` — same flow with `isHost: true`; assert the title `Close this room?`, the body string verbatim, and the confirm label `CLOSE ROOM`.
+- **Over-reach guard** — assert the sound toggle is still present in `actions:` and still toggles `gs.soundEnabled`.
+- **Manual, simulator** — the blocking glyph check from step 2.
+
+### Blast radius — same commit
+
+`lib/theme/app_icons.dart` · `lib/screens/lobby_screen.dart` · **new** `test/lobby_leave_test.dart` · `test/thematic_icon_test.dart` (if it enumerates the enum) · `docs/design_ui_direction.md` §7 (icon inventory gains `depart`).
+
+---
+
+## 5. Issue 52 — non-hosts get the full carousel, read-only
+
+**What this means for the user:** a non-host currently sees a single folder and has no way to learn the game ships six decks.
+
+### The gap
+
+`lib/widgets/deck_carousel.dart:102–121` early-returns a single centred `_FolderCard` under the label `THE CHOSEN FILE` whenever `widget.isHost` is false. The seven-item `PageView` at lines 123–141 is host-only. The data is fine: six decks in `functions/src/prompt_decks.ts`, mirrored in `lib/utils/prompt_decks.dart:7–126`, plus a synthetic `'custom'` appended at `lobby_screen.dart:339`; the `_familyFriendlyOnly` filter (`lobby_screen.dart:332–340`, default `false` at line 43) removes only the two mature decks and only while the toggle is on.
+
+### Implementation
+
+**Step 1.** Delete the early return at lines 102–121. Render the same `PageView` for both roles. Keep the `THE CHOSEN FILE` section label above the carousel **for non-hosts only** — the host has no label today and gains none.
+
+**Step 2.** Suppress every selection affordance when `!widget.isHost`:
+
+- In `_onPageChanged` (lines 79–80), return before `widget.onDeckSelected(newDeckId)`. The server rejects the write anyway (`updateLobbySettings` requires host — `index.ts:1007–1010`) but a rejected callable surfaces a visible error, so the client must not make the call at all.
+- In `_playStampPulse()` (line 86), return immediately when `!widget.isHost`. The stamp reads as *"you just chose this."*
+
+**Step 3.** Badge the host's live choice so a non-host who swipes away still knows what is selected: on the card where `deckId == widget.selectedDeckId`, overlay the text `CHOSEN`. Non-hosts only — the host already has the stamp pulse.
+
+**Step 4.** **Do not yank the page out from under a reader.** When `selectedDeckId` changes from the Firestore stream, a non-host's `PageView` may animate back to the chosen deck **only if the user has not swiped within the last 3 seconds**. Record the last interaction time in `didUpdateWidget`/`_onPageChanged` and compare; reuse the existing `_debounceTimer` field (line 94) rather than adding another timer.
+
+**Step 5.** `custom` stays in the non-host list. The custom-prompt editor (`lobby_screen.dart:428–431`) stays host-gated — **do not expose it.**
+
+### Validation
+
+**New file `test/deck_carousel_test.dart`** — it does not exist today. **These tests will hit §1 trap 7 as hard as Issue 50's did** — the carousel lives inside the lobby tree and `_pulseController` is its own animation. Use `await tester.pump(); await tester.pump(const Duration(milliseconds: 500));`, never `pumpAndSettle()`. For swipe assertions, `tester.fling` / `tester.drag` followed by two explicit pumps is the pattern that works here.
+
+- `"non-host sees every deck"` — assert `find.byType(PageView)` is present with `itemCount == 7`. **Falsifying:** today there is no `PageView` for a non-host, so the finder fails immediately.
+- `"non-host cannot select a deck"` — swipe one page; assert the fake's `updateLobbySettings` was **not** called and the stamp pulse did not run.
+- `"non-host can still see which deck is chosen"` — assert the `CHOSEN` badge is present on the card matching `selectedDeckId`.
+- `"host selection still works"` — **the over-reach guard.** Swiping as host still calls `updateLobbySettings` **exactly once per settled page** and still fires the stamp pulse.
+- **Layout** — 360×640 dp with the carousel present for a non-host; `AppMotion.reduce` renders a static card with no pulse.
+
+### Blast radius — same commit
+
+`lib/widgets/deck_carousel.dart` · `lib/screens/lobby_screen.dart` (label/props) · **new** `test/deck_carousel_test.dart` · `docs/design_prompt_system.md` · `docs/design_ui_direction.md` §10.
+
+---
+
+## 6. Issue 53 — 8-hour Firestore TTL for abandoned rooms
+
+**What this means for the user:** invisible in play. It keeps dead rooms out of production Firestore and stops the small 4-letter code space filling with corpses.
+
+### The gap
+
+`functions/src/index.ts` exports fourteen callables and **no scheduled or triggered function** — a grep across `functions/src/` for `onSchedule|pubsub|scheduler|onDocument|TTL` returns zero matches. Cleanup is entirely client-driven: the staleness sweep at `game_service.dart:310–328` only runs inside a subscribed client and cannot prune itself (line 317). When the last client closes the app, the room and its `players` subcollection persist indefinitely. Confirmed live on 9 Aug 2026: production room `KVOH` still holds a player document that nothing will ever remove.
+
+### ⚠️ Why this interval needs no keepalive — and what would change that
+
+The TTL is **+8 hours**, revised by the user on 9 Aug 2026 (from +1 h, originally +24 h). **Do not shorten it without re-reading this section.**
+
+Nothing in this system tracks presence. A player document's `expiresAt` is written **once, at join, and never refreshed** — the 10-second heartbeat writes `lastSeen` and only `lastSeen`. Room documents fare a little better, being refreshed by writes that already happen (step 3), but an idle lobby produces **zero** room writes. So the whole scheme rests on a single bet:
+
+> **every realistic session ends before the timer expires.**
+
+At 8 hours that bet always wins. The two gaps that could break it:
+
+| Gap | What it takes to hit | At 8 h |
+|---|---|---|
+| An idle lobby is deleted with players sitting in it | A lobby open, clients connected, no setting changes for the entire window | Unreachable — phones sleep and apps background long before |
+| An active player's document is deleted mid-game | One continuous session, measured from that player's join, longer than the window | Unreachable — a party game does not run for eight hours |
+
+**At +1 hour both gaps are ordinary occurrences**, which is why that interval required a host-only `touchRoom` keepalive callable plus a client timer. At 8 hours that machinery is dead weight, so **it is deliberately absent from this spec — do not add it back.**
+
+**Tripwire:** if the interval is ever shortened below roughly 4 hours, re-derive the table above before writing code. The keepalive design that a short interval would need is preserved in `ongoing_general_errors.md` Issue 53.
+
+### Implementation — backend
+
+**Step 1 — the constant.** Define once, at module scope in `functions/src/index.ts`:
+
+```ts
+const ROOM_TTL_MS = 8 * 60 * 60 * 1000;           // 8 hours — see the interval note above
+const ttlFrom = (now: number) =>
+  admin.firestore.Timestamp.fromMillis(now + ROOM_TTL_MS);
+```
+
+**Do not inline the literal.** The interval is referenced in five places; duplicating it is how three of them go stale, and the interval has already been revised twice.
+
+**Step 2 — write `expiresAt` at creation.**
+- `createRoom` (`index.ts:83–97`) — add `expiresAt: ttlFrom(Date.now())` to the room document.
+- `createRoom` (`index.ts:106`) and `joinRoom` (`index.ts:186`) — add the same to **each player document**. **TTL does not cascade to subcollections**; the `players` collection group needs its own field and its own policy. Skip this and every player document behind a deleted room is orphaned permanently.
+
+**Step 3 — ride-along refresh on existing room writes.** Add `expiresAt: ttlFrom(Date.now())` to the room update already performed by `advancePhaseInternal` (its `nextState` object), `startGame` (`index.ts:389`) and `updateLobbySettings` (`index.ts:1017`). These are existing writes; one extra field costs nothing. Be honest about what this buys at 8 hours: it is **cheap insurance, not load-bearing**. It only matters for a session outliving the window, which the interval note above establishes as unreachable. Include it because it costs nothing and makes a room's lifetime track activity rather than creation — not because anything depends on it.
+
+**Step 4 — `firestore.rules`.** `expiresAt` is **server-owned**. The player update rule at lines 25–28 is a denylist; add `'expiresAt'` to it:
+
+```
+.hasAny(['role', 'totalScore', 'timesFooled', 'playersDeceived', 'isHost', 'joinedAt', 'hasRerolled', 'authUid', 'id', 'expiresAt']);
+```
+
+Nothing refreshes a player document's `expiresAt` after join. That is a deliberate consequence of the interval note above, not an oversight.
+
+### Implementation — client
+
+**None.** Issue 53 is backend-and-rules only. If you are editing `lib/` for this item you have left the spec — the keepalive timer that a shorter interval would have needed is explicitly not part of this build.
+
+### Deployment — out-of-band, not captured by any file in this repo
+
+```bash
+gcloud firestore fields ttls update expiresAt --collection-group=rooms --project=gaslight-46368 --enable-ttl
+```
+
+```bash
+gcloud firestore fields ttls update expiresAt --collection-group=players --project=gaslight-46368 --enable-ttl
+```
+
+Record **both** in `docs/design_database_and_security.md`. Without that note there is no in-repo evidence these policies exist, and a fresh Firebase project silently accumulates rooms forever.
+
+### Accepted limitations — do NOT "fix" these
+
+Chosen knowingly on 9 Aug 2026 (Issue 53, Option B):
+
+- Deletion is **best-effort and may lag expiry**, in Firestore's case by up to 24 hours. An expired room can still be joinable. Not a bug to work around.
+- **The emulator does not enforce TTL.** No automated test can prove deletion happens. Only the writing and refreshing of `expiresAt` is testable — which is exactly why the refresh tests below are mandatory.
+
+### Validation
+
+**`functions/test/game_e2e.spec.ts`:**
+
+- `"writes expiresAt on room and players at creation"` — after `createRoom`, assert the room document's `expiresAt` is a `Timestamp` falling **between 7 h 45 m and 8 h 15 m** in the future, and that **every** player document has one in the same window. **Falsifying:** the field does not exist today, so it fails on `undefined`. Assert the window, not merely that the field is present — a bare presence check would pass a value of `0`.
+- `"refreshes expiresAt on existing room writes"` — capture `expiresAt`, advance a phase, assert the new value is **strictly greater**. Repeat for `startGame` and `updateLobbySettings`.
+
+**`functions/test/rules.spec.ts`:**
+
+- `"client cannot write expiresAt on its own player document"` — assert denied.
+- `"client can still write lastSeen alone"` — **the over-reach guard.** Break this and the 10-second heartbeat dies silently, which no client test would catch (§1 trap 6).
+
+**Out-of-band:** `gcloud firestore fields ttls list --collection-group=rooms --project=gaslight-46368` returns the policy.
+
+### Blast radius — same commit
+
+`functions/src/index.ts` (`createRoom`, `joinRoom`, `startGame`, `updateLobbySettings`, `advancePhaseInternal`) · `firestore.rules` · `functions/test/game_e2e.spec.ts` · `functions/test/rules.spec.ts` · `docs/design_database_and_security.md` (the `expiresAt` contract, the 8-hour interval and its rationale, and both `gcloud` commands).
+
+**No client files change for this item** — `lib/` and `test/fake_functions.dart` are untouched by Issue 53.
+
+---
+
+## 7. Deferred — do NOT start
+
+| Item | Trigger that would revive it |
+|---|---|
+| **Issue 53 Option A — scheduled cleanup function** | The 8-hour TTL proves insufficient, or orphaned `players` documents appear despite the second policy. |
+| **The `touchRoom` keepalive callable + 5-minute client timer** | **The TTL interval is shortened below roughly 4 hours.** Designed and costed on 9 Aug 2026 for the briefly-selected 1-hour interval; removed when the interval moved to 8 h. Do not build it at the current interval — see §6's interval note. |
+| **Issue 50 Option C — `PopScope` for system back / edge-swipe** | Playtesters reach for the back gesture and report nothing happens. The `AppBar` control ships first. |
+
+---
+
+## 8. Validation standard
 
 **For a fix: write validation that fails against the broken state, and observe it fail.** Issue 31 is the model — rebuilt from pre-fix source, the suite reported `expected null to equal 3` and `expected 'INTERNAL' to equal 'FAILED_PRECONDITION'`. **Record the observed failure output in the Resolved entry.**
 
-**A test's name is not a test.** Issue 32 shipped a test called *"…rim contrast >= 4.5:1"* that asserted only that a file was non-empty. Read the assertion, not the title.
+**A test's name is not a test.** A test titled *"…rim contrast >= 4.5:1"* asserted only that a file was non-empty, and the mascot shipped at **1.02:1** — invisible — with a fully green suite. Read the assertion, not the title.
 
-**Some correctness is invisible to the harness.** `Image.asset` loads nothing under `flutter test`. Verify artefacts directly — decode the PNG — or on a simulator.
+**A check that cannot fail is not a check.** The cmap presence script in §4 passes for essentially any codepoint in this font. Before trusting a verification, establish what it would take for it to fail.
+
+**Some correctness is invisible to the harness.** `Image.asset` loads nothing under `flutter test`; a wrong icon codepoint renders as tofu. Verify the artefact directly, or on a simulator.
+
+**Measure; do not estimate.** A layout overflow estimated at ~275 dp measured **593 dp**.
 
 **Do not tune a threshold to make a test pass.** Report the measured number and say the guard failed.
 
-Pair every fix assertion with an **over-reach guard**.
+**A criterion can be confidently wrong.** Two tests once required `beak_open` to place 40–50% of its pixels outside the body silhouette; that does not measure an open beak, and the art that reads correctly sits at 14.6%. Before lowering a threshold, establish which is wrong — the artefact or the criterion.
+
+**Pair every fix assertion with an over-reach guard.** Each item in §3–§6 names its own.
 
 ---
 
-## 4. Running 3 simulators for multiplayer testing
+## 9. Running 3 simulators for multiplayer testing
 
-Bots are server-seeded documents and never exercise the non-host **client** path — use real simulator clients for anything that must be correct.
+Bots are server-seeded documents and never exercise the non-host **client** path. Anything that must be correct for a second human needs a real second client.
 
 ```bash
 xcrun simctl boot "iPhone 17"; xcrun simctl boot "iPhone 17 Pro"; xcrun simctl boot "iPhone Air"; open -a Simulator
 ```
+
 ```bash
 flutter build ios --simulator --debug
 ```
+
 ```bash
 for U in $(xcrun simctl list devices booted | grep -oE '[0-9A-F-]{36}'); do xcrun simctl install "$U" build/ios/iphonesimulator/Runner.app; xcrun simctl launch "$U" com.whylabs.gaslight; done
 ```
 
-Must be `--debug`: `lobby_screen.dart` passes `debugEnabled: kDebugMode`, and the server refuses debug calls when false. **DEBUG: ADD 9 BOTS** is host-only and adds 9 unconditionally.
+Must be `--debug`: `lobby_screen.dart` passes `debugEnabled: kDebugMode` and the server refuses debug calls when false. **DEBUG: ADD 9 BOTS** is host-only and adds 9 unconditionally.
+
+To clear a device's room memory, `xcrun simctl uninstall <UDID> com.whylabs.gaslight` — the room code lives in `SharedPreferences` and survives a relaunch.
+
+For local play against the emulator set `USE_EMULATOR=true` in `.env` and rebuild — `.env` is bundled as an asset. **`USE_EMULATOR` must be `false` in any tester build.**
 
 ---
 
-## 5. `.gitignore` — rules that must never be removed
+## 10. Already delivered — do NOT rework
 
-**Decision rule.** (1) Secret, or identifies a developer's machine/account? → **ignore, always.** (2) Would a fresh clone fail or build differently without it? → **commit.**
+**Issues 1–49, Tasks T1–T11.** Points bearing on current work:
 
-| Rule | Guards |
-|---|---|
-| `.env` | Firebase API keys + `USE_EMULATOR`. Bundled into the IPA. |
-| `**/google-services.json` · `**/GoogleService-Info.plist` | Firebase config. The plist is required on disk to build, never committed. |
-| `/build/`, `.dart_tool/` | Generated. Source of the phantom analyzer errors in §1. |
-| `functions/node_modules/`, `functions/lib/` | Installed and compiled output. |
-| `**/ios/Flutter/Generated.xcconfig`, `flutter_export_environment.sh` | Absolute paths to the local Flutter SDK. |
-| `*.log`, `firebase-debug.log`, `firestore-debug.log` | Emulator logs; can contain room data and UIDs. |
+- **T6–T11 — the mascot is finished.** Ten transient poses are pre-rendered 256 px sprite sheets built by `scripts/build_sprite_sheets.py`, whose `POSE_REGISTRY` is the single source of truth for frame counts and grids; `_poseSheets` in `lib/widgets/raven_mascot.dart` must agree with it and `flutter test` T6.2 enforces that by parsing the Dart. `idle` and `sleep` deliberately stay on the layered renderer. **Two renderers coexist by design — do not unify them.**
+- **`RavenPoseHost.playRavenPose` takes a required `onceKey`**, because Firestore streams rebuild constantly and a bare `if (condition)` re-fires the pose every tick. The same hazard governs Issue 51's eviction message — §3 step 8.
+- **Issue 31** — settings no longer wipe each other. The server uses loose `!= null`; **never "simplify" it to a falsy check**, because `false` and `0` are legitimate values.
+- **Issues 28/29** — `phosphor_flutter` can never be used (`IconData` is a `final class`, proven twice). The app vendors the Phosphor Light font. **T2** — `cupertino_icons` deliberately absent.
+- **Task T3** — `test/helpers/png_decoder.dart` decodes palette-indexed PNGs and computes WCAG contrast. Reuse it rather than writing another decoder.
 
-**Must stay tracked:** the vendored Phosphor font + `LICENSE`, all raven PNGs + `PROMPTS.md`, `.firebaserc`, `ios/Podfile.lock`, both `xcshareddata/swiftpm/Package.resolved`. **After adding sprite sheets, confirm with `git status` that they are staged** — a silently-ignored asset is a blank bird on every other machine.
-
-**New with T6, and currently undecided in the repo:**
-- **`scripts/` must be committed.** `build_sprite_sheets.py` is the only way to rebuild a sheet from source art; losing it makes every sheet an unreproducible binary. Commit it with the pilot.
-- **`scratch/` should be gitignored.** It holds throwaway preview artifacts. Add `scratch/` to `.gitignore` and verify with `git check-ignore -v scratch`. If a preview page is worth keeping as a reusable template, move it to `scripts/` rather than leaving it in a directory whose name promises it is disposable.
-
-**Trap: `.swiftpm/` does not match `swiftpm/`** — the real Xcode paths have no leading dot.
+**Release plumbing — do not revert:** bundle ID `com.whylabs.gaslight` · Firebase iOS app `1:184580940908:ios:e79d100cc1231a8f022449`, project `gaslight-46368` · iOS deployment target **15.0** · Node **22** · `ITSAppUsesNonExemptEncryption = false` · `GoogleService-Info.plist` required on disk but gitignored · `.env` ships inside the IPA.
 
 ---
 
-## 6. Already delivered — do NOT rework
-
-**Issues 1–35, Tasks T1–T5.** Points bearing on current work:
-- **T4/T5** — the crow is the app's logo mascot, and has 12 poses wired to game moments through `raven_pose_host.dart`. The helper takes a **required `onceKey`**, because Firestore streams rebuild constantly and a bare `if (condition)` re-fires a pose on every tick. **T6 must not touch this.**
-- **Issue 32/33** — the mascot is layered PNGs on a shared canvas, body filled behind a brass rim at 7.70:1 contrast. Regeneration prompts in `assets/images/raven/PROMPTS.md`.
-- **Issue 35** — GIF/Veo was evaluated and rejected as a *delivery* format: video has no alpha and GIF alpha is 1-bit, so the rim fringes or jags. Veo remains useful as a **motion reference only**. Rive was rejected at **+4.5 MB measured** and because a `.riv` file can only be authored in a GUI editor — no agent can produce one.
-- **Task T3** — `test/helpers/png_decoder.dart` decodes palette-indexed PNGs and computes WCAG contrast. **Reuse it for sheet validation.**
-- **Issue 31** — settings no longer wipe each other; live in production. The server uses loose `!= null` — **never "simplify" to a falsy check**: `false` and `0` are legitimate values.
-- **Issue 28/29** — `phosphor_flutter` can never be used (`IconData` is a `final class`); the app vendors the Phosphor Light font. **T2** — `cupertino_icons` deliberately absent.
-
-**Release plumbing — do not revert:** bundle ID `com.whylabs.gaslight` · Firebase iOS app `1:184580940908:ios:e79d100cc1231a8f022449`, project `gaslight-46368` · iOS deployment target **15.0** · Node **22** · `ITSAppUsesNonExemptEncryption = false` · `GoogleService-Info.plist` required on disk but gitignored · `.env` ships in the IPA so **`USE_EMULATOR` must be `false`** for testers.
-
----
-
-## 7. Accepted equivalents — do NOT "fix" back
+## 11. Accepted equivalents — do NOT "fix" back
 
 - **Craft SUBMIT is in-flow** under the text field (M5); **Vote's CONFIRM** is bottom-anchored via `Expanded`+`SafeArea`.
 - **Reactions send raw emoji strings**; medallions are render-side only (V5).
-- **Entry-form logo uses `SizedBox` + `FittedBox`**, not `Transform.scale` — the latter does not change layout size.
-- **`isSmallHeight` uses a `< 700` dp breakpoint with a 6/8/12/16/20 spacing scale.**
-- **House Rules non-host gating uses `IgnorePointer` + `Opacity(0.5)`.** The server rejects non-host writes regardless.
+- **Entry-form logo uses `SizedBox` + `FittedBox`**, not `Transform.scale`.
+- **`isSmallHeight` uses a `< 700` dp breakpoint** with a 6/8/12/16/20 spacing scale.
+- **House Rules non-host gating uses `IgnorePointer` + `Opacity(0.5)`.** **Issue 52 deliberately departs from this pattern** for the deck carousel — it becomes interactive-but-inert rather than dimmed, because its purpose is to be read. Do not "restore consistency" by dimming it.
 - **The mascot's head tilt is whole-body**, a deliberate simplification for a single-silhouette design.
-- **After T6, two renderers coexist by design** — layered for resting poses, sprite sheets for transient ones. Do not unify them.
+- **Leaving a room does not call `Navigator` explicitly.** `lobby_screen.dart:369` gates the waiting-room render on `gs.gameState != null && gs.currentPlayer != null` and otherwise falls through to `_buildEntryForm` (line 385), so clearing local state re-renders the entry form in place. Same guarantee as "route to the entry screen", different structure — **do not add a redundant `Navigator.pushReplacement` after `leaveRoom()`.** This is also why `gs.currentPlayer!` at line 389 is safe.
 
 ---
 
-## 8. Intentional decisions / invariants — do NOT change
+## 12. Intentional decisions / invariants — do NOT change
 
-- **Server-authoritative:** clients read Firestore streams; **all** mutations go through callables; `firestore.rules` denies client room writes.
-- **Portrait-locked on phones**; **text scale clamped 1.0–1.3** (M3).
+- **Server-authoritative:** clients read Firestore streams; all mutations go through callables; `firestore.rules` denies client room writes. A player's own `lastSeen` heartbeat is the single sanctioned client write — **`expiresAt` is not, by §6 step 4.**
+- **Portrait-locked on phones**; **text scale clamped 1.0–1.3**.
 - **Duplicate-answer check is a lexical heuristic**, mirrored byte-identically in `functions/src/text_similarity.ts` ↔ `lib/utils/text_similarity.dart`.
 - **The `_advancedStateKeys` / once-per-event guards** survive Firestore-stream rebuilds — **never remove them.**
-- **`ThematicIcon` is the single public icon entry point.**
-- **`_familyFriendlyOnly` is client-local and never synced.**
+- **`ThematicIcon` is the single public icon entry point.** Issue 50 adds an enum member; it does not add a second icon mechanism.
+- **`_familyFriendlyOnly` is client-local and never synced** (Issue 30 Option C explicitly declined).
 - **`RavenMascot`'s constructor signature (`state`, `size`) is fixed**, and `playRavenPose`'s `onceKey` stays required.
 - **"Forgery Rounds" maps to `sabotageAnswersCount`.**
+- **Declined, do not re-propose:** P7 (Confidence Wager), P9 (House Cards), P11 (The Final Gambit), Issue 30 Option C, Issue 34 Option C.
 
 ---
 
-## 9. Where the contracts live
+## 13. Where the contracts live
 
-`ongoing_general_errors.md` was consolidated on August 7 from 903 lines to ~140. It is the live queue plus the traps that still bite — **not** a history. Do not re-expand it with delivered work; record outcomes in the design doc that owns the behaviour.
+`ongoing_general_errors.md` is the live queue plus the traps that still bite — **not** a history. Do not re-expand it with delivered work; record outcomes in the design doc that owns the behaviour.
 
 | What | Where |
 |---|---|
 | Open queue, selections, live traps | `docs/ongoing_general_errors.md` |
 | Full history of any resolved item | `git log` |
-| Backend write contract, rules, identity | `design_database_and_security.md` — **§7 is the `null` ≠ absent contract** |
-| Card passing, disconnect recalc, input validation | `design_rotation_engine.md` §5 |
+| Backend write contract, rules, identity, disconnect/host handoff | `design_database_and_security.md` — **§7 is the `null` ≠ absent contract; §4–§5 gain Issue 51's phase gate plus the `expiresAt` contract and its 8-hour rationale** |
+| Card passing, disconnect recalculation, input validation | `design_rotation_engine.md` §5 |
 | Scoring, routing, gameplay programme | `design_scoring_and_ui.md` §4 |
-| Palette, typography, motif, icons, mascot, UI programme | `design_ui_direction.md` — **T6 must update the mascot block** |
+| Palette, typography, motif, icons, mascot, UI programme | `design_ui_direction.md` — **§7 gains `depart`; §10 gains the non-host carousel** |
 | Prompt decks · duplicate answers | `design_prompt_system.md` · `design_semantic_integrity.md` |
-| Mascot art prompts | `assets/images/raven/PROMPTS.md` — **T6 appends the frame briefs** |
 | PNG decoding / contrast helper | `test/helpers/png_decoder.dart` |
+| Mascot pose pipeline | `.agents/skills/mascot_pose_creation/SKILL.md` |
 | Doc / commit / bug-filing conventions | `.agents/skills/` |
 
 ---
 
-## 10. Feedback loop — what past specs got wrong
+## 14. Feedback loop — what past specs got wrong
 
-- **A test's name is not a test.** A contrast test once asserted only that a file was non-empty — the exact guard for the bug being fixed, absent while reading as present.
-- **Approval gates get skipped under momentum.** Artwork shipped unseen because sign-off lived in a checklist. State gates inline, in the implementation section, marked blocking.
-- **A cross-language `undefined` check is not a null check.** The TypeScript emulator suite structurally could not produce the payload the Dart client sends.
-- **Resolution is not compilation.** A package that resolves may still fail to build — and a package's *documented* API may not be the one it ships.
+- **Changing a constant can change the architecture — and changing it back can un-change it.** The TTL moved 24 h → 1 h → 8 h in a single day. At 1 h the window no longer fit inside a realistic session, which forced a keepalive callable and a client timer into the design; at 8 h that machinery became dead weight and was deleted again. **When a spec tightens a time budget, re-derive which mechanisms still satisfy it — and when it loosens again, remove what the tight version required instead of leaving it in as "defensive".**
+- **Two safe changes can compose into an unsafe one.** Issue 51 (deletion evicts clients) and Issue 53 (delete on a timer) are each correct alone. At the briefly-selected 1-hour interval they combined to throw live players out of a running game — a failure neither item's own spec described, and the reason §6 now carries an explicit interval note rather than a bare constant. **When two queued items touch the same state, write down what happens once both have shipped.**
+- **"Handle disconnects" did not say *in which phase*.** The result is Issue 51: a function correct in four phases that silently corrupts the fifth. **Name the state space a rule applies to, and what happens in each part of it.**
+- **"Listen to the room" did not say what a *deleted* room means.** `if (snapshot.exists)` with no `else` looks complete and is not. **When specifying a listener, specify the absent case.**
+- **A hang is not a failure, and confusing the two costs a cycle.** `pumpAndSettle()` on an animated screen produces no assertion output at all — just `did not complete` after minutes of silence, which reads like a logic bug in the code under test. **When a test emits no assertion output whatsoever, suspect the pump strategy before the production code.** Check what the neighbouring tests in the same directory do before inventing a harness approach.
+- **A verification that cannot fail is not a verification.** The cmap presence check reads as rigorous and passes for nearly any input.
+- **A test's name is not a test.** A contrast test once asserted only that a file was non-empty.
+- **Approval gates get skipped under momentum.** Artwork shipped unseen because sign-off lived in a checklist. State gates inline, marked blocking.
+- **A cross-language `undefined` check is not a null check.**
+- **Resolution is not compilation.** A package that resolves may still fail to build.
 - **Layout overflow must be measured, not estimated** — estimated ~275 dp, measured **593 dp**.
-- **A ruling is only as durable as the test that pins it.**
-- **Some correctness is invisible to the harness.** Verify the artefact directly.
-- **Pilot the risky part before committing to the whole.** T6 converts one pose and compares before doing ten — the cost of being wrong about frames-versus-transforms is nine poses of wasted art.
 
 ---
 
@@ -554,36 +602,30 @@ Must be `--debug`: `lobby_screen.dart` passes `debugEnabled: kDebugMode`, and th
 ```
 (1) STUDY the item here + the rejected options in ongoing_general_errors.md + the
     exact files at the cited anchors (re-grep; line numbers drift).
-(2) IMPLEMENT exactly as specified.
-(3) VALIDATE per §3. Observe the falsifying test fail against the broken state.
-    For anything the harness cannot see, decode the artefact or check a simulator.
-    Then the full §1 battery.
+(2) IMPLEMENT exactly as specified. Copy strings verbatim.
+(3) VALIDATE per §8. Observe the falsifying assertion fail against the broken state
+    before you fix it, and record that output. Run the item's over-reach guard.
+    For anything the harness cannot see, check a simulator. Then the full §1 battery.
 (4) BLOCKED or impossible? STOP. File it in ongoing_general_errors.md with options
     and a `Your selection: _____` line. Do NOT re-choose on the user's behalf.
-(5) RECORD: move to Resolved (Problem / Solution / Validation) including observed
-    failure output and measured numbers. Sync any design doc whose behaviour changed.
-(6) COMMIT: one item = one Conventional Commit, WHY in the body.
+(5) RECORD: move the issue to Resolved (Problem / Solution / Validation) including
+    the observed failure output. Sync any design doc whose behaviour changed.
+(6) COMMIT: one issue = one Conventional Commit, WHY in the body.
 ```
 
 ---
 
 ## Definition of Done
 
-- [ ] **Pilot committed on its own** before the rollout begins.
-- [ ] `scripts/build_sprite_sheets.py` generalised to a pose registry — adding a pose is a data change, not a code change.
-- [ ] All nine remaining transient poses converted in the §2 order; `idle` and `sleep` untouched.
-- [ ] **🚦 Every pose previewed as an animated GIF and approved by the user before its commit** (skill §5).
-- [ ] `.agents/skills/mascot_pose_creation/SKILL.md` followed and kept accurate if the pipeline changes.
-- [ ] Frame-index unit test passes and is written so a `round()` implementation would fail it.
-- [ ] Per pose: frame 0 matches the resting bounding box; no opaque pixel touches a cell border in any frame.
-- [ ] Sheet integrity asserted for every entry in `_poseSheets`: declared geometry matches file dimensions, alpha present, frame-0 rim contrast ≥ 4.5:1.
-- [ ] Total decoded sheet memory asserted under **12 MB**.
-- [ ] `idle` and `sleep` still render the layered stack with the blink swap — the over-reach guard.
-- [ ] `AppMotion.reduce` renders frame 0 and never advances, for every converted pose.
-- [ ] Every loaded `ui.Image` is disposed; pumping the widget away throws nothing.
-- [ ] `raven_pose_host.dart` unchanged.
-- [ ] App-size delta measured against the **44.0 MB** baseline and recorded — not estimated.
-- [ ] Three-simulator playthrough: every converted pose fires, plays once, returns to resting.
-- [ ] `PROMPTS.md` gains the frame briefs and the sheet-assembly command; `design_ui_direction.md`'s mascot block records the two-renderer split.
-- [ ] Full battery: `flutter analyze lib test` **0 errors** · `flutter test` **≥ 91 + new** · functions build clean · `npm --prefix functions test` **31/31**.
-- [ ] Issue 35 moved to Resolved; one commit per pose batch. Guide rewritten to **Queue Complete** or the next queue.
+- [ ] **Issue 51** — host leaving a lobby deletes the room *and* every player document; the lobby branch precedes the `!hasCard` branch; in-game host transfer still works; the client's room listener handles deletion and evicts with **"The host has left. This room has closed."**, gated by a once-per-event key.
+- [ ] **Issue 50** — `leading:` leave control in the lobby `AppBar`, both dialog copy variants verbatim, `leaveRoom()` called exactly once on confirm, sound toggle untouched.
+- [ ] **The `depart` glyph seen rendering on a simulator.** A tofu box passes every automated test in this project. This checkbox may not be ticked from a green suite.
+- [ ] **Issue 52** — non-hosts get all 7 cards, cannot select, cannot trigger the stamp pulse, see the `CHOSEN` badge, and are not page-yanked within 3 s of swiping; the host path is unchanged.
+- [ ] **Issue 53** — `ROOM_TTL_MS` defined once at **8 hours**; `expiresAt` written at creation on rooms *and* players and asserted to land in a window, not merely to exist; refreshed on existing room writes; `expiresAt` in the `firestore.rules` denylist with the `lastSeen`-still-allowed guard passing; **both** `gcloud` TTL policies applied and recorded. **No `touchRoom`, no client timer, no changes under `lib/`.**
+- [ ] Every item's **falsifying assertion was observed to fail** against the broken state, with the output recorded in its Resolved entry.
+- [ ] Every item's **over-reach guard passes** before and after.
+- [ ] Three-simulator playthrough: host leaves a lobby → both non-hosts evicted with the right message; a non-host leaves → the room survives and the host sees them go; a full game completes end to end. **Do not try to wall-clock the 8-hour TTL** — instead confirm in the Firebase console that a freshly created room and each of its player documents carries an `expiresAt` roughly eight hours out.
+- [ ] Full battery at or above the §1 bar: `flutter analyze lib test` **0 errors** · `flutter test` **≥ 106 + new** · functions build clean · `npm --prefix functions test` **≥ 31 + new**.
+- [ ] `flutter build ios --release --no-codesign` run and `Runner.app` size **measured and recorded** — the 47.7 MB figure in §1 is stale and must not be quoted.
+- [ ] Issues 50–53 moved to Resolved in `ongoing_general_errors.md`; design docs synced per each item's blast radius.
+- [ ] **Guide rewritten** to `Queue Complete` or the next queue. If the queue is empty: **do not invent work.** The only legitimate triggers are a §7 deferred item's trigger firing, or a new user-selected issue.
