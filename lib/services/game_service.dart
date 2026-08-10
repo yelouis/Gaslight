@@ -244,7 +244,10 @@ class GameService extends ChangeNotifier {
     return false;
   }
 
+  bool _heartbeatDisabledForTest = false;
+
   void _startHeartbeat(String roomCode, String playerId) {
+    if (_heartbeatDisabledForTest) return;
     print("DEBUG HEARTBEAT: started timer for room: $roomCode, player: $playerId");
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
@@ -258,6 +261,13 @@ class GameService extends ChangeNotifier {
         });
       } catch (_) {}
     });
+  }
+
+  @visibleForTesting
+  void stopHeartbeat() {
+    _heartbeatDisabledForTest = true;
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
   }
 
   Future<void> _clearLocalRoomState() async {

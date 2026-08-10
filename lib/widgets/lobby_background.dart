@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
 
 class AnimatedLobbyBackground extends StatefulWidget {
   final Widget child;
@@ -21,7 +22,19 @@ class _AnimatedLobbyBackgroundState extends State<AnimatedLobbyBackground> with 
       duration: const Duration(seconds: 4),
       lowerBound: 0.8,
       upperBound: 1.0,
-    )..repeat(reverse: true);
+      value: 1.0,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (AppMotion.reduce(context)) {
+      _breathingController.stop();
+      _breathingController.value = 1.0;
+    } else if (!_breathingController.isAnimating) {
+      _breathingController.repeat(reverse: true);
+    }
   }
 
   @override

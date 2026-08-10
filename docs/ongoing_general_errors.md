@@ -18,25 +18,17 @@ They are causally linked: Issue 51 is the root defect, it produced the state tha
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-### Issue 50: No way to leave a lobby
-
-**Status**: ⚠️ Confirmed Unresolved — verified August 9, 2026. `GameService.leaveRoom()` exists and is correct (`lib/services/game_service.dart:258–290`: cancels the room and player subscriptions, cancels the heartbeat timer, calls the `handleDisconnect` callable, clears the `room_code` and `player_id` keys from `SharedPreferences`, and notifies listeners). The lobby simply never calls it. `lib/screens/lobby_screen.dart:377–386` declares exactly one `AppBar` action — the sound toggle — and supplies no `leading:` widget. A grep across `lobby_screen.dart`, `gaslight_route.dart` and `main.dart` for `PopScope|WillPopScope|Navigator.pop|maybePop|leading:|BackButton|Leave|Exit|Quit` returns **zero matches**. The sole caller of `leaveRoom()` in the entire client is `lib/screens/game_over_screen.dart:289`. Consequence: once a player joins a room, the only exit is reaching game-over or force-quitting the app — and force-quitting leaves the seat behind for 30 s until a peer's staleness sweep prunes it.
-
-**Option A (recommended): `AppBar` exit icon with a confirmation dialog**
-- Pros: Matches the existing `AppBar` idiom already used for the sound toggle; discoverable in the standard back-button position; the confirm step prevents a mis-tap from dumping a player out of a room mid-setup; reuses `leaveRoom()` with no service changes; allows distinct host copy warning that leaving ends the room.
-- Cons: Consumes the `leading:` slot, so any future navigation affordance must share it; requires two copy strings (host vs non-host); the dialog needs an `AppMotion.reduce(context)` path like every other animated surface.
-
-**Option B: A `LEAVE` button inside the bottom sheet, beside `READY`**
-- Pros: Sits where the player's attention already is; leaves the `AppBar` untouched.
-- Cons: Crowds the primary action at 360×640 dp, where the sheet already carries the ready state, the ready counter and the "Waiting for Host…" line; places a destructive action adjacent to the most-tapped control in the screen, inviting mis-taps; hard to keep both targets ≥ 48 dp.
-
-**Option C: `AppBar` icon plus a `PopScope` handler for system back and edge-swipe**
-- Pros: Most complete coverage — the iOS edge-swipe and the Android hardware back both leave cleanly instead of silently doing nothing.
-- Cons: `PopScope` must be suppressed during the join transition and any route push, or it fires against a half-built room; interacts with the custom transitions in `gaslight_route.dart`; materially more surface to test than Option A.
-
-Your selection: **Option A** — selected August 9, 2026.
-
-**Implementation note — the icon codepoint cannot be verified in this repo.** Option A needs a new `ThematicIconType.depart`. The vendored `Phosphor-Light.ttf` carries a `post` table at version 3.0, which stores no glyph names, so no script in this repository can map a name to a codepoint. A cmap presence check is **not** a substitute: the font's cmap spans `0x0020–0xFFFD` and three unrelated candidate codepoints all tested present on August 9, 2026. `0xe674` is the user's proposed value and is present, but presence is not identity. **The only real gate is seeing the glyph render on a simulator** — a wrong codepoint produces a tofu box that passes every automated test in this project.
+6. **Issue 50: Lobby Leave Control (Resolved - August 9, 2026)**:
+   - **Problem**: Joining a lobby was a one-way trip — `GameService.leaveRoom()` existed but `LobbyScreen` provided no leading exit button in `AppBar`.
+   - **Solution**: Added `ThematicIconType.depart` mapped to glyph `0xe674` in Phosphor Light font asset. Added `leading:` exit `IconButton` in `LobbyScreen`'s `AppBar` that triggers confirmation dialog `_confirmLeave`. Formatted dialog with role-specific copy (Guest: *"Leave this room? / You can rejoin with the room code as long as the game hasn't started. / STAY / LEAVE"*; Host: *"Close this room? / You are the host. Leaving will close the room for everyone. / STAY / CLOSE ROOM"*). Confirmed button touch target sizes $\ge 48\text{ dp}$, added double-tap guard `_isLeaving`, and ensured `AppMotion.reduce` accessibility path.
+   - **Observed Falsifying Output**:
+     ```text
+     ══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+     The following TestFailure was thrown running a test:
+     Expected: exactly one matching node in the widget tree
+       Actual: _TooltipFinder:<Zero widgets found with tooltip "Leave room".>
+     ```
+   - **Over-reach Guard**: Verified sound toggle `IconButton` remains in `AppBar` actions and toggling sound state works as intended (`test/lobby_leave_test.dart`). Updated `house_rules_panel_test.dart` to assert 2 `IconButton`s in `AppBar`.
 
 ---
 

@@ -194,12 +194,12 @@ void main() {
       }
     });
 
-    testWidgets('AppBar contains exactly one icon button and inline panel exists', (tester) async {
+    testWidgets('AppBar contains leave and sound icon buttons and inline panel exists', (tester) async {
       try {
         await setupRoomAndPump(tester, isHost: true);
         expect(
           find.descendant(of: find.byType(AppBar), matching: find.byType(IconButton)),
-          findsOneWidget,
+          findsNWidgets(2),
         );
         expect(find.text('HOUSE RULES'), findsOneWidget);
       } finally {

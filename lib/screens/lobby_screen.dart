@@ -42,6 +42,70 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
   Set<String> _knownPlayerIds = {};
   bool _familyFriendlyOnly = false;
   String? _handledRoomClosedKey;
+  bool _isLeaving = false;
+
+  void _confirmLeave(BuildContext context, GameService gs, bool isHost) {
+    if (_isLeaving) return;
+    final reduceMotion = AppMotion.reduce(context);
+
+    showDialog(
+      context: context,
+      barrierDismissible: !reduceMotion,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.groundRaised,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.brass, width: 1),
+          ),
+          title: Text(
+            isHost ? 'Close this room?' : 'Leave this room?',
+            style: AppTextStyles.cardHeader.copyWith(color: AppColors.brass),
+          ),
+          content: Text(
+            isHost
+                ? 'You are the host. Leaving will close the room for everyone.'
+                : "You can rejoin with the room code as long as the game hasn't started.",
+            style: AppTextStyles.bodyIvory,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(64, 48),
+              ),
+              child: Text(
+                'STAY',
+                style: AppTextStyles.bodyIvory.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                if (_isLeaving) return;
+                _isLeaving = true;
+                try {
+                  await gs.leaveRoom();
+                } finally {
+                  _isLeaving = false;
+                }
+              },
+              style: TextButton.styleFrom(
+                minimumSize: const Size(64, 48),
+              ),
+              child: Text(
+                isHost ? 'CLOSE ROOM' : 'LEAVE',
+                style: AppTextStyles.bodyIvory.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: isHost ? AppColors.oxblood : AppColors.brass,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -384,6 +448,14 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: ThematicIcon(
+            type: ThematicIconType.depart,
+            color: theme.colorScheme.secondary,
+          ),
+          onPressed: () => _confirmLeave(context, gs, isHost),
+          tooltip: 'Leave room',
+        ),
         title: TitleSettle(
           text: 'THE PARLOR',
           style: AppTextStyles.phaseTitle.copyWith(fontSize: 22),

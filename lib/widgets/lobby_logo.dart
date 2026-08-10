@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_motion.dart';
 import 'raven_mascot.dart';
 
 class AnimatedLobbyLogo extends StatefulWidget {
@@ -19,7 +20,19 @@ class _AnimatedLobbyLogoState extends State<AnimatedLobbyLogo> with SingleTicker
       duration: const Duration(milliseconds: 100),
       lowerBound: 0.8,
       upperBound: 1.0,
-    )..repeat(reverse: true);
+      value: 1.0,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (AppMotion.reduce(context)) {
+      _flickerController.stop();
+      _flickerController.value = 1.0;
+    } else if (!_flickerController.isAnimating) {
+      _flickerController.repeat(reverse: true);
+    }
   }
 
   @override

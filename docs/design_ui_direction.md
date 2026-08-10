@@ -126,7 +126,7 @@ Your selection (icon overhaul now / later): Sounds good. Proceed
 > **The icon system is now a hybrid using a vendored font asset**, and this is the current contract:
 >
 > - **The six avatar house sigils remain bespoke and hand-painted** — `flame`, `moth`, `key`, `raven`, `moon`, `hourglass`. The paragraph above about engraved crests still holds in full, including the `SigilTicker` / `AnimatedThematicIcon` animation work from V1/V2.
-> - **The eleven functional affordances render from a vendored Phosphor Light font asset (`assets/fonts/phosphor/Phosphor-Light.ttf`)** — `writing`, `redraw`, `timer`, `secret`, `ledger`, `envelope`, `observe`, `confirm`, `sound`, `mute`, `host`. Light was chosen because its 1.5 px nominal stroke matches the painter's hairline `max(1.5, w/16)`, preserving "single-weight brass line icons for consistency."
+> - **The twelve functional affordances render from a vendored Phosphor Light font asset (`assets/fonts/phosphor/Phosphor-Light.ttf`)** — `writing`, `redraw`, `timer`, `secret`, `ledger`, `envelope`, `observe`, `confirm`, `sound`, `mute`, `host`, `depart`. Light was chosen because its 1.5 px nominal stroke matches the painter's hairline `max(1.5, w/16)`, preserving "single-weight brass line icons for consistency."
 > - **No third-party icon package dependency is used.** The code points are mapped via local `const IconData` constants in `lib/theme/app_icons.dart` using `fontFamily: 'PhosphorLight'` without `fontPackage`. This removed ~2.43 MB of unused font weight assets (`Thin`, `Duotone`, `Bold`, `Regular`, `Fill`) from the shipped app bundle.
 > - `ThematicIcon` remains the **single public entry point**; the fork is internal (`app_icons.dart:33` `_bespokeSigils`, `:42` `_phosphorGlyphs`).
 >

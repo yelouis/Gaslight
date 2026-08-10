@@ -27,6 +27,7 @@ enum ThematicIconType {
   ledger,
   envelope,
   redraw,
+  depart,
 }
 
 const Set<ThematicIconType> _bespokeSigils = {
@@ -55,6 +56,7 @@ const Map<ThematicIconType, IconData> _phosphorGlyphs = {
   ThematicIconType.sound:    IconData(0xe5e8, fontFamily: _kPhosphorLight), // bellRinging
   ThematicIconType.mute:     IconData(0xe0d4, fontFamily: _kPhosphorLight), // bellSlash
   ThematicIconType.host:     IconData(0xe638, fontFamily: _kPhosphorLight), // lamp
+  ThematicIconType.depart:   IconData(0xe674, fontFamily: _kPhosphorLight), // signOut
 };
 
 class ThematicIcon extends StatelessWidget {
@@ -471,6 +473,9 @@ class _ThematicIconPainter extends CustomPainter {
           Offset(endX + arrowLen * math.cos(angle2), endY + arrowLen * math.sin(angle2)),
           redrawPaint..strokeWidth = paint.strokeWidth,
         );
+        break;
+
+      case ThematicIconType.depart:
         break;
     }
   }
