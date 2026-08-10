@@ -701,24 +701,30 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    ThematicIcon(
-                      type: isFooled ? ThematicIconType.confirm : ThematicIconType.hourglass,
-                      color: isLowTime ? Colors.redAccent : AppColors.brass,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      isFooled ? 'REVENGE UNMASKING!' : 'UNMASKING IN PROGRESS...',
-                      style: TextStyle(
-                        fontFamily: 'CormorantGaramond',
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Row(
+                    children: [
+                      ThematicIcon(
+                        type: isFooled ? ThematicIconType.confirm : ThematicIconType.hourglass,
                         color: isLowTime ? Colors.redAccent : AppColors.brass,
-                        letterSpacing: 1.5,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isFooled ? 'REVENGE UNMASKING!' : 'UNMASKING IN PROGRESS...',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'CormorantGaramond',
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isLowTime ? Colors.redAccent : AppColors.brass,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 if (isTimerActive)
                   AnimatedScale(
