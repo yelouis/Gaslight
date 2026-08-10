@@ -103,7 +103,9 @@ Committing backend code changes nothing for users. Issue 55 sat green, tested an
 npx firebase-tools deploy --only functions,firestore:rules --project gaslight-46368
 ```
 
-`firebase.json` carries a `predeploy` hook (`npm --prefix "$RESOURCE_DIR" run build`) added under Issue 55. Before that hook existed, the CLI uploaded whatever stale JavaScript happened to be sitting in the gitignored `functions/lib/` and still reported success. **Never remove the hook.**
+`firebase.json` carries a `predeploy` hook running both TypeScript build and backend emulator tests (`npm --prefix "$RESOURCE_DIR" run build` and `npm --prefix "$RESOURCE_DIR" test`), added under Issue 55/65. If tests fail, the deploy aborts before updating production Cloud Functions. **Never remove the hook.**
+
+> ⚠️ **Limitation:** `predeploy` is attached to the `functions` configuration block in `firebase.json`. Running a rules-only deploy (`firebase deploy --only firestore:rules`) bypasses the `functions` predeploy hook. Rules deploys must still be verified independently via Check 3 below.
 
 **Verify — four checks, none of which is "the command exited 0".** `gcloud` is not on the default `PATH`; it lives at `/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud`.
 
