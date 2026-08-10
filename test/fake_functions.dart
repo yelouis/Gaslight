@@ -244,12 +244,12 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       Map<String, String> initAssignments = stringRotations[startIdx.toString()]!;
 
       await roomRef.update(roomState.copyWith(
-        currentPhase: GamePhase.forgery,
+        currentPhase: GamePhase.truth,
         totalPlayers: players.length,
-        currentRotationIndex: startIdx,
+        currentRotationIndex: 0,
         cards: startingCards,
-        currentCardAssignments: initAssignments,
-        rotationPlan: stringRotations,
+        currentCardAssignments: {},
+        rotationPlan: {},
         readyPlayers: {},
       ).toMap());
 
@@ -475,8 +475,8 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final playerSnap = await transaction.get(roomRef.collection('players').doc(playerId));
         final player = PlayerState.fromMap(playerSnap.data()!, playerSnap.id);
 
-        if (player.hasRerolled) {
-          throw Exception("Prompt already re-rolled once this game.");
+        if (currentState.currentPhase != GamePhase.truth) {
+          throw Exception("Prompt re-roll is only allowed during the truth phase.");
         }
 
         final cards = List<CardModel>.from(currentState.cards);
@@ -490,7 +490,6 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         cards[cardIndex] = oldCard.copyWith(promptText: newPromptText);
 
         transaction.update(roomRef, {'cards': cards.map((c) => c.toMap()).toList()});
-        transaction.update(roomRef.collection('players').doc(playerId), {'hasRerolled': true});
       });
 
       return FakeHttpsCallableResult({'success': true} as T);
@@ -832,7 +831,30 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
     print('DEBUG advancePhaseInternal (caller=$caller): phase=${state.currentPhase}, activePlayers=${activePlayers.map((p) => p.id)}, readyPlayers=${state.readyPlayers}');
     GameState nextState = state.copyWith(readyPlayers: {});
 
-    if (state.currentPhase == GamePhase.forgery) {
+    if (state.currentPhase == GamePhase.truth) {
+      final nextCards = nextState.cards.map((card) {
+        final isSpectator = players.any((p) => p.id == card.targetPlayerId && p.role == PlayerRole.spectator);
+        if (!isSpectator && card.truthAnswer.trim().isEmpty) {
+          return card.copyWith(truthAnswer: 'THE SOUL IS SILENT');
+        }
+        return card;
+      }).toList();
+
+      final pIds = activePlayers.map((p) => p.id).toList();
+      final nativeRotations = RotationEngine.generateRotations(pIds, state.sabotageAnswersCount);
+      final Map<String, Map<String, String>> stringRotations = {};
+      nativeRotations.forEach((key, val) => stringRotations[key.toString()] = val);
+      final startIdx = 1;
+      final initAssignments = stringRotations[startIdx.toString()] ?? {};
+
+      nextState = nextState.copyWith(
+        currentPhase: GamePhase.forgery,
+        cards: nextCards,
+        currentRotationIndex: startIdx,
+        currentCardAssignments: initAssignments,
+        rotationPlan: stringRotations,
+      );
+    } else if (state.currentPhase == GamePhase.forgery) {
       final nextCards = nextState.cards.map((card) {
         String? holderId;
         state.currentCardAssignments.forEach((hId, tId) {
@@ -851,42 +873,36 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         }
         return card;
       }).toList();
-      nextState = nextState.copyWith(cards: nextCards);
 
       if (state.currentRotationIndex < state.sabotageAnswersCount) {
         int nextRot = state.currentRotationIndex + 1;
         Map<String, String> nextAssignments = state.rotationPlan[nextRot.toString()]!;
         nextState = nextState.copyWith(
+          cards: nextCards,
           currentRotationIndex: nextRot,
           currentCardAssignments: nextAssignments,
         );
       } else {
+        final cardsWithOptions = nextCards.map((card) {
+          final opts = <CardAnswerOption>[
+            CardAnswerOption(id: card.targetPlayerId, text: card.truthAnswer.isNotEmpty ? card.truthAnswer : 'THE SOUL IS SILENT')
+          ];
+          card.sabotageAnswers.forEach((forgerId, text) {
+            opts.add(CardAnswerOption(id: forgerId, text: text));
+          });
+          opts.shuffle();
+          return card.copyWith(options: opts);
+        }).toList();
+
         var pIds = activePlayers.map((p) => p.id).toList();
-        Map<String, String> truthAssignments = { for (var id in pIds) id : id };
+        pIds.shuffle(Random());
         nextState = nextState.copyWith(
-          currentPhase: GamePhase.truth,
-          currentCardAssignments: truthAssignments,
+          currentPhase: GamePhase.vote,
+          cards: cardsWithOptions,
+          currentReaderId: pIds.isNotEmpty ? pIds.first : null,
+          resolutionOrder: pIds,
         );
       }
-    } else if (state.currentPhase == GamePhase.truth) {
-      final nextCards = nextState.cards.map((card) {
-        final isSpectator = players.any((p) => p.id == card.targetPlayerId && p.role == PlayerRole.spectator);
-        if (!isSpectator) {
-          if (card.truthAnswer.trim().isEmpty) {
-            return card.copyWith(truthAnswer: 'THE SOUL IS SILENT');
-          }
-        }
-        return card;
-      }).toList();
-      nextState = nextState.copyWith(cards: nextCards);
-
-      var pIds = activePlayers.map((p) => p.id).toList();
-      pIds.shuffle(Random());
-      nextState = nextState.copyWith(
-        currentPhase: GamePhase.vote,
-        currentReaderId: pIds.isNotEmpty ? pIds.first : null,
-        resolutionOrder: pIds,
-      );
     } else if (state.currentPhase == GamePhase.vote) {
       final currentCard = state.cards.firstWhere((c) => c.targetPlayerId == state.currentReaderId);
       final deltas = ScoringLogic.calculateScores(

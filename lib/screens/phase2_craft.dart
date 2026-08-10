@@ -46,7 +46,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     final state = gs.gameState!;
     final me = gs.currentPlayer!;
     
-    final targetId = state.currentCardAssignments[me.id];
+    final targetId = state.currentPhase == GamePhase.truth ? me.id : state.currentCardAssignments[me.id];
     if (targetId == null) {
       setState(() => _isSubmitting = false);
       return;
@@ -208,21 +208,29 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                 ),
               ),
             ),
-            if (_showDealtOverlay && me.role != PlayerRole.spectator)
-              DealtCardOverlay(
-                phase: state.currentPhase,
-                readerName: state.currentCardAssignments[me.id] != null
-                    ? gs.players.firstWhere((p) => p.id == state.currentCardAssignments[me.id], orElse: () => me).name
-                    : me.name,
-                promptText: state.currentCardAssignments[me.id] != null
-                    ? state.cards.firstWhere((c) => c.targetPlayerId == state.currentCardAssignments[me.id], orElse: () => state.cards.first).promptText
-                    : '',
-                onDismiss: () {
-                  setState(() {
-                    _showDealtOverlay = false;
-                  });
-                },
-              ),
+            if (_showDealtOverlay && me.role != PlayerRole.spectator) ...[
+              () {
+                final bool isTruthRound = state.currentPhase == GamePhase.truth;
+                final String? targetId = isTruthRound ? me.id : state.currentCardAssignments[me.id];
+                final String promptText = targetId != null
+                    ? state.cards.firstWhere((c) => c.targetPlayerId == targetId, orElse: () => state.cards.first).promptText
+                    : '';
+                final String readerName = targetId != null
+                    ? gs.players.firstWhere((p) => p.id == targetId, orElse: () => me).name
+                    : me.name;
+
+                return DealtCardOverlay(
+                  phase: state.currentPhase,
+                  readerName: readerName,
+                  promptText: promptText,
+                  onDismiss: () {
+                    setState(() {
+                      _showDealtOverlay = false;
+                    });
+                  },
+                );
+              }(),
+            ],
           ],
         ),
       ),
@@ -337,12 +345,12 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
   }
 
   Widget _buildWriteUI(GameState state, dynamic me, ThemeData theme, GameService gs) {
-    String? targetId = state.currentCardAssignments[me.id];
+    bool isTruthRound = state.currentPhase == GamePhase.truth;
+    String? targetId = isTruthRound ? me.id : state.currentCardAssignments[me.id];
     if (targetId == null) return const Text('Error: No target assigned');
 
     CardModel targetCard = state.cards.firstWhere((c) => c.targetPlayerId == targetId);
     final targetPlayer = gs.players.firstWhere((p) => p.id == targetId, orElse: () => me);
-    bool isTruthRound = state.currentPhase == GamePhase.truth;
 
     return Column(
       children: [
@@ -471,14 +479,15 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                     () {
                       final bool isTimerLast5Sec = state.endTime != null && 
                           (state.endTime! - DateTime.now().millisecondsSinceEpoch) < 5000;
-                      final bool canReroll = !me.hasRerolled && !isTimerLast5Sec && !_isSubmitting;
+                      final bool isTruthPhase = state.currentPhase == GamePhase.truth;
+                      final bool canReroll = isTruthPhase && !isTimerLast5Sec && !_isSubmitting;
 
                       return SizedBox(
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton.icon(
                           icon: const ThematicIcon(type: ThematicIconType.redraw, size: 18),
-                          label: Text(me.hasRerolled ? 'RE-ROLL USED' : 'RE-ROLL PROMPT'),
+                          label: const Text('RE-ROLL PROMPT'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.ground,
                             foregroundColor: AppColors.brass,

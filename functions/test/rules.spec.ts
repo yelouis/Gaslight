@@ -152,4 +152,12 @@ describe('Firestore Security Rules', () => {
     // Allow lastSeen update
     await assertSucceeds(updateDoc(playerRef, { lastSeen: Date.now() }));
   });
+
+  it('should deny client reads and writes on sealed subcollection', async () => {
+    const userContext = testEnv.authenticatedContext('alice');
+    const sealedRef = doc(userContext.firestore(), 'rooms/TEST/sealed/card_1');
+    const getDoc = (await import('firebase/firestore')).getDoc;
+    await assertFails(getDoc(sealedRef));
+    await assertFails(setDoc(sealedRef, { truthAnswer: 'secret' }));
+  });
 });

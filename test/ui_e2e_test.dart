@@ -70,8 +70,6 @@ void main() {
       final rCode = gameService.gameState!.roomCode;
       expect(find.text(rCode), findsOneWidget);
       expect(find.text('ASSEMBLING THE SUSPECTS…'), findsOneWidget);
-      print('Room created: $rCode. Displaying Lobby Wait Screen.');
-
       // 4. Add bots and Start game
       await gameService.debugAddBots();
       await tick(300);
@@ -81,58 +79,49 @@ void main() {
       await gameService.startGame('the_daily_grind');
       await tick(600); // Allow navigation transition animation to finish
 
-      // 5. Verify transition to FORGERY phase
-      expect(find.text('FORGERY'), findsOneWidget);
-      expect(find.text('WRITE YOUR TRUTH'), findsNothing);
-      print('Successfully transitioned to FORGERY phase.');
-
-      // Dismiss dealt card overlay first
-      await tester.tap(find.text('INSPECT'));
-      await tick(600); // Allow overlay dismiss transition
-
-      // Submit forgery
-      final inputField = find.byType(TextField).first;
-      await tester.enterText(inputField, 'Alice\'s Simulated Forgery');
-      await tick(100);
-      await tester.tap(find.text('SUBMIT DOSSIER'));
-      await tick(400); // Allow host submit to completely finish and write to readyPlayers!
-
-      print('DEBUG: currentPlayerId: ${gameService.currentPlayer?.id}');
-      print('DEBUG: readyPlayers: ${gameService.gameState?.readyPlayers}');
-      print('DEBUG: currentPhase: ${gameService.gameState?.currentPhase}');
-      print('DEBUG: cards status: ${gameService.gameState?.cards.map((c) => 'target:${c.targetPlayerId}, truth:${c.truthAnswer.isNotEmpty}, sabs:${c.sabotageAnswers.keys}')}');
-      
-      // Verify waiting screen
-      expect(find.text('THE INK DRIES…'), findsOneWidget);
-      print('Host submission locked. Waiting screen displayed.');
-
-      // Complete forgery round 1
-      await gameService.debugSimulateBotResponses();
-      await tick(200);
-      if (gameService.gameState!.currentPhase == GamePhase.forgery) {
-        await gameService.evaluateReadyState();
-      }
-      await tick(600);
-
-      // 6. Verify transition directly to TRUTH phase (as 1 round was configured)
+      // 5. Verify transition to TRUTH phase
       expect(find.text('TRUTH'), findsOneWidget);
-      expect(find.text('YOUR TRUTH'), findsOneWidget);
-      print('Successfully transitioned to TRUTH phase.');
 
       // Dismiss dealt card overlay first
       await tester.tap(find.text('DISMISS'));
       await tick(600); // Allow overlay dismiss transition
 
+      expect(find.text('YOUR TRUTH'), findsOneWidget);
+      print('Successfully transitioned to TRUTH phase.');
+
       // Submit truth
-      await tester.enterText(find.byType(TextField).first, 'Alice\'s Real Truth');
+      final inputField = find.byType(TextField).first;
+      await tester.enterText(inputField, 'Alice\'s Real Truth');
       await tick(100);
       await tester.tap(find.text('SUBMIT DOSSIER'));
-      await tick(400);
+      await tick(400); // Allow host submit to finish
 
       // Complete Truth round
       await gameService.debugSimulateBotResponses();
       await tick(200);
       if (gameService.gameState!.currentPhase == GamePhase.truth) {
+        await gameService.evaluateReadyState();
+      }
+      await tick(600);
+
+      // 6. Verify transition to FORGERY phase
+      expect(find.text('FORGERY'), findsOneWidget);
+      print('Successfully transitioned to FORGERY phase.');
+
+      // Dismiss dealt card overlay
+      await tester.tap(find.text('INSPECT'));
+      await tick(600); // Allow overlay dismiss transition
+
+      // Submit forgery
+      await tester.enterText(find.byType(TextField).first, 'Alice\'s Simulated Forgery');
+      await tick(100);
+      await tester.tap(find.text('SUBMIT DOSSIER'));
+      await tick(400);
+
+      // Complete Forgery round
+      await gameService.debugSimulateBotResponses();
+      await tick(200);
+      if (gameService.gameState!.currentPhase == GamePhase.forgery) {
         await gameService.evaluateReadyState();
       }
       await tick(600);
@@ -226,11 +215,11 @@ void main() {
       await gameService.startGame('the_daily_grind');
       await tick(600);
 
-      // Verify forgery phase
-      expect(find.text('FORGERY'), findsOneWidget);
+      // Verify truth phase
+      expect(find.text('TRUTH'), findsOneWidget);
 
       // Dismiss dealt card overlay first
-      await tester.tap(find.text('INSPECT'));
+      await tester.tap(find.text('DISMISS'));
       await tick(600); // Allow overlay dismiss transition
 
       // Try submitting a similarity failure text (contains "trigger_error")
@@ -239,14 +228,10 @@ void main() {
       await tick(100);
 
       await tester.tap(find.text('SUBMIT DOSSIER'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 750));
+      await tick(400);
 
       // Verify SnackBar shown and spinner reset
-      expect(find.byType(SnackBar), findsOneWidget);
-      final SnackBar snackBar = tester.widget(find.byType(SnackBar));
-      final Text textWidget = snackBar.content as Text;
-      expect(textWidget.data, contains('Too similar'));
+      expect(find.textContaining('Too similar'), findsOneWidget);
       
       // Text field should not be cleared upon failure
       final textAfterError = (tester.widget(find.byType(TextField).first) as TextField).controller?.text;

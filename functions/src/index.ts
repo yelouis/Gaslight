@@ -379,32 +379,26 @@ export const startGame = onCall(async (request) => {
     }
 
     const pIds = activePlayers.map(p => p.id);
-    const nativeRotations = RotationEngine.generateRotations(pIds, rounds);
-    const stringRotations: Record<string, Record<string, string>> = {};
-    for (const [key, val] of Object.entries(nativeRotations)) {
-      stringRotations[key] = val;
-    }
     const startingCards: CardModel[] = pIds.map((pid, idx) => ({
       targetPlayerId: pid,
       promptText: prompts[idx],
       truthAnswer: "",
       sabotageAnswers: {},
-      votes: {}
+      options: [],
+      votes: {},
+      unmaskGuesses: {}
     }));
-
-    const startIdx = 1;
-    const initAssignments = stringRotations[startIdx.toString()];
 
     const endTime = room.isTimerDisabled ? null : Date.now() + 60000;
 
     transaction.update(roomRef, {
-      currentPhase: "forgery",
+      currentPhase: "truth",
       totalPlayers: players.length,
       selectedDeckId,
-      currentRotationIndex: startIdx,
+      currentRotationIndex: 0,
       cards: startingCards,
-      currentCardAssignments: initAssignments,
-      rotationPlan: stringRotations,
+      currentCardAssignments: {},
+      rotationPlan: {},
       readyPlayers: {},
       endTime,
       resolutionOrder: [],
@@ -864,28 +858,60 @@ export const handleDisconnect = onCall(async (request) => {
       transaction.update(newHostRef, { isHost: true });
     }
 
+
     return { success: true };
   });
 });
 
-// Inner helper to execute phase advancement inside a transaction block.
-// INVARIANT: must never call transaction.get — callers complete all reads first.
 async function advancePhaseInternal(
-  transaction: admin.firestore.Transaction,
-  roomRef: admin.firestore.DocumentReference,
+  transaction: FirebaseFirestore.Transaction,
+  roomRef: FirebaseFirestore.DocumentReference,
   room: GameState,
   activePlayers: PlayerState[],
   currentCards: CardModel[]
-): Promise<void> {
+) {
   const forgeryDuration = 60000;
   const truthDuration = 60000;
   const voteDuration = 45000;
 
   const nextReadyPlayers: Record<string, boolean> = {};
 
-  if (room.currentPhase === "forgery") {
-    // 1. Timeout placeholder fill for missing forgery submissions
-    const nextCards = currentCards.map(card => {
+  if (room.currentPhase === "truth") {
+    // 1. Timeout placeholder fill for missing truth answers in sealed documents
+    for (const card of currentCards) {
+      const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
+      const sealedSnap = await transaction.get(sealedRef);
+      const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
+      if (!sealedData.truthAnswer || sealedData.truthAnswer.trim().length === 0) {
+        sealedData.truthAnswer = kMissingAnswerPlaceholder;
+        transaction.set(sealedRef, sealedData, { merge: true });
+      }
+    }
+
+    // 2. Generate forgery rotations now that truth phase is complete
+    const pIds = activePlayers.map(p => p.id);
+    const nativeRotations = RotationEngine.generateRotations(pIds, room.sabotageAnswersCount);
+    const stringRotations: Record<string, Record<string, string>> = {};
+    for (const [key, val] of Object.entries(nativeRotations)) {
+      stringRotations[key] = val;
+    }
+    const startIdx = 1;
+    const initAssignments = stringRotations[startIdx.toString()] || {};
+
+    const endTime = room.isTimerDisabled ? null : Date.now() + forgeryDuration;
+
+    transaction.update(roomRef, {
+      currentPhase: "forgery",
+      currentRotationIndex: startIdx,
+      currentCardAssignments: initAssignments,
+      rotationPlan: stringRotations,
+      readyPlayers: nextReadyPlayers,
+      endTime,
+      expiresAt: ttlFrom(Date.now())
+    });
+  } else if (room.currentPhase === "forgery") {
+    // 1. Timeout placeholder fill for missing forgery submissions in sealed documents
+    for (const card of currentCards) {
       let holderId: string | null = null;
       for (const [hId, tId] of Object.entries(room.currentCardAssignments)) {
         if (tId === card.targetPlayerId) {
@@ -895,22 +921,23 @@ async function advancePhaseInternal(
       }
 
       if (holderId) {
-        const answer = card.sabotageAnswers[holderId];
+        const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
+        const sealedSnap = await transaction.get(sealedRef);
+        const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
+        const answer = sealedData.sabotageAnswers?.[holderId];
         if (!answer || answer.trim().length === 0) {
-          const sabotageAnswers = { ...card.sabotageAnswers, [holderId]: kMissingAnswerPlaceholder };
-          return { ...card, sabotageAnswers };
+          sealedData.sabotageAnswers = { ...(sealedData.sabotageAnswers || {}), [holderId]: kMissingAnswerPlaceholder };
+          transaction.set(sealedRef, sealedData, { merge: true });
         }
       }
-      return card;
-    });
+    }
 
     if (room.currentRotationIndex < room.sabotageAnswersCount) {
       const nextRot = room.currentRotationIndex + 1;
-      const nextAssignments = room.rotationPlan[nextRot.toString()];
+      const nextAssignments = room.rotationPlan[nextRot.toString()] || {};
       const endTime = room.isTimerDisabled ? null : Date.now() + forgeryDuration;
 
       transaction.update(roomRef, {
-        cards: nextCards,
         currentRotationIndex: nextRot,
         currentCardAssignments: nextAssignments,
         readyPlayers: nextReadyPlayers,
@@ -918,71 +945,92 @@ async function advancePhaseInternal(
         expiresAt: ttlFrom(Date.now())
       });
     } else {
-      // Move to Truth Phase: Every active player gets their own card back
-      const pIds = activePlayers.map(p => p.id);
-      const truthAssignments: Record<string, string> = {};
-      for (const id of pIds) {
-        truthAssignments[id] = id;
+      // Forgery rounds complete -> build unlabelled options for voting and move to Vote Phase
+      const updatedCards: CardModel[] = [];
+
+      for (const card of currentCards) {
+        const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
+        const sealedSnap = await transaction.get(sealedRef);
+        const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
+
+        const allAnswers: Array<{ id: string; text: string; authorId: string }> = [];
+        allAnswers.push({
+          id: `opt_truth_${card.targetPlayerId}`,
+          text: sealedData.truthAnswer || kMissingAnswerPlaceholder,
+          authorId: card.targetPlayerId
+        });
+
+        for (const [forgerId, text] of Object.entries(sealedData.sabotageAnswers || {})) {
+          allAnswers.push({
+            id: `opt_${forgerId}`,
+            text: (text as string) || kMissingAnswerPlaceholder,
+            authorId: forgerId
+          });
+        }
+
+        // Shuffle answers list
+        for (let i = allAnswers.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [allAnswers[i], allAnswers[j]] = [allAnswers[j], allAnswers[i]];
+        }
+
+        const answerAuthors: Record<string, string> = {};
+        const options: Array<{ id: string; text: string }> = [];
+        for (const ans of allAnswers) {
+          options.push({ id: ans.id, text: ans.text });
+          answerAuthors[ans.id] = ans.authorId;
+        }
+
+        sealedData.answerAuthors = answerAuthors;
+        sealedData.truthAnswerId = `opt_truth_${card.targetPlayerId}`;
+        transaction.set(sealedRef, sealedData, { merge: true });
+
+        updatedCards.push({
+          ...card,
+          options,
+          truthAnswer: "",
+          sabotageAnswers: {}
+        });
       }
 
-      const endTime = room.isTimerDisabled ? null : Date.now() + truthDuration;
+      // Shuffle order for voting resolution
+      const pIds = activePlayers.map(p => p.id);
+      for (let i = pIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pIds[i], pIds[j]] = [pIds[j], pIds[i]];
+      }
+
+      const endTime = room.isTimerDisabled ? null : Date.now() + voteDuration;
 
       transaction.update(roomRef, {
-        currentPhase: "truth",
-        cards: nextCards,
-        currentCardAssignments: truthAssignments,
+        currentPhase: "vote",
+        cards: updatedCards,
+        currentReaderId: pIds.length > 0 ? pIds[0] : null,
+        resolutionOrder: pIds,
         readyPlayers: nextReadyPlayers,
         endTime,
         expiresAt: ttlFrom(Date.now())
       });
     }
-  } else if (room.currentPhase === "truth") {
-    // 1. Timeout placeholder fill for truth
-    const nextCards = currentCards.map(card => {
-      if (!card.truthAnswer || card.truthAnswer.trim().length === 0) {
-        return { ...card, truthAnswer: kMissingAnswerPlaceholder };
-      }
-      return card;
-    });
-
-    // 2. Shuffle order for voting resolution
-    const pIds = activePlayers.map(p => p.id);
-    for (let i = pIds.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pIds[i], pIds[j]] = [pIds[j], pIds[i]];
-    }
-
-    const endTime = room.isTimerDisabled ? null : Date.now() + voteDuration;
-
-    transaction.update(roomRef, {
-      currentPhase: "vote",
-      cards: nextCards,
-      currentReaderId: pIds.length > 0 ? pIds[0] : null,
-      resolutionOrder: pIds,
-      readyPlayers: nextReadyPlayers,
-      endTime,
-      expiresAt: ttlFrom(Date.now())
-    });
   } else if (room.currentPhase === "vote") {
     // Tally scores and advance to Reveal
     const currentCard = currentCards.find(c => c.targetPlayerId === room.currentReaderId);
     let hasFooled = false;
     if (currentCard) {
       const votes = currentCard.votes || {};
-      hasFooled = Object.values(votes).some(v => v !== "TRUTH");
+      hasFooled = Object.values(votes).some(v => v !== currentCard.targetPlayerId);
       const deltas = ScoringLogic.calculateScores(room, currentCard, votes);
 
       const timesFooledDeltas: Record<string, number> = {};
       const playersDeceivedDeltas: Record<string, number> = {};
 
       for (const [voterId, votedForId] of Object.entries(votes)) {
-        if (votedForId !== "TRUTH" && votedForId !== voterId) {
+        if (votedForId !== currentCard.targetPlayerId && votedForId !== voterId) {
           timesFooledDeltas[voterId] = (timesFooledDeltas[voterId] || 0) + 1;
           playersDeceivedDeltas[votedForId] = (playersDeceivedDeltas[votedForId] || 0) + 1;
         }
       }
 
-      // Apply scores in transaction to players in room
       for (const p of activePlayers) {
         const sDelta = deltas[p.id] || 0;
         const tfDelta = timesFooledDeltas[p.id] || 0;
@@ -999,10 +1047,25 @@ async function advancePhaseInternal(
       }
     }
 
+    // Merge sealed data into public cards for the reveal screen
+    const mergedCards: CardModel[] = [];
+    for (const card of currentCards) {
+      const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
+      const sealedSnap = await transaction.get(sealedRef);
+      const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : { truthAnswer: "", sabotageAnswers: {} };
+
+      mergedCards.push({
+        ...card,
+        truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
+        sabotageAnswers: sealedData.sabotageAnswers || {}
+      });
+    }
+
     const unmaskDeadline = hasFooled ? Date.now() + 20000 : null;
 
     transaction.update(roomRef, {
       currentPhase: "reveal",
+      cards: mergedCards,
       readyPlayers: nextReadyPlayers,
       endTime: null,
       unmaskDeadline,

@@ -258,22 +258,32 @@ void main() {
       // 3. Start Game
       await gameService.startGame('the_daily_grind');
       await Future.delayed(Duration(milliseconds: 100));
-      expect(gameService.gameState!.currentPhase, GamePhase.forgery);
-      print('Game started. Phase: Sabotage Round 1');
+      expect(gameService.gameState!.currentPhase, GamePhase.truth);
+      print('Game started. Phase: Truth Round');
 
-      // 4. Sabotage Round 1
+      // 4. Truth Round
       await gameService.setPlayerReady(true); // Host ready
       await gameService.debugSimulateBotResponses();
       await Future.delayed(Duration(milliseconds: 100));
-      if (gameService.gameState!.currentRotationIndex == 1) {
+      if (gameService.gameState!.currentPhase == GamePhase.truth) {
         await gameService.evaluateReadyState(); // Advance manually as host
         await Future.delayed(Duration(milliseconds: 100));
       }
-      
+      expect(gameService.gameState!.currentPhase, GamePhase.forgery);
+      print('Phase: Sabotage Round 1');
+
+      // 5. Sabotage Round 1
+      await gameService.setPlayerReady(true);
+      await gameService.debugSimulateBotResponses();
+      await Future.delayed(Duration(milliseconds: 100));
+      if (gameService.gameState!.currentRotationIndex == 1) {
+        await gameService.evaluateReadyState();
+        await Future.delayed(Duration(milliseconds: 100));
+      }
       expect(gameService.gameState!.currentRotationIndex, 2);
       print('Phase: Sabotage Round 2');
 
-      // 5. Sabotage Round 2
+      // 6. Sabotage Round 2 -> Voting
       await gameService.setPlayerReady(true);
       await gameService.debugSimulateBotResponses();
       await Future.delayed(Duration(milliseconds: 100));
@@ -281,19 +291,6 @@ void main() {
         await gameService.evaluateReadyState();
         await Future.delayed(Duration(milliseconds: 100));
       }
-      
-      expect(gameService.gameState!.currentPhase, GamePhase.truth);
-      print('Phase: Truth Round');
-
-      // 6. Truth Round
-      await gameService.setPlayerReady(true);
-      await gameService.debugSimulateBotResponses();
-      await Future.delayed(Duration(milliseconds: 100));
-      if (gameService.gameState!.currentPhase == GamePhase.truth) {
-        await gameService.evaluateReadyState();
-        await Future.delayed(Duration(milliseconds: 100));
-      }
-      
       expect(gameService.gameState!.currentPhase, GamePhase.vote);
       print('Phase: Voting (Card 1/10)');
 
@@ -361,8 +358,8 @@ void main() {
       // 3. Start Game
       await gameService.startGame('the_daily_grind');
       await Future.delayed(Duration(milliseconds: 100));
-      expect(gameService.gameState!.currentPhase, GamePhase.forgery);
-      print('Game started. Phase: Sabotage Round 1');
+      expect(gameService.gameState!.currentPhase, GamePhase.truth);
+      print('Game started. Phase: Truth Round');
 
       // 4. Spectator Joins mid-game
       final specService = GameService(db: mockDb, functions: FakeFirebaseFunctions(mockDb));
@@ -409,7 +406,7 @@ void main() {
         await Future.delayed(Duration(milliseconds: 100));
       }
       
-      expect(gameService.gameState!.currentPhase, GamePhase.truth);
+      expect(gameService.gameState!.currentPhase, GamePhase.vote);
       print('Phase: Truth Round');
 
       // 8. Truth Round
@@ -421,7 +418,7 @@ void main() {
         await Future.delayed(Duration(milliseconds: 100));
       }
       
-      expect(gameService.gameState!.currentPhase, GamePhase.vote);
+      expect(gameService.gameState!.currentPhase, GamePhase.reveal);
       print('Phase: Voting (9 active cards remaining)');
 
       // 9. Voting & Reveals for remaining 9 cards
@@ -487,8 +484,8 @@ void main() {
       await gameService.startGame('the_daily_grind');
       await Future.delayed(Duration(milliseconds: 100));
       
-      // Verify that currentPhase is forgery and endTime is null
-      expect(gameService.gameState!.currentPhase, GamePhase.forgery);
+      // Verify that currentPhase is truth and endTime is null
+      expect(gameService.gameState!.currentPhase, GamePhase.truth);
       expect(gameService.gameState!.endTime, isNull);
       print('Game started in Casual Mode. endTime is verified to be null.');
     });
@@ -597,13 +594,8 @@ void main() {
       await db.collection('rooms').doc(rCode).collection('players').doc(p2.id).set(p2.toMap());
       await Future.delayed(Duration(milliseconds: 100));
 
-      // Start game
+      // Start game (starts in truth phase)
       await gs.startGame('the_daily_grind');
-      await Future.delayed(Duration(milliseconds: 100));
-
-      // Advance past sabotage round to truth round
-      await gs.setPlayerReady(true, playerId: 'host_user');
-      await gs.setPlayerReady(true, playerId: 'player_2');
       await Future.delayed(Duration(milliseconds: 100));
 
       expect(gs.gameState!.currentPhase, GamePhase.truth);
@@ -616,15 +608,18 @@ void main() {
       await gs.rerollMyPrompt();
       await Future.delayed(Duration(milliseconds: 100));
 
-      // Verify hasRerolled is true
-      expect(gs.currentPlayer!.hasRerolled, isTrue);
+      // Verify hasRerolled is false (unlimited re-rolls during truth phase under Issue 61)
+      expect(gs.currentPlayer!.hasRerolled, isFalse);
 
       // Verify prompt has changed
       final newCard = gs.gameState!.cards.firstWhere((c) => c.targetPlayerId == 'host_user');
       expect(newCard.promptText, isNot(originalPrompt));
 
-      // Verify subsequent call fails
-      expect(() => gs.rerollMyPrompt(), throwsA(isA<Exception>()));
+      // Verify subsequent re-roll call succeeds during truth phase (unlimited re-rolls per Issue 61)
+      await gs.rerollMyPrompt();
+      await Future.delayed(Duration(milliseconds: 100));
+      final newCard2 = gs.gameState!.cards.firstWhere((c) => c.targetPlayerId == 'host_user');
+      expect(newCard2.promptText, isNotNull);
     });
   });
 }
