@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gaslight/theme/app_icons.dart';
 
@@ -29,5 +31,39 @@ void main() {
     expect(icon.icon!.fontFamily, 'PhosphorLight');
     expect(icon.icon!.fontPackage, isNull);
     expect(icon.size, 20.0);
+  });
+
+  testWidgets('ThematicIconType.depart renders non-zero ink pixels to bitmap', (tester) async {
+    final key = GlobalKey();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: RepaintBoundary(
+            key: key,
+            child: const ThematicIcon(type: ThematicIconType.depart, size: 64, color: Colors.white),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.pumpAndSettle();
+
+    // Render boundary to image and inspect pixel bytes
+    final boundary = key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final byteData = await image.toByteData(format: ImageByteFormat.rawRgba);
+    expect(byteData, isNotNull);
+
+    final bytes = byteData!.buffer.asUint8List();
+    int nonZeroAlphaCount = 0;
+    for (int i = 3; i < bytes.length; i += 4) {
+      if (bytes[i] > 0) {
+        nonZeroAlphaCount++;
+      }
+    }
+
+    // Assert that the doorway & arrow line art renders at least 30 visible ink pixels
+    expect(nonZeroAlphaCount, greaterThanOrEqualTo(30),
+        reason: 'depart sigil must render visible line art pixels');
   });
 }
