@@ -95,8 +95,9 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     } catch (e) {
       debugPrint('EXCEPTION CAUGHT ON SUBMIT: $e, mounted=$mounted');
       if (mounted) {
-        String msg = e.toString();
-        if (msg.contains('similar') || msg.contains('Similarity')) {
+        final String errStr = e.toString();
+        String msg = 'Something went wrong. Try again.';
+        if (errStr.contains('similar') || errStr.contains('Similarity')) {
           msg = 'Too similar to an existing answer! Be more creative.';
         }
         debugPrint('SHOWING SNACKBAR WITH MSG: $msg');
@@ -499,10 +500,15 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                                       );
                                     }
                                   } catch (e) {
+                                    debugPrint('rerollMyPrompt error: $e');
                                     if (mounted) {
+                                      final String errStr = e.toString();
+                                      final String msg = errStr.contains('No more prompts')
+                                          ? 'No more prompts left in this deck.'
+                                          : 'Something went wrong. Try again.';
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
-                                          content: Text(e.toString().replaceAll('Exception: ', '')),
+                                          content: Text(msg),
                                           backgroundColor: Theme.of(context).colorScheme.error,
                                         ),
                                       );

@@ -48,6 +48,7 @@ class _FloatingReaction {
 
 class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseHost<Phase4RevealScreen> {
   bool _isNavigating = false;
+  bool _isSubmittingUnmask = false;
   
   late final int _mountTime;
   final Map<String, int> _lastSeenReactionAt = {};
@@ -807,6 +808,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                           spacing: 8,
                           runSpacing: 8,
                           children: candidates.map((cand) {
+                            final bool hasGuessed = currentCard.unmaskGuesses.containsKey(me.id);
                             return OutlinedButton(
                               style: OutlinedButton.styleFrom(
                                 side: const BorderSide(color: AppColors.brass),
@@ -816,14 +818,24 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              onPressed: () async {
+                              onPressed: (hasGuessed || _isSubmittingUnmask) ? null : () async {
+                                if (_isSubmittingUnmask || hasGuessed) return;
+                                setState(() => _isSubmittingUnmask = true);
                                 try {
                                   await gs.submitUnmaskGuess(cand.id);
                                 } catch (e) {
+                                  debugPrint('submitUnmaskGuess error: $e');
                                   if (context.mounted) {
+                                    final String msg = e.toString().contains('already submitted') || e.toString().contains('failed-precondition')
+                                        ? 'That guess is already locked in.'
+                                        : 'Something went wrong. Try again.';
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(e.toString())),
+                                      SnackBar(content: Text(msg)),
                                     );
+                                  }
+                                } finally {
+                                  if (mounted) {
+                                    setState(() => _isSubmittingUnmask = false);
                                   }
                                 }
                               },

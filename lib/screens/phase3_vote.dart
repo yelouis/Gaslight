@@ -84,10 +84,11 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
         AudioService.instance.playVote();
       }
     } catch (e) {
+      debugPrint('castVote error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
+            content: const Text('Something went wrong. Try again.'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -385,10 +386,11 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                 await context.read<GameService>().setPlayerReady(true);
                 AudioService.instance.playVote();
               } catch (e) {
+                debugPrint('setPlayerReady error: $e');
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(e.toString()),
+                      content: const Text('Something went wrong. Try again.'),
                       backgroundColor: Theme.of(context).colorScheme.error,
                     ),
                   );

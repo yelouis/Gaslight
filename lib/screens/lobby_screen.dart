@@ -43,6 +43,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
   bool _familyFriendlyOnly = false;
   String? _handledRoomClosedKey;
   bool _isLeaving = false;
+  bool _isStartingGame = false;
 
   void _confirmLeave(BuildContext context, GameService gs, bool isHost) {
     if (_isLeaving) return;
@@ -843,18 +844,25 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                         : null,
                     child: PrimaryButton(
                       text: 'START GAME',
-                      onPressed: startWarning == null ? () async {
+                      onPressed: (startWarning != null || _isStartingGame) ? null : () async {
+                        if (_isStartingGame) return;
+                        setState(() => _isStartingGame = true);
                         playRavenPose(RavenState.caw, onceKey: 'startgame:${gs.gameState?.roomCode}');
                         try {
                           await gs.startGame(_selectedDeck);
                         } catch (e) {
+                          debugPrint('startGame error: $e');
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                              const SnackBar(content: Text('Something went wrong. Try again.')),
                             );
                           }
+                        } finally {
+                          if (mounted) {
+                            setState(() => _isStartingGame = false);
+                          }
                         }
-                      } : null,
+                      },
                     ),
                   ),
                 ],
