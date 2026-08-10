@@ -871,7 +871,6 @@ async function advancePhaseInternal(
   currentCards: CardModel[]
 ) {
   const forgeryDuration = 60000;
-  const truthDuration = 60000;
   const voteDuration = 45000;
 
   const nextReadyPlayers: Record<string, boolean> = {};

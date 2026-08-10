@@ -808,7 +808,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                           spacing: 8,
                           runSpacing: 8,
                           children: candidates.map((cand) {
-                            final bool hasGuessed = currentCard.unmaskGuesses.containsKey(me.id);
+                            final bool hasGuessed = card.unmaskGuesses.containsKey(me.id);
                             return OutlinedButton(
                               style: OutlinedButton.styleFrom(
                                 side: const BorderSide(color: AppColors.brass),

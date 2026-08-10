@@ -3,6 +3,7 @@ export interface CardModel {
   promptText: string;
   truthAnswer: string;
   sabotageAnswers: Record<string, string>;
+  options?: Array<{ id: string; text: string }>;
   votes: Record<string, string>;
   unmaskGuesses?: Record<string, string>;
 }
