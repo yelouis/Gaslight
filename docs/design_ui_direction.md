@@ -218,6 +218,10 @@ Bundled `.wav` effects in `assets/audio/` — quill scratch on submit, wax thunk
 ### Motion tokens
 All durations come from `AppMotion`: `fast` 180 ms (presses, stamps) · `standard` 300 ms (fades, state swaps) · `scene` 450 ms (route transitions) · `emphasis` 600 ms (title settles, flips). No ad-hoc `Duration` values.
 
+### Lobby Leave Control & Motion Contract (Issue 50 — August 10, 2026)
+- **`ThematicIconType.depart`**: mapped to Phosphor Light glyph `0xe674`, rendering a sign-out arrow icon in `LobbyScreen`'s `AppBar` `leading:` slot with tooltip `'Leave room'`.
+- **Dialog motion & accessibility**: `_confirmLeave` uses `showGeneralDialog` with `barrierDismissible: true` unconditionally, `barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel`, `barrierColor: Colors.black54`, and `transitionDuration: AppMotion.reduce(context) ? Duration.zero : const Duration(milliseconds: 150)`. Under `AppMotion.reduce(context)`, the static child widget is returned directly without wrapping in a `FadeTransition`. Double-tap prevention sets `_isLeaving = true` before `Navigator.pop()`.
+
 ### Lobby Deck Carousel (Issue 52, shipped August 2026)
 - Non-hosts get the full 7-deck `PageView` carousel read-only, labeled with `THE CHOSEN FILE`. Selection affordances (`onDeckSelected` callable write, stamp pulse) are suppressed for non-hosts.
 - Host's selected deck is badged with `CHOSEN` on non-host carousels.

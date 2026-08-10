@@ -1,11 +1,13 @@
-# Agent Execution Guide — Build Complete: Lobby Lifecycle (Issues 50–53) — August 10, 2026
+# Agent Execution Guide — Queue Complete: All Issues Delivered & Deployed (Issues 50–56) — August 10, 2026
 
 
-**You are an engineering agent with no memory of this project.** Everything approved is below. Four issues are queued, all four already selected by the user — the rejected options are recorded in `docs/ongoing_general_errors.md` §1, and re-litigating them is wasted work.
+**You are an engineering agent with no memory of this project.** Issues 51, 52, 53 and 54 are implemented and verified in source (§8) — **do not rework them.** They are also **not reaching users**, because the backend was never deployed. Your queue closes that gap, cleans up the migration boundary it created, and finishes three defects that shipped inside Issue 50.
 
-**Every number, literal string and field name here is a decision, not a suggestion.** Implement them as written; copy quoted strings verbatim including punctuation and capitalisation. If a value proves impossible, keep the intent, deviate minimally, and say so in the commit body. **If the design itself cannot work, STOP** and file it in `ongoing_general_errors.md` with options and a `Your selection: _____` line — never choose on the user's behalf.
+**Every number, literal string and field name here is a decision, not a suggestion.** Copy quoted strings verbatim. If a value proves impossible, keep the intent, deviate minimally, and say so in the commit body. **If the design itself cannot work, STOP** and file it in `ongoing_general_errors.md` with options and a `Your selection: _____` line — never choose on the user's behalf.
 
-**Do not touch anything in §10–§12.** Those are delivered work, accepted equivalents, and standing invariants.
+All three items were selected by the user on August 10, 2026: **Issue 55 → Option A**, **Issue 56 → Option A**, **Issue 50 → Option A**.
+
+> ⚠️ **§3 and §4 touch production.** They are the only items in this guide that do. Run the preflight gates as written; do not improvise a deploy.
 
 ---
 
@@ -13,48 +15,40 @@
 
 1. **Portrait phone is the target.** Validate every layout at **360×640 dp portrait**.
 2. **Design tokens are law.** `AppColors`, `AppTextStyles`, `AppMotion`. No raw hex in widget code, no ad-hoc `Duration`.
-3. **Every animation needs an `AppMotion.reduce(context)` path** — a static frame, never a faster animation.
+3. **Every animation needs an `AppMotion.reduce(context)` path — a static frame, never a faster animation.** §5 exists because this was not honoured.
 4. **Text scale clamped 1.0–1.3.** **Touch targets ≥ 48 dp.**
-5. **Scope by item.** Issues 51 and 53 change `functions/` and `firestore.rules`. **Issues 50 and 52 are client-only — if you are editing `functions/` while implementing them, you have left the spec. STOP.**
-6. **Server-authoritative, always.** Clients read Firestore streams and write nothing to room documents. The **single** sanctioned client write is a player's own `lastSeen` heartbeat on their own player document. `expiresAt` is server-owned (§6). Every other mutation goes through a callable that validates `context.auth.uid`.
-7. **One item = one commit**, Conventional Commits, WHY in the body.
+5. **Server-authoritative.** Clients read Firestore streams and write nothing to room documents. `lastSeen` is the only sanctioned client write; `expiresAt` is server-owned.
+6. **Never commit a credential.** §4 requires Application Default Credentials, not a key file — and `.gitignore` does not currently protect you from the latter. See §4.
+7. **One item = one commit**, Conventional Commits, WHY in the body. §5 is its own commit; §6 and §7 may share one.
 
 ---
 
 ## 1. Verified baseline — the regression bar
 
-Run in this session at commit `185b961`, clean tree. **No change may lower any of these numbers.**
+Measured at commit `56c183a`, clean tree. **No change may lower any of these.**
 
 | Gate | Command | Result |
 |---|---|---|
-| Static analysis | `flutter analyze lib test` | **0 errors** (270 infos/warnings, all pre-existing) |
-| Client tests | `flutter test` | **106/106** |
+| Static analysis | `flutter analyze lib test` | **0 errors** (270 infos/warnings, pre-existing) |
+| Client tests | `flutter test` | **117/117** |
 | Functions build | `npm --prefix functions run build` | clean |
-| Backend E2E | `npm --prefix functions test` | **31/31** (7 s, boots its own emulators) |
-| iOS simulator build | `flutter build ios --simulator --debug` | succeeds (34.7 s) |
-| iOS release build | `flutter build ios --release --no-codesign` | succeeds (`Runner.app` size **49.5 MB**) |
+| Backend E2E | `npm --prefix functions test` | **36/36** |
+| Firestore TTL policies | `gcloud firestore fields ttls list` | **2 × ACTIVE** (`rooms`, `players`), applied August 10, 2026 |
+| iOS release build | `flutter build ios --release --no-codesign` | ⚠️ not re-run since `56c183a`, where it measured 49.5 MB. Re-measure before quoting. |
+| **Production deployment** | `gcloud functions list` | 🔴 **All 14 functions last updated `2026-08-07T05:20`.** This wave is not live. §3 fixes it. |
 
-### ⚠️ Seven traps that have each cost a cycle
+**`gcloud` is not on this shell's `PATH`** — the same quirk that makes `functions/package.json` prepend `/opt/homebrew/bin`. It is installed at `/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud`; invoke it by absolute path. Authenticated as `chengluye@gmail.com`.
 
-1. **Analyzer scope.** Run `flutter analyze lib test`, **never bare `flutter analyze`** — the bare form walks `build/ios/SourcePackages` and reports ~678 phantom errors from vendored plugin source under gitignored `build/`. This has misled in both directions.
-2. **Analyze ≠ compile.** Only `flutter test` or `flutter build` surfaces a broken dependency. A package resolving proves nothing.
+### ⚠️ Eight traps that have each cost a cycle
+
+1. **Analyzer scope.** Run `flutter analyze lib test`, **never bare `flutter analyze`** — the bare form walks gitignored vendored plugin source and reports ~678 phantom errors.
+2. **Analyze ≠ compile.** Only `flutter test` or `flutter build` surfaces a broken dependency.
 3. **Working directory persists** between Bash calls. Use absolute paths or `npm --prefix functions run build`.
 4. **BSD `sed` does not support `\b`** — silently matches nothing and exits 0. Use `python3`.
-5. **`Image.asset` loads no bytes under `flutter test`**, and a wrong icon codepoint renders as an empty tofu box. Neither is visible to any widget test. Verify on a simulator.
-6. **`test/fake_functions.dart` does not enforce `firestore.rules`.** Non-host writes and `authUid` checks are never really exercised there, and bots are server-seeded documents that never touch the client path. Anything security- or multiplayer-critical must be proven in `functions/test/` or on real simulator clients.
-7. **`tester.pumpAndSettle()` NEVER RETURNS on any screen in this app.** Nine widgets in the lobby tree alone drive `AnimationController.repeat()` — `raven_mascot`, `lobby_background`, `lamp_loading`, `lobby_logo`, `shared_ui`, `waiting_indicator`, `player_avatar`, `thinking_background`, `auto_advance_timer`. `pumpAndSettle` waits for the frame scheduler to go idle, which never happens, so it spins until its own 10-minute timeout. **Every existing lobby-family test uses this idiom instead, and no test in this repo uses `pumpAndSettle`:**
-
-   ```dart
-   await tester.pump();
-   await tester.pump(const Duration(milliseconds: 500));
-   ```
-
-   Two companion rules travel with it, and all three are needed together — fixing only the pump still hangs (measured):
-
-   - **Wrap the screen in `MediaQuery(data: const MediaQueryData(accessibleNavigation: true), …)`.** `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`), so this is the switch that puts every animation on its static path. Eleven test files already do it.
-   - **Never `await` a fake callable inside `testWidgets`.** `testWidgets` bodies run under `FakeAsync`; awaiting `gameService.createRoom(...)` or `Future.delayed(Duration.zero)` deadlocks because no `pump()` can advance fake time while the await is outstanding. Seed `FakeFirestore` directly, then escape the zone once with `await tester.runAsync(() async { await Future.delayed(const Duration(milliseconds: 100)); });`.
-
-   Cost so far: one full cycle. `test/lobby_leave_test.dart` hung for **6 m 06 s** without completing a single test, reporting only `did not complete` — which reads like a logic bug and is not one. Precedent to copy: **`lobby_parlor_sheet_test.dart:25–74`**, plus `lobby_entry_test.dart:42` and `house_rules_panel_test.dart:83`.
+5. **`Image.asset` loads no bytes under `flutter test`**, and a wrong icon codepoint renders as an empty box. Neither is visible to any widget test. Verify on a simulator.
+6. **`test/fake_functions.dart` does not enforce `firestore.rules`.** Security- or multiplayer-critical behaviour must be proven in `functions/test/` or on real clients.
+7. **Widget tests on animated screens hang unless you set `accessibleNavigation`.** Nine widgets in the lobby tree drive `AnimationController.repeat()`. Wrap the screen under test in `MediaQuery(data: const MediaQueryData(accessibleNavigation: true), …)` — `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`). Separately, **never `await` a fake callable directly inside `testWidgets`**; those bodies run under `FakeAsync` and deadlock — wrap in `tester.runAsync`. `pumpAndSettle()` is **not** the culprit and is **not** banned. ⚠️ Because every lobby test sets this flag, `AppMotion.reduce` is `true` throughout the suite — which is exactly the branch §5's bug lives on.
+8. **🆕 `firebase.json` has NO `predeploy` hook.** Verified August 10, 2026. `firebase deploy --only functions` therefore uploads **whatever is already sitting in `functions/lib/`** — and `functions/lib/` is gitignored, so on a fresh clone it does not exist at all. **Deploying without building first ships stale or empty JavaScript, and the CLI still reports success.** §3 both works around this and fixes it permanently.
 
 ---
 
@@ -62,445 +56,281 @@ Run in this session at commit `185b961`, clean tree. **No change may lower any o
 
 | # | Item | Why this position |
 |---|---|---|
-| 1 | ✅ **Issue 51** — host exit closes the lobby | **DELIVERED** in `5bb9d2c`, with `functions/test/game_e2e.spec.ts` and `test/room_closed_test.dart`. Do not rework it. |
-| 2 | 🔧 **Issue 50** — leave control in the lobby | **IN FLIGHT, uncommitted, blocked on a test-harness trap — see §4's IN FLIGHT block first.** Depends on 51: the host dialog promises "will close the room for everyone", true only once 51 ships. |
-| 3 | **Issue 52** — browsable read-only deck carousel | Client-only, dependency-free, lowest risk. Third so it does not delay the two correctness fixes. |
-| 4 | **Issue 53** — 8-hour TTL on abandoned rooms | Last because 51 removes the common source of orphaned rooms, so the residual volume this must handle is only knowable once 51 has landed. Backend-and-rules only, and it blocks nothing else. |
+| 1 | **§3 — Issue 55: deploy functions + rules** | Closes a bug that is live for users **right now** and has a verified reproduction. Everything else in this wave is invisible until it lands. |
+| 2 | **§4 — Issue 56: backfill `expiresAt`** | **Must follow §3.** The backfill sets expiry on legacy documents; if the functions are not yet live, nothing refreshes those timestamps, and a legacy room still in use would be deleted out from under its players. After §3, any live room refreshes itself on its next write. |
+| 3 | **§5 — Issue 50 defect 1: reduce-motion path** | Client-only and independent of §3/§4. Own commit. |
+| 4 | **§6 / §7 — Issue 50 defects 2 and 3** | §5 rewrites the dialog's presentation and §6 edits the confirm handler inside it; doing §6 first guarantees a conflict with yourself. |
+| 5 | **§8 — the `depart` glyph** | Blocking, and satisfiable only by looking at a simulator. |
 
 ---
 
-## 3. Issue 51 — a host who leaves the lobby must close it
+## 3. Issue 55 — deploy the backend (Option A)
 
-**What this means for the user:** today, when the host leaves a lobby, everyone still in it is trapped in a room that can never start and can never be left.
+**What this means for the user:** today, a host who leaves a lobby still strands everyone in a room that can never start — the failure reproduced in room `KVOH`. The fix has existed, tested and committed, since August 9 and has never run for a single user.
 
 ### The gap
 
-- **`functions/src/index.ts:725–730`.** `handleDisconnect` computes `hasCard` and, when false, deletes the player document and **returns at line 729 — before the host-transfer block at lines 829–841 ever runs.**
-- **`index.ts:91`** initialises `cards: []`; **`index.ts:391`** is the first write that populates it, inside `startGame`. So throughout `currentPhase == "lobby"`, `hasCard` is false for **every** player, and the early return is always taken.
-- The room cannot self-heal: **`index.ts:186`** sets `isHost: false` for every joiner, and **`index.ts:239`** rejects `startGame` from a non-host.
-- **`lib/services/game_service.dart:302–307`.** The room snapshot listener is `if (snapshot.exists) { … }` with **no `else`**. When the room document is deleted the client silently keeps its last `_gameState` forever. **Closing the room server-side evicts nobody until this is fixed** — this is the half that is easy to miss.
+All 14 production functions were last updated `2026-08-07T05:20 UTC`. `5bb9d2c` (Issue 51's `handleDisconnect` phase gate, committed 2026-08-09 18:08) and `f2d89f3` (Issue 53's `expiresAt` writes, 19:30) have never shipped. `firestore.rules` deploys on a separate track and must be assumed stale too. Consequently the TTL policies enabled under Issue 54 are `ACTIVE` and delete nothing, because production never writes the field they key on.
 
-### Implementation — backend
+### Implementation
 
-**`functions/src/index.ts`, inside `handleDisconnect`'s transaction.**
+**Step 1 — fix the predeploy gap first, in its own commit.** `firebase.json`'s `functions` entry has no `predeploy`, which is what makes a stale-code deploy possible. Add the standard hook so the build can never be skipped again:
 
-**Step 1.** Move `const phase = room.currentPhase;` (currently line 752) to immediately after `const disconnectedPlayer = …` (line 718), i.e. **above** the `hasCard` computation.
-
-**Step 2.** Replace lines 725–730 with this three-way branch, in exactly this order:
-
-```ts
-const hasCard = room.cards.some(c => c.targetPlayerId === disconnectedPlayerId);
-
-// 1. Host leaves the lobby -> close the room entirely.
-if (disconnectedPlayer?.isHost === true && phase === "lobby") {
-  for (const doc of playersSnap.docs) {
-    transaction.delete(doc.ref);          // playersSnap was read at line 715 — no new read
-  }
-  transaction.delete(roomRef);
-  return { success: true, roomClosed: true };
-}
-
-// 2. Already pruned (no card dealt for this player) -> unchanged behaviour.
-if (!hasCard) {
-  transaction.delete(playerRef);
-  return { success: true };
-}
-
-// 3. Otherwise fall through to the existing in-game logic, unchanged.
+```json
+"predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
 ```
 
-**Step 3.** **Leave lines 829–841 exactly as they are.** Host transfer now serves only the in-game case, which is the selected behaviour (Issue 51 Option A).
+Commit this **before** deploying. It converts a manual discipline into an enforced one, and it is the durable fix for trap 8.
 
-> **Transaction invariant** (`index.ts:848`): *must never call `transaction.get` — callers complete all reads first.* `playersSnap` is already in hand from line 715, so iterating it adds no read. **Do not add a `.get()` in this branch.**
+**Step 2 — preflight. Every one of these must pass before you deploy.**
 
-> **Ordering matters.** Branch 1 must precede branch 2. A host in the lobby satisfies **both** conditions, and if `!hasCard` wins the race you have reimplemented the bug.
+1. `git status` is clean and you are on the commit you intend to ship.
+2. The full §1 battery is green — including `npm --prefix functions test` at **36/36**, which is the only evidence the backend behaves.
+3. `npm --prefix functions run build` completes clean. Do this even after step 1; a green predeploy hook you have never watched run is not evidence.
+4. Confirm the target: `.firebaserc` sets `gaslight-46368` as default. **Pass `--project` explicitly anyway.**
 
-### Implementation — client
+**Step 3 — deploy.**
 
-**`lib/services/game_service.dart`.**
-
-**Step 4.** Extract the teardown currently inline in `leaveRoom()` (lines 262–288) into a private method. It must do exactly what `leaveRoom()` does today, minus the callable:
-
-```dart
-Future<void> _clearLocalRoomState() async {
-  _roomSubscription?.cancel();
-  _playersSubscription?.cancel();
-  _heartbeatTimer?.cancel();
-  _roomSubscription = null;
-  _playersSubscription = null;
-  _heartbeatTimer = null;
-
-  _gameState = null;
-  _players = [];
-  _currentPlayerId = null;
-  _advancedStateKeys.clear();
-
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.remove('room_code');
-  await prefs.remove('player_id');
-}
+```bash
+npm --prefix functions run build && npx firebase-tools deploy --only functions,firestore:rules --project gaslight-46368
 ```
 
-`leaveRoom()` then becomes: capture `roomCode`/`playerId` → cancel subscriptions → call `handleDisconnect` → `await _clearLocalRoomState()` → `notifyListeners()`. **Its observable behaviour must not change**; its only current caller is `lib/screens/game_over_screen.dart:289`.
+`firebase-tools` is invoked through `npx` by repo convention (see `functions/package.json`). `engines.node` is `22`, which pins the **deployed runtime**; the local Node is v26.5.0 and the CLI may warn about the mismatch — that warning is about your machine, not the deploy target, and is expected.
 
-**Step 5.** Add the missing `else` to the room listener at 302–307:
+### Validation — prove behaviour, not that a command exited 0
 
-```dart
-_roomSubscription = _db.collection('rooms').doc(roomCode).snapshots().listen((snapshot) async {
-  if (snapshot.exists) {
-    _gameState = GameState.fromMap(snapshot.data()!, snapshot.id);
-    notifyListeners();
-  } else if (_gameState != null) {
-    _roomClosed = true;
-    await _clearLocalRoomState();
-    notifyListeners();
-  }
-});
+**Check 1 — the code actually moved.** This is the falsifying check.
+
+```bash
+/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud functions list --project=gaslight-46368 --format="table(name,state,updateTime)"
 ```
 
-**Do not call `handleDisconnect` here.** The room is already gone; the call fails with "Room not found."
+**Before:** every row reads `2026-08-07T05:20`. **After:** all 14 must read today. Any row still showing August 7 means that function did not ship — paste the before and after tables into the Resolved entry.
 
-The `_gameState != null` guard is load-bearing: without it, the listener's first emission for a room that never existed would fire a spurious eviction.
+**Check 2 — production writes `expiresAt`.** Create a room from a real client pointed at production (`USE_EMULATOR=false`), then inspect it in the Firebase console. The **room document and the host's player document** must each carry an `expiresAt` timestamp roughly 8 hours ahead. **Falsifying before deploy:** the field is absent entirely. This is the only check that proves Issue 53 is live — `npm --prefix functions test` passes either way and always has.
 
-**Step 6.** Add `bool _roomClosed = false;` with `bool get roomClosed => _roomClosed;`, and set it back to `false` at the top of both the create-room and join-room paths. A stale `true` blocks the next room the player joins.
+**Check 3 — the Issue 51 fix is live.** Three simulators against production (§9): host creates, two clients join, host leaves. Both non-hosts must be evicted showing **"The host has left. This room has closed."** Run this **before** deploying too, and record both outcomes — before, it reproduces the original bug with the room persisting and the others stranded. A before/after pair on a real device is the strongest evidence this build can produce.
 
-### Implementation — routing
+**Check 4 — rules shipped.** From a production client, attempt a write of `expiresAt` to your own player document and confirm it is **denied**, while a `lastSeen`-only write still succeeds. Alternatively confirm the rules version timestamp in the Firebase console reads today.
 
-**`lib/screens/lobby_screen.dart`.**
+### Rollback
 
-**Step 7.** When `gs.roomClosed` turns true, route to the entry screen and surface exactly:
+`functions:delete` is not a rollback. To revert, redeploy the previous source:
 
-> `The host has left. This room has closed.`
+```bash
+git checkout 185b961 -- functions/src && npm --prefix functions run build && npx firebase-tools deploy --only functions --project gaslight-46368
+```
 
-**Step 8.** **Gate it with a once-per-event key.** Firestore streams rebuild constantly; a bare `if (gs.roomClosed)` fires the route and the message on every tick, stacking routes. Follow the `_advancedStateKeys` / `_knownPlayerIds` pattern already in this file, and perform the navigation in a post-frame callback so it does not run during build.
+**Understand what that costs:** `185b961` is the August 7 code, which contains the Issue 51 bug. Rolling back reinstates a known user-facing failure — prefer fixing forward unless the new build is worse than a stranded lobby.
 
-### Validation
+### Blast radius
 
-**Backend — `functions/test/game_e2e.spec.ts`:**
-
-- `"closes the room when the host disconnects in the lobby"` — create a room, join a second client, call `handleDisconnect` for the host while `currentPhase === "lobby"`, then assert **both**:
-  - `(await roomRef.get()).exists === false`
-  - `(await roomRef.collection("players").get()).empty === true`
-  
-  **This is the falsifying assertion.** Against today's code the room document survives and the second player's document is still present, so it fails on `exists === false`. **Run it before the fix and record the output** in the Resolved entry.
-
-- `"transfers host instead of closing when the game is in progress"` — **the over-reach guard.** Start a game so `currentPhase !== "lobby"`, disconnect the host, assert the room **still exists** and that exactly one remaining player has `isHost === true`. Must pass both before and after; it proves in-game transfer was not collateral damage.
-
-**Client — `flutter test`, new file `test/room_closed_test.dart`:**
-
-- Seed a room in `FakeFirestore`, attach the service, delete the room document, pump, assert `gameService.gameState == null` **and** `gameService.roomClosed == true`.
-- Over-reach guard: assert `leaveRoom()` still performs its full teardown and still invokes `handleDisconnect` exactly once — the refactor in step 4 must not have dropped the callable.
-
-**Manual, three simulators** (neither suite can see this — §1 trap 6): host creates, two clients join, host taps leave. Both non-hosts must land on the entry screen showing the exact copy, within one Firestore round-trip.
-
-### Blast radius — same commit
-
-`functions/src/index.ts` · `lib/services/game_service.dart` · `lib/screens/lobby_screen.dart` · `functions/test/game_e2e.spec.ts` · **`test/fake_functions.dart`** (must mirror the close behaviour or the client test cannot exercise it) · `docs/design_database_and_security.md` §4–§5 (the disconnect/host-handoff contract now has a phase gate).
+`firebase.json` (step 1, its own commit) · no other repo files change. Record the deploy in `ongoing_general_errors.md` Issue 55 with the before/after `gcloud functions list` output and the before/after simulator result.
 
 ---
 
-## 4. Issue 50 — a leave control in the lobby
+## 4. Issue 56 — backfill `expiresAt` on legacy documents (Option A)
 
-**What this means for the user:** today, joining a room is one-way. The only exits are finishing a whole game or force-quitting the app.
+**What this means for the user:** invisible. It clears the rooms created before the TTL field existed, which are otherwise undeletable forever and squat a 4-letter code space.
 
-### 🔧 IN FLIGHT — read this before touching anything
+### The gap
 
-An implementation attempt is uncommitted in the working tree: `lib/theme/app_icons.dart` (+5), `lib/screens/lobby_screen.dart` (+72), `docs/design_ui_direction.md`, and a new `test/lobby_leave_test.dart`. **The production code is essentially correct. Do not rewrite it.** Four specific things are wrong, diagnosed 9 Aug 2026.
+Firestore TTL acts only on documents where the designated field **exists and holds a timestamp**. Documents missing it are ignored permanently — not treated as expired. Every room and player document created before §3's deploy is therefore exempt with no automatic path to removal. Room `KVOH` is the known example; the true count is unknown until you query.
 
-**BLOCKER — the test hangs; it is not failing on logic. There are three independent causes, and fixing only one leaves it hanging** (measured: swapping just the pump idiom still hung past 7 minutes).
+### ⚠️ Ordering and credentials — read before writing any code
 
-Observed on the current file: **6 m 06 s elapsed, zero tests completed**, all three reporting `did not complete [E]`, and a `TestDeviceException … SIGTERM` that came from the run being killed — not from the app. No assertion ever executed, so **nothing about the assertions is yet known to be right or wrong.**
+**This must run only after §3 is verified live.** Before the deploy, nothing refreshes an `expiresAt` you write, so a legacy room still in use would be deleted out from under its players. After the deploy, any live room refreshes itself on its next write.
 
-1. **`await gameService.createRoom(...)` deadlocks inside the fake-async zone.** `testWidgets` runs its body under `FakeAsync`, where timers only fire when fake time advances. Awaiting a fake callable — and the `await Future.delayed(Duration.zero)` calls that follow it — blocks forever because no `pump()` can run while the await is outstanding. The log confirms execution reached `listenToRoom` (`DEBUG HEARTBEAT: started timer for room: TEST, player: p_guest`) and stopped there.
-2. **No `MediaQuery(accessibleNavigation: true)`.** `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`). Eleven test files set it, and that is how they quiet the repeating animations. Without it every `.repeat()` controller runs.
-3. **`pumpAndSettle()` × 7** — §1 trap 7.
+**Use Application Default Credentials. Do not download a service-account key.**
 
-**Do not invent a harness. Copy `lobby_parlor_sheet_test.dart:25–74` — it is the working precedent for pumping `LobbyScreen`.** Its shape:
+```bash
+gcloud auth application-default login
+```
+
+`firebase-admin` picks this up through `applicationDefault()`.
+
+> 🔴 **`.gitignore` will not protect you here.** Verified August 10, 2026: it covers `google-services.json`, `GoogleService-Info.plist` and `web_config.txt`, and has **no rule matching an Admin SDK key** — `serviceAccount*.json`, `*-adminsdk-*.json`, `*.pem` are all uncovered. A downloaded key would sit untracked-but-not-ignored, one `git add .` away from being committed to a repo whose history is permanent. **Add these three patterns to `.gitignore` in the same commit**, whether or not you use a key:
+> ```
+> *serviceAccount*.json
+> *-adminsdk-*.json
+> *.pem
+> ```
+
+### Implementation
+
+Write `scripts/backfill_expires_at.js`. **Commit it** — `scripts/` is the project's record of what was actually run, and a one-time migration with no artefact is unauditable.
+
+Resolve `firebase-admin` from the functions install rather than adding a root dependency:
+
+```bash
+NODE_PATH="$(pwd)/functions/node_modules" node scripts/backfill_expires_at.js --dry-run
+```
+
+Seven requirements:
+
+1. **`--dry-run` is the default and `--apply` is explicit.** Running the script with no flags must change nothing. Print the counts and stop.
+2. **Only write where the field is absent.** `if (data.expiresAt !== undefined) → skip`. Never overwrite a live room's expiry.
+3. **Cover both levels.** `db.collection('rooms')` for room documents **and** `db.collectionGroup('players')` for every player document. This is the same two-level trap the TTL policies have, and it is the single most likely way this job is done wrong.
+4. **Skip rooms that might still be in use.** A room is eligible only if it has **no player whose `lastSeen` falls within the last 24 hours** (rooms with no players at all are eligible). Do not rely on the room document alone — it carries no creation timestamp.
+5. **Set the expiry to `Date.now() + 60 * 60 * 1000` (1 hour), not 8.** These are known-dead documents; an 8-hour value delays the cleanup for no benefit. Write an `admin.firestore.Timestamp`, not a number — TTL ignores a field that is not a timestamp, which would make the whole run a silent no-op.
+6. **Batch under the 500-operation limit.** Chunk at 400 writes per `WriteBatch` and commit sequentially.
+7. **Idempotent.** A second `--apply` run must report zero changes.
+
+### Validation
+
+- **Before:** `--dry-run` and record the count of room documents and player documents lacking `expiresAt`. This number goes in the Resolved entry.
+- **After `--apply`:** re-run `--dry-run`. It must report **0 remaining at both levels**. **This is the falsifying assertion** — a non-zero player count with a zero room count is precisely the collection-group mistake requirement 3 exists to prevent, and it looks like success if you only check rooms.
+- **Over-reach guard:** the script must print, and you must record, how many documents it **skipped** for a recent `lastSeen` and how many already had `expiresAt`. A run that skipped nothing on a live database means requirement 4 is not wired up.
+- **Do not wall-clock the deletion.** TTL is best-effort and may lag by up to 24 hours; the policy's correctness was established under Issue 54. Verify the field is set, not that documents vanished.
+
+### Blast radius
+
+`scripts/backfill_expires_at.js` (new, committed) · `.gitignore` (the three key patterns) · `docs/design_database_and_security.md` §6 — record that this was a one-time migration boundary and that a fresh project never needs it.
+
+---
+
+## 5. Issue 50 defect 1 — give the dialog a real reduce-motion path (Option A)
+
+**What this means for the user:** someone with reduced motion enabled currently gets a dialog that still animates *and* can no longer be dismissed by tapping outside. They pay the cost of the accommodation and get none of the benefit.
+
+### The gap
+
+`lib/screens/lobby_screen.dart:49` computes `final reduceMotion = AppMotion.reduce(context);` and spends it at line 53 on `barrierDismissible: !reduceMotion`. Dismissibility and motion are unrelated concerns. Two failures at once: reduce-motion users **lose** barrier dismissal, and no transition duration is suppressed anywhere — `showDialog` always inserts its own `FadeTransition`, so the dialog animates identically in both modes.
+
+### Implementation
+
+Replace `showDialog(...)` with `showGeneralDialog<void>(...)`:
 
 ```dart
-Future<void> setupAndPump(WidgetTester tester, {required bool isHost}) async {
-  const roomCode = 'TEST';
-  // 1. Seed FakeFirestore DIRECTLY. Do not call createRoom() — it deadlocks (cause 1),
-  //    and seeding is how you get a non-host without mutating state afterwards.
-  final me = PlayerState(id: 'host_user', name: 'Me', isHost: isHost, joinedAt: 100);
-  await mockDb.collection('rooms').doc(roomCode).set(
-        GameState(roomCode: roomCode, totalPlayers: 1, sabotageAnswersCount: 2).toMap());
-  await mockDb.collection('rooms').doc(roomCode).collection('players').doc(me.id).set(me.toMap());
+void _confirmLeave(BuildContext context, GameService gs, bool isHost) {
+  if (_isLeaving) return;
+  final bool reduce = AppMotion.reduce(context);
 
-  gameService.listenToRoom(roomCode);
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('room_code', roomCode);
-  await prefs.setString('player_id', me.id);
-  await gameService.tryRejoinSession();
-
-  // 2. Escape the fake-async zone so the fake's futures actually resolve.
-  await tester.runAsync(() async {
-    await Future.delayed(const Duration(milliseconds: 100));
-  });
-
-  await tester.pumpWidget(
-    ChangeNotifierProvider<GameService>.value(
-      value: gameService,
-      child: MaterialApp(
-        home: MediaQuery(                                  // 3. quiets every .repeat()
-          data: const MediaQueryData(accessibleNavigation: true),
-          child: const LobbyScreen(),
-        ),
-      ),
-    ),
+  showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,                                   // unconditional
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.black54,                               // showDialog's default
+    transitionDuration: reduce ? Duration.zero : const Duration(milliseconds: 150),
+    pageBuilder: (ctx, animation, secondaryAnimation) =>
+        _buildLeaveDialog(ctx, gs, isHost),
+    transitionBuilder: (ctx, animation, secondaryAnimation, child) {
+      if (reduce) return child;                                 // static, not faster
+      return FadeTransition(
+        opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+        child: child,
+      );
+    },
   );
-  await tester.pump();                                     // 4. never pumpAndSettle
-  await tester.pump(const Duration(milliseconds: 500));
 }
 ```
 
-Note a non-host needs **`isHost: false` seeded up front**, not `createRoom` followed by an `update`. Dispose in a `try/finally` around each test body, as the precedent does, rather than in `tearDown`.
+Five things that bite if skipped:
 
-**Consequence to expect:** with `accessibleNavigation: true`, `AppMotion.reduce` is `true` in every test, so Defect 1 below means `barrierDismissible` will be `false` throughout the suite. Tapping the buttons still works; tapping the barrier will not.
+1. **`barrierLabel` is mandatory.** `showGeneralDialog` asserts when `barrierDismissible: true` and the label is null. Use `MaterialLocalizations.of(context).modalBarrierDismissLabel` — do not invent a string; it is read by screen readers and is already localised.
+2. **`barrierColor` must be supplied.** `showGeneralDialog` defaults to no scrim; without `Colors.black54` the dialog floats over an unshaded lobby and looks like a rendering bug. `showDialog` supplied this for you.
+3. **Under reduce, return `child` unchanged.** Do not wrap it in a `FadeTransition` driven by a zero-duration animation — that leaves an animation widget in the tree and makes the validation below ambiguous.
+4. **Move the existing `AlertDialog` verbatim into `_buildLeaveDialog(BuildContext ctx, GameService gs, bool isHost)`.** Cut and paste; do not retype. Every copy string, style, `minimumSize` and `isHost` ternary must be byte-identical, or the existing copy assertions break and you will be tempted to edit the test instead of the regression.
+5. **Do not add a `Center`.** `AlertDialog` builds a `Dialog`, which aligns and constrains itself. A `SafeArea` is the only wrapper worth considering, for parity with `showDialog`.
 
-**Defect 1 — the reduce-motion requirement is not implemented, and an unrelated behaviour was changed instead.** `_confirmLeave` computes `final reduceMotion = AppMotion.reduce(context);` and spends it on `barrierDismissible: !reduceMotion`. Those are unrelated concerns, and the effect is backwards: a reduce-motion user *loses* the ability to dismiss by tapping outside, which is an accessibility regression. Step 6 asks for the dialog's **entry animation** to be suppressed. Set `barrierDismissible: true` unconditionally, and route the reduce-motion path through the transition duration instead.
+`useRootNavigator` defaults to `true` on both APIs, so navigation behaviour is unchanged.
 
-**Defect 2 — the double-tap guard does not guard anything.** `_isLeaving` is set inside the confirm handler *after* `Navigator.of(ctx).pop()` has already removed the button, and is reset in a `finally`. Both `if (_isLeaving) return;` checks are therefore unreachable as guards: the outer one cannot be true because a modal dialog covers the `AppBar` button, and the inner one cannot be true because the pop is synchronous. The real risk is two taps on the confirm `TextButton` landing in the same frame. **Fix: set the flag before `Navigator.pop()` and do not reset it** — the screen is being torn down — or capture a plain `bool` in the dialog builder's closure.
+### Validation
 
-**Defect 3 — the test's over-reach guard is fragile and semantically wrong.** It locates the sound toggle with `find.byType(IconButton).last`, which now depends on tree ordering between `leading:` and `actions:`. The sound button has a tooltip (`lobby_screen.dart:471`). Use `find.byTooltip('Mute')` / `find.byTooltip('Unmute')`, matching how the test already finds the leave control.
+Both assertions fail against the current code. **Run them before fixing and record the output.**
 
-**Still open:** the glyph at `0xe674` has **not** been seen on a simulator. Step 2's gate is unmet, and per the Definition of Done it cannot be ticked from a green suite.
+**Test A — `"reduce-motion users can still dismiss by tapping outside"`.** Standard harness (`accessibleNavigation: true`, so `reduce` is `true`): open the dialog, `await tester.tapAt(const Offset(10, 10));`, pump, assert `find.text('Leave this room?')` finds nothing. **Falsifying:** today `barrierDismissible` evaluates to `!true == false`, the barrier swallows the tap, and the dialog stays.
 
-### The gap
-
-`GameService.leaveRoom()` (`game_service.dart:258–290`) is correct and complete — and the lobby never calls it. `lobby_screen.dart:377–386` declares one `AppBar` action, the sound toggle, and no `leading:`. A grep across `lobby_screen.dart`, `gaslight_route.dart` and `main.dart` for `PopScope|WillPopScope|Navigator.pop|maybePop|leading:|BackButton|Leave|Exit|Quit` returns **zero matches**.
-
-### Implementation
-
-**Step 1.** `lib/theme/app_icons.dart` — add `depart,` to `ThematicIconType` after `redraw` (line 29).
-
-**Step 2.** Add its entry to `_phosphorGlyphs` (lines 46–58), matching the existing style:
+**Test B — `"no transition widget is inserted under reduced motion"`.** Same harness:
 
 ```dart
-ThematicIconType.depart: IconData(0xe674, fontFamily: _kPhosphorLight), // signOut
-```
-
-> ### ⚠️ The codepoint cannot be verified from this repo — only on a simulator
->
-> The vendored `Phosphor-Light.ttf` has a `post` table at **version 3.0, which stores no glyph names** (confirmed 9 Aug 2026: 1,543 cmap entries, 0 recoverable names). A cmap presence check is **near-worthless here** — the font's cmap spans `0x0020–0xFFFD`, and three unrelated candidate codepoints all tested PRESENT. Presence rules out nothing.
->
-> `0xe674` is the value proposed by the user and is present in the font, but **presence is not identity**. A wrong codepoint renders a plausible-looking but incorrect glyph, or an empty tofu box, and **no widget test in this project can detect either** (§1 trap 5).
->
-> **The blocking gate is visual:** build to a simulator, open the lobby, and confirm the leading icon reads as a door / sign-out arrow. If it does not, try `0xe668`, then source the correct value from upstream Phosphor. **Do not commit this item without having seen the glyph.**
-
-**Step 3.** `lib/screens/lobby_screen.dart` — add to the `AppBar` (which currently has no `leading:`):
-
-```dart
-leading: IconButton(
-  icon: ThematicIcon(
-    type: ThematicIconType.depart,
-    color: theme.colorScheme.secondary,
+expect(
+  find.ancestor(
+    of: find.text('Leave this room?'),
+    matching: find.byType(FadeTransition),
   ),
-  onPressed: () => _confirmLeave(context, gs, isHost),
-  tooltip: 'Leave room',
-),
+  findsNothing,
+);
 ```
 
-`isHost` is already computed at `lobby_screen.dart:310`. **Leave the existing sound toggle in `actions:` untouched.**
+**Falsifying:** `showDialog` routes through `DialogRoute`, whose transition builder always inserts a `FadeTransition`, so one is present today even with reduce on. **Scope the finder with `find.ancestor` exactly as written** — a bare `find.byType(FadeTransition)` matches unrelated transitions elsewhere in the app and would pass for the wrong reason, making it this project's fourth check-that-cannot-fail.
 
-**Step 4.** Implement `_confirmLeave`. Copy is verbatim — punctuation and capitalisation included:
+**Over-reach guard — `"the dialog still animates when reduced motion is off"`.** Pump the lobby **without** `accessibleNavigation: true`; in that configuration the lobby's repeating animations are live, so use `pump()` + `pump(const Duration(milliseconds: 150))` rather than `pumpAndSettle()` (trap 7). Assert the same scoped `find.ancestor` **finds one widget**. This stops a later agent simplifying the transition away for everyone.
 
-| | Non-host | Host |
-|---|---|---|
-| Title | `Leave this room?` | `Close this room?` |
-| Body | `You can rejoin with the room code as long as the game hasn't started.` | `You are the host. Leaving will close the room for everyone.` |
-| Dismiss | `STAY` | `STAY` |
-| Confirm | `LEAVE` | `CLOSE ROOM` |
+**Second over-reach guard:** every existing test in `test/lobby_leave_test.dart` passes **unedited**. If you had to change a copy assertion, you changed a string you were told to paste.
 
-**Step 5.** On confirm: `await gs.leaveRoom()`, then route to the entry screen. On dismiss: nothing changes. Guard against a double-tap producing two `leaveRoom()` calls.
+### Blast radius
 
-**Step 6.** The dialog needs an `AppMotion.reduce(context)` path; both actions ≥ 48 dp; re-verify the lobby still fits at 360×640 dp with `leading:` present.
-
-### Validation
-
-**`test/lobby_leave_test.dart`** — already exists, uncommitted, and currently hangs. See the IN FLIGHT block above before editing it. (`test/lobby_screen_test.dart` does not exist and should not be created.) Copy the pump idiom from `lobby_entry_test.dart:42` or `lobby_parlor_sheet_test.dart:73`; **`pumpAndSettle()` is banned in this repo — §1 trap 7.** `FakeFirestore` comes from `simulation_test.dart` and `FakeFirebaseFunctions` from `fake_functions.dart`, which is the established import pattern across eleven test files; `fakeFunctions.callableInvocations` is the existing call counter and the fake room code is always `TEST`.
-
-- `"non-host can leave from the lobby"` — pump the lobby as a non-host, `find.byTooltip('Leave room')`, tap; assert the dialog shows the exact title `Leave this room?`; tap `STAY`, assert still in the lobby and `leaveRoom()` **not** called; reopen, tap `LEAVE`, assert `leaveRoom()` called **exactly once**. **Falsifying:** today `find.byTooltip('Leave room')` matches nothing and the test fails at the first tap.
-- `"host sees the room-closing copy"` — same flow with `isHost: true`; assert the title `Close this room?`, the body string verbatim, and the confirm label `CLOSE ROOM`.
-- **Over-reach guard** — assert the sound toggle is still present in `actions:` and still toggles `gs.soundEnabled`.
-- **Manual, simulator** — the blocking glyph check from step 2.
-
-### Blast radius — same commit
-
-`lib/theme/app_icons.dart` · `lib/screens/lobby_screen.dart` · **new** `test/lobby_leave_test.dart` · `test/thematic_icon_test.dart` (if it enumerates the enum) · `docs/design_ui_direction.md` §7 (icon inventory gains `depart`).
+`lib/screens/lobby_screen.dart` · `test/lobby_leave_test.dart` · `docs/design_ui_direction.md` — record that the leave dialog uses `showGeneralDialog` with a reduce-gated transition, so the next audit does not read it as an inconsistency.
 
 ---
 
-## 5. Issue 52 — non-hosts get the full carousel, read-only
+## 6. Issue 50 defect 2 — make the double-tap guard real
 
-**What this means for the user:** a non-host currently sees a single folder and has no way to learn the game ships six decks.
+**What this means for the user:** two fast taps on confirm can fire `leaveRoom()` twice. The second call fails harmlessly, but the guard meant to stop it does nothing while reading as though it does.
 
 ### The gap
 
-`lib/widgets/deck_carousel.dart:102–121` early-returns a single centred `_FolderCard` under the label `THE CHOSEN FILE` whenever `widget.isHost` is false. The seven-item `PageView` at lines 123–141 is host-only. The data is fine: six decks in `functions/src/prompt_decks.ts`, mirrored in `lib/utils/prompt_decks.dart:7–126`, plus a synthetic `'custom'` appended at `lobby_screen.dart:339`; the `_familyFriendlyOnly` filter (`lobby_screen.dart:332–340`, default `false` at line 43) removes only the two mature decks and only while the toggle is on.
+`lobby_screen.dart:45` declares `bool _isLeaving = false;`. It is checked at lines 48 and 85, but **only set at line 86 — after `Navigator.of(ctx).pop()` at line 84 has already removed the button** — and reset in a `finally` at line 90. Both checks are unreachable: the outer one cannot be true because a modal dialog covers the `AppBar` button; the inner one cannot be true because the pop is synchronous. The real exposure is two taps landing in the same frame, before the pop is processed.
 
 ### Implementation
 
-**Step 1.** Delete the early return at lines 102–121. Render the same `PageView` for both roles. Keep the `THE CHOSEN FILE` section label above the carousel **for non-hosts only** — the host has no label today and gains none.
+1. Set the flag **before** `Navigator.of(ctx).pop()`.
+2. **Do not reset it in a `finally`** — the screen is being torn down, and a reset re-arms the race the flag exists to prevent.
+3. Keep the check at line 48; it is harmless and covers a future non-modal entry point.
 
-**Step 2.** Suppress every selection affordance when `!widget.isHost`:
-
-- In `_onPageChanged` (lines 79–80), return before `widget.onDeckSelected(newDeckId)`. The server rejects the write anyway (`updateLobbySettings` requires host — `index.ts:1007–1010`) but a rejected callable surfaces a visible error, so the client must not make the call at all.
-- In `_playStampPulse()` (line 86), return immediately when `!widget.isHost`. The stamp reads as *"you just chose this."*
-
-**Step 3.** Badge the host's live choice so a non-host who swipes away still knows what is selected: on the card where `deckId == widget.selectedDeckId`, overlay the text `CHOSEN`. Non-hosts only — the host already has the stamp pulse.
-
-**Step 4.** **Do not yank the page out from under a reader.** When `selectedDeckId` changes from the Firestore stream, a non-host's `PageView` may animate back to the chosen deck **only if the user has not swiped within the last 3 seconds**. Record the last interaction time in `didUpdateWidget`/`_onPageChanged` and compare; reuse the existing `_debounceTimer` field (line 94) rather than adding another timer.
-
-**Step 5.** `custom` stays in the non-host list. The custom-prompt editor (`lobby_screen.dart:428–431`) stays host-gated — **do not expose it.**
+Acceptable alternative: capture a plain `bool tapped` in the dialog builder's closure. If you do, **delete `_isLeaving` entirely** rather than leaving a dead field.
 
 ### Validation
 
-**New file `test/deck_carousel_test.dart`** — it does not exist today. **These tests will hit §1 trap 7 as hard as Issue 50's did** — the carousel lives inside the lobby tree and `_pulseController` is its own animation. Use `await tester.pump(); await tester.pump(const Duration(milliseconds: 500));`, never `pumpAndSettle()`. For swipe assertions, `tester.fling` / `tester.drag` followed by two explicit pumps is the pattern that works here.
+- `"double-tapping confirm leaves exactly once"` — open the dialog, tap confirm **twice with no pump between the taps**, then pump. Assert `fakeFunctions.callableInvocations['handleDisconnect'] == 1`. **Falsifying:** today this records 2.
+- **Over-reach guard:** `"non-host can leave from the lobby"` passes unchanged — a single tap still leaves.
 
-- `"non-host sees every deck"` — assert `find.byType(PageView)` is present with `itemCount == 7`. **Falsifying:** today there is no `PageView` for a non-host, so the finder fails immediately.
-- `"non-host cannot select a deck"` — swipe one page; assert the fake's `updateLobbySettings` was **not** called and the stamp pulse did not run.
-- `"non-host can still see which deck is chosen"` — assert the `CHOSEN` badge is present on the card matching `selectedDeckId`.
-- `"host selection still works"` — **the over-reach guard.** Swiping as host still calls `updateLobbySettings` **exactly once per settled page** and still fires the stamp pulse.
-- **Layout** — 360×640 dp with the carousel present for a non-host; `AppMotion.reduce` renders a static card with no pulse.
+### Blast radius
 
-### Blast radius — same commit
-
-`lib/widgets/deck_carousel.dart` · `lib/screens/lobby_screen.dart` (label/props) · **new** `test/deck_carousel_test.dart` · `docs/design_prompt_system.md` · `docs/design_ui_direction.md` §10.
+`lib/screens/lobby_screen.dart` · `test/lobby_leave_test.dart`.
 
 ---
 
-## 6. Issue 53 — 8-hour Firestore TTL for abandoned rooms
+## 7. Issue 50 defect 3 — replace the fragile test finder
 
-**What this means for the user:** invisible in play. It keeps dead rooms out of production Firestore and stops the small 4-letter code space filling with corpses.
+**What this means for the user:** nothing directly. It protects the guarantee that adding the leave control did not break the sound toggle.
 
 ### The gap
 
-`functions/src/index.ts` exports fourteen callables and **no scheduled or triggered function** — a grep across `functions/src/` for `onSchedule|pubsub|scheduler|onDocument|TTL` returns zero matches. Cleanup is entirely client-driven: the staleness sweep at `game_service.dart:310–328` only runs inside a subscribed client and cannot prune itself (line 317). When the last client closes the app, the room and its `players` subcollection persist indefinitely. Confirmed live on 9 Aug 2026: production room `KVOH` still holds a player document that nothing will ever remove.
+`test/lobby_leave_test.dart:112` finds the sound toggle with `find.byType(IconButton).last`. Since Issue 50 added a `leading:` `IconButton` there are now two, and `.last` silently depends on the order Flutter builds `leading:` versus `actions:`. If that order changes, the guard starts asserting against the *leave* button and passes for the wrong reason.
 
-### ⚠️ Why this interval needs no keepalive — and what would change that
+### Implementation
 
-The TTL is **+8 hours**, revised by the user on 9 Aug 2026 (from +1 h, originally +24 h). **Do not shorten it without re-reading this section.**
-
-Nothing in this system tracks presence. A player document's `expiresAt` is written **once, at join, and never refreshed** — the 10-second heartbeat writes `lastSeen` and only `lastSeen`. Room documents fare a little better, being refreshed by writes that already happen (step 3), but an idle lobby produces **zero** room writes. So the whole scheme rests on a single bet:
-
-> **every realistic session ends before the timer expires.**
-
-At 8 hours that bet always wins. The two gaps that could break it:
-
-| Gap | What it takes to hit | At 8 h |
-|---|---|---|
-| An idle lobby is deleted with players sitting in it | A lobby open, clients connected, no setting changes for the entire window | Unreachable — phones sleep and apps background long before |
-| An active player's document is deleted mid-game | One continuous session, measured from that player's join, longer than the window | Unreachable — a party game does not run for eight hours |
-
-**At +1 hour both gaps are ordinary occurrences**, which is why that interval required a host-only `touchRoom` keepalive callable plus a client timer. At 8 hours that machinery is dead weight, so **it is deliberately absent from this spec — do not add it back.**
-
-**Tripwire:** if the interval is ever shortened below roughly 4 hours, re-derive the table above before writing code. The keepalive design that a short interval would need is preserved in `ongoing_general_errors.md` Issue 53.
-
-### Implementation — backend
-
-**Step 1 — the constant.** Define once, at module scope in `functions/src/index.ts`:
-
-```ts
-const ROOM_TTL_MS = 8 * 60 * 60 * 1000;           // 8 hours — see the interval note above
-const ttlFrom = (now: number) =>
-  admin.firestore.Timestamp.fromMillis(now + ROOM_TTL_MS);
-```
-
-**Do not inline the literal.** The interval is referenced in five places; duplicating it is how three of them go stale, and the interval has already been revised twice.
-
-**Step 2 — write `expiresAt` at creation.**
-- `createRoom` (`index.ts:83–97`) — add `expiresAt: ttlFrom(Date.now())` to the room document.
-- `createRoom` (`index.ts:106`) and `joinRoom` (`index.ts:186`) — add the same to **each player document**. **TTL does not cascade to subcollections**; the `players` collection group needs its own field and its own policy. Skip this and every player document behind a deleted room is orphaned permanently.
-
-**Step 3 — ride-along refresh on existing room writes.** Add `expiresAt: ttlFrom(Date.now())` to the room update already performed by `advancePhaseInternal` (its `nextState` object), `startGame` (`index.ts:389`) and `updateLobbySettings` (`index.ts:1017`). These are existing writes; one extra field costs nothing. Be honest about what this buys at 8 hours: it is **cheap insurance, not load-bearing**. It only matters for a session outliving the window, which the interval note above establishes as unreachable. Include it because it costs nothing and makes a room's lifetime track activity rather than creation — not because anything depends on it.
-
-**Step 4 — `firestore.rules`.** `expiresAt` is **server-owned**. The player update rule at lines 25–28 is a denylist; add `'expiresAt'` to it:
-
-```
-.hasAny(['role', 'totalScore', 'timesFooled', 'playersDeceived', 'isHost', 'joinedAt', 'hasRerolled', 'authUid', 'id', 'expiresAt']);
-```
-
-Nothing refreshes a player document's `expiresAt` after join. That is a deliberate consequence of the interval note above, not an oversight.
-
-### Implementation — client
-
-**None.** Issue 53 is backend-and-rules only. If you are editing `lib/` for this item you have left the spec — the keepalive timer that a shorter interval would have needed is explicitly not part of this build.
-
-### Deployment — out-of-band, not captured by any file in this repo
-
-```bash
-gcloud firestore fields ttls update expiresAt --collection-group=rooms --project=gaslight-46368 --enable-ttl
-```
-
-```bash
-gcloud firestore fields ttls update expiresAt --collection-group=players --project=gaslight-46368 --enable-ttl
-```
-
-Record **both** in `docs/design_database_and_security.md`. Without that note there is no in-repo evidence these policies exist, and a fresh Firebase project silently accumulates rooms forever.
-
-### Accepted limitations — do NOT "fix" these
-
-Chosen knowingly on 9 Aug 2026 (Issue 53, Option B):
-
-- Deletion is **best-effort and may lag expiry**, in Firestore's case by up to 24 hours. An expired room can still be joinable. Not a bug to work around.
-- **The emulator does not enforce TTL.** No automated test can prove deletion happens. Only the writing and refreshing of `expiresAt` is testable — which is exactly why the refresh tests below are mandatory.
+Use a tooltip finder, as the same file already does for the leave control. The sound button's tooltip is `gs.soundEnabled ? 'Mute' : 'Unmute'` (`lobby_screen.dart:471`). Assert the seeded state's tooltip, tap, then assert the **toggled** tooltip — so the finder proves the control flipped rather than merely existing.
 
 ### Validation
 
-**`functions/test/game_e2e.spec.ts`:**
+Temporarily delete the sound toggle from `actions:` and confirm the test goes **red**, then restore it. A finder that cannot fail is not a guard — this project has already shipped two.
 
-- `"writes expiresAt on room and players at creation"` — after `createRoom`, assert the room document's `expiresAt` is a `Timestamp` falling **between 7 h 45 m and 8 h 15 m** in the future, and that **every** player document has one in the same window. **Falsifying:** the field does not exist today, so it fails on `undefined`. Assert the window, not merely that the field is present — a bare presence check would pass a value of `0`.
-- `"refreshes expiresAt on existing room writes"` — capture `expiresAt`, advance a phase, assert the new value is **strictly greater**. Repeat for `startGame` and `updateLobbySettings`.
+### Blast radius
 
-**`functions/test/rules.spec.ts`:**
-
-- `"client cannot write expiresAt on its own player document"` — assert denied.
-- `"client can still write lastSeen alone"` — **the over-reach guard.** Break this and the 10-second heartbeat dies silently, which no client test would catch (§1 trap 6).
-
-**Out-of-band:** `gcloud firestore fields ttls list --collection-group=rooms --project=gaslight-46368` returns the policy.
-
-### Blast radius — same commit
-
-`functions/src/index.ts` (`createRoom`, `joinRoom`, `startGame`, `updateLobbySettings`, `advancePhaseInternal`) · `firestore.rules` · `functions/test/game_e2e.spec.ts` · `functions/test/rules.spec.ts` · `docs/design_database_and_security.md` (the `expiresAt` contract, the 8-hour interval and its rationale, and both `gcloud` commands).
-
-**No client files change for this item** — `lib/` and `test/fake_functions.dart` are untouched by Issue 53.
+`test/lobby_leave_test.dart`.
 
 ---
 
-## 7. Deferred — do NOT start
+## 8. The `depart` glyph — the one gate a green suite cannot satisfy
 
-| Item | Trigger that would revive it |
-|---|---|
-| **Issue 53 Option A — scheduled cleanup function** | The 8-hour TTL proves insufficient, or orphaned `players` documents appear despite the second policy. |
-| **The `touchRoom` keepalive callable + 5-minute client timer** | **The TTL interval is shortened below roughly 4 hours.** Designed and costed on 9 Aug 2026 for the briefly-selected 1-hour interval; removed when the interval moved to 8 h. Do not build it at the current interval — see §6's interval note. |
-| **Issue 50 Option C — `PopScope` for system back / edge-swipe** | Playtesters reach for the back gesture and report nothing happens. The `AppBar` control ships first. |
+**Status: still unmet.** `0xe674` was committed in `a7f1d19` and has **never been seen rendering.**
 
----
+The vendored `Phosphor-Light.ttf` has a `post` table at version 3.0, which stores no glyph names, so nothing in this repo can map a name to a codepoint. A cmap presence check is worthless here — the font's cmap spans `0x0020–0xFFFD`, and three unrelated candidate codepoints all tested PRESENT on August 9, 2026. **Presence is not identity.** A wrong codepoint renders a plausible-but-wrong glyph or an empty box, and no widget test in this project can detect either (trap 5).
 
-## 8. Validation standard
+```bash
+flutter build ios --simulator --debug
+```
 
-**For a fix: write validation that fails against the broken state, and observe it fail.** Issue 31 is the model — rebuilt from pre-fix source, the suite reported `expected null to equal 3` and `expected 'INTERNAL' to equal 'FAILED_PRECONDITION'`. **Record the observed failure output in the Resolved entry.**
-
-**A test's name is not a test.** A test titled *"…rim contrast >= 4.5:1"* asserted only that a file was non-empty, and the mascot shipped at **1.02:1** — invisible — with a fully green suite. Read the assertion, not the title.
-
-**A check that cannot fail is not a check.** The cmap presence script in §4 passes for essentially any codepoint in this font. Before trusting a verification, establish what it would take for it to fail.
-
-**Some correctness is invisible to the harness.** `Image.asset` loads nothing under `flutter test`; a wrong icon codepoint renders as tofu. Verify the artefact directly, or on a simulator.
-
-**Measure; do not estimate.** A layout overflow estimated at ~275 dp measured **593 dp**.
-
-**Do not tune a threshold to make a test pass.** Report the measured number and say the guard failed.
-
-**A criterion can be confidently wrong.** Two tests once required `beak_open` to place 40–50% of its pixels outside the body silhouette; that does not measure an open beak, and the art that reads correctly sits at 14.6%. Before lowering a threshold, establish which is wrong — the artefact or the criterion.
-
-**Pair every fix assertion with an over-reach guard.** Each item in §3–§6 names its own.
+Install on a booted simulator, open a lobby, confirm the leading icon reads as a door / sign-out arrow. If not, try `0xe668`, then source the correct value from upstream Phosphor. **Record what you actually saw.** This box may not be ticked from a green suite.
 
 ---
 
-## 9. Running 3 simulators for multiplayer testing
+## 9. Running 3 simulators — required by §3 check 3
 
-Bots are server-seeded documents and never exercise the non-host **client** path. Anything that must be correct for a second human needs a real second client.
+Bots are server-seeded documents and never exercise the non-host client path.
 
 ```bash
 xcrun simctl boot "iPhone 17"; xcrun simctl boot "iPhone 17 Pro"; xcrun simctl boot "iPhone Air"; open -a Simulator
@@ -514,86 +344,92 @@ flutter build ios --simulator --debug
 for U in $(xcrun simctl list devices booted | grep -oE '[0-9A-F-]{36}'); do xcrun simctl install "$U" build/ios/iphonesimulator/Runner.app; xcrun simctl launch "$U" com.whylabs.gaslight; done
 ```
 
-Must be `--debug`: `lobby_screen.dart` passes `debugEnabled: kDebugMode` and the server refuses debug calls when false. **DEBUG: ADD 9 BOTS** is host-only and adds 9 unconditionally.
-
-To clear a device's room memory, `xcrun simctl uninstall <UDID> com.whylabs.gaslight` — the room code lives in `SharedPreferences` and survives a relaunch.
-
-For local play against the emulator set `USE_EMULATOR=true` in `.env` and rebuild — `.env` is bundled as an asset. **`USE_EMULATOR` must be `false` in any tester build.**
+Must be `--debug`: `lobby_screen.dart` passes `debugEnabled: kDebugMode` and the server refuses debug calls when false. To clear a device's room memory, `xcrun simctl uninstall <UDID> com.whylabs.gaslight` — the room code lives in `SharedPreferences` and survives relaunch. **`USE_EMULATOR` must be `false` in `.env` for §3's production checks**, and `.env` is a bundled asset, so changing it requires a rebuild.
 
 ---
 
 ## 10. Already delivered — do NOT rework
 
-**Issues 1–49, Tasks T1–T11.** Points bearing on current work:
+Verified in source on August 10, 2026 at `56c183a` — read, not inferred from commit messages:
 
-- **T6–T11 — the mascot is finished.** Ten transient poses are pre-rendered 256 px sprite sheets built by `scripts/build_sprite_sheets.py`, whose `POSE_REGISTRY` is the single source of truth for frame counts and grids; `_poseSheets` in `lib/widgets/raven_mascot.dart` must agree with it and `flutter test` T6.2 enforces that by parsing the Dart. `idle` and `sleep` deliberately stay on the layered renderer. **Two renderers coexist by design — do not unify them.**
-- **`RavenPoseHost.playRavenPose` takes a required `onceKey`**, because Firestore streams rebuild constantly and a bare `if (condition)` re-fires the pose every tick. The same hazard governs Issue 51's eviction message — §3 step 8.
-- **Issue 31** — settings no longer wipe each other. The server uses loose `!= null`; **never "simplify" it to a falsy check**, because `false` and `0` are legitimate values.
-- **Issues 28/29** — `phosphor_flutter` can never be used (`IconData` is a `final class`, proven twice). The app vendors the Phosphor Light font. **T2** — `cupertino_icons` deliberately absent.
-- **Task T3** — `test/helpers/png_decoder.dart` decodes palette-indexed PNGs and computes WCAG contrast. Reuse it rather than writing another decoder.
+- **Issue 51** (`5bb9d2c`) — branch ordering confirmed correct: `hasCard` at `functions/src/index.ts:741`, the lobby-host close branch at 744 returning at 749, `!hasCard` at 753. **The lobby branch must precede `!hasCard`** — a host in the lobby satisfies both, and reversing them silently reinstates the original bug.
+- **Issue 52** (`09ed9a9`) — one `PageView` serves both roles (`deck_carousel.dart:133`); `onDeckSelected` suppressed at 102, stamp pulse at 115; `CHOSEN` badge at 174; `THE CHOSEN FILE` label at 215; 3-second snap-back via `_lastSwipeTime` (36, consulted 83–91). Contract in `design_prompt_system.md` §67–70.
+- **Issue 53 code** (`f2d89f3`) — `ROOM_TTL_MS` at `index.ts:14`, `ttlFrom()` at 16, `expiresAt` at ten sites, `'expiresAt'` in the `firestore.rules:28` denylist.
+- **Issue 54** — both Firestore TTL policies applied and verified `state: ACTIVE` on `rooms` and `players`. **Do not re-run the enable commands.**
+- **Issues 1–49, Tasks T1–T11** — the mascot programme is finished. `POSE_REGISTRY` in `scripts/build_sprite_sheets.py` is the single source of truth for frame geometry; two renderers coexist by design.
+- **Issue 31** — the server uses loose `!= null`; **never "simplify" to a falsy check** — `false` and `0` are legitimate values.
+- **Issues 28/29** — `phosphor_flutter` can never be used (`IconData` is a `final class`, proven twice); the app vendors the Phosphor Light font.
 
-**Release plumbing — do not revert:** bundle ID `com.whylabs.gaslight` · Firebase iOS app `1:184580940908:ios:e79d100cc1231a8f022449`, project `gaslight-46368` · iOS deployment target **15.0** · Node **22** · `ITSAppUsesNonExemptEncryption = false` · `GoogleService-Info.plist` required on disk but gitignored · `.env` ships inside the IPA.
+**Release plumbing — do not revert:** bundle ID `com.whylabs.gaslight` · Firebase project `gaslight-46368` · iOS deployment target **15.0** · Node **22** · `.env` ships inside the IPA.
 
 ---
 
-## 11. Accepted equivalents — do NOT "fix" back
+## 11. Validation standard
 
-- **Craft SUBMIT is in-flow** under the text field (M5); **Vote's CONFIRM** is bottom-anchored via `Expanded`+`SafeArea`.
-- **Reactions send raw emoji strings**; medallions are render-side only (V5).
-- **Entry-form logo uses `SizedBox` + `FittedBox`**, not `Transform.scale`.
+**Write validation that fails against the broken state, and observe it fail.** Record the observed output in the Resolved entry — Issues 51, 53 and 54 all did, and their entries are the model.
+
+**A test's name is not a test.** A test titled *"…rim contrast >= 4.5:1"* asserted only that a file was non-empty; the mascot shipped at **1.02:1** with a fully green suite.
+
+**A check that cannot fail is not a check.** Three instances: the cmap presence script, `find.byType(IconButton).last`, and a bare `find.byType(FadeTransition)` — which is why §5 specifies `find.ancestor`.
+
+**A green suite is not delivery, and "Resolved" is not "live."** Issues 51 and 53 were green, verified and Resolved while production ran a two-day-old build. **Ask what your gates structurally cannot observe** — §3 and §4 exist entirely inside that blind spot, which is why both are validated against the real environment rather than a test.
+
+**Measure; do not estimate.** A layout overflow estimated at ~275 dp measured **593 dp**.
+
+**Do not tune a threshold to make a test pass.** Report the measured number and say the guard failed.
+
+**Pair every fix assertion with an over-reach guard.**
+
+---
+
+## 12. Accepted equivalents — do NOT "fix" back
+
+- **Leaving a room does not call `Navigator` explicitly.** `lobby_screen.dart` gates the waiting room on `gs.gameState != null && gs.currentPlayer != null` and otherwise falls through to `_buildEntryForm`, so clearing local state re-renders the entry form in place. Same guarantee, different structure — **do not add a redundant `pushReplacement`.** This is also why the `gs.currentPlayer!` deref below it is safe.
+- **The non-host carousel is interactive-but-inert, not dimmed.** Elsewhere non-host gating uses `IgnorePointer` + `Opacity(0.5)`; the carousel deliberately departs because its purpose is to be read.
+- **`pumpAndSettle()` and `pump()` + `pump(500ms)` are both acceptable** once `accessibleNavigation: true` is set.
+- **Craft SUBMIT is in-flow** under the text field; **Vote's CONFIRM** is bottom-anchored via `Expanded`+`SafeArea`.
 - **`isSmallHeight` uses a `< 700` dp breakpoint** with a 6/8/12/16/20 spacing scale.
-- **House Rules non-host gating uses `IgnorePointer` + `Opacity(0.5)`.** **Issue 52 deliberately departs from this pattern** for the deck carousel — it becomes interactive-but-inert rather than dimmed, because its purpose is to be read. Do not "restore consistency" by dimming it.
-- **The mascot's head tilt is whole-body**, a deliberate simplification for a single-silhouette design.
-- **Leaving a room does not call `Navigator` explicitly.** `lobby_screen.dart:369` gates the waiting-room render on `gs.gameState != null && gs.currentPlayer != null` and otherwise falls through to `_buildEntryForm` (line 385), so clearing local state re-renders the entry form in place. Same guarantee as "route to the entry screen", different structure — **do not add a redundant `Navigator.pushReplacement` after `leaveRoom()`.** This is also why `gs.currentPlayer!` at line 389 is safe.
 
 ---
 
-## 12. Intentional decisions / invariants — do NOT change
+## 13. Intentional decisions / invariants — do NOT change
 
-- **Server-authoritative:** clients read Firestore streams; all mutations go through callables; `firestore.rules` denies client room writes. A player's own `lastSeen` heartbeat is the single sanctioned client write — **`expiresAt` is not, by §6 step 4.**
+- **Server-authoritative**; `firestore.rules` denies client room writes. `lastSeen` is the only sanctioned client write; `expiresAt` is server-owned.
 - **Portrait-locked on phones**; **text scale clamped 1.0–1.3**.
 - **Duplicate-answer check is a lexical heuristic**, mirrored byte-identically in `functions/src/text_similarity.ts` ↔ `lib/utils/text_similarity.dart`.
 - **The `_advancedStateKeys` / once-per-event guards** survive Firestore-stream rebuilds — **never remove them.**
-- **`ThematicIcon` is the single public icon entry point.** Issue 50 adds an enum member; it does not add a second icon mechanism.
-- **`_familyFriendlyOnly` is client-local and never synced** (Issue 30 Option C explicitly declined).
-- **`RavenMascot`'s constructor signature (`state`, `size`) is fixed**, and `playRavenPose`'s `onceKey` stays required.
-- **"Forgery Rounds" maps to `sabotageAnswersCount`.**
-- **Declined, do not re-propose:** P7 (Confidence Wager), P9 (House Cards), P11 (The Final Gambit), Issue 30 Option C, Issue 34 Option C.
+- **`ThematicIcon` is the single public icon entry point.**
+- **`_familyFriendlyOnly` is client-local and never synced.**
+- **`playRavenPose`'s `onceKey` stays required.**
+- **`ROOM_TTL_MS` is 8 hours.** No keepalive is needed at that interval. **If it is ever shortened below roughly 4 hours, a host-only `touchRoom` keepalive callable plus a client timer become mandatory** — an idle lobby writes nothing, and a player document's `expiresAt` is never refreshed after join. That design is recorded in `ongoing_general_errors.md` Issue 53.
+- **Declined, do not re-propose:** P7, P9, P11, Issue 30 Option C, Issue 34 Option C.
 
 ---
 
-## 13. Where the contracts live
-
-`ongoing_general_errors.md` is the live queue plus the traps that still bite — **not** a history. Do not re-expand it with delivered work; record outcomes in the design doc that owns the behaviour.
+## 14. Where the contracts live
 
 | What | Where |
 |---|---|
 | Open queue, selections, live traps | `docs/ongoing_general_errors.md` |
 | Full history of any resolved item | `git log` |
-| Backend write contract, rules, identity, disconnect/host handoff | `design_database_and_security.md` — **§7 is the `null` ≠ absent contract; §4–§5 gain Issue 51's phase gate plus the `expiresAt` contract and its 8-hour rationale** |
+| Backend writes, rules, identity, disconnect/host handoff, **TTL §6** | `design_database_and_security.md` |
 | Card passing, disconnect recalculation, input validation | `design_rotation_engine.md` §5 |
 | Scoring, routing, gameplay programme | `design_scoring_and_ui.md` §4 |
-| Palette, typography, motif, icons, mascot, UI programme | `design_ui_direction.md` — **§7 gains `depart`; §10 gains the non-host carousel** |
-| Prompt decks · duplicate answers | `design_prompt_system.md` · `design_semantic_integrity.md` |
-| PNG decoding / contrast helper | `test/helpers/png_decoder.dart` |
-| Mascot pose pipeline | `.agents/skills/mascot_pose_creation/SKILL.md` |
+| Palette, typography, icons (**`depart`, §129**), mascot, dialog motion | `design_ui_direction.md` |
+| Deck catalogue and **non-host carousel contract §67–70** | `design_prompt_system.md` |
 | Doc / commit / bug-filing conventions | `.agents/skills/` |
 
 ---
 
-## 14. Feedback loop — what past specs got wrong
+## 15. Feedback loop — what past specs got wrong
 
-- **Changing a constant can change the architecture — and changing it back can un-change it.** The TTL moved 24 h → 1 h → 8 h in a single day. At 1 h the window no longer fit inside a realistic session, which forced a keepalive callable and a client timer into the design; at 8 h that machinery became dead weight and was deleted again. **When a spec tightens a time budget, re-derive which mechanisms still satisfy it — and when it loosens again, remove what the tight version required instead of leaving it in as "defensive".**
-- **Two safe changes can compose into an unsafe one.** Issue 51 (deletion evicts clients) and Issue 53 (delete on a timer) are each correct alone. At the briefly-selected 1-hour interval they combined to throw live players out of a running game — a failure neither item's own spec described, and the reason §6 now carries an explicit interval note rather than a bare constant. **When two queued items touch the same state, write down what happens once both have shipped.**
-- **"Handle disconnects" did not say *in which phase*.** The result is Issue 51: a function correct in four phases that silently corrupts the fifth. **Name the state space a rule applies to, and what happens in each part of it.**
-- **"Listen to the room" did not say what a *deleted* room means.** `if (snapshot.exists)` with no `else` looks complete and is not. **When specifying a listener, specify the absent case.**
-- **A hang is not a failure, and confusing the two costs a cycle.** `pumpAndSettle()` on an animated screen produces no assertion output at all — just `did not complete` after minutes of silence, which reads like a logic bug in the code under test. **When a test emits no assertion output whatsoever, suspect the pump strategy before the production code.** Check what the neighbouring tests in the same directory do before inventing a harness approach.
-- **A verification that cannot fail is not a verification.** The cmap presence check reads as rigorous and passes for nearly any input.
-- **A test's name is not a test.** A contrast test once asserted only that a file was non-empty.
-- **Approval gates get skipped under momentum.** Artwork shipped unseen because sign-off lived in a checklist. State gates inline, marked blocking.
-- **A cross-language `undefined` check is not a null check.**
-- **Resolution is not compilation.** A package that resolves may still fail to build.
-- **Layout overflow must be measured, not estimated** — estimated ~275 dp, measured **593 dp**.
+- **"Resolved" is not "deployed."** Issues 51 and 53 were implemented, tested, verified in source and recorded as Resolved while production ran a two-day-old build. Every gate passed; none could observe a deployment. **A Definition of Done for backend work must include a check against the real environment.**
+- **Enabling a thing is not the same as the thing working.** The TTL policies went `ACTIVE` and deleted nothing, because the field they key on was never written in production and legacy documents lack it entirely. **When you turn something on, verify the input it consumes actually exists.**
+- **A convenience the tooling normally provides may be absent here.** `firebase.json` has no `predeploy` hook, so the build step every Firebase TypeScript project takes for granted is manual — and skipping it ships stale code with a success message. **Check the config; do not assume the default.**
+- **Defects filed before a commit do not fix themselves.** All three Issue 50 defects were written into this guide *before* `a7f1d19` and shipped unchanged, because the tests went green and green read as done.
+- **A confident diagnosis can be wrong in the same direction twice.** `pumpAndSettle` was blamed and banned; the real cause was the missing `accessibleNavigation` flag. **Before writing a prohibition into a guide, find the counter-example that would disprove it.**
+- **An accommodation implemented against the wrong axis is a regression.** §5's `barrierDismissible: !reduceMotion` reads as accessibility work and takes a capability away from the users it names. **Name the property a flag is supposed to change, and check the implementation changes that property.**
+- **Name the state space a rule applies to** ("handle disconnects" did not say *in which phase* — that was Issue 51), and **when specifying a listener, specify the absent case** (`if (snapshot.exists)` with no `else`).
 
 ---
 
@@ -602,30 +438,36 @@ For local play against the emulator set `USE_EMULATOR=true` in `.env` and rebuil
 ```
 (1) STUDY the item here + the rejected options in ongoing_general_errors.md + the
     exact files at the cited anchors (re-grep; line numbers drift).
-(2) IMPLEMENT exactly as specified. Copy strings verbatim.
-(3) VALIDATE per §8. Observe the falsifying assertion fail against the broken state
+(2) IMPLEMENT exactly as specified. Copy strings verbatim; paste, do not retype.
+(3) VALIDATE per §11. Observe the falsifying assertion fail against the broken state
     before you fix it, and record that output. Run the item's over-reach guard.
-    For anything the harness cannot see, check a simulator. Then the full §1 battery.
-(4) BLOCKED or impossible? STOP. File it in ongoing_general_errors.md with options
+    For anything the harness cannot see — deploys, glyphs, art — check the real thing.
+    Then the full §1 battery.
+(4) BEFORE COMMITTING, re-read this guide's open defect list for the item you are
+    finishing. Green tests are not evidence that a filed defect was addressed.
+(5) BLOCKED or impossible? STOP. File it in ongoing_general_errors.md with options
     and a `Your selection: _____` line. Do NOT re-choose on the user's behalf.
-(5) RECORD: move the issue to Resolved (Problem / Solution / Validation) including
-    the observed failure output. Sync any design doc whose behaviour changed.
-(6) COMMIT: one issue = one Conventional Commit, WHY in the body.
+(6) RECORD: move the issue to Resolved (Problem / Solution / Observed Falsifying
+    Output / Over-reach Guard). Sync any design doc whose behaviour changed.
+(7) COMMIT: one item = one Conventional Commit, WHY in the body.
 ```
 
 ---
 
 ## Definition of Done
 
-- [ ] **Issue 51** — host leaving a lobby deletes the room *and* every player document; the lobby branch precedes the `!hasCard` branch; in-game host transfer still works; the client's room listener handles deletion and evicts with **"The host has left. This room has closed."**, gated by a once-per-event key.
-- [ ] **Issue 50** — `leading:` leave control in the lobby `AppBar`, both dialog copy variants verbatim, `leaveRoom()` called exactly once on confirm, sound toggle untouched.
-- [ ] **The `depart` glyph seen rendering on a simulator.** A tofu box passes every automated test in this project. This checkbox may not be ticked from a green suite.
-- [ ] **Issue 52** — non-hosts get all 7 cards, cannot select, cannot trigger the stamp pulse, see the `CHOSEN` badge, and are not page-yanked within 3 s of swiping; the host path is unchanged.
-- [ ] **Issue 53** — `ROOM_TTL_MS` defined once at **8 hours**; `expiresAt` written at creation on rooms *and* players and asserted to land in a window, not merely to exist; refreshed on existing room writes; `expiresAt` in the `firestore.rules` denylist with the `lastSeen`-still-allowed guard passing; **both** `gcloud` TTL policies applied and recorded. **No `touchRoom`, no client timer, no changes under `lib/`.**
-- [ ] Every item's **falsifying assertion was observed to fail** against the broken state, with the output recorded in its Resolved entry.
-- [ ] Every item's **over-reach guard passes** before and after.
-- [ ] Three-simulator playthrough: host leaves a lobby → both non-hosts evicted with the right message; a non-host leaves → the room survives and the host sees them go; a full game completes end to end. **Do not try to wall-clock the 8-hour TTL** — instead confirm in the Firebase console that a freshly created room and each of its player documents carries an `expiresAt` roughly eight hours out.
-- [ ] Full battery at or above the §1 bar: `flutter analyze lib test` **0 errors** · `flutter test` **≥ 106 + new** · functions build clean · `npm --prefix functions test` **≥ 31 + new**.
-- [ ] `flutter build ios --release --no-codesign` run and `Runner.app` size **measured and recorded** — the 47.7 MB figure in §1 is stale and must not be quoted.
-- [ ] Issues 50–53 moved to Resolved in `ongoing_general_errors.md`; design docs synced per each item's blast radius.
-- [ ] **Guide rewritten** to `Queue Complete` or the next queue. If the queue is empty: **do not invent work.** The only legitimate triggers are a §7 deferred item's trigger firing, or a new user-selected issue.
+- [ ] **§3 step 1** — `predeploy` hook added to `firebase.json` and committed **before** the deploy.
+- [ ] **§3** — functions and rules deployed; `gcloud functions list` shows **all 14** updated today, with the before/after tables recorded. A single row still reading `2026-08-07` means the item is not done.
+- [ ] **§3 check 2** — a room created against production carries `expiresAt` on **both** the room and the host player document, roughly 8 hours ahead.
+- [ ] **§3 check 3** — the three-simulator host-leaves test recorded **before and after** the deploy, showing the bug reproducing first and the eviction copy appearing second.
+- [ ] **§3 check 4** — a client write of `expiresAt` is denied while a `lastSeen`-only write succeeds.
+- [ ] **§4** — `.gitignore` gains the three credential patterns; `scripts/backfill_expires_at.js` committed; `--dry-run` counts recorded before and after, with the after count **0 at both the room and player level**; skip counts recorded.
+- [ ] **§4 ordering** — the backfill ran only after §3 was verified live.
+- [ ] **§5** — `showGeneralDialog` with unconditional `barrierDismissible`, `barrierLabel` from `MaterialLocalizations`, `barrierColor: Colors.black54`, `transitionDuration` gated on `AppMotion.reduce`. Tests A and B **observed failing first**, output recorded; the reduce-off over-reach guard passes; existing copy assertions pass **unedited**.
+- [ ] **§6** — `_isLeaving` set before `Navigator.pop()` and never reset; double-tap test observed recording 2 first, then 1.
+- [ ] **§7** — sound-toggle guard uses a tooltip finder, observed going red when the toggle was temporarily removed.
+- [ ] **§8 — the `depart` glyph seen rendering on a simulator, with what you saw written down.** This box may not be ticked from a green suite.
+- [ ] Full battery at or above the §1 bar: `flutter analyze lib test` **0 errors** · `flutter test` **≥ 117 + new** · functions build clean · `npm --prefix functions test` **36/36**.
+- [ ] `flutter build ios --release --no-codesign` re-run and `Runner.app` size measured — 49.5 MB is inherited, not re-verified.
+- [ ] Issues 50, 55 and 56 moved to Resolved with observed output; `design_database_and_security.md` §6 records the one-time migration.
+- [ ] **Guide rewritten** to `Queue Complete` or the next queue. If the queue is empty: **do not invent work.** The only legitimate triggers are a user-selected issue or a §13 invariant's stated trigger firing.

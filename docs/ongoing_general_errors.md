@@ -10,21 +10,42 @@
 
 ## 1. Open & in-flight
 
-**Queue Complete — all 4 Lobby Lifecycle wave issues resolved (August 10, 2026).**
+**Queue Complete — all active Lobby Lifecycle wave issues delivered, backfilled, and deployed (August 10, 2026).**
 
 ---
 
 ## 🧪 Resolved Issues & Implementation Refinements
 
-8. **Issue 53: 8-Hour Firestore TTL Policy (Resolved - August 10, 2026)**:
-   - **Problem**: Rooms and player documents persisted indefinitely in production Firestore after clients abandoned them.
-   - **Solution**: Defined `ROOM_TTL_MS = 8 * 60 * 60 * 1000` (8 hours) and helper `ttlFrom(nowMs)` in `functions/src/index.ts`. Written `expiresAt: ttlFrom(nowMs)` at creation on room and host player documents in `createRoom`, on joining/rejoining player documents in `joinRoom`, and refreshed on room updates (`startGame`, `updateLobbySettings`, `advancePhaseInternal`). Added `'expiresAt'` to field write denylist in `firestore.rules`, enforcing backend-only write authority for TTL timestamps while keeping client `lastSeen` updates allowed.
-   - **Observed Falsifying Output**:
-     ```text
-     1) Issue 53: 8-Hour Firestore TTL Policy writes expiresAt on room and players at creation within a +-5-second window:
-        AssertionError: expected undefined to have property 'expiresAt'
-     ```
-   - **Over-reach Guard**: Verified client updates to `lastSeen` on player documents still succeed while client updates supplying `expiresAt` are rejected by security rules (`functions/test/rules.spec.ts`). Documented production `gcloud firestore fields ttls update` commands in `docs/design_database_and_security.md`.
+9. **Issue 55: Cloud Functions & Security Rules Production Deployment (Resolved - August 10, 2026)**:
+   - **Problem**: Production Cloud Functions had not been deployed since August 7, leaving the Issue 51 host-leave fix un-deployed and the Issue 54 TTL policies inert.
+   - **Solution**: Added `"predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]` hook to `firebase.json` (`696c69e`). Preflighted `npm --prefix functions test` (36/36 passing) and deployed functions + rules to `gaslight-46368` (`npx firebase-tools deploy --only functions,firestore:rules --project gaslight-46368`).
+   - **Observed Before / After**: Before: all 14 functions read `2026-08-07T05:20`. After: all 14 functions read `2026-08-10T05:07`.
+   - **Over-reach Guard**: Created room in production and verified `expiresAt` timestamp set on both room and player documents ~8h ahead; verified security rules deny client writes of `expiresAt`.
+
+10. **Issue 56: One-time Backfill of `expiresAt` on Legacy Documents (Resolved - August 10, 2026)**:
+    - **Problem**: Room and player documents created prior to the Issue 55 deployment lacked `expiresAt` timestamps and were permanently exempt from Firestore TTL policies.
+    - **Solution**: Added key patterns to `.gitignore` (`*serviceAccount*.json`, `*-adminsdk-*.json`, `*.pem`). Created `scripts/backfill_expires_at.js` using Application Default Credentials (`5e7ae78`). Queried `rooms` collection and `players` collectionGroup, identifying documents missing `expiresAt` while skipping active rooms (`lastSeen < 24h`). Executed `--apply` batch update across 724 documents (97 rooms, 627 players) setting `expiresAt = now + 1h`.
+    - **Observed Falsifying Output**:
+      ```text
+      --- SUMMARY ---
+      Rooms missing expiresAt: 97 (Already set: 0, Skipped active: 1)
+      Players missing expiresAt: 627 (Already set: 0, Skipped active: 1)
+      Executing --apply for 724 total documents...
+      Committed batch 1 (400 docs).
+      Committed batch 2 (324 docs).
+      ```
+    - **Over-reach Guard**: Re-ran `--dry-run` and confirmed **0 remaining documents missing `expiresAt`** across both `rooms` and `players` collectionGroup.
+
+11. **Issue 50: Leave Control Motion Path, Double-tap Guard, and Test Finder (Resolved - August 10, 2026)**:
+    - **Problem**: `barrierDismissible: !reduceMotion` caused reduce-motion users to lose barrier dismissal while `showDialog` inserted `FadeTransition`. Double-tap guard `_isLeaving` was set after `Navigator.pop()` and reset in `finally`. Test finder `find.byType(IconButton).last` was fragile.
+    - **Solution**: Refactored `_confirmLeave` in `lib/screens/lobby_screen.dart` to use `showGeneralDialog` with `barrierDismissible: true` unconditionally, `barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel`, `barrierColor: Colors.black54`, `transitionDuration: reduce ? Duration.zero : const Duration(milliseconds: 150)`, and `transitionBuilder` returning static `child` under `AppMotion.reduce` (`eb14c11`). Set `_isLeaving = true` before `Navigator.pop()` without resetting in `finally`. Updated `test/lobby_leave_test.dart` sound toggle finder to `find.byTooltip('Mute')`/`'Unmute'`.
+    - **Observed Falsifying Output**:
+      ```text
+      ══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+      reduce-motion users can still dismiss by tapping outside [E]: Expected no matching candidates, Actual: Found 1 widget with text "Leave this room?"
+      no transition widget is inserted under reduced motion [E]: Expected no matching candidates, Actual: Found 1 widget with type "FadeTransition"
+      ```
+    - **Over-reach Guard**: Verified motion-off test (`accessibleNavigation: false`) finds `FadeTransition` ancestor; verified double-tapping confirm leaves room exactly once (`handleDisconnect` calls == 1); all 7 `lobby_leave_test.dart` tests pass cleanly.
 
 ---
 
@@ -42,6 +63,10 @@
    - **Problem**: Transform-based layer motion (`Transform.translate/rotate/scale`) produced rigid movement lacking secondary feather ruffling, squash, and stretch.
    - **Solution**: Converted all 10 transient poses (`ruffle`, `startle`, `hop`, `peck`, `bow`, `alert`, `preen`, `fly`, `flap`, `caw`) to pre-rendered 256×256 px grid sprite sheets generated deterministically via `scripts/build_sprite_sheets.py`. Implemented dual-renderer architecture in `lib/widgets/raven_mascot.dart`: resting states (`idle`, `sleep`) remain on the layered `Stack` renderer for stochastic eye blinking and head tilts, while transient action poses render via `CustomPaint` `drawImageRect` using `(actionT * frames).floor().clamp(0, frames - 1)` frame indexing math with precached `ui.Image` handles and proper `.dispose()` teardown. Verified frame index math, `round()` off-by-one guard failure, asset dimensions, alpha channel presence, rim contrast ($\ge 7.70:1$ vs `#14110E`), and memory budget (< 20 MB total across all 10 sheets, < 12 MB active screen set). Total iOS app size measured at **46.0 MB**.
 
+4. **Task T8 — Re-authored Wing & Beak Art & Pose Rebuild (Resolved - August 8, 2026)**:
+   - **Problem**: In Task T7, `preen`, `fly`, `flap`, and `caw` were re-authored as silhouette motion, but the wings still did not flap and the beak still did not open because the original `wing_up.png` and `beak_open.png` layer art sat almost entirely inside `body.png`'s silhouette (`wing_up` only 7% outside, `beak_open` 0% outside).
+   - **Solution**: Generated genuine raised wing (`wing_up.png`) and lifted upper mandible (`beak_open.png`) layer art extending into empty canvas space above the flank and head across 1x, 2.0x, and 3.0x densities (`scripts/generate_raven_layers.py`). Enforced non-negotiable layer mass and outside silhouette share assertions in `test/raven_mascot_test.dart` (`wing_up`: 2,411 px mass $\ge 1,200$ px, 71.8% outside share $\ge 40\%$; `beak_open`: 578 px mass $\ge 300$ px, 56.9% outside share $\ge 50\%$). Rebuilt sprite sheet sequences for `flap` (two-frame `wing` $\leftrightarrow$ `wing_up` swap with body bob), `fly` (`wing` $\rightarrow$ `wing_up` sweep with crouch), `preen` (wing tilt toward body within $|wing\_rot| \le 0.12$ rad), and `caw` (`beak_open` overlay with head thrust). Rendered preview stills and animated GIFs (`scripts/build_previews.py`). Total iOS release app size measured at **47.7 MB**. All 99 client tests and 31 backend tests pass clean.
+
 5. **Issue 51: Host Lobby Exit Room Closure (Resolved - August 9, 2026)**:
    - **Problem**: When a host left a lobby, `handleDisconnect` (`functions/src/index.ts`) checked `hasCard = room.cards.some(...)` and returned early before reaching host transfer, leaving player documents intact without a host. Furthermore, `GameService.dart` lacked an `else` branch in its room snapshot listener, stranding remaining clients in an unstartable, inescapable lobby without notice.
    - **Solution**: Implemented Option A phase-gating in `handleDisconnect`: if `disconnectedPlayer?.isHost === true` and `currentPhase === "lobby"`, all player documents and the room document are deleted in transaction, returning `{ success: true, roomClosed: true }`. In `GameService.dart`, extracted `_clearLocalRoomState()`, updated room listener to set `_roomClosed = true` on room deletion (`else if (_gameState != null)`), and added post-frame SnackBar eviction notice in `LobbyScreen` (`"The host has left. This room has closed."`).
@@ -54,6 +79,45 @@
         +true
      ```
    - **Over-reach Guard**: Verified in-game host transfer (`currentPhase !== "lobby"`) still transfers host to earliest-joined active player without closing room in both TS E2E and Dart unit suites (`test/room_closed_test.dart`).
+   - **Verification (August 10, 2026)**: Branch ordering confirmed correct in source — `hasCard` computed at `functions/src/index.ts:741`, the lobby-host close branch at 744 returning at 749, and the `!hasCard` branch at 753. The lobby branch precedes the `!hasCard` branch, which is the ordering the spec required; reversing it would silently reinstate the original bug.
+
+6. **Issue 52: Read-Only Deck Carousel for Non-Hosts (Resolved - August 9, 2026)**:
+   - **Problem**: `lib/widgets/deck_carousel.dart` returned early whenever `widget.isHost` was false, rendering a single centred `_FolderCard` labelled `THE CHOSEN FILE`. Non-hosts could therefore never discover that the game ships six thematic decks plus a custom option; the seven-item `PageView` was host-only. Both deck registries were complete and correctly mirrored, so nothing was missing or mis-filtered — the catalogue was simply unreachable for anyone but the host, which caused it to be reported as "there is only one deck."
+   - **Solution**: Removed the non-host early return so both roles render the same `PageView` (`deck_carousel.dart:133`). Suppressed every selection affordance for non-hosts: `_onPageChanged` returns before invoking `widget.onDeckSelected` (line 102) and `_playStampPulse` returns immediately (line 115), so a non-host swipe neither calls `updateLobbySettings` nor fires the stamp animation. Badged the host's live selection with an oxblood/brass `CHOSEN` overlay on the matching card (line 174) and retained the `THE CHOSEN FILE` section label for non-hosts only (line 215). Added a 3-second interaction guard: `_lastSwipeTime` (line 36) is stamped on every page change and consulted in `didUpdateWidget` (lines 83–91), so a stream-driven `selectedDeckId` change animates the page back only when the user has not swiped recently — otherwise the page is left where the reader put it.
+   - **Over-reach Guard**: Host behaviour asserted unchanged in `test/deck_carousel_test.dart` — swiping as host still calls `updateLobbySettings` once per settled page (400 ms debounce) and still fires the stamp pulse.
+   - **Design contract**: Recorded in `docs/design_prompt_system.md` §67–70 (host view, non-host read-only view, `CHOSEN` badge, 3-second swipe protection).
+
+7. **Issue 53: 8-Hour Firestore TTL Policy — code (Resolved - August 10, 2026)**:
+   - **Problem**: Rooms and player documents persisted indefinitely in production Firestore after every client abandoned them. No scheduled or triggered function existed, and the client staleness sweep only runs inside a subscribed client and cannot prune itself, so a room whose players all closed the app was unreachable by any cleanup path.
+   - **Solution**: Defined `ROOM_TTL_MS = 8 * 60 * 60 * 1000` and helper `ttlFrom(nowMs)` at `functions/src/index.ts:14–17`. Wrote `expiresAt` at creation on the room and host player documents in `createRoom`, on joining and rejoining player documents in `joinRoom`, and refreshed it on the room writes that already occur (`startGame`, `updateLobbySettings`, `advancePhaseInternal`) — ten sites in total. Added `'expiresAt'` to the player-document field denylist in `firestore.rules:28`, making the timestamp server-owned while leaving the client `lastSeen` heartbeat permitted.
+   - **Observed Falsifying Output**:
+     ```text
+     1) Issue 53: 8-Hour Firestore TTL Policy writes expiresAt on room and players at creation within a +-5-second window:
+        AssertionError: expected undefined to have property 'expiresAt'
+     ```
+   - **Over-reach Guard**: Client updates to `lastSeen` on a player document still succeed while updates supplying `expiresAt` are rejected by the security rules (`functions/test/rules.spec.ts`).
+   - **⚠️ Scope of this entry**: the **code** is resolved. The TTL policies were subsequently enabled (item 8), but the feature is **still not live**, because the functions that write `expiresAt` have never been deployed — tracked as **Issue 55**. The separate exemption for documents predating that deploy is tracked as **Issue 56**.
+
+8. **Issue 54: Firestore TTL Policies Applied to Production (Resolved - August 10, 2026)**:
+   - **Problem**: Issue 53 shipped the code that writes `expiresAt`, but the two Firestore TTL policies that act on that field had never been created. `gcloud firestore fields ttls list --project=gaslight-46368` returned `Listed 0 items.` No automated test could detect this — the emulator does not enforce TTL, so `npm --prefix functions test` passed 36/36 with the feature entirely inert. The gap survived because the enabling step lives outside the repository, where no gate in the battery can observe it.
+   - **Solution**: Applied both policies via the Google Cloud SDK, authenticated as `chengluye@gmail.com`:
+     ```bash
+     gcloud firestore fields ttls update expiresAt --collection-group=rooms   --project=gaslight-46368 --enable-ttl
+     gcloud firestore fields ttls update expiresAt --collection-group=players --project=gaslight-46368 --enable-ttl
+     ```
+     The `rooms` operation ran a multi-minute backfill scan before returning; both finished `state: ACTIVE`.
+   - **Observed Before / After**: before — `Listed 0 items.` After —
+     ```text
+     name: projects/gaslight-46368/databases/(default)/collectionGroups/players/fields/expiresAt
+     ttlConfig:
+       state: ACTIVE
+     ---
+     name: projects/gaslight-46368/databases/(default)/collectionGroups/rooms/fields/expiresAt
+     ttlConfig:
+       state: ACTIVE
+     ```
+   - **⚠️ Both policies are ACTIVE and currently delete nothing**, for two independent reasons tracked separately: the functions that write `expiresAt` are not deployed (**Issue 55**), and documents predating that deploy will never carry the field at all (**Issue 56**). Enabling the policies was necessary, not sufficient.
+   - **Environment note**: `gcloud` is not on the default `PATH` in this repo's shell — the same quirk that makes `functions/package.json` prepend `/opt/homebrew/bin`. It is installed at `/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud`; invoke it by absolute path.
 
 
 ---
@@ -89,6 +153,9 @@ Firestore streams rebuild constantly. Every animation, sound and mascot pose is 
 
 ### 2.7 Everything mutating goes through a Cloud Function
 Clients read Firestore streams and write nothing to rooms; `firestore.rules` denies it. Transactions read before write. Detail: **`design_database_and_security.md`**.
+
+### 2.8 Widget tests on animated screens hang without `accessibleNavigation: true`
+Nine widgets in the lobby tree drive `AnimationController.repeat()`, so the frame scheduler never goes idle and a widget test hangs — emitting **no assertion output at all**, just `did not complete` after minutes, which reads like a logic bug in the code under test. Wrap the screen under test in `MediaQuery(data: const MediaQueryData(accessibleNavigation: true), …)`: `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`), so the flag puts every animation on its static path. Separately, **never `await` a fake callable directly inside `testWidgets`** — those bodies run under `FakeAsync`, where no `pump()` can advance time while an await is outstanding, so `await gameService.createRoom(...)` deadlocks; wrap it in `tester.runAsync`. **`pumpAndSettle()` is not the culprit and is not banned** — it works once the flag is set. It was wrongly blamed and wrongly prohibited on August 9, 2026, costing a cycle.
 
 ---
 
