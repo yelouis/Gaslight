@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -48,10 +49,13 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Render boundary to image and inspect pixel bytes
-    final boundary = key.currentContext!.findRenderObject() as RenderRepaintBoundary;
-    final image = await boundary.toImage();
-    final byteData = await image.toByteData(format: ImageByteFormat.rawRgba);
+    // Render boundary to image and inspect pixel bytes under real async engine thread
+    ByteData? byteData;
+    await tester.runAsync(() async {
+      final boundary = key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final image = await boundary.toImage();
+      byteData = await image.toByteData(format: ImageByteFormat.rawRgba);
+    });
     expect(byteData, isNotNull);
 
     final bytes = byteData!.buffer.asUint8List();
