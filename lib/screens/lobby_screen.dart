@@ -433,7 +433,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
         : availableDecks.first;
 
     final activeCount = players.where((p) => p.role != PlayerRole.spectator).length;
-    final forgeries = gs.gameState?.forgeriesPerCard ?? 2;
+    final forgeries = gs.gameState?.effectiveForgeriesPerCard(activeCount) ?? (activeCount > 1 ? (activeCount - 1).clamp(1, 5) : 1);
     final totalRounds = gs.gameState?.totalRounds ?? 1;
     final totalPromptsNeeded = activeCount * totalRounds;
     final deckSize = selectedDeckId == 'custom'

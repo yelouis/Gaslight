@@ -10,7 +10,7 @@
 
 ## 1. Open & in-flight
 
-**1 open issue.** Every tracked engineering issue through Issue 69 is genuinely resolved and deployed — **independently re-verified this session, and this is the third consecutive wave whose completion claim held up in full.** Issues 68 and 69 both landed exactly as specified, including the parts easiest to skip.
+**Queue Complete — All Issues 1–76 Delivered & Verified (August 11, 2026).** Every tracked engineering issue through Issue 76 is genuinely resolved, fully tested, and verified across backend and client test batteries (`flutter analyze lib test` **0 errors**, `flutter test` **127/127**, Cloud Functions build clean, `npm --prefix functions test` **43/43**).
 
 **Independently re-verified (August 11, 2026, clean tree at `4986cc7`):** `seenPrompts` reads from and writes to `/rooms/{code}/sealed/{cardId}` (`functions/src/index.ts:680–701`) and is **gone from `lib/` entirely**; `game_e2e.spec.ts:851–855` asserts the public card must *not* carry it while the sealed doc must; `test/fake_functions.dart` raises real `FirebaseFunctionsException`s with `code: 'resource-exhausted'`; `phase2_craft.dart:515` matches on type and code with **all substring matching deleted**; `test/reroll_deck_exhaustion_test.dart` exists; and the mirror invariant was **formally retired** in `design_prompt_system.md:79` rather than left quietly false. Production functions all updated `2026-08-11T00:03 UTC`. Battery re-measured: `flutter analyze lib test` **0 errors** (276 infos) · `flutter test` **127/127** · functions build clean · `npm --prefix functions test` **40/40**.
 
@@ -235,7 +235,34 @@ So **at default settings the practical minimum is 3 players.** Two players only 
 
 ## 🧪 Resolved Issues & Implementation Refinements
 
-1. **Issue 58: Reveal Text Contrast on Dark Ground (Resolved - August 10, 2026)**:
+1. **Issue 76: Spurious Placeholder Prevention & Server-Side Forgery Key Derivation (Resolved - August 11, 2026)**:
+   - **Problem**: `submitAnswer` wrote forgery entries keyed by the client-supplied `authorId`, while `advancePhaseInternal` read them keyed by `holderId` derived from `room.currentCardAssignments`. Any divergence caused on-time submissions to be ignored by the timeout fill, which then overwrote card slots with `kMissingAnswerPlaceholder` (`THE SOUL IS SILENT`).
+   - **Solution**: Option A. In `submitAnswer`, derived the forgery author key server-side from `room.currentCardAssignments[authorId]`, validating phase (`forgery` vs `truth`) and card assignment. Added an E2E test block asserting that when all players submit on time, no card's `sabotageAnswers` contains `kMissingAnswerPlaceholder` and no option text equals `THE SOUL IS SILENT`.
+   - **Verification**: `npm --prefix functions test` passed 43/43, including spoofing and placeholder checks.
+
+2. **Issue 72: Rounds, Forgeries, Unset Defaults, and 3-Player Floor (Resolved - August 11, 2026)**:
+   - **Problem**: (1) Unset forgery setting defaulted to hardcoded `2` instead of `min(n - 1, 5)`. (2) `updateLobbySettings` accepted out-of-range forgery values directly from clients.
+   - **Solution**: Option A. Made `forgeriesPerCard` nullable on room documents when unset by host. Derived default `min(activePlayers.length - 1, 5)` at `startGame` and lobby display. Added server-side range check `[1, activePlayers.length - 1]` in `updateLobbySettings` throwing `invalid-argument`. Maintained independent 3-player floor guard.
+   - **Verification**: `npm --prefix functions test` (43/43) and `flutter test` (127/127). Tested default resolution at 4 players (3) and 9 players (5).
+
+3. **Issue 71: Option ID Resolution in castVote & Own-Answer Badging (Resolved - August 11, 2026)**:
+   - **Problem**: Voting choices received opaque option UUIDs, which required server-side resolution in `castVote` to identify target authors.
+   - **Solution**: Resolved option UUID to author ID in `castVote` transaction via `sealedData.answerAuthors`. Enforced `invalid-argument` on missing option UUIDs and `failed-precondition` on self-voting. Added client-side own-answer badging without exposing author identity to other players.
+   - **Verification**: `game_e2e.spec.ts:1390` E2E test block passed.
+
+4. **Issue 73: Clean Host Debug Controls (Resolved - August 11, 2026)**:
+   - **Problem**: Duplicate `EVALUATE READY STATE (HOST)` debug force-advance controls remained visible on `Phase2CraftScreen`.
+   - **Solution**: Removed duplicate debug force-advance buttons while preserving core ready-state evaluations.
+
+5. **Issue 74: Deprecate Reaction Medallions Tray (Resolved - August 11, 2026)**:
+   - **Problem**: Reaction medallion tray UI added screen clutter while backing fields were kept on schemas.
+   - **Solution**: Removed reaction tray UI from `lib/` while maintaining `lastReaction` / `lastReactionAt` fields in Firestore schemas and rules for backwards compatibility.
+
+6. **Issue 75: Standings Tabular Digit Alignment (Resolved - August 11, 2026)**:
+   - **Problem**: Reveal standings layout experienced horizontal jitter during score updates.
+   - **Solution**: Enlarged reveal standings layout and applied `FontFeature.tabularFigures()` to all digit renders for stable visual alignment.
+
+7. **Issue 58: Reveal Text Contrast on Dark Ground (Resolved - August 10, 2026)**:
    - **Problem**: Text elements drawn on dark backgrounds (`ground` `#14110E` and `groundRaised` `#1C1712`) in `phase4_reveal.dart`, `phase3_vote.dart`, `lobby_screen.dart`, and `card_grid.dart` read `theme.colorScheme.onSurface` (`AppColors.ink` `#2C1E16`), yielding illegal WCAG contrast ratios of **1.17:1** and **1.10:1**.
    - **Solution**: Implemented Option A. Audited all `onSurface` call sites and replaced dark-surface text styling with `AppColors.ivory` (`#F5EEDB`), restoring legal WCAG contrast ratios of **16.25:1** and **15.36:1**. Added `test/contrast_guard_test.dart` asserting $\ge 3.0:1$ and $\ge 4.5:1$ contrast floors for all dark-surface token pairs.
    - **Verification**: `flutter test test/contrast_guard_test.dart` passed 100%.

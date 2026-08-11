@@ -15,12 +15,7 @@ enum GamePhase { lobby, truth, forgery, vote, reveal, gameOver }
 
 ### Minimum player count
 
-`startGame` enforces two floors:
-
-1. `activePlayers.length < 2` → rejected (`functions/src/index.ts`).
-2. `activePlayers.length <= sabotageAnswersCount` → rejected, where `sabotageAnswersCount` defaults to **2**.
-
-At default settings the practical minimum is **3 players**. Two players only works if the host lowers forgery rounds to 1, which is exactly what the 2-player E2E test does. The lobby states this honestly (`lobby_screen.dart:444`, *"Need more players than forgery rounds"*). **This is a configuration-dependent floor, not a defect.**
+`startGame` enforces a strict floor of **3 active players** (`activePlayers.length < 3` → rejected with `failed-precondition`). This is a deliberate rule enforced as an independent guard, not a side-effect of forgery arithmetic.
 
 ## 2. Card Model (`CardModel`)
 
@@ -31,7 +26,7 @@ A card represents a prompt assigned to a player, holding their answers, vote cho
 * `targetPlayerId` (String): ID of the player this card belongs to (the Target).
 * `promptText` (String): The drawn prompt assigned to this card.
 * `truthAnswer` (String): The Target's own answer (populated on the public room document at `reveal` phase; stored in server-only `/rooms/{code}/sealed/{cardId}` subcollection prior to reveal).
-* `sabotageAnswers` (Map<String, String>): A map of `saboteurPlayerId` to their written sabotage answers (populated on the public room document at `reveal` phase; stored in server-only `/rooms/{code}/sealed/{cardId}` subcollection prior to reveal).
+* `sabotageAnswers` (Map<String, String>): A map of `saboteurPlayerId` to their written sabotage answers (populated on the public room document at `reveal` phase; stored in server-only `/rooms/{code}/sealed/{cardId}` subcollection prior to reveal). `submitAnswer` derives the author key server-side from `currentCardAssignments[authorId]`, ensuring key synchronization with `advancePhaseInternal` and preventing spurious `kMissingAnswerPlaceholder` (`THE SOUL IS SILENT`) entries.
 * `options` (List<CardAnswerOption>?): Unlabelled, shuffled options list (`id`, `text`) supplied to public cards during the `vote` phase to conceal answer origin.
 * `votes` (Map<String, String>): A map of `voterPlayerId` to `votedForPlayerId` (or `'TRUTH'`), representing votes cast during the `vote` phase.
 * `unmaskGuesses` (Map<String, String>?): A map of `guesserPlayerId` to `accusedPlayerId` representing unmask guesses cast during the `reveal` phase.
@@ -70,7 +65,10 @@ The root room document storing global match settings and rotation assignments.
 * `roomCode` (String): 4-character room access key.
 * `currentPhase` (GamePhase): Active phase of the game loop.
 * `totalPlayers` (int): Number of active players participating in gameplay (excluding spectators).
-* `sabotageAnswersCount` (int): Total number of sabotage rotations configured (normally 2).
+* `forgeriesPerCard` (int?): Total number of forgery rotations configured per card (legacy alias `sabotageAnswersCount`).
+  - **Unset default:** Resolves to `min(n - 1, 5)` at read time (`startGame` and lobby display) when `null`.
+  - **Hard ceiling:** `n - 1` (where `n` is `activePlayers.length`). Values above `n - 1` are never offered in the chooser and are rejected by `updateLobbySettings`.
+  - **5 is a default, not a cap:** A room with 9 players allows selecting 7 or 8 forgeries.
 * `currentRotationIndex` (int): Incremental tracker for the current sabotage pass.
 * `cards` (List<CardModel>): The master list of cards in active play.
 * `currentCardAssignments` (Map<String, String>): Mappings of `holdingPlayerId` to `targetPlayerId`, determining who writes for whom.

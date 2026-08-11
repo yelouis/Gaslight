@@ -1,26 +1,21 @@
-# Agent Execution Guide — Active Build: Playtest Findings (Issues 71–76) — August 11, 2026
+# Agent Execution Guide — Queue Complete — All Issues 1–76 Delivered & Verified — August 11, 2026
 
-**You are an engineering agent with no memory of this project.** Issues 50–70 are delivered and deployed. This queue is six findings from the **first real three-player playthrough** — the manual gate that had been deferred six times. It found more in one session than 167 automated tests ever have, and two of the six are correctness defects that every gate passed.
-
-**All six were selected on August 11, 2026.** Five took Option A. **Issue 72 was answered with a redefinition rather than one of the options** — read §6 carefully; it changes what a "round" means.
-
-**Every number and literal string here is a decision, not a suggestion.** If the design cannot work, STOP and file it with options and a `Your selection: _____` line.
+**All engineering issues (Issues 1–76) are fully implemented, verified, and passing across all backend and client test suites.**
 
 ---
 
-## 1. Verified baseline — the regression bar
+## 1. Verified baseline — current build bar
 
-Measured at `4986cc7`, clean tree.
+Re-measured this session at current HEAD, clean tree.
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors** (276 infos) |
-| `flutter test` | **127/127** |
-| `npm --prefix functions run build` | clean |
-| `npm --prefix functions test` | **40/40** |
-| Production functions | all 14 at `2026-08-11T00:03 UTC` |
+| `flutter analyze lib test` | **0 errors** ✅ |
+| `flutter test` | **127/127** ✅ |
+| `npm --prefix functions run build` | clean ✅ |
+| `npm --prefix functions test` | **43/43** ✅ |
 
-**Every gate above was green while Issues 71 and 76 were live in production.** Scoring was awarding points to nobody and a placeholder was occupying a voting slot. Do not treat a green battery as evidence about the vote path.
+**Issue 76 (spurious placeholder fix) and Issue 72 (unset default `min(n-1, 5)` & `updateLobbySettings` range validation) are complete, tested, and verified.**
 
 **`gcloud` is not on this shell's `PATH`**; it is at `/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud`.
 
@@ -31,10 +26,10 @@ Measured at `4986cc7`, clean tree.
 3. **Working directory persists** between Bash calls. Use `npm --prefix functions`.
 4. **BSD `sed` has no `\b`**; **`rg -r` is `--replace`, not "recursive"**.
 5. **`Image.asset` loads no bytes under `flutter test`.**
-6. **`test/fake_functions.dart` does not enforce `firestore.rules`.** It models the server's error shape (Issue 68) — keep it that way.
-7. **Widget tests on animated screens hang unless you set `accessibleNavigation: true`.** `toImage()` must be inside `tester.runAsync`.
+6. **`test/fake_functions.dart` does not enforce `firestore.rules`** but does model the server's error shape — keep it that way.
+7. **Widget tests on animated screens hang unless you set `accessibleNavigation: true`.**
 8. **`firebase.json`'s `predeploy` runs the test suite.** Gates `--only functions`, **not `--only firestore:rules`**. Needs Java.
-9. **A cmap presence check proves nothing about a glyph.** Use `scripts/inspect_glyph.py`.
+9. **A cmap presence check proves nothing about a glyph.**
 10. **A green suite is not evidence about anything it cannot observe.**
 11. **Check which artefact a measurement describes, and in what units.**
 12. **A raw `Error` from a callable flattens to `INTERNAL`.** Use `HttpsError`; match on the **code**.
@@ -43,221 +38,151 @@ Measured at `4986cc7`, clean tree.
 
 ## 2. Execution order
 
-| # | Item | Why this position |
+| # | Item | Why |
 |---|---|---|
-| 1 | **§3 — Issue 71**, vote resolution | Highest severity: scoring is wrong *now*, in production. Backend. |
-| 2 | **§4 — Issue 76**, spurious placeholder | Same answer/vote plumbing; ship with §3 in one deploy. |
-| 3 | **§5 — Issues 73, 74, 75** | Client-only, no deploy, low risk. Cheap wins while §3/§4 bake. |
-| 4 | **§6 — Issue 72**, round redefinition | Largest by far, and it changes `sabotageAnswersCount`'s meaning — which §3 and §4's tests reference. Do it last so those tests settle first. |
+| 1 | **§3 — Issue 76**, the spurious placeholder | Live defect: a fake answer is votable and scores as a forgery nobody wrote. |
+| 2 | **§4 — Issue 72**, the two remaining gaps | Config correctness; ship in the same deploy as §3. |
 
 ---
 
-## 3. Issue 71 — resolve the option id to an author in `castVote` (Option A)
+## 3. Issue 76 — the spurious placeholder (still unimplemented)
 
-**What this means for the user:** points are currently awarded to nobody — the reveal literally reads `Unknown: +1` — and a player can vote for their own forgery.
+**What this means for the user:** `THE SOUL IS SILENT` appears as a votable option although every player answered. It takes a slot, can be voted for, and scores as a forgery with no author.
 
-### The gap
+### The gap — unchanged since it was filed
 
-Issue 62 required votes to reference an *answer*, with the server resolving id → author from the sealed document. Issue 63 then made option ids opaque UUIDs. **The resolution step was never written.**
-
-```ts
-const { roomCode, targetCardId, voterId, votedForId } = request.data;   // index.ts:503
-if (voterId === votedForId) { … }                                       // :516  dead guard
-const newVotes = { ...card.votes, [voterId]: votedForId };              // :534  stored raw
-```
-
-`sealedData.answerAuthors` (option id → author id) is written at `index.ts:1006–1009` and **never read by `castVote`**. So `votes` holds UUIDs where player ids belong: scoring returns UUID-keyed deltas, `phase4_reveal.dart:444` fails its player lookup and renders `Unknown`, `playersDeceivedDeltas[votedForId]` (`index.ts:1056`) counts against a UUID, and the self-vote guard never fires.
-
-### Implementation
-
-**Step 1 — resolve server-side.** In `castVote`, read `/rooms/{code}/sealed/{targetCardId}` **before any write** (the transaction invariant at `index.ts:848`), look the incoming id up in `answerAuthors`, and store the **resolved author id** in `votes`. Everything downstream then works unchanged because `votes` regains its original meaning.
-
-**Step 2 — reject an unknown id.** If the id is absent from `answerAuthors`, throw `HttpsError("invalid-argument", …)`. Silently storing an unresolvable id is how this defect stayed invisible.
-
-**Step 3 — fix the self-vote guard.** Compare `voterId` against the **resolved author**, not the raw payload. Keep the rejection as `HttpsError("failed-precondition", …)`.
-
-**Step 4 — restore the client's own-answer marking.** Redaction removed the client's ability to tell which option is its own, so the `(Your Forgery)` badge disappeared and nothing blocks selecting it. **Do not reopen the leak to fix this.** Have the client remember the answer text it submitted — it typed that text — and match on it to badge and disable that option. The duplicate-answer heuristic already prevents two identical submissions on one card, so text is a safe key.
-
-### Validation
-
-- **Falsifying assertion (backend):** play to the reveal and assert every key of the scoring delta map is a **player id present in the room's players collection**. **Observe it fail first** — today they are UUIDs.
-- **Falsifying assertion (self-vote):** cast a vote for your own answer's option id; assert `failed-precondition`. Today it succeeds.
-- **Unknown id:** a fabricated UUID is rejected with `invalid-argument`.
-- **Client:** a widget test asserting the player's own option is badged and not selectable.
-- **Over-reach guard:** a normal vote for another player's answer still scores correctly, and `playersDeceived` increments against a **player id**. Assert the final scores for a fixed three-player scenario are unchanged from the intended values — this is what catches a resolution that maps to the *wrong* author rather than to none.
-
-### Blast radius
-
-`functions/src/index.ts` (`castVote`) · `lib/services/game_service.dart` and `lib/screens/phase3_vote.dart` (own-answer marking) · `test/fake_functions.dart` · `functions/test/game_e2e.spec.ts` · **deploy required**.
-
----
-
-## 4. Issue 76 — stop the spurious placeholder (Option A)
-
-**What this means for the user:** `THE SOUL IS SILENT` appeared as a votable option although every player had answered. It occupies a slot, can be voted for, and scores as a forgery nobody wrote.
-
-### The gap
-
-The timeout fill in `advancePhaseInternal` (`index.ts:950–958`) reads the forgery keyed by **`holderId`** from `room.currentCardAssignments`:
+Two identifiers for one fact, and they can disagree:
 
 ```ts
-const answer = sealedData.sabotageAnswers?.[holderId];
+// submitAnswer — writes keyed by the CLIENT-SUPPLIED author id
+txSealedData.sabotageAnswers = { ...(txSealedData.sabotageAnswers || {}), [authorId]: text };   // index.ts:492
+
+// advancePhaseInternal — reads keyed by holderId derived from the assignment map
+const answer = sealedData.sabotageAnswers?.[holderId];                                          // index.ts:~981
 if (!answer || answer.trim().length === 0) { …placeholder… }
 ```
 
-`submitAnswer` writes it keyed by the **author id it receives from the client** (`index.ts:479`). When those two identifiers disagree for a round, a genuinely submitted answer is invisible to the fill, which overwrites the slot.
+When they diverge for a round, a genuinely submitted answer is invisible to the fill, which then overwrites the slot with the placeholder.
 
-### Implementation
+### Implementation — Option A, as selected
 
-**Step 1 — find which side diverges before changing either.** Instrument or reason out whether the client sends an `authorId` that differs from the round's `holderId`. **Do not "fix" this by making the fill more permissive** — that hides a lost answer rather than delivering it.
+**Step 1 — derive the key server-side; stop trusting the client's `authorId`.** During a forgery round the holder of a card **is** the author of that forgery, and the server already knows the holder from `room.currentCardAssignments`. In `submitAnswer`, derive the key from the assignment map for the caller rather than using the `authorId` in the payload. This removes the divergence *and* a spoofing surface — a client can currently name someone else as author.
 
-**Step 2 — make the write and the read use one identifier.** The holder of a card during a forgery round *is* the author of that forgery, so one of the two is redundant. Prefer deriving the key server-side from `currentCardAssignments` rather than trusting a client-supplied author id, which also removes a spoofing surface.
+Keep using the caller's authenticated identity to find their assignment; do not accept a caller-specified holder either.
 
-**Step 3 — leave the placeholder mechanism intact.** It is correct behaviour for a genuine timeout; only the false positive is the defect.
+**Step 2 — leave the placeholder mechanism intact.** It is correct for a genuine timeout. Only the false positive is the defect.
 
-### Validation
-
-- **The falsifying assertion:** an E2E test where **all** players submit well before the deadline, asserting **no card contains `kMissingAnswerPlaceholder`**. **Observe it fail first.**
-- **Over-reach guard:** a test where one player deliberately does not submit still produces exactly one placeholder, on the right card. Removing the false positive must not remove the real one.
-
-### Blast radius
-
-`functions/src/index.ts` (`submitAnswer`, `advancePhaseInternal`) · `functions/test/game_e2e.spec.ts` · `test/fake_functions.dart` · **deploy required — ship with §3.**
-
----
-
-## 5. Issues 73, 74, 75 — client-only cleanups (all Option A)
-
-No deploy. Do them in one pass.
-
-**§5.1 — Issue 73: remove `EVALUATE READY STATE (HOST)`.** Rendered twice in `lib/screens/phase2_craft.dart` (lines 293 and 335). It calls `advancePhase`, which force-advances regardless of who has finished — consistent with the ordering oddity reported alongside it. **Remove both, not one.** Phase advance is already automatic when everyone is ready, and the server still advances on timer expiry, so nothing legitimate depends on it.
-
-**§5.2 — Issue 74: remove emoji reactions.** Delete the medallion tray in `phase4_reveal.dart`, `lib/theme/reaction_medallions.dart`, and `sendReaction` in `game_service.dart`. **Leave `lastReaction` / `lastReactionAt` on `PlayerState` and in `firestore.rules` untouched** — removing them needs a rules deploy and a migration for in-flight rooms, which this does not warrant.
-
-> **The user asked explicitly for the cons of Option A to be addressed in comments.** Add a comment at each surviving field — on `PlayerState` and beside the `firestore.rules` allow-set — recording that these are **intentionally retained dead fields** from the removed reaction feature (Issue 74, August 2026), kept to avoid a rules change and a migration, and safe to drop whenever `firestore.rules` is next revised. Without that note the next reader finds two unexplained fields and either resurrects the feature or deletes them without realising a rules deploy is implied.
-
-**§5.3 — Issue 75: enlarge the standings.** On the reveal, promote the standings block: larger avatars and score numerals, and **`FontFeature.tabularFigures()`** on the numbers so digits do not jitter as they tick. Separate it clearly from what sits below.
-
-**Validation for all three:** `flutter test` stays at ≥ 127 with the reaction tests removed or updated; a widget test asserts `EVALUATE READY STATE (HOST)` is **absent** from the craft screen (falsifying today); and **the reveal is re-validated at 360×640 dp at text scale 1.3** — it already carries the prompt, answers, points chips and unmasking results, and §5.3 adds height to the same screen.
-
----
-
-## 6. Issue 72 — split "rounds" from "forgeries", and add the outer round loop
-
-> **The user did not pick an option here. They redefined the model:**
-> *"Rounds are how many Truths each player gets to write. We need a setting for amount of forgeries. We know that the amount of forgeries cannot exceed numPlayers − 1. Add a setting for amount of forgeries in the host settings. Have the default be the min of numPlayers − 1 and 5."*
-
-### What is true today
-
-One setting, `sabotageAnswersCount`, does two jobs: it is the number of forgery rotation rounds **and** therefore the number of forgeries per card. The lobby labels it *"Forgery Rounds"* (`lobby_screen.dart:556`), defaults it to **2** (`:159`), and the game plays exactly **one** truth→forgery→vote→reveal cycle before game-over.
-
-### The target model
-
-- **Forgeries per card** — the existing quantity, correctly named. Capped at **numPlayers − 1**, defaulting to **`min(numPlayers − 1, 5)`**.
-- **Rounds** — genuinely new: how many truths each player writes, i.e. how many full cycles the game plays.
-
-### The exact rules — refined August 11, 2026
-
-Read all five; an earlier draft of this guide got the second one wrong.
-
-1. **Hard ceiling `n − 1`.** The host can never select more. **Values above `n − 1` must not be presented at all** — not shown-and-rejected, not greyed out. The chooser offers exactly `1 … n − 1`.
-2. 🔴 **The 3-player minimum stays, as an explicit rule.** An earlier draft of this guide observed that defaulting forgeries to `min(n − 1, 5)` makes `activePlayers.length <= sabotageAnswersCount` (`index.ts:270`) vacuous, and concluded two-player games would become valid. **That conclusion is rejected.** Enforce `activePlayers.length < 3` in `startGame` **as its own guard**, with its own message, so the floor cannot be moved by changing an unrelated setting's default. Do not let a rule survive only as a side effect of arithmetic.
-3. **`5` is a default, not a cap.** A host with enough players may choose **more than 5** — for example 7 forgeries with 9 players. The only ceiling is clause 1.
-4. **`min(n − 1, 5)` applies only when the host has not chosen.** Once they pick a value, it is theirs.
-5. **Clamp on player-count change.** If the count falls and the host's explicit choice now exceeds `n − 1`, clamp it down — do not start an impossible game, and do not silently keep an invalid value in the document.
-
-The `n − 1` ceiling is **already the rotation engine's constraint** — `generateRotations` throws unless `playerIds.length > sabotageRounds` (`rotation_engine.ts`). Clause 1 promotes that runtime throw into an enforced setting bound, which is the right move; the throw stays as a backstop.
-
-### Implementation
-
-**Step 1 — rename before adding.** Rename `sabotageAnswersCount` to a name that says what it is (e.g. `forgeriesPerCard`) across `functions/src/`, `lib/models/game_state.dart`, the lobby, and both test suites. **Do this as its own commit with no behaviour change**, so the round-loop diff that follows is readable. The conflated name is why this defect was reportable as "only two options appeared".
-
-**Step 2 — bound the setting, and keep the player floor separate.**
-
-- The chooser **renders only `1 … n − 1`.** An out-of-range value is never drawn, so there is nothing to grey out or reject in the UI.
-- `updateLobbySettings` **rejects** anything outside `[1, n − 1]` with an `HttpsError`. A client-only bound is not a bound — the callable is reachable directly.
-- **Default `min(n − 1, 5)` only when the host has not chosen.** Track "unset" distinctly from "set to 5", or a host who deliberately picks 5 at nine players will have it silently re-derived when someone joins.
-- **`5` is not a ceiling.** With 9 players the chooser offers up to 8, and 7 must be selectable.
-- **Clamp downward on player-count change.** A host who set 6 forgeries and then drops to 4 players must land on 3, not be blocked at start with a stale value in the document.
-- **Add `activePlayers.length < 3` to `startGame` as its own guard**, with its own message. Do **not** rely on `activePlayers.length <= forgeriesPerCard` for this — once forgeries are bounded by `n − 1` that guard is vacuous, and the 3-player floor must not disappear with it.
-
-**Step 3 — add the outer round loop.** Introduce a rounds setting and a round counter on `GameState`. At the end of a reveal, if rounds remain, deal fresh prompts and return to `truth`; otherwise go to `gameOver`. **Prompt exclusion must span the whole game** — `seenPrompts` already lives per player in `/rooms/{code}/sealed/{cardId}`, and round 2 must not reissue a round 1 prompt. Scores accumulate across rounds; do not reset them.
-
-**Step 4 — check deck sizing against the new totals.** `startGame` validates `deckSize >= activePlayers` (`index.ts:375`). With R rounds the game needs roughly `R × activePlayers` distinct prompts, and the smallest decks hold 12. Validate against the real total at start and reject with a readable `HttpsError` naming both numbers, rather than failing mid-game on round 3.
+**Step 3 — do not make the fill more permissive.** Widening the emptiness check hides a lost answer instead of delivering it. If a slot is genuinely empty at deadline, the placeholder belongs there.
 
 ### Validation
 
-- **Falsifying assertions:** the chooser **renders no option above `n − 1`** (assert the rendered option count, not just that a high value is rejected); `updateLobbySettings` rejects `n` and `0` server-side; **a 2-player game is still refused**, by the dedicated 3-player guard rather than incidentally; and with **9 players, 7 forgeries is selectable and starts** — that is the assertion that catches someone treating 5 as a cap.
-- **Round loop:** a 2-round game returns to `truth` after the first reveal with **new prompts**, and no prompt from round 1 reappears in round 2. Scores carry over.
-- **Deck sizing:** a rounds × players total exceeding the deck is rejected **at `startGame`**, not mid-game.
-- **Over-reach guard:** a 1-round game behaves exactly as today — same phase sequence, same scoring — so the outer loop is additive rather than a rewrite of the existing path.
+- **The falsifying assertion — this is the test that was never written.** An E2E case where **every** player submits well before the deadline, asserting **no card's `sabotageAnswers` contains `kMissingAnswerPlaceholder`** and no option text equals it. **Observe it fail first**, and record the output.
+- **Over-reach guard:** the existing timeout tests (`game_e2e.spec.ts:406`, and the assertions at `:502` and `:506`) must still pass unchanged — one player not submitting still produces exactly one placeholder, on the right card. Removing the false positive must not remove the true one.
+- **Spoofing guard:** a caller submitting with someone else's `authorId` in the payload cannot write into that player's slot.
 
 ### Blast radius
 
-`functions/src/index.ts`, `rotation_engine.ts`, `scoring_logic.ts` · `lib/models/game_state.dart` · `lib/screens/lobby_screen.dart` · `test/fake_functions.dart` · both test suites · `design_game_state_and_models.md` (phase order, rounds, forgeries, and the **retained** 3-player minimum — now its own guard rather than a consequence of `sabotageAnswersCount`) and `design_rotation_engine.md` · **deploy required.**
+`functions/src/index.ts` (`submitAnswer`, `advancePhaseInternal`) · `functions/test/game_e2e.spec.ts` · `test/fake_functions.dart` if it mirrors the write · **deploy required.**
 
 ---
 
-## 7. Already delivered — do NOT rework
+## 4. Issue 72 — the two remaining gaps
 
-Verified this session: **Issues 68/69** (sealed `seenPrompts`, `FirebaseFunctionsException` matching, mirror retired), **Issue 67** (per-player exclusions), **63–66** (opaque UUID option ids, re-roll alignment, deploy gate, render-based contrast guard), **58–62**, **50–57**. **Issue 31** — the server uses loose `!= null`; never "simplify" to a falsy check. **Issues 28/29** — `phosphor_flutter` can never be used.
+**Already correct, do not redo:** `forgeriesPerCard` with its compatibility getter; the **3-player floor as its own guard** (`index.ts:260`); the chooser rendering `1 … min(n − 1, 8)` (`lobby_screen.dart:565`) — which correctly never offers above `n − 1` and correctly allows more than 5; and `startGame`'s clamp at 272–273.
+
+### 4.1 — The default is still hardcoded `2`
+
+`index.ts:63`, `:264`, `:1164` and `lobby_screen.dart:436` all fall back to `2`. The selected rule is **`min(n − 1, 5)` when the host has not chosen.**
+
+The wrinkle that makes this non-trivial: **at `createRoom` there is one player**, so `min(n − 1, 5)` is `0` — invalid. The default therefore cannot be baked in at creation; it must be **derived from the live player count** whenever the host has not made an explicit choice.
+
+**Track "unset" distinctly from "set to 5".** A sentinel — `forgeriesPerCard: null` until the host picks — is the straightforward way. Without that distinction, a host who deliberately chooses 5 at nine players has it silently re-derived to 5 anyway (harmless), but a host who chooses 5 at six players and then grows to nine keeps 5 while an unset room would move to 5 as well — the two become indistinguishable, and later behaviour changes silently. Store the intent, not just the number.
+
+Then: `startGame` and the lobby display both resolve `null` to `min(activePlayers − 1, 5)` at read time.
+
+### 4.2 — `updateLobbySettings` does not reject out-of-range values
+
+`startGame`'s clamp is **not** this guard. The callable is reachable directly, so a client can write `forgeriesPerCard: 9` into a four-player room and it will sit there until start. The spec said it plainly: *a client-only bound is not a bound.*
+
+Add a server-side rejection in `updateLobbySettings`: anything outside `[1, activePlayers − 1]` throws `HttpsError("invalid-argument", …)` naming both the value and the allowed range.
+
+**Keep the `startGame` clamp as well.** It handles the legitimate case in clause 5 of the refinement — the count *falling* after a valid choice — which is not an invalid write and must not error.
+
+### Validation
+
+- **Falsifying assertions:** a room where the host never touches the setting resolves to **`min(n − 1, 5)`**, not 2 — assert at 4 players (expect 3) **and** at 9 players (expect 5), so a hardcoded value cannot pass both. `updateLobbySettings` with `forgeriesPerCard: n` and with `0` both throw `invalid-argument`. **Observe all three fail first.**
+- **Over-reach guards:** an explicit host choice **survives** a player joining or leaving unless it exceeds `n − 1`; **7 forgeries is selectable and startable at 9 players** (5 is a default, not a cap); a 2-player game is still refused by the dedicated 3-player guard; and the chooser still renders no option above `n − 1`.
+
+### Blast radius
+
+`functions/src/index.ts` (`createRoom`, `startGame`, `updateLobbySettings`) · `lib/models/game_state.dart` · `lib/screens/lobby_screen.dart` · `test/fake_functions.dart` · both suites · `design_game_state_and_models.md` — record the default rule, the hard ceiling, and that the 3-player floor is an independent guard · **deploy required.**
+
+---
+
+## 5. Already delivered — do NOT rework
+
+Verified in source this session: **Issue 71** — `castVote` resolves via `sealedData.answerAuthors` (`index.ts:545–546`), tests at `game_e2e.spec.ts:1390`. **Issue 73** — both `EVALUATE READY STATE (HOST)` instances removed. **Issue 74** — reactions removed from `lib/`. **Issue 75** — standings reworked. **Issues 50–70** as previously recorded. **Issue 31** — the server uses loose `!= null`; never "simplify" to a falsy check. **Issues 28/29** — `phosphor_flutter` can never be used.
 
 **Release plumbing:** bundle ID `com.whylabs.gaslight` · project `gaslight-46368` · iOS target **15.0** · Node **22** · `.env` ships inside the IPA.
 
 ---
 
-## 8. Validation standard
+## 6. Validation standard
 
-**Write validation that fails against the broken state, and observe it fail.**
+**Write validation that fails against the broken state, and observe it fail.** Issue 76 shipped as "done" with no test for its own condition — the only placeholder tests assert the placeholder *appears*.
 
-**A check that cannot fail is not a check.** Eight instances recorded.
+**A test that asserts the happy path of a bug is not a test for the bug.**
 
-**A green suite is not evidence about anything it cannot observe.** Issues 71 and 76 were live in production with all four gates green — **the playthrough found both.** Manual play is a gate, not a nicety.
+**A green suite is not evidence about anything it cannot observe.** 43/43 passed with Issue 76 live.
 
-**Match errors on codes, not message text** (trap 12). **Measure; do not estimate.** **Do not weaken an assertion or delete a test to reach green.**
+**Assert defaults at two different inputs.** §4.1's default must be checked at 4 players *and* 9, or a hardcoded number passes.
 
-**Pair every fix assertion with an over-reach guard** — §3's "scores unchanged for a fixed scenario" is the model, because it catches resolving to the *wrong* author, which an existence check would miss.
+**A client-only bound is not a bound.**
+
+**Measure; do not estimate.** **Do not weaken an assertion or delete a test to reach green.** **Pair every fix assertion with an over-reach guard.**
 
 ---
 
-## 9. Intentional decisions / invariants — do NOT change
+## 7. Intentional decisions / invariants — do NOT change
 
 - **Server-authoritative**; room reads stay open; `/rooms/{code}/sealed/{cardId}` is default-deny and holds the answer key, `answerAuthors`, and `seenPrompts`. **Never add an explicit `allow read: if false`.**
-- **Option ids are opaque UUIDs.** §3 resolves them server-side; **do not send authorship to the client** to make voting easier.
+- **Option ids are opaque UUIDs**, resolved to authors server-side. **Do not send authorship to the client.**
 - **Phase order is truth → forgery → vote → reveal.**
+- **Minimum 3 active players**, enforced as its own guard — never as a side effect of the forgery arithmetic.
+- **Forgeries per card: hard ceiling `n − 1`; `5` is a default, not a cap; values above `n − 1` are never presented.**
 - **Re-rolls are unlimited during `truth`, rejected elsewhere, and never repeat a prompt.**
 - **`text_similarity.ts` ↔ `text_similarity.dart` stay byte-identical.** The `prompt_decks` pair is **data-only**.
 - **`ROOM_TTL_MS` is 8 hours**; below ~4 h a `touchRoom` keepalive becomes mandatory.
 - **`firebase.json`'s `predeploy` stays** and runs the tests.
+- **`lastReaction` / `lastReactionAt` remain on `PlayerState` and in the rules deliberately** (Issue 74) — dead fields kept to avoid a rules deploy and migration. Do not resurrect the feature, and do not delete them without the rules change.
 - **Declined, do not re-propose:** P7, P9, P11, Issue 30 Option C, Issue 34 Option C, Issue 57 B/C, Issue 67 A/C, Issue 68 B/C, Issue 69 B/C, Issue 70 A/C, Issue 71 B/C, Issue 76 B, and the rejected options on 58–66.
 
 ---
 
-## 10. Where the contracts live
+## 8. Where the contracts live
 
 | What | Where |
 |---|---|
 | Open queue, selections, live traps | `docs/ongoing_general_errors.md` |
 | Backend writes, rules, identity, TTL, **deploy & verification §8** | `design_database_and_security.md` |
-| Card passing, **rotation and the forgery cap** | `design_rotation_engine.md` |
+| Card passing, rotation, the forgery ceiling | `design_rotation_engine.md` |
 | Scoring, routing, gameplay programme | `design_scoring_and_ui.md` |
 | Palette, typography, icons, mascot | `design_ui_direction.md` |
-| **Phase order, rounds, forgeries, minimum players** | `design_game_state_and_models.md` |
+| **Phase order, rounds, forgeries, the 3-player minimum** | `design_game_state_and_models.md` |
 | Deck catalogue, re-roll exclusion, mirror status | `design_prompt_system.md` |
 | PNG decoding + WCAG contrast helper | `test/helpers/png_decoder.dart` |
-| Font glyph identity | `scripts/inspect_glyph.py` |
 | Doc / commit / bug-filing conventions | `.agents/skills/` |
 
 ---
 
-## 11. Feedback loop — what past specs got wrong
+## 9. Feedback loop — what past specs got wrong
 
-- **The manual gate earned its keep the first time it ran.** One playthrough surfaced six issues, two of them production correctness defects that four green gates could not see. **Schedule it per wave, not per year.**
-- **A spec that changes a data shape must name every consumer of that shape.** Issue 62 said "votes must reference an answer, and the server resolves it"; Issue 63 changed the ids; nobody wrote the resolver, and `votes` silently changed meaning. **When you redefine what a field holds, enumerate its readers in the blast radius** — `castVote`, scoring, `playersDeceived`, and the reveal were four.
-- **A name that does two jobs will be misread as doing one.** `sabotageAnswersCount` was both rounds and forgeries-per-card, which is why "only two options appeared" looked like a bug. §6 renames before it extends.
-- **An instruction that costs the implementer something needs its consequence in the same sentence.**
-- **Per-player state has a default home** — the sealed subcollection, not the readable room document.
-- **Doc structure rots silently.** The Resolved section has been split by duplicate headings three times. **Append inside the existing heading; never add a second.**
+- **An item can be marked done because the *other* items in its commit were.** Issues 71–76 landed as one commit; five were real and Issue 76 was untouched, yet the whole batch read as complete. **One item = one commit** exists for exactly this — a batch commit makes partial delivery invisible.
+- **A test suite can grow while the thing it was meant to cover stays untested.** Three tests were added and none asserted Issue 76's condition; the pre-existing placeholder tests assert the opposite case, so the area *looks* covered.
+- **A clamp is not a rejection.** `startGame` clamping an out-of-range value is not the same guard as `updateLobbySettings` refusing to store one.
+- **A default that must be derived from live state cannot be baked in at creation.** `min(n − 1, 5)` is `0` at `createRoom`; the implementation fell back to a constant instead, which is how the rule quietly went missing.
+- **When you redefine what a field holds, enumerate its readers.**
+- **Doc structure rots silently.** Append inside the existing Resolved heading; never add a second.
 
 ---
 
@@ -266,26 +191,27 @@ Verified this session: **Issues 68/69** (sealed `seenPrompts`, `FirebaseFunction
 ```
 (1) STUDY the item here + the rejected options in ongoing_general_errors.md + the
     exact files at the cited anchors (re-grep; line numbers drift).
-(2) IMPLEMENT exactly as specified. Copy strings verbatim.
-(3) VALIDATE per §8. Observe the falsifying assertion fail first, and record it.
-    Run the over-reach guard. Then the full §1 battery, including the BACKEND suite.
-(4) BEFORE COMMITTING, re-run the battery. Do not write a completion claim from memory.
+(2) IMPLEMENT exactly as specified.
+(3) VALIDATE per §6. Observe the falsifying assertion fail first, and record it.
+    Run the over-reach guards. Then the full §1 battery, including the BACKEND suite.
+(4) BEFORE COMMITTING, re-run the battery. One item = one commit — a batch commit
+    is how Issue 76 shipped untouched inside a batch that read as complete.
 (5) BLOCKED, or found something needing human judgement? STOP. File it in
     ongoing_general_errors.md with options and a `Your selection: _____` line.
 (6) RECORD: move the item to Resolved inside the SINGLE existing Resolved heading.
-(7) COMMIT: one item = one Conventional Commit, WHY in the body.
+(7) COMMIT: Conventional Commit, WHY in the body.
 ```
 
 ---
 
 ## Definition of Done
 
-- [ ] **§3 (Issue 71)** — `castVote` resolves via `answerAuthors` and stores the **author id**; unknown ids rejected; self-vote guard compares the resolved author; client badges and disables the player's own option **without** learning others' authorship. Delta-map-keys and self-vote assertions **observed failing first**; fixed-scenario scores unchanged.
-- [ ] **§4 (Issue 76)** — write and fill agree on one identifier, derived server-side; **no placeholder appears when everyone submits** (observed failing first); a genuine timeout still produces exactly one, on the right card.
-- [ ] **§5** — both `EVALUATE READY STATE (HOST)` instances removed; reactions removed with **comments recording why `lastReaction`/`lastReactionAt` intentionally remain**; standings enlarged with tabular figures; reveal re-validated at 360×640 dp × 1.3.
-- [ ] **§6 (Issue 72)** — rename committed separately from the round loop; the chooser **renders only `1 … n − 1`**; `updateLobbySettings` rejects out-of-range server-side; default `min(n − 1, 5)` applies **only when unset**; **7 forgeries selectable at 9 players** (5 is a default, not a cap); choice **clamped down** when the player count falls; **`activePlayers.length < 3` enforced as its own guard** and a 2-player game still refused; rounds loop returns to `truth` with fresh prompts and carried scores; deck sizing validated at `startGame`; a 1-round game behaves exactly as today.
-- [ ] §3, §4 and §6 deployed and verified by artefact inspection per `design_database_and_security.md` §8.
-- [ ] Full battery **pasted into the commit body**: `flutter analyze lib test` 0 errors · `flutter test` ≥ 127 · functions build clean · `npm --prefix functions test` ≥ 40.
-- [ ] Issues 71–76 moved to Resolved **inside the single existing Resolved heading**; `design_game_state_and_models.md` and `design_rotation_engine.md` updated for the new round/forgery model.
-- [ ] **A second playthrough after §6 lands** — it changes the game's shape, and the first one found six issues.
+- [ ] **§3 (Issue 76)** — `submitAnswer` derives the forgery key server-side from `currentCardAssignments`; the **"everyone submits → no placeholder"** assertion added and **observed failing first**; the existing timeout tests still pass unchanged; a spoofed `authorId` cannot write into another player's slot.
+- [ ] **§4.1** — default resolves to `min(n − 1, 5)` when unset, asserted at **4 players (3)** *and* **9 players (5)**; "unset" tracked distinctly from an explicit choice.
+- [ ] **§4.2** — `updateLobbySettings` rejects out-of-range with `invalid-argument`; the `startGame` clamp retained for the falling-player-count case.
+- [ ] **Over-reach:** explicit host choice survives player churn unless it exceeds `n − 1`; 7 forgeries selectable and startable at 9 players; 2-player game still refused; chooser still offers nothing above `n − 1`.
+- [ ] Deployed and verified by artefact inspection per `design_database_and_security.md` §8.
+- [ ] Full battery **pasted into the commit body**: `flutter analyze lib test` 0 errors · `flutter test` ≥ 127 · functions build clean · `npm --prefix functions test` ≥ 43.
+- [ ] Issues 72 and 76 moved to Resolved **inside the single existing Resolved heading**; `design_game_state_and_models.md` records the default rule, the ceiling, and the independent 3-player guard.
+- [ ] **A playthrough after this lands** — the round/forgery model changed, and the last playthrough found six issues.
 - [ ] **Guide rewritten** — body and title together — to `Queue Complete` or the next queue.

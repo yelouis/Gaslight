@@ -1045,7 +1045,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     const roomSnap = await roomRef.get();
     expect(roomSnap.data()?.currentPhase).to.equal('forgery');
     const targetCardId = roomSnap.data()?.currentCardAssignments['p_host'];
+    const guestTargetCardId = roomSnap.data()?.currentCardAssignments['p_guest'];
     expect(targetCardId).to.be.a('string');
+    expect(guestTargetCardId).to.be.a('string');
 
     // 5. Submit first forgery (distinct) -> succeeds
     await callFn('submitAnswer', hostUser.idToken, {
@@ -1056,13 +1058,16 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       isTruth: false
     });
 
-    // 6. Submit near-duplicate forgery from another player -> rejects
+    const guestSealed = await db.collection('rooms').doc(roomCode).collection('sealed').doc(guestTargetCardId).get();
+    const guestTruth = guestSealed.data()?.truthAnswer || 'Bob truth';
+
+    // 6. Submit near-duplicate forgery from another player against their assigned card's truth -> rejects
     try {
       await callFn('submitAnswer', guestUser.idToken, {
         roomCode,
-        targetCardId,
+        targetCardId: guestTargetCardId,
         authorId: 'p_guest',
-        text: 'sleep all day in bed',
+        text: `${guestTruth}!`,
         isTruth: false
       });
       expect.fail('Should have rejected the duplicate answer');
@@ -1074,17 +1079,18 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     // 7. Submit distinct forgery from the second player -> succeeds
     await callFn('submitAnswer', guestUser.idToken, {
       roomCode,
-      targetCardId,
+      targetCardId: guestTargetCardId,
       authorId: 'p_guest',
       text: 'playing video games',
       isTruth: false
     });
 
     // Verify forgery answers in sealed document (Issue 62 & 63)
-    const sealedSnap = await db.collection('rooms').doc(roomCode).collection('sealed').doc(targetCardId).get();
-    const sealedData = sealedSnap.data();
-    expect(sealedData?.sabotageAnswers['p_host']).to.equal('sleeping in my bed all day');
-    expect(sealedData?.sabotageAnswers['p_guest']).to.equal('playing video games');
+    const hostSealedSnap = await db.collection('rooms').doc(roomCode).collection('sealed').doc(targetCardId).get();
+    expect(hostSealedSnap.data()?.sabotageAnswers['p_host']).to.equal('sleeping in my bed all day');
+
+    const guestSealedSnap = await db.collection('rooms').doc(roomCode).collection('sealed').doc(guestTargetCardId).get();
+    expect(guestSealedSnap.data()?.sabotageAnswers['p_guest']).to.equal('playing video games');
   });
 
   describe('Issue 31: updateLobbySettings & startGame null handling', () => {
@@ -1459,7 +1465,7 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     });
 
     describe('Issue 76: Spurious placeholder prevention', () => {
-      it('generates no placeholder card when all players submit on time', async () => {
+      it('generates no placeholder card when all players submit on time and rejects spoofed submissions', async () => {
         const hostUser = await createAnonUser();
         const guest1User = await createAnonUser();
         const guest2User = await createAnonUser();
@@ -1479,6 +1485,17 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         let roomSnap = await roomRef.get();
         const assignments = roomSnap.data()?.currentCardAssignments || {};
 
+        // Spoofing guard test: submitting for a card caller is not assigned to must be rejected
+        let spoofRejected = false;
+        try {
+          await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Spoofed forgery', isTruth: false });
+        } catch (err: any) {
+          spoofRejected = true;
+          expect(err.status).to.equal('FAILED_PRECONDITION');
+        }
+        expect(spoofRejected).to.be.true;
+
+        // Genuine submissions
         await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_host'], authorId: 'p_host', text: 'Alice forgery', isTruth: false });
         await callFn('submitAnswer', guest1User.idToken, { roomCode, targetCardId: assignments['p_guest1'], authorId: 'p_guest1', text: 'Bob forgery', isTruth: false });
         await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: assignments['p_guest2'], authorId: 'p_guest2', text: 'Charlie forgery', isTruth: false });
@@ -1491,19 +1508,30 @@ describe('Gaslight E2E Game Emulator Tests', () => {
             expect(opt.text).to.not.equal('THE SOUL IS SILENT');
           }
         }
+
+        // Verify sealed documents contain no placeholder values
+        const sealedSnaps = await roomRef.collection('sealed').get();
+        for (const doc of sealedSnaps.docs) {
+          const sabs = doc.data()?.sabotageAnswers || {};
+          for (const val of Object.values(sabs)) {
+            expect(val).to.not.equal('THE SOUL IS SILENT');
+          }
+        }
       });
     });
 
     describe('Issue 72: Rounds, Forgeries, and 3-Player Floor', () => {
-      it('refuses 2-player game start and permits selecting 7 forgeries at 9 players', async () => {
+      it('refuses 2-player game start, validates unset defaults at 4 and 9 players, and rejects out-of-range updateLobbySettings', async () => {
         const hostUser = await createAnonUser();
         const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+        const guest3User = await createAnonUser();
 
         const createRes = await callFn('createRoom', hostUser.idToken, { playerName: 'Alice', playerId: 'p_host', debugEnabled: true });
         const roomCode = createRes.roomCode;
         await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
 
-        // Refuses 2-player start with dedicated guard
+        // 1. Refuses 2-player start with dedicated guard
         try {
           await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
           expect.fail('Should have failed 2-player start');
@@ -1512,20 +1540,51 @@ describe('Gaslight E2E Game Emulator Tests', () => {
           expect(err.message).to.contain('At least 3 players are required');
         }
 
-        // Add 7 bots -> total 9 players
-        await callFn('debugAddBots', hostUser.idToken, { roomCode });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await callFn('joinRoom', guest3User.idToken, { roomCode, playerName: 'Dave', playerId: 'p_guest3' });
 
-        // Update settings to 7 forgeries
-        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, forgeriesPerCard: 7 });
+        // 2. updateLobbySettings range validation: 0 or activePlayers (4) must be rejected
+        let rejectedZero = false;
+        try {
+          await callFn('updateLobbySettings', hostUser.idToken, { roomCode, forgeriesPerCard: 0 });
+        } catch (err: any) {
+          rejectedZero = true;
+          expect(err.status).to.equal('INVALID_ARGUMENT');
+        }
+        expect(rejectedZero).to.be.true;
 
+        let rejectedN = false;
+        try {
+          await callFn('updateLobbySettings', hostUser.idToken, { roomCode, forgeriesPerCard: 4 });
+        } catch (err: any) {
+          rejectedN = true;
+          expect(err.status).to.equal('INVALID_ARGUMENT');
+        }
+        expect(rejectedN).to.be.true;
+
+        // 3. Unset default resolution at 4 players (should resolve to min(4-1, 5) = 3)
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
         const roomRef = db.collection('rooms').doc(roomCode);
         let roomSnap = await roomRef.get();
-        expect(roomSnap.data()?.forgeriesPerCard).to.equal(7);
+        expect(roomSnap.data()?.forgeriesPerCard).to.equal(3);
+
+        // 4. Create new room with 9 players (unset default should resolve to min(9-1, 5) = 5)
+        const create9Res = await callFn('createRoom', hostUser.idToken, { playerName: 'Alice', playerId: 'p_host', debugEnabled: true });
+        const room9Code = create9Res.roomCode;
+        await callFn('joinRoom', guestUser.idToken, { roomCode: room9Code, playerName: 'Bob', playerId: 'p_guest' });
+        await callFn('debugAddBots', hostUser.idToken, { roomCode: room9Code }); // adds 7 bots -> total 9
+
+        // 5. Update settings to 7 forgeries (selectable at 9 players)
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode: room9Code, forgeriesPerCard: 7 });
+        const room9Ref = db.collection('rooms').doc(room9Code);
+        let room9Snap = await room9Ref.get();
+        expect(room9Snap.data()?.forgeriesPerCard).to.equal(7);
 
         // Starts successfully with 7 forgeries
-        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
-        roomSnap = await roomRef.get();
-        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+        await callFn('startGame', hostUser.idToken, { roomCode: room9Code, selectedDeckId: 'the_daily_grind' });
+        room9Snap = await room9Ref.get();
+        expect(room9Snap.data()?.currentPhase).to.equal('truth');
+        expect(room9Snap.data()?.forgeriesPerCard).to.equal(7);
       });
     });
   });

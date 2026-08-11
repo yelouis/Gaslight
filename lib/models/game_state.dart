@@ -8,14 +8,20 @@ class GameState {
 
   // Custom Configurability
   final int totalPlayers;
-  final int forgeriesPerCard;
+  final int? forgeriesPerCard;
   final int totalRounds;
   final int currentRound;
   final bool isTimerDisabled;
   final String selectedDeckId;
 
   // Legacy alias for compatibility
-  int get sabotageAnswersCount => forgeriesPerCard;
+  int? get sabotageAnswersCount => forgeriesPerCard;
+
+  int effectiveForgeriesPerCard(int activePlayersCount) {
+    if (forgeriesPerCard != null) return forgeriesPerCard!;
+    if (activePlayersCount <= 1) return 1;
+    return (activePlayersCount - 1).clamp(1, 5);
+  }
 
   // Rotation Tracking
   final int currentRotationIndex;
@@ -51,7 +57,7 @@ class GameState {
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
     this.totalPlayers = 4,
-    int forgeriesPerCard = 2,
+    int? forgeriesPerCard,
     int? sabotageAnswersCount,
     this.totalRounds = 1,
     this.currentRound = 1,
@@ -67,7 +73,7 @@ class GameState {
     this.resolutionOrder = const [],
     this.debugEnabled = false,
     this.unmaskDeadline,
-  }) : forgeriesPerCard = sabotageAnswersCount ?? forgeriesPerCard;
+  }) : forgeriesPerCard = forgeriesPerCard ?? sabotageAnswersCount;
 
   GameState copyWith({
     String? roomCode,
@@ -120,8 +126,8 @@ class GameState {
       'roomCode': roomCode,
       'currentPhase': currentPhase.name,
       'totalPlayers': totalPlayers,
-      'forgeriesPerCard': forgeriesPerCard,
-      'sabotageAnswersCount': forgeriesPerCard,
+      if (forgeriesPerCard != null) 'forgeriesPerCard': forgeriesPerCard,
+      if (forgeriesPerCard != null) 'sabotageAnswersCount': forgeriesPerCard,
       'totalRounds': totalRounds,
       'currentRound': currentRound,
       'isTimerDisabled': isTimerDisabled,
@@ -155,7 +161,7 @@ class GameState {
         orElse: () => GamePhase.lobby,
       ),
       totalPlayers: map['totalPlayers']?.toInt() ?? 4,
-      forgeriesPerCard: map['forgeriesPerCard']?.toInt() ?? map['sabotageAnswersCount']?.toInt() ?? 2,
+      forgeriesPerCard: map['forgeriesPerCard']?.toInt() ?? map['sabotageAnswersCount']?.toInt(),
       totalRounds: map['totalRounds']?.toInt() ?? 1,
       currentRound: map['currentRound']?.toInt() ?? 1,
       isTimerDisabled: map['isTimerDisabled'] as bool? ?? false,

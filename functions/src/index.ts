@@ -60,7 +60,7 @@ export const createRoom = onCall(async (request) => {
   const playerId = data.playerId as string; // stable UUID
   const colorValue = (data.colorValue as number) || 0xFF58A6FF;
   const avatarIndex = (data.avatarIndex as number) || 0;
-  const forgeriesPerCard = (data.forgeriesPerCard as number) || (data.sabotageAnswersCount as number) || 2;
+  const forgeriesPerCard = data.forgeriesPerCard != null ? Number(data.forgeriesPerCard) : (data.sabotageAnswersCount != null ? Number(data.sabotageAnswersCount) : null);
   const totalRounds = (data.totalRounds as number) || 1;
   const isTimerDisabled = (data.isTimerDisabled as boolean) || false;
   const selectedDeckId = (data.selectedDeckId as string) || "the_daily_grind";
@@ -82,7 +82,7 @@ export const createRoom = onCall(async (request) => {
   }
 
   if (exists) {
-    throw new HttpsError("internal", "Could not generate unique room code.");
+    throw new HttpsError("resource-exhausted", "Could not generate a unique room code. Try again.");
   }
 
   const roomRef = db.collection("rooms").doc(roomCode);
@@ -93,8 +93,8 @@ export const createRoom = onCall(async (request) => {
     roomCode,
     currentPhase: "lobby",
     totalPlayers: 1,
-    forgeriesPerCard,
-    sabotageAnswersCount: forgeriesPerCard,
+    forgeriesPerCard: forgeriesPerCard ?? null,
+    sabotageAnswersCount: forgeriesPerCard ?? null,
     totalRounds,
     currentRound: 1,
     isTimerDisabled,
@@ -111,7 +111,7 @@ export const createRoom = onCall(async (request) => {
     expiresAt: ttlFrom(nowMs)
   };
 
-  const playerState = {
+  const playerState: PlayerState = {
     id: playerId,
     name: playerName,
     totalScore: 0,
@@ -261,7 +261,10 @@ export const startGame = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "At least 3 players are required to start the game.");
     }
 
-    let forgeriesPerCard = room.forgeriesPerCard ?? room.sabotageAnswersCount ?? 2;
+    let forgeriesPerCard = room.forgeriesPerCard ?? room.sabotageAnswersCount;
+    if (forgeriesPerCard == null) {
+      forgeriesPerCard = Math.min(activePlayers.length - 1, 5);
+    }
     if (!Number.isInteger(forgeriesPerCard) || forgeriesPerCard < 1) {
       throw new HttpsError(
         "failed-precondition",
@@ -477,6 +480,24 @@ export const submitAnswer = onCall(async (request) => {
     const playersSnap = await transaction.get(roomRef.collection("players"));
 
     const room = roomSnap.data() as GameState;
+
+    if (isTruth) {
+      if (room.currentPhase !== "truth") {
+        throw new HttpsError("failed-precondition", "Truth submissions are only allowed during the truth phase.");
+      }
+      if (targetCardId !== authorId) {
+        throw new HttpsError("failed-precondition", "Players can only submit truth for their own card.");
+      }
+    } else {
+      if (room.currentPhase !== "forgery") {
+        throw new HttpsError("failed-precondition", "Forgery submissions are only allowed during the forgery phase.");
+      }
+      const assignedTargetCardId = room.currentCardAssignments?.[authorId];
+      if (!assignedTargetCardId || assignedTargetCardId !== targetCardId) {
+        throw new HttpsError("failed-precondition", "Player is not assigned to forge this card in the current rotation.");
+      }
+    }
+
     const cardIdx = room.cards.findIndex(c => c.targetPlayerId === targetCardId);
     if (cardIdx === -1) {
       throw new HttpsError("not-found", "Target card not found.");
@@ -1159,17 +1180,19 @@ export const updateLobbySettings = onCall(async (request) => {
     const numPlayers = activePlayers.length;
 
     const data = roomSnap.data() as GameState;
-    let newForgeries = forgeriesPerCard != null ? forgeriesPerCard : sabotageAnswersCount;
-    if (newForgeries == null) {
-      newForgeries = data.forgeriesPerCard ?? data.sabotageAnswersCount ?? 2;
-    }
+    const isExplicitForgeriesUpdate = forgeriesPerCard != null || sabotageAnswersCount != null;
+    let newForgeries: number | undefined = isExplicitForgeriesUpdate
+      ? Number(forgeriesPerCard != null ? forgeriesPerCard : sabotageAnswersCount)
+      : (data.forgeriesPerCard ?? data.sabotageAnswersCount ?? undefined);
 
-    if (!Number.isInteger(newForgeries) || newForgeries < 1) {
-      throw new HttpsError("invalid-argument", `Forgeries per card (${newForgeries}) must be at least 1.`);
-    }
-
-    if (numPlayers >= 2 && newForgeries > numPlayers - 1) {
-      throw new HttpsError("invalid-argument", `Forgeries per card (${newForgeries}) cannot exceed active players - 1 (${numPlayers - 1}).`);
+    if (isExplicitForgeriesUpdate && newForgeries != null) {
+      const maxAllowed = numPlayers > 1 ? numPlayers - 1 : 8;
+      if (!Number.isInteger(newForgeries) || newForgeries < 1 || newForgeries > maxAllowed) {
+        throw new HttpsError(
+          "invalid-argument",
+          `Forgeries per card (${newForgeries}) must be between 1 and active players - 1 (${maxAllowed}).`
+        );
+      }
     }
 
     let newTotalRounds = totalRounds != null ? totalRounds : (data.totalRounds || 1);
@@ -1177,14 +1200,18 @@ export const updateLobbySettings = onCall(async (request) => {
       throw new HttpsError("invalid-argument", `Total rounds (${newTotalRounds}) must be between 1 and 5.`);
     }
 
-    transaction.update(roomRef, {
-      forgeriesPerCard:     newForgeries,
-      sabotageAnswersCount: newForgeries,
-      totalRounds:          newTotalRounds,
-      isTimerDisabled:      isTimerDisabled      != null ? isTimerDisabled      : data.isTimerDisabled,
-      selectedDeckId:       selectedDeckId       != null ? selectedDeckId       : (data.selectedDeckId || "the_daily_grind"),
-      expiresAt:            ttlFrom(Date.now())
-    });
+    const updatePayload: Record<string, any> = {
+      totalRounds: newTotalRounds,
+      isTimerDisabled: isTimerDisabled != null ? isTimerDisabled : (data.isTimerDisabled || false),
+      selectedDeckId: selectedDeckId != null ? selectedDeckId : (data.selectedDeckId || "the_daily_grind"),
+      expiresAt: ttlFrom(Date.now())
+    };
+    if (newForgeries !== undefined) {
+      updatePayload.forgeriesPerCard = newForgeries;
+      updatePayload.sabotageAnswersCount = newForgeries;
+    }
+
+    transaction.update(roomRef, updatePayload);
 
     return { success: true };
   });

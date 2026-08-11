@@ -250,7 +250,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       }
 
       var pIds = activePlayers.map((p) => p.id).toList();
-      var nativeRotations = RotationEngine.generateRotations(pIds, roomState.sabotageAnswersCount);
+      var nativeRotations = RotationEngine.generateRotations(pIds, roomState.effectiveForgeriesPerCard(activePlayers.length));
       Map<String, Map<String, String>> stringRotations = {};
       nativeRotations.forEach((key, val) => stringRotations[key.toString()] = val);
       List<CardModel> startingCards = [];
@@ -650,7 +650,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
             .map((p) => p.id)
             .toList();
             
-        int remainingRotations = state.sabotageAnswersCount;
+        int remainingRotations = state.effectiveForgeriesPerCard(activePlayerIds.length);
         if (activePlayerIds.length <= remainingRotations) {
           remainingRotations = activePlayerIds.length - 1;
         }
@@ -922,7 +922,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       }).toList();
 
       final pIds = activePlayers.map((p) => p.id).toList();
-      final nativeRotations = RotationEngine.generateRotations(pIds, state.sabotageAnswersCount);
+      final nativeRotations = RotationEngine.generateRotations(pIds, state.effectiveForgeriesPerCard(activePlayers.length));
       final Map<String, Map<String, String>> stringRotations = {};
       nativeRotations.forEach((key, val) => stringRotations[key.toString()] = val);
       final startIdx = 1;
@@ -955,7 +955,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         return card;
       }).toList();
 
-      if (state.currentRotationIndex < state.sabotageAnswersCount) {
+      if (state.currentRotationIndex < state.effectiveForgeriesPerCard(activePlayers.length)) {
         int nextRot = state.currentRotationIndex + 1;
         Map<String, String> nextAssignments = state.rotationPlan[nextRot.toString()]!;
         nextState = nextState.copyWith(
