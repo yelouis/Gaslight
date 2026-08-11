@@ -32,7 +32,6 @@ class CardModel {
   final List<CardAnswerOption> options;
   final Map<String, String> votes; // VoterId -> VotedForAuthorId
   final Map<String, String> unmaskGuesses; // GuesserId -> GuessedAuthorId
-  final List<String> seenPrompts;
 
   CardModel({
     required this.targetPlayerId,
@@ -42,7 +41,6 @@ class CardModel {
     this.options = const [],
     this.votes = const {},
     this.unmaskGuesses = const {},
-    this.seenPrompts = const [],
   });
 
   CardModel copyWith({
@@ -53,7 +51,6 @@ class CardModel {
     List<CardAnswerOption>? options,
     Map<String, String>? votes,
     Map<String, String>? unmaskGuesses,
-    List<String>? seenPrompts,
   }) {
     return CardModel(
       targetPlayerId: targetPlayerId ?? this.targetPlayerId,
@@ -63,7 +60,6 @@ class CardModel {
       options: options ?? this.options,
       votes: votes ?? this.votes,
       unmaskGuesses: unmaskGuesses ?? this.unmaskGuesses,
-      seenPrompts: seenPrompts ?? this.seenPrompts,
     );
   }
 
@@ -76,7 +72,6 @@ class CardModel {
       'options': options.map((o) => o.toMap()).toList(),
       'votes': votes,
       'unmaskGuesses': unmaskGuesses,
-      'seenPrompts': seenPrompts,
     };
   }
 
@@ -89,12 +84,6 @@ class CardModel {
           .toList();
     }
 
-    final rawSeen = map['seenPrompts'];
-    List<String> parsedSeen = [];
-    if (rawSeen is List) {
-      parsedSeen = List<String>.from(rawSeen);
-    }
-
     return CardModel(
       targetPlayerId: map['targetPlayerId'] ?? '',
       promptText: map['promptText'] ?? '',
@@ -103,7 +92,6 @@ class CardModel {
       options: parsedOptions,
       votes: Map<String, String>.from(map['votes'] ?? {}),
       unmaskGuesses: Map<String, String>.from(map['unmaskGuesses'] ?? {}),
-      seenPrompts: parsedSeen,
     );
   }
 }

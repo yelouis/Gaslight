@@ -384,8 +384,7 @@ export const startGame = onCall(async (request) => {
       sabotageAnswers: {},
       options: [],
       votes: {},
-      unmaskGuesses: {},
-      seenPrompts: [prompts[idx]]
+      unmaskGuesses: {}
     }));
 
     const endTime = room.isTimerDisabled ? null : Date.now() + 60000;
@@ -673,8 +672,14 @@ export const rerollPrompt = onCall(async (request) => {
       throw new HttpsError("not-found", "Card not found for player.");
     }
 
+    const sealedRef = roomRef.collection("sealed").doc(playerId);
+    const sealedSnap = await transaction.get(sealedRef);
+
     const targetCard = room.cards[cardIdx];
-    const cardSeen = targetCard.seenPrompts || [targetCard.promptText];
+    const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
+    const cardSeen: string[] = (sealedData && Array.isArray(sealedData.seenPrompts) && sealedData.seenPrompts.length > 0)
+      ? sealedData.seenPrompts
+      : [targetCard.promptText];
 
     const excluded = new Set([
       ...room.cards.map(c => c.promptText),
@@ -685,13 +690,15 @@ export const rerollPrompt = onCall(async (request) => {
 
     const updatedCard = {
       ...targetCard,
-      promptText: newPrompt,
-      seenPrompts: [...cardSeen, newPrompt]
+      promptText: newPrompt
     };
     const newCards = [...room.cards];
     newCards[cardIdx] = updatedCard;
 
+    const updatedSeen = [...cardSeen, newPrompt];
+
     transaction.update(roomRef, { cards: newCards });
+    transaction.set(sealedRef, { seenPrompts: updatedSeen }, { merge: true });
 
     return { success: true };
   });

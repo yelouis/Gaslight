@@ -142,7 +142,6 @@ class _CandleFlamePainter extends CustomPainter {
     double swayX = isStatic ? 0.0 : math.sin(animationValue * 2 * math.pi) * 2.5;
 
     final double baseWidth = 14.0;
-    final Offset flameTip = Offset(wickTop.dx + swayX, wickTop.dy - flameHeight);
 
     // Outer flame: brass @ 0.85
     final outerPaint = Paint()

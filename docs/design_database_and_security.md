@@ -9,7 +9,7 @@ This document outlines the Firestore structure, the server-authoritative write a
 * `/rooms/{roomCode}`: the root `GameState` document (phase, cards, votes, readiness, rotation plan).
 * `/rooms/{roomCode}/players/{playerId}`: individual `PlayerState` documents. `playerId` is a client-chosen stable ID; the document stores `authUid` (the Firebase anonymous UID currently bound to that seat) for server-side ownership checks.
 * `/rooms/{roomCode}/embeddings/{answerHash}`: server-managed cache of Gemini embedding vectors (md5 of the normalized answer text → vector) for the semantic-similarity filter. No client rule → default deny; server-only.
-* `/rooms/{roomCode}/sealed/{cardId}`: server-managed answer keys (`truthAnswer` and `sabotageAnswers` forgery map) stored during `truth`, `forgery`, and `vote` phases to conceal answer origin until `reveal`. No client rule → default deny; server-only.
+* `/rooms/{roomCode}/sealed/{cardId}`: server-managed answer keys (`truthAnswer` and `sabotageAnswers` forgery map) and per-player prompt history (`seenPrompts` list) stored during `truth`, `forgery`, and `vote` phases to conceal answer origin and prompt history until reveal. No client rule → default deny; server-only.
 
 ---
 

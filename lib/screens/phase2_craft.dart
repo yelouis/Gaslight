@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/game_service.dart';
@@ -511,8 +512,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                                   } catch (e) {
                                     debugPrint('rerollMyPrompt error: $e');
                                     if (mounted) {
-                                       final String errStr = e.toString();
-                                       final String msg = (errStr.contains('No more prompts') || errStr.contains('resource-exhausted'))
+                                       final String msg = (e is FirebaseFunctionsException && e.code == 'resource-exhausted')
                                            ? 'No more prompts left in this deck.'
                                            : 'Something went wrong. Try again.';
                                       ScaffoldMessenger.of(context).showSnackBar(

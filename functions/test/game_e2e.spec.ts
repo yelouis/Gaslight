@@ -848,6 +848,16 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       seenByHost.add(updatedHostCard.promptText);
     }
 
+    // Issue 69 assertion: Public cards MUST NOT carry seenPrompts
+    const publicHostCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+    expect(publicHostCard).to.not.have.property('seenPrompts');
+
+    // Issue 69 assertion: Sealed document MUST carry seenPrompts
+    const sealedSnap = await db.collection('rooms').doc(roomCode).collection('sealed').doc('p_host').get();
+    expect(sealedSnap.exists).to.be.true;
+    expect(sealedSnap.data()?.seenPrompts).to.be.an('array');
+    expect(sealedSnap.data()?.seenPrompts).to.have.lengthOf(11);
+
     // The host has now seen 11 prompts (1 initial + 10 re-rolled). The guest has 1 prompt.
     // Total 12 prompts used. The 11th re-roll should fail with resource-exhausted HttpsError.
     let threwExhaustion = false;

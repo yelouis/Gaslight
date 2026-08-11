@@ -69,3 +69,13 @@ Contributions ride the player's own document to avoid a new write path (rules al
 - **`CHOSEN` Badge**: On non-host carousels, the host's currently selected deck card is badged with an oxblood/brass `CHOSEN` label.
 - **3-Second Swipe Protection**: When the host updates `selectedDeckId` via Firestore stream, a non-host's carousel page position does not snap back to the chosen deck if the non-host swiped within the last 3 seconds (`_lastSwipeTime`).
 
+---
+
+## 5. Re-roll Prompt Exclusion & Mirror Invariant Status (Issue 67 & 69 — August 2026)
+
+- **Sealed Storage (`/rooms/{roomCode}/sealed/{cardId}`)**: The list of prompts a player has seen and rejected during re-rolls (`seenPrompts: string[]`) is stored in the server-only `/sealed/{cardId}` subcollection (keyed by target player ID), preserving player privacy by keeping declined prompts off the public, client-readable room document.
+- **Lazy Seeding & Accumulation**: `rerollPrompt` reads the player's sealed document inside the transaction prior to any writes, seeding `seenPrompts` lazily from `targetCard.promptText` if not yet created. The excluded set for a re-roll contains all active card prompts across the match plus all prompts previously seen by the target player.
+- **Exhaustion Handling**: When no unique prompts remain in the deck, `PromptDecks.drawOneExcluding` throws `HttpsError("resource-exhausted", "No more prompts left in this deck.")`. Client UI (`phase2_craft.dart`) matches explicitly on `e is FirebaseFunctionsException && e.code == 'resource-exhausted'`.
+- **TypeScript ↔ Dart Mirror Status**: `functions/src/prompt_decks.ts` and `lib/utils/prompt_decks.dart` mirror the static prompt arrays byte-for-byte. The error plumbing is intentionally decoupled: the TypeScript backend throws typed `HttpsError` exceptions, whereas the Dart module throws standard `Exception` instances (used solely by `test/fake_functions.dart`).
+
+

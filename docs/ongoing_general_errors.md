@@ -6,22 +6,20 @@
 
 **Bug-filing format** is in `.agents/skills/bug_documentation_guidelines/`. Open issues end with a `Your selection: _____` line; that line is the user's, and an agent must never fill it in on their own behalf.
 
----
+-## 1. Open & in-flight
 
-## 1. Open & in-flight
+**0 open issues.** All tracked issues (through Issue 69) are resolved, tested, verified, and deployed to production.
 
-**0 open issues.** Issues 63–67 have been completed, tested, and deployed to production.
-
-**Battery measured at clean tree (August 10, 2026):**
+**Battery measured at clean tree (August 11, 2026):**
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors** ✅ (272 infos) |
-| `flutter test` | **125/125** ✅ |
+| `flutter analyze lib test` | **0 errors** ✅ |
+| `flutter test` | **127/127** ✅ |
 | `npm --prefix functions run build` | clean ✅ |
 | `npm --prefix functions test` | **40/40** ✅ |
 | `flutter build ios --release --no-codesign` | **49.5 MB** (`Runner.app`) — 49,545,165 bytes decimal |
-| Production functions | all 14 updated `2026-08-10T23:33 UTC` |
+| Production functions | all 14 updated `2026-08-11T00:04 UTC` (`gaslight-46368`) |
 
 ### Reference: the real minimum player count
 
@@ -34,9 +32,9 @@ So **at default settings the practical minimum is 3 players.** Two players only 
 
 ---
 
-*(No unresolved issues at this time.)*
+## ⚠️ Unresolved Issues & Suggestions
 
----
+*None currently open.*
 
 ---
 
@@ -239,6 +237,26 @@ So **at default settings the practical minimum is 3 players.** Two players only 
       Committed proportions differ slightly from the spec (door `0.18–0.48`/`0.18–0.82`, shaft from `0.32`) but preserve the intent, which the spec explicitly permitted.
     - **Glyph audit completed (August 10, 2026)** — the concern that produced Issue 57 applied equally to the eleven remaining font-backed icons, none of which had ever been checked. All eleven were decoded from the TTF and compared against their comments in `app_icons.dart`: `writing`/feather, `redraw`/arrows-clockwise, `timer`/hourglass, `secret`/key, `ledger`/open-book, `envelope`/envelope, `observe`/magnifying-glass, `confirm`/seal-with-check, `sound`/bell-ringing, `mute`/bell-slash, `host`/lamp. **All eleven match.** No sibling defect exists; the mapping process produced exactly one bad codepoint. Recorded in `design_ui_direction.md` §7.
     - **⚠️ Known gap — the regression guard is missing.** The specced falsifying assertion for "the sigil actually draws something" (render to a bitmap, decode with `test/helpers/png_decoder.dart`, assert an ink-pixel floor) was **not implemented**. `find.byType(CustomPaint)` is satisfied whether or not the painter draws anything, so **the suite would stay green if `case ThematicIconType.depart:` were reverted to a bare `break;`.** The icon is correct today and unprotected tomorrow. Carried in `agent_execution_guide.md` §3.
+
+13. **Issue 68: Re-roll Deck Exhaustion Client SnackBar & Exception Handling (Resolved - August 11, 2026)**:
+    - **Problem**: The client exception matcher in `lib/screens/phase2_craft.dart` matched on substring text matching `(errStr.contains('No more prompts') || errStr.contains('resource-exhausted'))` rather than comparing `FirebaseFunctionsException.code == 'resource-exhausted'`. Furthermore, `test/fake_functions.dart` threw standard `Exception` instead of `FirebaseFunctionsException`, making client exception paths untestable in widget tests.
+    - **Solution**: Implemented Option A. Updated `test/fake_functions.dart` to throw `FirebaseFunctionsException(code: 'resource-exhausted', message: 'No more prompts left in this deck.')` when a deck is exhausted during re-roll. Added `overrideCallable` support to `FakeFirebaseFunctions` to allow per-test callable behavior injection. Updated `lib/screens/phase2_craft.dart` exception handler to match strictly on `e is FirebaseFunctionsException && e.code == 'resource-exhausted'` displaying `'No more prompts left in this deck.'` while falling back to `'Something went wrong. Try again.'` for generic errors without exposing raw stack traces. Created `test/reroll_deck_exhaustion_test.dart` containing 2 passing widget tests for both resource exhaustion and generic internal errors.
+    - **Observed Falsifying Output**:
+      - Verified under `test/reroll_deck_exhaustion_test.dart` that throwing `code: 'resource-exhausted'` renders `'No more prompts left in this deck.'` in the SnackBar and NOT `'Something went wrong. Try again.'`.
+      - Verified over-reach guard: throwing `code: 'internal'` renders `'Something went wrong. Try again.'` and NOT `'No more prompts left in this deck.'`.
+    - **Verification**: `flutter test test/reroll_deck_exhaustion_test.dart` passed 100%. Full Flutter test battery (127/127 passed).
+
+14. **Issue 69: Sealed Storage for `seenPrompts` Subcollection (Resolved - August 11, 2026)**:
+    - **Problem**: `seenPrompts` list of rejected prompts was stored on `CardModel` on the client-readable root room document (`firestore.rules` `allow read: if true`), leaking players' rejected prompt history to all clients in the match.
+    - **Solution**: Implemented Option A. Removed `seenPrompts` from `CardModel` interface in `functions/src/scoring_logic.ts` and class in `lib/models/card_model.dart`. Removed initial `seenPrompts` creation from `startGame` in `functions/src/index.ts`. Updated `rerollPrompt` in `functions/src/index.ts` to read the player's sealed document (`/rooms/{roomCode}/sealed/{cardId}`) inside the Firestore transaction before any writes, seeding `seenPrompts` lazily from the card's current `promptText` if not yet present, and writing the updated `seenPrompts` array to the sealed document. Updated `test/fake_functions.dart` to mirror the sealed subcollection storage.
+    - **Observed Falsifying Output (E2E Test in `functions/test/game_e2e.spec.ts`)**:
+      ```text
+      // Public room card doc MUST NOT have seenPrompts
+      expect(publicHostCard).to.not.have.property('seenPrompts'); // PASSED
+      // Sealed subcollection doc MUST have seenPrompts
+      expect(sealedSnap.data()?.seenPrompts).to.have.lengthOf(11); // PASSED
+      ```
+    - **Verification**: `npm --prefix functions test` (40/40 passing), `flutter test` (127/127 passing), Cloud Functions deployed to production `gaslight-46368` (all 14 functions updated).
 
 ---
 

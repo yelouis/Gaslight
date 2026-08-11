@@ -21,12 +21,17 @@ class FakeFirebaseFunctions extends Fake implements FirebaseFunctions {
   Map<String, dynamic>? lastCallParams;
   String? lastCallName;
   final Map<String, int> callableInvocations = {};
+  final Map<String, Future<dynamic> Function(Map<String, dynamic> params)> _callableOverrides = {};
 
   FakeFirebaseFunctions(this.db);
 
+  void overrideCallable(String name, Future<dynamic> Function(Map<String, dynamic> params) handler) {
+    _callableOverrides[name] = handler;
+  }
+
   @override
   HttpsCallable httpsCallable(String name, {HttpsCallableOptions? options}) {
-    return FakeHttpsCallable(db, name, onCall: (n, p) {
+    return FakeHttpsCallable(db, name, overrideHandler: _callableOverrides[name], onCall: (n, p) {
       lastCallName = n;
       lastCallParams = p;
       callableInvocations[n] = (callableInvocations[n] ?? 0) + 1;
@@ -37,14 +42,19 @@ class FakeFirebaseFunctions extends Fake implements FirebaseFunctions {
 class FakeHttpsCallable extends Fake implements HttpsCallable {
   final FirebaseFirestore db;
   final String name;
+  final Future<dynamic> Function(Map<String, dynamic> params)? overrideHandler;
   final void Function(String name, Map<String, dynamic> params)? onCall;
 
-  FakeHttpsCallable(this.db, this.name, {this.onCall});
+  FakeHttpsCallable(this.db, this.name, {this.overrideHandler, this.onCall});
 
   @override
   Future<HttpsCallableResult<T>> call<T>([dynamic parameters]) async {
     final params = parameters as Map<String, dynamic>? ?? {};
     onCall?.call(name, params);
+    if (overrideHandler != null) {
+      final res = await overrideHandler!(params);
+      return FakeHttpsCallableResult(res as T);
+    }
     final roomCode = params['roomCode'] as String? ?? 'TEST';
 
     if (name == 'createRoom') {
@@ -237,7 +247,6 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         startingCards.add(CardModel(
           targetPlayerId: pIds[i],
           promptText: prompts[i],
-          seenPrompts: [prompts[i]],
         ));
       }
 
@@ -484,18 +493,35 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final cardIndex = cards.indexWhere((c) => c.targetPlayerId == playerId);
         final oldCard = cards[cardIndex];
 
+        final sealedRef = roomRef.collection('sealed').doc(playerId);
+        final sealedSnap = await transaction.get(sealedRef);
+        List<String> cardSeenPrompts = [oldCard.promptText];
+        if (sealedSnap.exists && sealedSnap.data()?['seenPrompts'] != null) {
+          cardSeenPrompts = List<String>.from(sealedSnap.data()!['seenPrompts']);
+        }
+
         final deckId = currentState.selectedDeckId == 'custom' ? 'the_daily_grind' : currentState.selectedDeckId;
-        final cardSeenPrompts = oldCard.seenPrompts.isNotEmpty ? oldCard.seenPrompts : [oldCard.promptText];
         final excludedPrompts = {
           ...cards.map((c) => c.promptText),
           ...cardSeenPrompts,
         };
-        final newPromptText = PromptDecks.drawOneExcluding(deckId, excludedPrompts);
+
+        String newPromptText;
+        try {
+          newPromptText = PromptDecks.drawOneExcluding(deckId, excludedPrompts);
+        } catch (e) {
+          throw FirebaseFunctionsException(
+            message: 'No more prompts left in this deck.',
+            code: 'resource-exhausted',
+          );
+        }
+
         final updatedSeen = [...cardSeenPrompts, newPromptText];
 
-        cards[cardIndex] = oldCard.copyWith(promptText: newPromptText, seenPrompts: updatedSeen);
+        cards[cardIndex] = oldCard.copyWith(promptText: newPromptText);
 
         transaction.update(roomRef, {'cards': cards.map((c) => c.toMap()).toList()});
+        transaction.set(sealedRef, {'seenPrompts': updatedSeen}, SetOptions(merge: true));
       });
 
       return FakeHttpsCallableResult({'success': true} as T);

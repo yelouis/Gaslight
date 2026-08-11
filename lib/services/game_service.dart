@@ -64,6 +64,14 @@ class GameService extends ChangeNotifier {
   List<PlayerState> get players => _players;
   String? get currentPlayerId => _currentPlayerId;
 
+  @visibleForTesting
+  void debugSetState(GameState gameState, List<PlayerState> players, String currentPlayerId) {
+    _gameState = gameState;
+    _players = players;
+    _currentPlayerId = currentPlayerId;
+    notifyListeners();
+  }
+
   // Cleanup and Heartbeat
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _roomSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _playersSubscription;
