@@ -12,7 +12,10 @@ export interface GameState {
   roomCode: string;
   currentPhase: string;
   totalPlayers: number;
-  sabotageAnswersCount: number;
+  forgeriesPerCard: number;
+  sabotageAnswersCount?: number;
+  totalRounds?: number;
+  currentRound?: number;
   isTimerDisabled: boolean;
   selectedDeckId: string;
   currentRotationIndex: number;

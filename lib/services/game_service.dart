@@ -78,7 +78,10 @@ class GameService extends ChangeNotifier {
   Timer? _heartbeatTimer;
 
   // Duplicate-advance guards
-  final Set<String> _advancedStateKeys = {};
+  final Map<String, String> _advancedStateKeys = {};
+  final Set<String> _mySubmittedAnswers = {};
+  
+  bool isMySubmittedAnswer(String text) => _mySubmittedAnswers.contains(text.trim());
 
   // Disconnect in-flight guards
   final Set<String> _disconnectsInFlight = {};
@@ -290,6 +293,7 @@ class GameService extends ChangeNotifier {
     _players = [];
     _currentPlayerId = null;
     _advancedStateKeys.clear();
+    _mySubmittedAnswers.clear();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('room_code');
@@ -395,10 +399,15 @@ class GameService extends ChangeNotifier {
     });
   }
 
-  Future<void> updateLobbySettings({int? sabotageAnswersCount, bool? isTimerDisabled, String? selectedDeckId}) async {
+  Future<void> updateLobbySettings({int? forgeriesPerCard, int? sabotageAnswersCount, int? totalRounds, bool? isTimerDisabled, String? selectedDeckId}) async {
     if (_gameState == null || currentPlayer?.isHost != true) return;
     final payload = <String, dynamic>{'roomCode': _gameState!.roomCode};
-    if (sabotageAnswersCount != null) payload['sabotageAnswersCount'] = sabotageAnswersCount;
+    final fCount = forgeriesPerCard ?? sabotageAnswersCount;
+    if (fCount != null) {
+      payload['forgeriesPerCard'] = fCount;
+      payload['sabotageAnswersCount'] = fCount;
+    }
+    if (totalRounds != null) payload['totalRounds'] = totalRounds;
     if (isTimerDisabled != null) payload['isTimerDisabled'] = isTimerDisabled;
     if (selectedDeckId != null) payload['selectedDeckId'] = selectedDeckId;
     await _functions.httpsCallable('updateLobbySettings').call(payload);
@@ -413,17 +422,6 @@ class GameService extends ChangeNotifier {
       'roomCode': rCode,
       'guesserId': p.id,
       'guessedAuthorId': guessedAuthorId,
-    });
-  }
-
-  Future<void> sendReaction(String emoji) async {
-    final p = currentPlayer;
-    final rCode = _gameState?.roomCode;
-    if (p == null || rCode == null || rCode.isEmpty) return;
-    
-    await _db.collection('rooms').doc(rCode).collection('players').doc(p.id).update({
-      'lastReaction': emoji,
-      'lastReactionAt': DateTime.now().millisecondsSinceEpoch,
     });
   }
 
@@ -464,6 +462,9 @@ class GameService extends ChangeNotifier {
   
   Future<void> submitCardAnswer(String targetCardId, String authorId, String text, bool isTruth) async {
     if (_gameState == null) return;
+    if (text.trim().isNotEmpty) {
+      _mySubmittedAnswers.add(text.trim());
+    }
     await _functions.httpsCallable('submitAnswer').call({
       'roomCode': _gameState!.roomCode,
       'targetCardId': targetCardId,

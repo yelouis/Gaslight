@@ -49,6 +49,7 @@ class _PosePainter extends CustomPainter {
     required this.image,
     required this.frameIndex,
     required this.cols,
+    // ignore: unused_element_parameter
     this.cellSize = 256.0,
   });
 

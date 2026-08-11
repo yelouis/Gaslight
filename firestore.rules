@@ -20,7 +20,8 @@ service cloud.firestore {
         // Creation is handled by createRoom and joinRoom callables
         allow create: if false;
         
-        // Players can update only cosmetic/heartbeat/reaction fields on their own document.
+        // Players can update only cosmetic/heartbeat fields on their own document.
+        // Note: lastReaction and lastReactionAt are intentionally retained dead fields from the removed reaction feature (Issue 74, August 2026), kept to avoid a rules deploy and data migration. Safe to drop when firestore.rules is next revised.
         // Critical game fields like score, role, host status, and rejoin identifiers are locked to server writes.
         allow update: if isAuthenticated() 
                       && resource.data.authUid == request.auth.uid

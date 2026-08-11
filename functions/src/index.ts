@@ -60,7 +60,8 @@ export const createRoom = onCall(async (request) => {
   const playerId = data.playerId as string; // stable UUID
   const colorValue = (data.colorValue as number) || 0xFF58A6FF;
   const avatarIndex = (data.avatarIndex as number) || 0;
-  const sabotageAnswersCount = (data.sabotageAnswersCount as number) || 2;
+  const forgeriesPerCard = (data.forgeriesPerCard as number) || (data.sabotageAnswersCount as number) || 2;
+  const totalRounds = (data.totalRounds as number) || 1;
   const isTimerDisabled = (data.isTimerDisabled as boolean) || false;
   const selectedDeckId = (data.selectedDeckId as string) || "the_daily_grind";
   const debugEnabled = (data.debugEnabled as boolean) || false;
@@ -92,7 +93,10 @@ export const createRoom = onCall(async (request) => {
     roomCode,
     currentPhase: "lobby",
     totalPlayers: 1,
-    sabotageAnswersCount,
+    forgeriesPerCard,
+    sabotageAnswersCount: forgeriesPerCard,
+    totalRounds,
+    currentRound: 1,
     isTimerDisabled,
     selectedDeckId,
     currentRotationIndex: 0,
@@ -253,21 +257,23 @@ export const startGame = onCall(async (request) => {
     }
 
     const activePlayers = players.filter(p => p.role !== "spectator");
-    if (activePlayers.length < 2) {
-      throw new HttpsError("failed-precondition", "Cannot start: Need at least 2 active players.");
+    if (activePlayers.length < 3) {
+      throw new HttpsError("failed-precondition", "At least 3 players are required to start the game.");
     }
 
-    const rounds = room.sabotageAnswersCount;
-    if (!Number.isInteger(rounds) || rounds < 1) {
+    let forgeriesPerCard = room.forgeriesPerCard ?? room.sabotageAnswersCount ?? 2;
+    if (!Number.isInteger(forgeriesPerCard) || forgeriesPerCard < 1) {
       throw new HttpsError(
         "failed-precondition",
-        `This room has an invalid forgery-round count (${JSON.stringify(rounds)}). Re-set the house rules, then start again.`
+        `This room has an invalid forgery-round count (${JSON.stringify(forgeriesPerCard)}). Re-set the house rules, then start again.`
       );
     }
 
-    if (activePlayers.length <= rounds) {
-      throw new HttpsError("failed-precondition", "Cannot start: Need more players than forgery rounds.");
+    if (forgeriesPerCard > activePlayers.length - 1) {
+      forgeriesPerCard = activePlayers.length - 1;
     }
+
+    const totalRounds = room.totalRounds || 1;
 
     let prompts: string[] = [];
     if (selectedDeckId === "custom") {
@@ -369,9 +375,10 @@ export const startGame = onCall(async (request) => {
 
       prompts = activePlayers.map(p => assigned[p.id]);
     } else {
+      const totalPromptsNeeded = activePlayers.length * totalRounds;
       const deckSize = PromptDecks.getDeckSize(selectedDeckId);
-      if (deckSize < activePlayers.length) {
-        throw new HttpsError("failed-precondition", `Cannot start: Selected deck has ${deckSize} prompts, but you need at least ${activePlayers.length} prompts.`);
+      if (deckSize < totalPromptsNeeded) {
+        throw new HttpsError("failed-precondition", `Deck size (${deckSize}) is insufficient for ${activePlayers.length} players over ${totalRounds} rounds (${totalPromptsNeeded} prompts required).`);
       }
       prompts = PromptDecks.drawPrompts(selectedDeckId, activePlayers.length);
     }
@@ -393,6 +400,10 @@ export const startGame = onCall(async (request) => {
       currentPhase: "truth",
       totalPlayers: players.length,
       selectedDeckId,
+      forgeriesPerCard,
+      sabotageAnswersCount: forgeriesPerCard,
+      totalRounds,
+      currentRound: 1,
       currentRotationIndex: 0,
       cards: startingCards,
       currentCardAssignments: {},
@@ -401,6 +412,11 @@ export const startGame = onCall(async (request) => {
       endTime,
       resolutionOrder: [],
       expiresAt: ttlFrom(Date.now())
+    });
+
+    pIds.forEach((pid, idx) => {
+      const sealedRef = roomRef.collection("sealed").doc(pid);
+      transaction.set(sealedRef, { seenPrompts: [prompts[idx]] }, { merge: true });
     });
 
     // Reset player readiness
@@ -513,16 +529,28 @@ export const castVote = onCall(async (request) => {
     throw new HttpsError("permission-denied", "User does not own this player document.");
   }
 
-  if (voterId === votedForId) {
-    throw new HttpsError("invalid-argument", "Self-voting is not allowed.");
-  }
-
   return await db.runTransaction(async (transaction) => {
     const roomSnap = await transaction.get(roomRef);
     if (!roomSnap.exists) {
       throw new HttpsError("not-found", "Game room not found.");
     }
     const playersSnap = await transaction.get(roomRef.collection("players"));
+
+    const sealedRef = roomRef.collection("sealed").doc(targetCardId);
+    const sealedSnap = await transaction.get(sealedRef);
+    if (!sealedSnap.exists) {
+      throw new HttpsError("not-found", "Sealed card document not found.");
+    }
+    const sealedData = sealedSnap.data() as any;
+    const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+    const resolvedAuthorId = answerAuthors[votedForId];
+    if (!resolvedAuthorId) {
+      throw new HttpsError("invalid-argument", "Option ID is invalid or does not exist.");
+    }
+
+    if (voterId === resolvedAuthorId) {
+      throw new HttpsError("failed-precondition", "Self-voting is not allowed.");
+    }
 
     const room = roomSnap.data() as GameState;
     const cardIdx = room.cards.findIndex(c => c.targetPlayerId === targetCardId);
@@ -531,7 +559,7 @@ export const castVote = onCall(async (request) => {
     }
 
     const card = room.cards[cardIdx];
-    const newVotes = { ...card.votes, [voterId]: votedForId };
+    const newVotes = { ...card.votes, [voterId]: resolvedAuthorId };
     const updatedCard = { ...card, votes: newVotes };
     const newCards = [...room.cards];
     newCards[cardIdx] = updatedCard;
@@ -794,7 +822,7 @@ export const handleDisconnect = onCall(async (request) => {
       }
 
       const activePlayerIds = remainingActivePlayers.map(p => p.id);
-      let remainingRotations = room.sabotageAnswersCount;
+      let remainingRotations: number = room.forgeriesPerCard ?? room.sabotageAnswersCount ?? 2;
       if (activePlayerIds.length <= remainingRotations) {
         remainingRotations = activePlayerIds.length - 1;
       }
@@ -910,14 +938,15 @@ async function advancePhaseInternal(
       const sealedData = sealedDataMap[card.targetPlayerId];
       if (!sealedData.truthAnswer || sealedData.truthAnswer.trim().length === 0) {
         sealedData.truthAnswer = kMissingAnswerPlaceholder;
-        const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
-        transaction.set(sealedRef, sealedData, { merge: true });
       }
+      const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
+      transaction.set(sealedRef, sealedData, { merge: true });
     }
 
     // 2. Generate forgery rotations now that truth phase is complete
     const pIds = activePlayers.map(p => p.id);
-    const nativeRotations = RotationEngine.generateRotations(pIds, room.sabotageAnswersCount);
+    const forgeriesPerCard = room.forgeriesPerCard ?? room.sabotageAnswersCount ?? 2;
+    const nativeRotations = RotationEngine.generateRotations(pIds, forgeriesPerCard);
     const stringRotations: Record<string, Record<string, string>> = {};
     for (const [key, val] of Object.entries(nativeRotations)) {
       stringRotations[key] = val;
@@ -958,7 +987,8 @@ async function advancePhaseInternal(
       }
     }
 
-    if (room.currentRotationIndex < room.sabotageAnswersCount) {
+    const forgeriesPerCard = room.forgeriesPerCard ?? room.sabotageAnswersCount ?? 2;
+    if (room.currentRotationIndex < forgeriesPerCard) {
       const nextRot = room.currentRotationIndex + 1;
       const nextAssignments = room.rotationPlan[nextRot.toString()] || {};
       const endTime = room.isTimerDisabled ? null : Date.now() + forgeryDuration;
@@ -1104,7 +1134,7 @@ export const updateLobbySettings = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
   }
   const callerUid = request.auth.uid;
-  const { roomCode, sabotageAnswersCount, isTimerDisabled, selectedDeckId } = request.data;
+  const { roomCode, forgeriesPerCard, sabotageAnswersCount, totalRounds, isTimerDisabled, selectedDeckId } = request.data as any;
   if (!roomCode) {
     throw new HttpsError("invalid-argument", "roomCode is required.");
   }
@@ -1125,9 +1155,32 @@ export const updateLobbySettings = onCall(async (request) => {
       throw new HttpsError("permission-denied", "Only host can update lobby settings.");
     }
 
+    const activePlayers = players.filter(p => p.role !== "spectator");
+    const numPlayers = activePlayers.length;
+
     const data = roomSnap.data() as GameState;
+    let newForgeries = forgeriesPerCard != null ? forgeriesPerCard : sabotageAnswersCount;
+    if (newForgeries == null) {
+      newForgeries = data.forgeriesPerCard ?? data.sabotageAnswersCount ?? 2;
+    }
+
+    if (!Number.isInteger(newForgeries) || newForgeries < 1) {
+      throw new HttpsError("invalid-argument", `Forgeries per card (${newForgeries}) must be at least 1.`);
+    }
+
+    if (numPlayers >= 2 && newForgeries > numPlayers - 1) {
+      throw new HttpsError("invalid-argument", `Forgeries per card (${newForgeries}) cannot exceed active players - 1 (${numPlayers - 1}).`);
+    }
+
+    let newTotalRounds = totalRounds != null ? totalRounds : (data.totalRounds || 1);
+    if (!Number.isInteger(newTotalRounds) || newTotalRounds < 1 || newTotalRounds > 5) {
+      throw new HttpsError("invalid-argument", `Total rounds (${newTotalRounds}) must be between 1 and 5.`);
+    }
+
     transaction.update(roomRef, {
-      sabotageAnswersCount: sabotageAnswersCount != null ? sabotageAnswersCount : data.sabotageAnswersCount,
+      forgeriesPerCard:     newForgeries,
+      sabotageAnswersCount: newForgeries,
+      totalRounds:          newTotalRounds,
       isTimerDisabled:      isTimerDisabled      != null ? isTimerDisabled      : data.isTimerDisabled,
       selectedDeckId:       selectedDeckId       != null ? selectedDeckId       : (data.selectedDeckId || "the_daily_grind"),
       expiresAt:            ttlFrom(Date.now())
@@ -1180,10 +1233,57 @@ export const advanceToNextResolution = onCall(async (request) => {
         unmaskDeadline: null
       });
     } else {
-      transaction.update(roomRef, {
-        currentPhase: "gameOver",
-        unmaskDeadline: null
-      });
+      const totalRounds = room.totalRounds || 1;
+      const currentRound = room.currentRound || 1;
+
+      if (currentRound < totalRounds) {
+        const nextRound = currentRound + 1;
+        const activePlayers = players.filter(p => p.role !== "spectator");
+        const deckId = room.selectedDeckId || "the_daily_grind";
+
+        const newCards: CardModel[] = [];
+        for (const p of activePlayers) {
+          const sealedRef = roomRef.collection("sealed").doc(p.id);
+          const sealedSnap = await transaction.get(sealedRef);
+          const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
+          const seenPrompts: string[] = Array.isArray(sealedData.seenPrompts) ? sealedData.seenPrompts : [];
+
+          const newPrompt = PromptDecks.drawOneExcluding(deckId, new Set(seenPrompts));
+          const updatedSeen = [...seenPrompts, newPrompt];
+          transaction.set(sealedRef, { seenPrompts: updatedSeen, truthAnswer: "", sabotageAnswers: {} }, { merge: true });
+
+          newCards.push({
+            targetPlayerId: p.id,
+            promptText: newPrompt,
+            truthAnswer: "",
+            sabotageAnswers: {},
+            options: [],
+            votes: {},
+            unmaskGuesses: {}
+          });
+        }
+
+        const endTime = room.isTimerDisabled ? null : Date.now() + 60000;
+
+        transaction.update(roomRef, {
+          currentPhase: "truth",
+          currentRound: nextRound,
+          currentRotationIndex: 0,
+          cards: newCards,
+          currentCardAssignments: {},
+          rotationPlan: {},
+          readyPlayers: {},
+          endTime,
+          resolutionOrder: [],
+          unmaskDeadline: null,
+          expiresAt: ttlFrom(Date.now())
+        });
+      } else {
+        transaction.update(roomRef, {
+          currentPhase: "gameOver",
+          unmaskDeadline: null
+        });
+      }
     }
 
     return { success: true };
@@ -1237,7 +1337,7 @@ export const submitUnmaskGuess = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "Player did not cast a vote for this card.");
     }
 
-    if (votedForId === "TRUTH") {
+    if (votedForId === "TRUTH" || votedForId === currentCard.targetPlayerId) {
       throw new HttpsError("failed-precondition", "Only players who fell for a forgery can make an unmask guess.");
     }
 

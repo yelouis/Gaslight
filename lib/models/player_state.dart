@@ -20,7 +20,7 @@ class PlayerState {
   final int? joinedAt; // Epoch timestamp for join time
   final bool lobbyReady; // If player is ready in the lobby
 
-  // Emoji Reactions
+  // Note: lastReaction and lastReactionAt are intentionally retained dead fields from the removed reaction feature (Issue 74, August 2026), kept to avoid a rules deploy and data migration. Safe to drop when firestore.rules is next revised.
   final String? lastReaction;
   final int? lastReactionAt; // Epoch timestamp in ms
 

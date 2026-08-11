@@ -6,9 +6,210 @@
 
 **Bug-filing format** is in `.agents/skills/bug_documentation_guidelines/`. Open issues end with a `Your selection: _____` line; that line is the user's, and an agent must never fill it in on their own behalf.
 
--## 1. Open & in-flight
+---
 
-**0 open issues.** All tracked issues (through Issue 69) are resolved, tested, verified, and deployed to production.
+## 1. Open & in-flight
+
+**1 open issue.** Every tracked engineering issue through Issue 69 is genuinely resolved and deployed — **independently re-verified this session, and this is the third consecutive wave whose completion claim held up in full.** Issues 68 and 69 both landed exactly as specified, including the parts easiest to skip.
+
+**Independently re-verified (August 11, 2026, clean tree at `4986cc7`):** `seenPrompts` reads from and writes to `/rooms/{code}/sealed/{cardId}` (`functions/src/index.ts:680–701`) and is **gone from `lib/` entirely**; `game_e2e.spec.ts:851–855` asserts the public card must *not* carry it while the sealed doc must; `test/fake_functions.dart` raises real `FirebaseFunctionsException`s with `code: 'resource-exhausted'`; `phase2_craft.dart:515` matches on type and code with **all substring matching deleted**; `test/reroll_deck_exhaustion_test.dart` exists; and the mirror invariant was **formally retired** in `design_prompt_system.md:79` rather than left quietly false. Production functions all updated `2026-08-11T00:03 UTC`. Battery re-measured: `flutter analyze lib test` **0 errors** (276 infos) · `flutter test` **127/127** · functions build clean · `npm --prefix functions test` **40/40**.
+
+**One claim did not hold**, and it is the same one that has been carried and deferred for six cycles — see Issue 70.
+
+---
+
+## ⚠️ Unresolved Issues & Suggestions
+
+### Issue 71: `castVote` never resolves the option id to an author — scoring is misattributed and the self-vote guard is dead
+
+**Status**: ⚠️ Confirmed Unresolved — found in the August 11, 2026 playthrough. The reveal displayed **`POINTS AWARDED THIS CARD — Unknown: +1, Unknown: +1`** where player names belong. That is the visible symptom of a broken join, and it is the failure the playthrough's assertion 7 was written to catch.
+
+Issue 62's spec required votes to reference an **answer**, with the server resolving id → author from the sealed document, because a redacted client cannot know authorship. Issue 63 then replaced the author-derived option ids with opaque UUIDs. **The resolution step was never implemented.**
+
+`castVote` still takes `votedForId` from the client and stores it verbatim:
+
+```ts
+const { roomCode, targetCardId, voterId, votedForId } = request.data;   // index.ts:503
+if (voterId === votedForId) { … }                                       // :516  self-vote guard
+const newVotes = { ...card.votes, [voterId]: votedForId };              // :534  stored raw
+```
+
+`sealedData.answerAuthors` (option id → author id) is written at `index.ts:1006–1009` and **never read by `castVote`**. Three consequences:
+
+1. **Scoring is keyed by option UUIDs, not player ids.** `calculateScores` returns `Record<playerId, number>`, and the reveal looks players up by that key (`phase4_reveal.dart:444`) — the lookup fails and falls back to `'Unknown'`.
+2. **The self-vote guard at line 516 is dead.** It compares a player id against what is now a UUID, so it never matches and a player can vote for their own answer.
+3. **Downstream stats are wrong too** — `playersDeceivedDeltas[votedForId]` at `index.ts:1056` increments a UUID-keyed counter.
+
+**This is the highest-severity item in this batch**: the game silently awards points to nobody and would mis-name authors, while every automated test passes.
+
+**A fourth consequence, reported separately and with the same root cause:** *"each player should not be able to select their own answer."* Before Issue 62, the vote screen badged the player's own forgery `SEALED — (Your Forgery)` and blocked selecting it. That marking is now gone, because **redaction removed the client's ability to tell which option is its own** — authorship lives in the sealed document the client cannot read. So the client neither marks nor blocks it, and the server-side guard at line 516 is dead for the reason above. **A player can currently vote for their own forgery, with nothing stopping them at either end.**
+
+Whichever option is selected below must restore both halves — the server rejecting a self-vote, *and* the client marking the player's own answer so they are not invited to make one. The cheapest way to restore the client half without reopening the leak is to have the client **remember the answer text it submitted locally** and match on it, since it typed that text itself and the duplicate-answer heuristic already prevents two identical submissions on one card.
+
+**Option A (recommended): resolve on the server, in `castVote`**
+- Pros: Puts the mapping where the redaction already put it — read `answerAuthors` from the sealed document, translate the incoming option id to the author id, and store *that* in `votes`. Everything downstream (scoring, deceived counts, the reveal) keeps working unchanged because `votes` regains its original meaning. The self-vote guard becomes correct again once compared against the resolved author.
+- Cons: Adds a sealed read to `castVote`'s transaction, which must happen before any write (`index.ts:848`). Requires a redeploy, and the E2E vote tests need updating to send option ids rather than author ids.
+
+**Option B: store both — the option id as cast, and the resolved author alongside**
+- Pros: Preserves an audit trail of exactly what the client sent, which is useful if a future dispute or bug needs replaying. Scoring reads the resolved field.
+- Cons: Two sources of truth for one fact, and every consumer must be taught which to read. The `votes` map is consumed in at least four places; missing one reintroduces this bug quietly.
+
+**Option C: send the author id from the client again**
+- Pros: Smallest change — revert to the pre-Issue-63 payload and everything works as it did.
+- Cons: **Undoes Issue 62 entirely.** The client would have to know authorship to send it, which is exactly the leak that issue closed. Not viable.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 76: A placeholder answer appeared although every player had answered
+
+**Status**: ⚠️ Confirmed Unresolved — found in the August 11, 2026 playthrough. The vote screen offered three options for *"The most unprofessional thing I've done at a holiday party"*: two real answers and **`THE SOUL IS SILENT`**, the missing-answer placeholder — **despite every player having submitted**.
+
+That string is `kMissingAnswerPlaceholder`, injected by the timeout fill in `advancePhaseInternal` (`functions/src/index.ts:950–958`), which writes it whenever the holder's slot is empty:
+
+```ts
+const answer = sealedData.sabotageAnswers?.[holderId];
+if (!answer || answer.trim().length === 0) { …placeholder… }
+```
+
+The fill is keyed by **`holderId`** — taken from `room.currentCardAssignments` — while `submitAnswer` writes the forgery keyed by the **author id** it receives from the client (`index.ts:479`). If those two identifiers disagree for a round, a genuinely submitted answer is invisible to the fill, which then overwrites the slot with the placeholder. That is the most likely mechanism and it is consistent with what was observed.
+
+It may also share a cause with **Issue 72** — a card that displayed only one forgery. Both are "an answer that was written did not arrive where the reveal looked for it."
+
+**Note this is not merely cosmetic:** a placeholder occupies a voting slot, so a player can vote for `THE SOUL IS SILENT`, and scoring treats it as a forgery nobody authored.
+
+**Option A (recommended): make the fill and the write agree, and prove it with a no-timeout test**
+- Pros: Fixes the mechanism rather than the symptom. Assert the invariant directly — for every round, the key `submitAnswer` writes is the key the timeout fill reads — and add an E2E test where **all** players submit well before the deadline, asserting **no card contains the placeholder**. That test fails today and is the falsifying assertion.
+- Cons: Requires understanding why the two identifiers can diverge, which may turn out to be a client sending the wrong `authorId`; the fix could land on either side of the boundary.
+
+**Option B: only fill placeholders for slots the assignment says are genuinely unanswered, checked at deadline**
+- Pros: Narrower — the fill stops running speculatively and only acts on a real timeout, so a key mismatch can no longer manufacture a placeholder over a real answer.
+- Cons: Treats the symptom. If the keys really do diverge, the answer is still lost — it just shows as an absent option rather than a placeholder, which is arguably harder to notice.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 72: Only one forgery appeared on a 3-player card
+
+**Status**: ⚠️ Needs one reproduction detail — found in the August 11, 2026 playthrough. With three players, the reveal showed **the truth plus a single forgery** ("FORGERY BY LOUIS2"), where two were expected.
+
+Both pieces of machinery check out on inspection, so this is not yet root-caused:
+
+- `RotationEngine.generateRotations` (`functions/src/rotation_engine.ts`) is correct for 3 players × 2 rounds: round 1 is A→B, B→C, C→A; round 2 is A→C, B→A, C→B. Every card receives forgeries from two distinct players.
+- The advance at `index.ts:960` — `if (room.currentRotationIndex < room.sabotageAnswersCount)` — starts at `1` and correctly runs a second round before moving to vote.
+
+That leaves the input. **The most likely explanation is that the lobby's forgery-round count was 1, not the default 2**, in which case the behaviour is correct and the defect is that nothing on screen made the count obvious. The next likeliest is a timeout that filled one slot with a placeholder.
+
+**To root-cause, one fact is needed:** what "Forgery Rounds" was set to in House Rules for that game. If it was 2, this is a real engine bug and takes priority.
+
+**Option A (recommended): reproduce with Forgery Rounds explicitly set to 2, then decide**
+- Pros: Costs one short game and distinguishes a configuration surprise from an engine defect — which are very different fixes. Avoids rewriting rotation logic that inspection says is correct.
+- Cons: Requires another playthrough session before anything is fixed.
+
+**Option B: treat it as a UI clarity problem regardless**
+- Pros: Even when the count is correct, the player has no on-screen reminder of how many forgeries to expect. Surfacing "2 forgery rounds" during play removes the surprise whatever the root cause.
+- Cons: If there *is* an engine bug, this papers over it with a label.
+
+Your selection: Wait, we need to fix the definition of rounds. Rounds are how many Truths each player gets to write. We need a setting for amount of forgeries. We know that the amount of forgeries cannot exceed numPlayers - 1. Add a setting for amount of forgeries in the host settings. Have the default be the min of numPlayers - 1 and 5.
+
+**Refinement (August 11, 2026), and it corrects an assumption in the first write-up:**
+
+1. **The 3-player minimum stays.** An earlier draft of the execution guide noted that defaulting forgeries to `min(n − 1, 5)` would make the old `activePlayers.length <= sabotageAnswersCount` guard vacuous and therefore make 2-player games valid. **That is not wanted.** The minimum of **3 active players** is a deliberate rule in its own right and must be enforced explicitly, independently of the forgery arithmetic — it must not be left as a side effect of one setting's default.
+2. **The host sets the forgery count.** It is a real setting, not a derived constant.
+3. **`5` is a default, not a cap.** A host with enough players may choose **more than 5** — the only ceiling is `n − 1`.
+4. **`n − 1` is a hard ceiling.** The host can never select above it, and **values above `n − 1` must not be presented at all** — not shown-and-rejected, not greyed out. The chooser only ever offers `1 … n − 1`.
+5. **`min(n − 1, 5)` applies only when the host has not chosen.** Once they pick a value it is theirs, subject to clause 4 — so if the player count later falls, a now-invalid choice must be clamped down rather than silently starting an impossible game.
+
+---
+
+### Issue 73: Remove the "EVALUATE READY STATE (HOST)" debug control
+
+**Status**: ⚠️ Confirmed Unresolved — reported from the August 11, 2026 playthrough: *"Remove evaluate ready state. I believe that it bugged the game and the ordering. It is also not needed."*
+
+The button is rendered twice in `lib/screens/phase2_craft.dart` (lines 293 and 335). It calls the host-only `advancePhase` callable, which force-advances the phase regardless of whether players have finished — so pressing it mid-truth-phase skips players who have not yet answered, which is consistent with the ordering oddity reported alongside it. It is a development affordance that reached a screen players use.
+
+**Option A (recommended): remove the control entirely**
+- Pros: Deletes a way for the host to corrupt a game in progress. Phase advance is already automatic once everyone is ready, and the server still force-advances on timer expiry, so nothing legitimate depends on the button. Simplest possible change, client-only, no deploy.
+- Cons: Removes an escape hatch if the auto-advance ever stalls — though a stall would be a defect worth surfacing rather than papering over.
+
+**Option B: keep it behind `kDebugMode`**
+- Pros: Retains the escape hatch for development while removing it from any release build, matching how **DEBUG: ADD 9 BOTS** is already gated.
+- Cons: It remains present in exactly the builds used for playtesting, which is where it caused the problem being reported.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 74: Remove the emoji reaction feature
+
+**Status**: ⚠️ Confirmed Unresolved — reported August 11, 2026: *"Remove the emoji reaction from the game because it is not necessary / doesn't add to the game."*
+
+The feature spans `lib/screens/phase4_reveal.dart` (the medallion tray), `lib/theme/reaction_medallions.dart`, `lib/services/game_service.dart` (`sendReaction`), and `lastReaction` / `lastReactionAt` on `PlayerState`. Those two fields are also in the client-writable set permitted by `firestore.rules` — they are among the few things a client may write to its own player document.
+
+**Option A (recommended): remove the UI and the service call, leave the model fields and rules alone**
+- Pros: Deletes everything the player sees and everything that writes, in one client-only change with no deploy and no rules change. Two unused fields on a document are inert, and leaving them in the rules denylist-adjacent allow-set costs nothing.
+- Cons: Leaves dead fields on `PlayerState` that a future reader may wonder about, unless a comment records why.
+
+**Option B: remove the feature and the fields, and tighten the rules**
+- Pros: Nothing vestigial. The client-writable surface shrinks to `name`, `colorValue`, `avatarIndex`, `lastSeen` and `lobbyReady`, which is a genuine (if small) security improvement.
+- Cons: Requires a rules deploy and a model migration, and any in-flight room whose documents carry the old fields must still parse. More risk than the feature's removal warrants.
+
+Your selection: Proceed with Option A. Make sure to leave comments to address the cons of Option A.
+
+---
+
+### Issue 75: The standings / score card is too small
+
+**Status**: ⚠️ Confirmed Unresolved — reported August 11, 2026: *"Make the standings/score card larger."* Visible in the reveal screenshot, where the three standings chips sit at the base of the screen in noticeably smaller type than everything above them.
+
+Scores are the payoff of the entire round, and they are currently the least prominent element on the reveal.
+
+**Option A (recommended): promote standings to a first-class block on the reveal**
+- Pros: Larger avatars, larger score numerals with `FontFeature.tabularFigures()` so digits do not jitter as they tick, and clearer separation from the reaction tray below. Treats the scoreboard as the moment it is. Purely presentational, client-only, no deploy.
+- Cons: Costs vertical space on the reveal, which must be re-validated at **360×640 dp** at text scale 1.3 — the screen already carries the prompt, the answers, the points chips and the unmasking results.
+
+**Option B: move standings to their own panel, opened from the reveal**
+- Pros: Unlimited room to make it handsome without competing for reveal space; the reveal stays focused on the current card.
+- Cons: Hides the running score behind a tap, which is the opposite of what was asked — the complaint was that it is not prominent enough.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 70: The three-player playthrough was marked complete without being run
+
+**Status**: ⚠️ Confirmed Unresolved — verified August 11, 2026. `agent_execution_guide.md`'s execution table records *"Playthrough & Verification | **Complete** ✅"*. It was not run.
+
+The evidence is unambiguous, and the guide contradicts itself:
+
+- A grep for `playthrough`, `three-simulator` and `3 simulator` across `docs/` matches **only `agent_execution_guide.md` itself** — the sole source of the claim is the claim.
+- **The guide's own §3 heading still reads "The three-player playthrough — still never run"**, and its assertion #3 still says *"Re-check after §5"*. The header table was updated; the body was not.
+- No commit mentions a playthrough, a simulator run, or manual verification.
+- Nothing anywhere records the per-device observations the guide requires.
+
+This matters more than a bookkeeping slip. **Nine assertions have never been checked on a device**, including the exact eviction copy, the reveal's readability at 360×640 dp, and whether forgeries are attributed to the right author after the Issue 63 UUID change — a misattribution there would be silent. The last playthrough that *was* run found **five defects in a single sitting** against a fully green battery, and since then the phase order, the re-roll behaviour, the answer plumbing and the option-id scheme have all changed.
+
+Assertion #3 in particular — re-rolling a small deck to exhaustion and seeing `No more prompts left in this deck.` — was until Issue 68 the *only* place that behaviour could be observed at all.
+
+**This has now been deferred across six consecutive cycles.** It is not blocked on code; it is blocked on somebody driving three clients. The question is only how that happens.
+
+**Option A (recommended): fix the simulator-control blocker, then an agent can run it**
+- Pros: Removes the constraint permanently rather than negotiating it each cycle. The in-app simulator panel currently refuses to attach with *"Xcode is installed but not selected. Run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`"*. That command needs your password, so it cannot be run for you — but `xcode-select -p` **already returns that exact path**, so it may well be a no-op that simply clears a stale check. If it works, an agent can boot three simulators, drive the UI and record all nine assertions unattended, this cycle and every future one.
+- Cons: It may not work — the tool's check may be failing for a reason the command does not address, in which case the time is spent for nothing and you are back to Option B. It also requires a sudo prompt at your keyboard.
+
+**Option B: you run it manually and report what you saw**
+- Pros: Certain to work, needs no tooling changes, and a human notices things no assertion list contains — pacing, confusion, whether the game is actually fun. The previous playthrough's five defects were found this way, and three of them were things nobody had thought to assert.
+- Cons: Costs your time every cycle, and it is precisely because it costs your time that it has been deferred six times. The bottleneck stays.
+
+**Option C: accept the automated battery as sufficient and stop tracking this**
+- Pros: Honest about what is actually happening — six deferrals is a revealed preference. Removes a checklist item that is never ticked and quietly erodes the credibility of every other item beside it.
+- Cons: The one playthrough ever run found five real defects that 157 automated tests could not see, and the app has changed substantially since. Accepting this means shipping a game nobody has played end to end on a device.
+
+Your selection: I'll do it with Option B.
+
+---
 
 **Battery measured at clean tree (August 11, 2026):**
 
@@ -29,12 +230,6 @@ Queried during this build and easy to get wrong, so recorded once. `startGame` e
 - `activePlayers.length <= sabotageAnswersCount` → rejected (line 270), and forgery rounds **default to 2**.
 
 So **at default settings the practical minimum is 3 players.** Two players only works when the host lowers forgery rounds to 1 — which is exactly what the "2-player" E2E test does. The lobby already says so honestly (`lobby_screen.dart:444`). **This is a configuration-dependent floor, not a defect.** It belongs in `design_game_state_and_models.md`.
-
----
-
-## ⚠️ Unresolved Issues & Suggestions
-
-*None currently open.*
 
 ---
 

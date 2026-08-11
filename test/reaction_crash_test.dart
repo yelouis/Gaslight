@@ -121,17 +121,9 @@ void main() {
       await tester.pump();
 
       // No assertion errors should be thrown!
-      // Verify floating reaction exists in the widget tree
-      expect(find.byType(FloatingEmojiWidget), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byType(FloatingEmojiWidget),
-          matching: find.text('GuestUser'),
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('THE REVEAL'), findsOneWidget);
 
-      // Drain the 3-second floating reaction removal timer and the recursive reveal sequence timers
+      // Drain timers
       await tester.pump(const Duration(seconds: 10));
     });
   });

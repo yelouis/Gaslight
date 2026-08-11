@@ -408,7 +408,11 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
       );
     }
 
-    final gridAnswers = currentCard?.options.map((opt) => VotingAnswer(authorId: opt.id, text: opt.text)).toList() ?? [];
+    final gs = context.watch<GameService>();
+    final gridAnswers = currentCard?.options.map((opt) {
+      final isSelf = gs.isMySubmittedAnswer(opt.text);
+      return VotingAnswer(authorId: opt.id, text: opt.text, isSelfAnswer: isSelf);
+    }).toList() ?? [];
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 500),

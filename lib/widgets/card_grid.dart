@@ -7,7 +7,8 @@ import '../theme/app_motion.dart';
 class VotingAnswer {
   final String authorId;
   final String text;
-  VotingAnswer({required this.authorId, required this.text});
+  final bool isSelfAnswer;
+  VotingAnswer({required this.authorId, required this.text, this.isSelfAnswer = false});
 }
 
 class CardGrid extends StatelessWidget {
@@ -41,7 +42,7 @@ class CardGrid extends StatelessWidget {
       itemCount: answers.length,
       itemBuilder: (context, index) {
         final ans = answers[index];
-        final isSelfAnswer = ans.authorId == currentPlayerId;
+        final isSelfAnswer = ans.isSelfAnswer || ans.authorId == currentPlayerId;
         final isSelected = selectedAuthorId == ans.authorId;
 
         return Material(

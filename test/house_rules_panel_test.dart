@@ -45,16 +45,25 @@ void main() {
         joinedAt: 200,
       );
 
+      final p3 = PlayerState(id: 'p3', name: 'Player 3', isHost: false, joinedAt: 300);
+      final p4 = PlayerState(id: 'p4', name: 'Player 4', isHost: false, joinedAt: 400);
+      final p5 = PlayerState(id: 'p5', name: 'Player 5', isHost: false, joinedAt: 500);
+      final p6 = PlayerState(id: 'p6', name: 'Player 6', isHost: false, joinedAt: 600);
+
       final gameState = GameState(
         roomCode: roomCode,
-        totalPlayers: 2,
-        sabotageAnswersCount: sabotageAnswersCount,
+        totalPlayers: 6,
+        forgeriesPerCard: sabotageAnswersCount,
         isTimerDisabled: isTimerDisabled,
       );
 
       await mockDb.collection('rooms').doc(roomCode).set(gameState.toMap());
       await mockDb.collection('rooms').doc(roomCode).collection('players').doc(hostPlayer.id).set(hostPlayer.toMap());
       await mockDb.collection('rooms').doc(roomCode).collection('players').doc(guestPlayer.id).set(guestPlayer.toMap());
+      await mockDb.collection('rooms').doc(roomCode).collection('players').doc(p3.id).set(p3.toMap());
+      await mockDb.collection('rooms').doc(roomCode).collection('players').doc(p4.id).set(p4.toMap());
+      await mockDb.collection('rooms').doc(roomCode).collection('players').doc(p5.id).set(p5.toMap());
+      await mockDb.collection('rooms').doc(roomCode).collection('players').doc(p6.id).set(p6.toMap());
 
       gameService.listenToRoom(roomCode);
       final prefs = await SharedPreferences.getInstance();
@@ -89,9 +98,9 @@ void main() {
         await setupRoomAndPump(tester, isHost: true);
 
         expect(find.text('HOUSE RULES'), findsOneWidget);
-        expect(find.text('5'), findsOneWidget);
+        expect(find.text('5'), findsNWidgets(2));
 
-        final chip5 = find.text('5');
+        final chip5 = find.text('5').first;
         await tester.ensureVisible(chip5);
         await tester.pump();
         await tester.tap(chip5);
@@ -120,7 +129,7 @@ void main() {
         expect(find.text('HOUSE RULES'), findsOneWidget);
         expect(find.text('Only the host can modify house rules.'), findsOneWidget);
 
-        final chip5 = find.text('5');
+        final chip5 = find.text('5').first;
         await tester.ensureVisible(chip5);
         await tester.pump();
         await tester.tap(chip5, warnIfMissed: false);
@@ -146,7 +155,7 @@ void main() {
       try {
         await setupRoomAndPump(tester, isHost: false, sabotageAnswersCount: 5);
 
-        final chip5 = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '5'));
+        final chip5 = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '5').first);
         expect(chip5.selected, isTrue);
       } finally {
         gameService.dispose();
@@ -187,7 +196,8 @@ void main() {
       try {
         await setupRoomAndPump(tester, isHost: false);
         expect(find.text('HOUSE RULES'), findsOneWidget);
-        expect(find.text('Forgery Rounds:'), findsOneWidget);
+        expect(find.text('Forgeries Per Card:'), findsOneWidget);
+        expect(find.text('Rounds:'), findsOneWidget);
         expect(find.text('Disable Game Timers'), findsOneWidget);
       } finally {
         gameService.dispose();

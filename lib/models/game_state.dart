@@ -8,9 +8,14 @@ class GameState {
 
   // Custom Configurability
   final int totalPlayers;
-  final int sabotageAnswersCount;
+  final int forgeriesPerCard;
+  final int totalRounds;
+  final int currentRound;
   final bool isTimerDisabled;
   final String selectedDeckId;
+
+  // Legacy alias for compatibility
+  int get sabotageAnswersCount => forgeriesPerCard;
 
   // Rotation Tracking
   final int currentRotationIndex;
@@ -46,7 +51,10 @@ class GameState {
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
     this.totalPlayers = 4,
-    this.sabotageAnswersCount = 2,
+    int forgeriesPerCard = 2,
+    int? sabotageAnswersCount,
+    this.totalRounds = 1,
+    this.currentRound = 1,
     this.isTimerDisabled = false,
     this.selectedDeckId = 'the_daily_grind',
     this.currentRotationIndex = 0,
@@ -59,13 +67,16 @@ class GameState {
     this.resolutionOrder = const [],
     this.debugEnabled = false,
     this.unmaskDeadline,
-  });
+  }) : forgeriesPerCard = sabotageAnswersCount ?? forgeriesPerCard;
 
   GameState copyWith({
     String? roomCode,
     GamePhase? currentPhase,
     int? totalPlayers,
+    int? forgeriesPerCard,
     int? sabotageAnswersCount,
+    int? totalRounds,
+    int? currentRound,
     bool? isTimerDisabled,
     String? selectedDeckId,
     int? currentRotationIndex,
@@ -86,7 +97,9 @@ class GameState {
       roomCode: roomCode ?? this.roomCode,
       currentPhase: currentPhase ?? this.currentPhase,
       totalPlayers: totalPlayers ?? this.totalPlayers,
-      sabotageAnswersCount: sabotageAnswersCount ?? this.sabotageAnswersCount,
+      forgeriesPerCard: forgeriesPerCard ?? sabotageAnswersCount ?? this.forgeriesPerCard,
+      totalRounds: totalRounds ?? this.totalRounds,
+      currentRound: currentRound ?? this.currentRound,
       isTimerDisabled: isTimerDisabled ?? this.isTimerDisabled,
       selectedDeckId: selectedDeckId ?? this.selectedDeckId,
       currentRotationIndex: currentRotationIndex ?? this.currentRotationIndex,
@@ -107,7 +120,10 @@ class GameState {
       'roomCode': roomCode,
       'currentPhase': currentPhase.name,
       'totalPlayers': totalPlayers,
-      'sabotageAnswersCount': sabotageAnswersCount,
+      'forgeriesPerCard': forgeriesPerCard,
+      'sabotageAnswersCount': forgeriesPerCard,
+      'totalRounds': totalRounds,
+      'currentRound': currentRound,
       'isTimerDisabled': isTimerDisabled,
       'selectedDeckId': selectedDeckId,
       'currentRotationIndex': currentRotationIndex,
@@ -139,7 +155,9 @@ class GameState {
         orElse: () => GamePhase.lobby,
       ),
       totalPlayers: map['totalPlayers']?.toInt() ?? 4,
-      sabotageAnswersCount: map['sabotageAnswersCount']?.toInt() ?? 2,
+      forgeriesPerCard: map['forgeriesPerCard']?.toInt() ?? map['sabotageAnswersCount']?.toInt() ?? 2,
+      totalRounds: map['totalRounds']?.toInt() ?? 1,
+      currentRound: map['currentRound']?.toInt() ?? 1,
       isTimerDisabled: map['isTimerDisabled'] as bool? ?? false,
       selectedDeckId: map['selectedDeckId'] as String? ?? 'the_daily_grind',
       currentRotationIndex: map['currentRotationIndex']?.toInt() ?? 0,

@@ -1,3 +1,5 @@
+// ignore_for_file: subtype_of_sealed_class, avoid_relative_lib_imports, annotate_overrides, avoid_print
+
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -519,19 +521,19 @@ void main() {
       await gs.createRoom('Host', 'host_user', sabotageAnswersCount: 2);
       await Future.delayed(Duration(milliseconds: 100));
       
-      // Should throw for too few active players (< 2)
+      // Should throw for too few active players (< 3)
       expect(
         () => gs.startGame('the_daily_grind'),
-        throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('Need at least 2 active players'))),
+        throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('At least 3 players are required to start the game'))),
       );
 
-      // Add a second player. Total players: 2, sabotageAnswersCount: 2. Need players > sabotageAnswersCount.
+      // Add a second player. Total players: 2. Still < 3 active players.
       await gs.joinRoom(gs.gameState!.roomCode, 'Player 2', 'player_2');
       await Future.delayed(Duration(milliseconds: 100));
       
       expect(
         () => gs.startGame('the_daily_grind'),
-        throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('Need more players than forgery rounds'))),
+        throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('At least 3 players are required to start the game'))),
       );
     });
 
@@ -588,9 +590,11 @@ void main() {
       await Future.delayed(Duration(milliseconds: 100));
       final rCode = gs.gameState!.roomCode;
 
-      // Add second player
+      // Add second & third players
       final p2 = PlayerState(id: 'player_2', name: 'Player 2', joinedAt: 100);
+      final p3 = PlayerState(id: 'player_3', name: 'Player 3', joinedAt: 200);
       await db.collection('rooms').doc(rCode).collection('players').doc(p2.id).set(p2.toMap());
+      await db.collection('rooms').doc(rCode).collection('players').doc(p3.id).set(p3.toMap());
       await Future.delayed(Duration(milliseconds: 100));
 
       // Start game (starts in truth phase)

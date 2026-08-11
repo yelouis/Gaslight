@@ -288,12 +288,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
           ),
         ),
         if (gs.currentPlayer!.isHost) ...[
-          const SizedBox(height: 40),
-          SecondaryButton(
-            text: 'EVALUATE READY STATE (HOST)',
-            onPressed: () => gs.evaluateReadyState(),
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 20),
           TextButton(
             onPressed: () => gs.debugSimulateBotResponses(),
             child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
@@ -330,12 +325,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
         WaitingOnRow(players: activeNonSpectators, readyMap: state.readyPlayers),
         
         if (gs.currentPlayer!.isHost) ...[
-          const SizedBox(height: 40),
-          SecondaryButton(
-            text: 'EVALUATE READY STATE (HOST)',
-            onPressed: () => gs.evaluateReadyState(),
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 20),
           TextButton(
             onPressed: () => gs.debugSimulateBotResponses(),
             child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),

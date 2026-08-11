@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_relative_lib_imports, unused_local_variable, avoid_print
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +10,7 @@ import '../lib/utils/prompt_decks.dart';
 import '../lib/utils/rotation_engine.dart';
 import '../lib/utils/scoring_logic.dart';
 import '../lib/utils/text_similarity.dart';
+import 'dart:async';
 import 'dart:math';
 
 class FakeHttpsCallableResult<T> implements HttpsCallableResult<T> {
@@ -131,11 +134,19 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final players = playersSnap.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
       final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
 
-      if (activePlayers.length < 2) {
-        throw Exception("Cannot start: Need at least 2 active players.");
+      if (activePlayers.length < 3) {
+        throw FirebaseFunctionsException(
+          message: "At least 3 players are required to start the game.",
+          code: "failed-precondition",
+        );
       }
-      if (activePlayers.length <= roomState.sabotageAnswersCount) {
-        throw Exception("Cannot start: Need more players than forgery rounds.");
+      final totalPromptsNeeded = activePlayers.length * roomState.totalRounds;
+      final deckSize = PromptDecks.getDeckSize(roomState.selectedDeckId);
+      if (roomState.selectedDeckId != 'custom' && deckSize < totalPromptsNeeded) {
+        throw FirebaseFunctionsException(
+          message: "Deck size ($deckSize) is insufficient for ${activePlayers.length} players over ${roomState.totalRounds} rounds ($totalPromptsNeeded prompts required).",
+          code: "failed-precondition",
+        );
       }
       List<String> prompts = [];
       if (roomState.selectedDeckId == 'custom') {
@@ -447,17 +458,54 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
           clearUnmaskDeadline: true,
         ).toMap());
       } else {
-        await roomRef.update(currentState.copyWith(
-          currentPhase: GamePhase.gameOver,
-          clearUnmaskDeadline: true,
-        ).toMap());
+        if (currentState.currentRound < currentState.totalRounds) {
+          final nextRound = currentState.currentRound + 1;
+          final playersSnap = await roomRef.collection('players').get();
+          final players = playersSnap.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
+          final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
+          final deckId = currentState.selectedDeckId == 'custom' ? 'the_daily_grind' : currentState.selectedDeckId;
+
+          final newCards = <CardModel>[];
+          for (var p in activePlayers) {
+            final sealedRef = roomRef.collection('sealed').doc(p.id);
+            final sealedSnap = await sealedRef.get();
+            final cardSeenPrompts = (sealedSnap.exists && sealedSnap.data()?['seenPrompts'] != null)
+                ? List<String>.from(sealedSnap.data()!['seenPrompts'])
+                : <String>[];
+            final newPrompt = PromptDecks.drawOneExcluding(deckId, cardSeenPrompts.toSet());
+            final updatedSeen = [...cardSeenPrompts, newPrompt];
+            await sealedRef.set({'seenPrompts': updatedSeen}, SetOptions(merge: true));
+
+            newCards.add(CardModel(
+              targetPlayerId: p.id,
+              promptText: newPrompt,
+            ));
+          }
+
+          await roomRef.update(currentState.copyWith(
+            currentPhase: GamePhase.truth,
+            currentRound: nextRound,
+            currentRotationIndex: 0,
+            cards: newCards,
+            currentCardAssignments: {},
+            rotationPlan: {},
+            readyPlayers: {},
+            clearUnmaskDeadline: true,
+          ).toMap());
+        } else {
+          await roomRef.update(currentState.copyWith(
+            currentPhase: GamePhase.gameOver,
+            clearUnmaskDeadline: true,
+          ).toMap());
+        }
       }
 
       return FakeHttpsCallableResult({'success': true} as T);
     }
 
     if (name == 'updateLobbySettings') {
-      final sabotageAnswersCount = params['sabotageAnswersCount'];
+      final forgeriesPerCard = params['forgeriesPerCard'] ?? params['sabotageAnswersCount'];
+      final totalRounds = params['totalRounds'];
       final isTimerDisabled = params['isTimerDisabled'];
       final selectedDeckId = params['selectedDeckId'];
 
@@ -466,7 +514,8 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final currentState = GameState.fromMap(snapshot.data()!, snapshot.id);
 
       await roomRef.update(currentState.copyWith(
-        sabotageAnswersCount: sabotageAnswersCount ?? currentState.sabotageAnswersCount,
+        forgeriesPerCard: forgeriesPerCard ?? currentState.forgeriesPerCard,
+        totalRounds: totalRounds ?? currentState.totalRounds,
         isTimerDisabled: isTimerDisabled ?? currentState.isTimerDisabled,
         selectedDeckId: selectedDeckId ?? currentState.selectedDeckId,
       ).toMap());

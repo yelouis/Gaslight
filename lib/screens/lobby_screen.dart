@@ -433,18 +433,20 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
         : availableDecks.first;
 
     final activeCount = players.where((p) => p.role != PlayerRole.spectator).length;
-    final rounds = gs.gameState?.sabotageAnswersCount ?? 2;
+    final forgeries = gs.gameState?.forgeriesPerCard ?? 2;
+    final totalRounds = gs.gameState?.totalRounds ?? 1;
+    final totalPromptsNeeded = activeCount * totalRounds;
     final deckSize = selectedDeckId == 'custom'
-        ? activeCount
+        ? totalPromptsNeeded
         : PromptDecks.getDeckSize(selectedDeckId);
     
     String? startWarning;
-    if (activeCount < 2) {
-      startWarning = "Need at least 2 active players to start.";
-    } else if (activeCount <= rounds) {
-      startWarning = "Need more players than forgery rounds ($rounds).";
-    } else if (deckSize < activeCount) {
-      startWarning = "Deck too small: selected deck has $deckSize prompts but you have $activeCount active players.";
+    if (activeCount < 3) {
+      startWarning = "Need at least 3 active players to start.";
+    } else if (activeCount <= forgeries) {
+      startWarning = "Need more players than forgeries per card ($forgeries).";
+    } else if (deckSize < totalPromptsNeeded) {
+      startWarning = "Deck too small: selected deck has $deckSize prompts but you need $totalPromptsNeeded prompts ($activeCount players × $totalRounds rounds).";
     }
 
     final playingPlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
@@ -553,14 +555,48 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'Forgery Rounds:',
+                                    'Forgeries Per Card:',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 6,
+                                    children: List.generate(
+                                      (activeCount - 1).clamp(1, 8),
+                                      (i) => i + 1,
+                                    ).map((f) {
+                                      final isSelected = forgeries == f;
+                                      return ChoiceChip(
+                                        label: Text('$f'),
+                                        selected: isSelected,
+                                        selectedColor: AppColors.brass,
+                                        labelStyle: TextStyle(
+                                          color: isSelected ? AppColors.ink : AppColors.ivory,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        onSelected: (selected) {
+                                          if (selected) {
+                                            gs.updateLobbySettings(forgeriesPerCard: f);
+                                          }
+                                        },
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Rounds:',
                                     style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory),
                                   ),
                                   const SizedBox(height: 6),
                                   Wrap(
                                     spacing: 6,
                                     children: [1, 2, 3, 4, 5].map((r) {
-                                      final isSelected = rounds == r;
+                                      final isSelected = totalRounds == r;
                                       return ChoiceChip(
                                         label: Text('$r'),
                                         selected: isSelected,
@@ -571,7 +607,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                         ),
                                         onSelected: (selected) {
                                           if (selected) {
-                                            gs.updateLobbySettings(sabotageAnswersCount: r);
+                                            gs.updateLobbySettings(totalRounds: r);
                                           }
                                         },
                                       );

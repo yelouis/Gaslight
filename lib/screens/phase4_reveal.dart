@@ -21,10 +21,10 @@ import 'dart:math';
 import 'dart:async';
 import 'package:uuid/uuid.dart';
 import 'package:clock/clock.dart';
-import '../widgets/lamp_loading.dart';
-import '../theme/reaction_medallions.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
+import '../widgets/waiting_indicator.dart';
+import '../widgets/lamp_loading.dart';
 
 class Phase4RevealScreen extends StatefulWidget {
   const Phase4RevealScreen({super.key});
@@ -33,26 +33,11 @@ class Phase4RevealScreen extends StatefulWidget {
   State<Phase4RevealScreen> createState() => _Phase4RevealScreenState();
 }
 
-class _FloatingReaction {
-  final String id;
-  final String emoji;
-  final String playerName;
-  final double xPercent;
-  _FloatingReaction({
-    required this.id,
-    required this.emoji,
-    required this.playerName,
-    required this.xPercent,
-  });
-}
-
 class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseHost<Phase4RevealScreen> {
   bool _isNavigating = false;
   bool _isSubmittingUnmask = false;
   
   late final int _mountTime;
-  final Map<String, int> _lastSeenReactionAt = {};
-  final List<_FloatingReaction> _floatingReactions = [];
   int _lastReactionSentTime = 0;
 
   int _revealStartTime = 0;
@@ -100,7 +85,6 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     super.initState();
     _mountTime = clock.now().millisecondsSinceEpoch;
     _revealStartTime = _mountTime;
-    context.read<GameService>().addListener(_onGameServiceUpdate);
     _countdownTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
       if (mounted) {
         setState(() {});
@@ -111,53 +95,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
   @override
   void dispose() {
     _countdownTimer?.cancel();
-    try {
-      context.read<GameService>().removeListener(_onGameServiceUpdate);
-    } catch (_) {}
     super.dispose();
-  }
-
-  void _onGameServiceUpdate() {
-    if (!mounted) return;
-    final gs = context.read<GameService>();
-    _checkForNewReactions(gs.players);
-  }
-
-  void _triggerFloatingReaction(String playerName, String emoji) {
-    final id = const Uuid().v4();
-    final randomX = 0.1 + Random().nextDouble() * 0.8;
-    final reaction = _FloatingReaction(
-      id: id,
-      emoji: emoji,
-      playerName: playerName,
-      xPercent: randomX,
-    );
-    if (mounted) {
-      setState(() {
-        _floatingReactions.add(reaction);
-      });
-    }
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _floatingReactions.removeWhere((r) => r.id == id);
-        });
-      }
-    });
-  }
-
-  void _checkForNewReactions(List<PlayerState> players) {
-    for (var player in players) {
-      final lastAt = player.lastReactionAt;
-      final reaction = player.lastReaction;
-      if (lastAt != null && reaction != null && lastAt > _mountTime) {
-        final previousLastAt = _lastSeenReactionAt[player.id];
-        if (previousLastAt == null || lastAt > previousLastAt) {
-          _lastSeenReactionAt[player.id] = lastAt;
-          _triggerFloatingReaction(player.name, reaction);
-        }
-      }
-    }
   }
 
   Widget? _buildBestForgeryBanner(CardModel card, GameService gs) {
@@ -260,7 +198,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     final theme = Theme.of(context);
 
     if (state == null) {
-      return const Scaffold(backgroundColor: AppColors.ground, body: Center(child: LampLightingIndicator()));
+      return Scaffold(backgroundColor: AppColors.ground, body: Center(child: LampLightingIndicator()));
     }
     
     final correctRoute = GameState.getRouteForPhase(state.currentPhase);
@@ -370,7 +308,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                 curve: Curves.easeOutCubic,
                 builder: (context, val, child) {
                   return Transform.translate(
-                    offset: Offset(0, 50 * (1 - val)),
+                    offset: Offset(0, 50.0 * (1 - val)),
                     child: Opacity(opacity: val, child: child),
                   );
                 },
@@ -510,13 +448,13 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                               'STANDINGS',
                               style: TextStyle(
                                 fontFamily: 'Lora',
-                                fontSize: 12,
+                                fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.brass.withOpacity(0.7),
-                                letterSpacing: 2,
+                                color: AppColors.brass.withOpacity(0.9),
+                                letterSpacing: 3,
                               ),
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 12),
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Row(
@@ -528,44 +466,44 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                       return Padding(
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                           decoration: BoxDecoration(
                                             color: AppColors.groundRaised,
                                             borderRadius: BorderRadius.circular(12),
                                             border: Border.all(
-                                              color: AppColors.brass.withOpacity(0.3),
-                                              width: 1,
+                                              color: AppColors.brass.withOpacity(0.4),
+                                              width: 1.5,
                                             ),
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              PlayerAvatar(player: player, size: 24, showName: false),
-                                              const SizedBox(width: 6),
+                                              PlayerAvatar(player: player, size: 32, showName: false),
+                                              const SizedBox(width: 8),
                                               Text(
                                                 player.name,
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  fontSize: 13,
+                                                  fontSize: 15,
                                                   color: AppColors.ivory,
                                                 ),
                                               ),
-                                              const SizedBox(width: 8),
+                                              const SizedBox(width: 10),
                                               Text(
                                                 '${player.totalScore}',
                                                 style: const TextStyle(
                                                   fontFeatures: [FontFeature.tabularFigures()],
                                                   fontWeight: FontWeight.w900,
-                                                  fontSize: 14,
+                                                  fontSize: 18,
                                                   color: AppColors.brass,
                                                 ),
                                               ),
                                               if (delta > 0) ...[
-                                                const SizedBox(width: 4),
+                                                const SizedBox(width: 6),
                                                 Text(
                                                   '▲+$delta',
                                                   style: const TextStyle(
-                                                    fontSize: 12,
+                                                    fontSize: 13,
                                                     fontWeight: FontWeight.bold,
                                                     color: AppColors.verdigris,
                                                   ),
@@ -602,59 +540,12 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                 ),
               ),
             ),
-            // Floating emoji reactions stack overlay
-            ..._floatingReactions.map((r) {
-              return Positioned(
-                bottom: 80,
-                left: MediaQuery.of(context).size.width * r.xPercent - 25,
-                child: FloatingEmojiWidget(
-                  emoji: r.emoji,
-                  playerName: r.playerName,
-                ),
-              );
-            }),
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: ['😂', '🤨', '🐍', '👏', '🔥'].map((emoji) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Material(
-                    color: AppColors.groundRaised,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      onTap: () {
-                        final now = clock.now().millisecondsSinceEpoch;
-                        if (now - _lastReactionSentTime < 500) return;
-                        _lastReactionSentTime = now;
-                        gs.sendReaction(emoji);
-                      },
-                      customBorder: const CircleBorder(),
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: ReactionMedallion.fromEmoji(
-                            emoji,
-                            size: 30,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildRevengeGuessTray(GameState state, CardModel card, GameService gs, ThemeData theme) {
     final me = gs.currentPlayer;
@@ -1092,53 +983,5 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
   }
 }
 
-class FloatingEmojiWidget extends StatelessWidget {
-  final String emoji;
-  final String playerName;
 
-  const FloatingEmojiWidget({
-    super.key,
-    required this.emoji,
-    required this.playerName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0.0, end: 1.0),
-      duration: const Duration(seconds: 3),
-      builder: (context, progress, child) {
-        final opacity = progress < 0.7 ? 1.0 : (1.0 - progress) / 0.3;
-        final yOffset = -300 * progress;
-        
-        return Transform.translate(
-          offset: Offset(0, yOffset),
-          child: Opacity(
-            opacity: opacity,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ReactionMedallion.fromEmoji(
-                  emoji,
-                  size: 44,
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    playerName,
-                    style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
 
