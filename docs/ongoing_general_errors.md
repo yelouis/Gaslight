@@ -71,7 +71,7 @@ The last deployed commit is `6d9c178` (2026-08-10T23:33 UTC). **Every "Issue N i
 - Pros: attacks the reason this happened — `gcloud functions list` was never part of the battery, so a source-verified claim could always masquerade as a shipped one. Cheap and permanent.
 - Cons: does not itself fix anything; only useful alongside A or B.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -107,7 +107,7 @@ Only one reader was updated (`index.ts:1367`, which defensively checks both). **
 - Pros: clients stop reasoning about vote encoding at all.
 - Cons: new field, new migration, new rules surface; strictly more work than A for the same guarantee.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Falsifying validation required for whichever option is chosen:** a test in which one player votes the truth and one votes a forgery, asserting the truth-voter's `totalScore` increases by `ceil((P − 1) / (S + 1))` and the forger's by exactly 1. Observe it fail against today's code first.
 
@@ -139,7 +139,7 @@ Two separable defects live here, and the second is the more serious:
 - Pros: one-line change.
 - Cons: a client-only bound is not a bound (§13).
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -155,7 +155,7 @@ The reveal computes correctness as `guessedAuthorId == currentCard.votes[guesser
 
 **Do not fix this yet.** Re-run the assertion after Issues 77 and 78 land. If it still fails, file the design question then, with the observed values of `votes[guesserId]` and `guessedAuthorId` attached.
 
-Your selection: _____
+Your selection: Don't fix this yet, lets rerun the assertion after Issue 77 and 78 land.
 
 ---
 
