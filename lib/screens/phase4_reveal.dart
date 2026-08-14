@@ -102,7 +102,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     final voteCounts = <String, int>{};
     for (var entry in card.votes.entries) {
       final votedFor = entry.value;
-      if (votedFor != 'TRUTH') {
+      if (votedFor != card.targetPlayerId) {
         voteCounts[votedFor] = (voteCounts[votedFor] ?? 0) + 1;
       }
     }
@@ -247,7 +247,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
       });
 
       final me = gs.currentPlayer;
-      final isFooled = me != null && currentCard != null && currentCard.votes[me.id] != null && currentCard.votes[me.id] != 'TRUTH';
+      final isFooled = me != null && currentCard != null && currentCard.votes[me.id] != null && currentCard.votes[me.id] != currentCard.targetPlayerId;
       final fooledSomeone = me != null && currentCard != null && currentCard.sabotageAnswers.containsKey(me.id) && currentCard.votes.values.contains(me.id);
 
       // Chained trigger order per spec: startle (you were fooled) -> preen (you fooled someone) -> bow (truth landed)
@@ -262,7 +262,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
 
     final me = gs.currentPlayer;
     if (me != null && currentCard != null) {
-      final isFooled = currentCard.votes[me.id] != null && currentCard.votes[me.id] != 'TRUTH';
+      final isFooled = currentCard.votes[me.id] != null && currentCard.votes[me.id] != currentCard.targetPlayerId;
       final actualForgerId = isFooled ? currentCard.votes[me.id] : null;
       final myGuess = currentCard.unmaskGuesses[me.id];
       final isCorrectGuess = myGuess != null && myGuess == actualForgerId;
@@ -356,7 +356,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                 ),
                               ),
                             ),
-                            _buildOptionRow('TRUTH', currentCard.truthAnswer, currentCard, gs, theme, revealStage, isTruth: true),
+                            _buildOptionRow(currentCard.targetPlayerId, currentCard.truthAnswer, currentCard, gs, theme, revealStage, isTruth: true),
                             ...currentCard.sabotageAnswers.entries.map((e) => 
                               _buildOptionRow(e.key, e.value, currentCard!, gs, theme, revealStage)
                             ),
@@ -551,7 +551,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     final me = gs.currentPlayer;
     if (me == null) return const SizedBox.shrink();
 
-    final isFooled = card.votes[me.id] != null && card.votes[me.id] != 'TRUTH';
+    final isFooled = card.votes[me.id] != null && card.votes[me.id] != card.targetPlayerId;
     final now = clock.now().millisecondsSinceEpoch;
     final isTimerActive = state.unmaskDeadline != null && now < state.unmaskDeadline!;
     
@@ -754,7 +754,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
             ] else ...[
               () {
                 final fooledPlayers = gs.players.where((p) =>
-                  card.votes[p.id] != null && card.votes[p.id] != 'TRUTH'
+                  card.votes[p.id] != null && card.votes[p.id] != card.targetPlayerId
                 ).toList();
                 if (fooledPlayers.isEmpty) {
                   return const Text(

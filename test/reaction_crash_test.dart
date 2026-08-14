@@ -42,7 +42,7 @@ void main() {
         promptText: 'Simulated prompt?',
         truthAnswer: 'The real truth',
         sabotageAnswers: {'guest_id': 'Simulated lie'},
-        votes: {'guest_id': 'TRUTH'},
+        votes: {'guest_id': 'host_id'},
       );
 
       final gameState = GameState(

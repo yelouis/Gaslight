@@ -51,7 +51,7 @@ export class ScoringLogic {
     for (const [voterId, votedForId] of Object.entries(playerVotes)) {
       if (voterId === votedForId) continue; // Self-vote prevention!
 
-      if (votedForId === 'TRUTH') {
+      if (votedForId === currentCard.targetPlayerId) {
         // The voter gets points for finding the truth
         deltas[voterId] = (deltas[voterId] || 0) + truthReward;
 

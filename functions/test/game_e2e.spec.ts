@@ -1587,5 +1587,220 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(room9Snap.data()?.forgeriesPerCard).to.equal(7);
       });
     });
+
+    describe('Issue 78: Truth vote scoring by target identity (no TRUTH sentinel)', () => {
+      it('Case A: calculates correct score deltas for P=4, S=1 (truth reward = 2)', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+        const guest3User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await callFn('joinRoom', guest3User.idToken, { roomCode, playerName: 'Dave', playerId: 'p_g3' });
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+
+        // Truth phase: all submit
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice Truth', isTruth: true });
+        await callFn('submitAnswer', guest1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob Truth', isTruth: true });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie Truth', isTruth: true });
+        await callFn('submitAnswer', guest3User.idToken, { roomCode, targetCardId: 'p_g3', authorId: 'p_g3', text: 'Dave Truth', isTruth: true });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+        const assignments = roomSnap.data()?.currentCardAssignments;
+
+        // Forgery phase: all submit assigned
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_host'], authorId: 'p_host', text: 'Alice Lie', isTruth: false });
+        await callFn('submitAnswer', guest1User.idToken, { roomCode, targetCardId: assignments['p_g1'], authorId: 'p_g1', text: 'Bob Lie', isTruth: false });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: assignments['p_g2'], authorId: 'p_g2', text: 'Charlie Lie', isTruth: false });
+        await callFn('submitAnswer', guest3User.idToken, { roomCode, targetCardId: assignments['p_g3'], authorId: 'p_g3', text: 'Dave Lie', isTruth: false });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+        const targetCardId = roomSnap.data()?.currentReaderId; // Target player of the card being voted on
+        const sealedSnap = await roomRef.collection('sealed').doc(targetCardId).get();
+        const sealedData = sealedSnap.data() as any;
+        const truthOptId = sealedData.truthAnswerId;
+        const answerAuthors = sealedData.answerAuthors; // optId -> authorId
+
+        // Find a forgery option id and its forger author id
+        let forgeryOptId = '';
+        let forgerAuthorId = '';
+        for (const [optId, aId] of Object.entries(answerAuthors)) {
+          if (optId !== truthOptId) {
+            forgeryOptId = optId;
+            forgerAuthorId = aId as string;
+            break;
+          }
+        }
+
+        const allPlayers = [
+          { id: 'p_host', token: hostUser.idToken },
+          { id: 'p_g1', token: guest1User.idToken },
+          { id: 'p_g2', token: guest2User.idToken },
+          { id: 'p_g3', token: guest3User.idToken },
+        ];
+        const voters = allPlayers.filter(p => p.id !== targetCardId);
+        const reader = allPlayers.find(p => p.id === targetCardId)!;
+
+        // In 4p S=1, voters are 1 forger and 2 innocent guessers
+        const innocentVoters = voters.filter(p => p.id !== forgerAuthorId);
+        const forgerVoter = voters.find(p => p.id === forgerAuthorId)!;
+
+        const innocentTruthVoter = innocentVoters[0];
+        const innocentForgeryVoter = innocentVoters[1];
+
+        // 1. Innocent truth voter votes for truth
+        await callFn('castVote', innocentTruthVoter.token, { roomCode, targetCardId, voterId: innocentTruthVoter.id, votedForId: truthOptId });
+        // 2. Innocent forgery voter votes for forgery
+        await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, voterId: innocentForgeryVoter.id, votedForId: forgeryOptId });
+        // 3. Forger votes for truth
+        await callFn('castVote', forgerVoter.token, { roomCode, targetCardId, voterId: forgerVoter.id, votedForId: truthOptId });
+
+        await callFn('setReady', reader.token, { roomCode, playerId: reader.id, ready: true });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+
+        // Check scores:
+        // P=4, S=1 -> ceil((4-1)/(1+1)) = ceil(3/2) = 2 for truth voter
+        const itvSnap = await roomRef.collection('players').doc(innocentTruthVoter.id).get();
+        const ifvSnap = await roomRef.collection('players').doc(innocentForgeryVoter.id).get();
+        const targetSnap = await roomRef.collection('players').doc(targetCardId).get();
+        const forgerSnap = await roomRef.collection('players').doc(forgerAuthorId).get();
+
+        // Innocent truth voter gains truth reward (2)
+        expect(itvSnap.data()?.totalScore).to.equal(2);
+        // Card target gains 1 per truth voter (innocentTruthVoter + forgerVoter = 2)
+        expect(targetSnap.data()?.totalScore).to.equal(2);
+        // Forger gains truthReward(2) + saboteurBonus(1) + forgerCredit(1) = 4
+        expect(forgerSnap.data()?.totalScore).to.equal(4);
+        // Innocent forgery voter gains 0 (over-reach guard)
+        expect(ifvSnap.data()?.totalScore).to.equal(0);
+      });
+
+      it('Case B: calculates correct score deltas for P=5, S=3 (truth reward = 1)', async () => {
+        const hostUser = await createAnonUser();
+        const g1 = await createAnonUser();
+        const g2 = await createAnonUser();
+        const g3 = await createAnonUser();
+        const g4 = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 3,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await callFn('joinRoom', g3.idToken, { roomCode, playerName: 'Dave', playerId: 'p_g3' });
+        await callFn('joinRoom', g4.idToken, { roomCode, playerName: 'Eve', playerId: 'p_g4' });
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+
+        // Truth phase
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'T1', isTruth: true });
+        await callFn('submitAnswer', g1.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'T2', isTruth: true });
+        await callFn('submitAnswer', g2.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'T3', isTruth: true });
+        await callFn('submitAnswer', g3.idToken, { roomCode, targetCardId: 'p_g3', authorId: 'p_g3', text: 'T4', isTruth: true });
+        await callFn('submitAnswer', g4.idToken, { roomCode, targetCardId: 'p_g4', authorId: 'p_g4', text: 'T5', isTruth: true });
+
+        // Forgery rounds 1, 2, 3
+        for (let r = 0; r < 3; r++) {
+          const rSnap = await roomRef.get();
+          const asg = rSnap.data()?.currentCardAssignments;
+          await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: asg['p_host'], authorId: 'p_host', text: `L1_${r}`, isTruth: false });
+          await callFn('submitAnswer', g1.idToken, { roomCode, targetCardId: asg['p_g1'], authorId: 'p_g1', text: `L2_${r}`, isTruth: false });
+          await callFn('submitAnswer', g2.idToken, { roomCode, targetCardId: asg['p_g2'], authorId: 'p_g2', text: `L3_${r}`, isTruth: false });
+          await callFn('submitAnswer', g3.idToken, { roomCode, targetCardId: asg['p_g3'], authorId: 'p_g3', text: `L4_${r}`, isTruth: false });
+          await callFn('submitAnswer', g4.idToken, { roomCode, targetCardId: asg['p_g4'], authorId: 'p_g4', text: `L5_${r}`, isTruth: false });
+        }
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+        const targetCardId = roomSnap.data()?.currentReaderId;
+        const sealedSnap = await roomRef.collection('sealed').doc(targetCardId).get();
+        const sealedData = sealedSnap.data() as any;
+        const truthOptId = sealedData.truthAnswerId;
+        const answerAuthors = sealedData.answerAuthors; // optId -> authorId
+
+        const forgeryOptions: Array<{ optId: string; authorId: string }> = [];
+        for (const [optId, aId] of Object.entries(answerAuthors)) {
+          if (optId !== truthOptId) {
+            forgeryOptions.push({ optId, authorId: aId as string });
+          }
+        }
+
+        const allPlayers = [
+          { id: 'p_host', token: hostUser.idToken },
+          { id: 'p_g1', token: g1.idToken },
+          { id: 'p_g2', token: g2.idToken },
+          { id: 'p_g3', token: g3.idToken },
+          { id: 'p_g4', token: g4.idToken },
+        ];
+        const voters = allPlayers.filter(p => p.id !== targetCardId);
+        const reader = allPlayers.find(p => p.id === targetCardId)!;
+
+        // In 5p S=3, voters are 3 forgers and 1 innocent voter
+        const forgerIds = forgeryOptions.map(f => f.authorId);
+        const innocentVoter = voters.find(p => !forgerIds.includes(p.id))!;
+        const forgerVoters = voters.filter(p => forgerIds.includes(p.id));
+
+        const forger1 = forgerVoters[0];
+        const forger2 = forgerVoters[1];
+        const forger3 = forgerVoters[2];
+
+        // Find forger2's option id so forger1 can vote for it
+        const forger2Opt = forgeryOptions.find(f => f.authorId === forger2.id)!;
+
+        // 1. Innocent voter votes truth
+        await callFn('castVote', innocentVoter.token, { roomCode, targetCardId, voterId: innocentVoter.id, votedForId: truthOptId });
+        // 2. Forger 1 votes for Forger 2's forgery
+        await callFn('castVote', forger1.token, { roomCode, targetCardId, voterId: forger1.id, votedForId: forger2Opt.optId });
+        // 3. Forger 2 votes truth
+        await callFn('castVote', forger2.token, { roomCode, targetCardId, voterId: forger2.id, votedForId: truthOptId });
+        // 4. Forger 3 votes truth
+        await callFn('castVote', forger3.token, { roomCode, targetCardId, voterId: forger3.id, votedForId: truthOptId });
+
+        await callFn('setReady', reader.token, { roomCode, playerId: reader.id, ready: true });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+
+        // P=5, S=3 -> ceil((5-1)/(3+1)) = ceil(4/4) = 1
+        const itvSnap = await roomRef.collection('players').doc(innocentVoter.id).get();
+        const f1Snap = await roomRef.collection('players').doc(forger1.id).get();
+        const f2Snap = await roomRef.collection('players').doc(forger2.id).get();
+        const f3Snap = await roomRef.collection('players').doc(forger3.id).get();
+        const targetSnap = await roomRef.collection('players').doc(targetCardId).get();
+
+        // Innocent voter gets truth reward = 1
+        expect(itvSnap.data()?.totalScore).to.equal(1);
+        // Forger 1 was fooled by Forger 2 -> 0 (over-reach guard)
+        expect(f1Snap.data()?.totalScore).to.equal(0);
+        // Forger 2 gets truth reward (1) + saboteur bonus (1) + forger credit from forger 1 (1) = 3
+        expect(f2Snap.data()?.totalScore).to.equal(3);
+        // Forger 3 gets truth reward (1) + saboteur bonus (1) = 2
+        expect(f3Snap.data()?.totalScore).to.equal(2);
+        // Target gets +1 per truth voter (innocentVoter + forger2 + forger3 = 3)
+        expect(targetSnap.data()?.totalScore).to.equal(3);
+      });
+    });
   });
 });
+

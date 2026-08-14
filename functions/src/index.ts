@@ -1090,8 +1090,20 @@ async function advancePhaseInternal(
       });
     }
   } else if (room.currentPhase === "vote") {
+    // Merge sealed data into public cards for scoring and reveal screen
+    const mergedCards: CardModel[] = [];
+    for (const card of currentCards) {
+      const sealedData = sealedDataMap[card.targetPlayerId] || {};
+
+      mergedCards.push({
+        ...card,
+        truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
+        sabotageAnswers: sealedData.sabotageAnswers || {}
+      });
+    }
+
     // Tally scores and advance to Reveal
-    const currentCard = currentCards.find(c => c.targetPlayerId === room.currentReaderId);
+    const currentCard = mergedCards.find(c => c.targetPlayerId === room.currentReaderId);
     let hasFooled = false;
     if (currentCard) {
       const votes = currentCard.votes || {};
@@ -1122,18 +1134,6 @@ async function advancePhaseInternal(
           });
         }
       }
-    }
-
-    // Merge sealed data into public cards for the reveal screen
-    const mergedCards: CardModel[] = [];
-    for (const card of currentCards) {
-      const sealedData = sealedDataMap[card.targetPlayerId];
-
-      mergedCards.push({
-        ...card,
-        truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
-        sabotageAnswers: sealedData.sabotageAnswers || {}
-      });
     }
 
     const unmaskDeadline = hasFooled ? Date.now() + 20000 : null;
@@ -1364,7 +1364,7 @@ export const submitUnmaskGuess = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "Player did not cast a vote for this card.");
     }
 
-    if (votedForId === "TRUTH" || votedForId === currentCard.targetPlayerId) {
+    if (votedForId === currentCard.targetPlayerId) {
       throw new HttpsError("failed-precondition", "Only players who fell for a forgery can make an unmask guess.");
     }
 
@@ -1541,7 +1541,7 @@ export const debugSimulateBotResponses = onCall(async (request) => {
 
           readyPlayers[p.id] = true;
           if (currentTargetId !== p.id) {
-            votes[p.id] = "TRUTH";
+            votes[p.id] = currentTargetId;
           }
         }
         card.votes = votes;

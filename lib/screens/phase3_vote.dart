@@ -34,36 +34,12 @@ class Phase3VoteScreen extends StatefulWidget {
   State<Phase3VoteScreen> createState() => _Phase3VoteScreenState();
 }
 
-class _AnonymizedAnswer {
-  final String authorId;
-  final String text;
-  _AnonymizedAnswer(this.authorId, this.text);
-}
-
 class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<Phase3VoteScreen> {
   bool _submitted = false;
   bool _isNavigating = false;
   final Set<String> _sealedSoundPlayed = {};
   String? _lastReaderId;
-  List<_AnonymizedAnswer>? _shuffledAnswers;
-  String? _shuffledCardId;
   String? _localSelectedAuthorId;
-
-  void _generateShuffledAnswers(CardModel card) {
-    if (_shuffledAnswers != null && _shuffledCardId == card.targetPlayerId) return;
-    
-    List<_AnonymizedAnswer> answers = [];
-    answers.add(_AnonymizedAnswer('TRUTH', card.truthAnswer));
-    card.sabotageAnswers.forEach((authorId, text) {
-      answers.add(_AnonymizedAnswer(authorId, text));
-    });
-    
-    answers.shuffle(Random());
-    setState(() {
-      _shuffledAnswers = answers;
-      _shuffledCardId = card.targetPlayerId;
-    });
-  }
 
   void _castVote(GameService gs, String votedForId) async {
     final state = gs.gameState;
@@ -129,10 +105,6 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
       try {
         currentCard = state.cards.firstWhere((c) => c.targetPlayerId == currentTargetId);
       } catch (_) {}
-    }
-
-    if (currentCard != null) {
-       _generateShuffledAnswers(currentCard);
     }
 
     return AnimatedThinkingBackground(

@@ -29,7 +29,7 @@ void main() {
       required WidgetTester tester,
       required String localPlayerId,
       required int? unmaskDeadline,
-      Map<String, String> votes = const {'local_player_id': 'guest_id', 'guest_id': 'TRUTH'},
+      Map<String, String> votes = const {'local_player_id': 'guest_id', 'guest_id': 'local_player_id'},
       Map<String, String> unmaskGuesses = const {},
     }) async {
       // Setup players
@@ -117,27 +117,25 @@ void main() {
     testWidgets('Widget Test A: Fooled player, unmaskDeadline in future -> guess tray visible, authors sealed', (WidgetTester tester) async {
       try {
         final now = DateTime.now().millisecondsSinceEpoch;
-        // Local player voted 'guest_id' (forgery). Thus they are fooled!
+        // Setup reveal screen: local player fooled, deadline in future
         await setupAndPumpRevealScreen(
           tester: tester,
           localPlayerId: 'local_player_id',
           unmaskDeadline: now + 15000,
-          votes: {'local_player_id': 'guest_id', 'guest_id': 'TRUTH'},
+          votes: {'local_player_id': 'guest_id', 'guest_id': 'local_player_id'},
         );
 
-        // Settle initial beats (stage 1 and 2 take 1.8s each, so 3.6s total)
+        // Settle intro beats
         await settleReveal(tester, 4000);
 
         final texts = find.byType(Text).evaluate().map((e) => (e.widget as Text).data).toList();
         print("TEST A TEXT WIDGETS: $texts");
 
-        // Assert guess tray is visible
+        // Assert candidate chips are visible
         expect(find.text('REVENGE UNMASKING!'), findsOneWidget);
-        expect(find.textContaining('Accuse the player'), findsOneWidget);
-
-        // Every forgery row still shows SEALED ANSWER, no author name text anywhere
-        expect(find.text('SEALED ANSWER'), findsNWidgets(1)); // Truth is flipped (stage 2), forgery stays sealed.
-        expect(find.textContaining('FORGERY BY'), findsNothing);
+        expect(find.text('GUESTPLAYER'), findsOneWidget);
+        expect(find.text('SEALED ANSWER'), findsOneWidget); // Author still hidden during unmask stage
+        expect(find.text('FORGERY BY GUESTPLAYER'), findsNothing); // Not revealed yet
       } finally {
         gameService.dispose();
       }
@@ -146,12 +144,13 @@ void main() {
     testWidgets('Widget Test B: unmaskDeadline in past -> authors flipped, REVENGE results row present, tray gone', (WidgetTester tester) async {
       try {
         final now = DateTime.now().millisecondsSinceEpoch;
+        // Setup reveal screen: local player made unmask guess, deadline passed
         await setupAndPumpRevealScreen(
           tester: tester,
           localPlayerId: 'local_player_id',
-          unmaskDeadline: now - 5000, // already in the past
-          votes: {'local_player_id': 'guest_id', 'guest_id': 'TRUTH'},
-          unmaskGuesses: {'local_player_id': 'guest_id'}, // local player accused guest_id
+          unmaskDeadline: now - 5000,
+          votes: {'local_player_id': 'guest_id', 'guest_id': 'local_player_id'},
+          unmaskGuesses: {'local_player_id': 'guest_id'},
         );
 
         // Settle intro beats
@@ -160,15 +159,14 @@ void main() {
         final texts = find.byType(Text).evaluate().map((e) => (e.widget as Text).data).toList();
         print("TEST B TEXT WIDGETS: $texts");
 
-        // Assert authors flipped
-        expect(find.textContaining('FORGERY BY GUESTPLAYER'), findsOneWidget);
+        // Assert authors are revealed (flipping cards to front)
+        expect(find.text('FORGERY BY GUESTPLAYER'), findsOneWidget);
+        expect(find.text('SEALED ANSWER'), findsNothing);
 
-        // Assert REVENGE row present
+        // Assert unmask results are shown
         expect(find.text('REVENGE UNMASKING RESULTS'), findsOneWidget);
-        expect(find.textContaining('accused GuestPlayer'), findsOneWidget);
-
-        // Assert tray is gone
-        expect(find.text('REVENGE UNMASKING!'), findsNothing);
+        expect(find.textContaining('LocalPlayer accused GuestPlayer'), findsOneWidget);
+        expect(find.textContaining('SUCCESS! (+1)'), findsOneWidget);
       } finally {
         gameService.dispose();
       }
@@ -176,11 +174,12 @@ void main() {
 
     testWidgets('Widget Test C: unmaskDeadline is null -> no tray, authors flip promptly after intro', (WidgetTester tester) async {
       try {
+        // Setup reveal screen: no unmask deadline (no one fooled)
         await setupAndPumpRevealScreen(
           tester: tester,
           localPlayerId: 'local_player_id',
-          unmaskDeadline: null, // nobody was fooled
-          votes: {'local_player_id': 'TRUTH', 'guest_id': 'TRUTH'},
+          unmaskDeadline: null,
+          votes: {'local_player_id': 'local_player_id', 'guest_id': 'local_player_id'},
         );
 
         // Settle intro beats
@@ -189,9 +188,9 @@ void main() {
         final texts = find.byType(Text).evaluate().map((e) => (e.widget as Text).data).toList();
         print("TEST C TEXT WIDGETS: $texts");
 
-        // Authors flipped promptly (stage 4)
-        expect(find.textContaining('FORGERY BY GUESTPLAYER'), findsOneWidget);
-        expect(find.text('THE TRUTH'), findsOneWidget);
+        // Authors flipped
+        expect(find.text('FORGERY BY GUESTPLAYER'), findsOneWidget);
+        expect(find.text('SEALED ANSWER'), findsNothing);
 
         // No tray visible
         expect(find.text('REVENGE UNMASKING!'), findsNothing);
@@ -204,12 +203,12 @@ void main() {
     testWidgets('Widget Test D: Local player not fooled but window active -> status line during window', (WidgetTester tester) async {
       try {
         final now = DateTime.now().millisecondsSinceEpoch;
-        // Local player voted TRUTH, guest_id voted guest_id (forgery - self-vote/dummy)
+        // Local player voted TRUTH (local_player_id), guest_id voted guest_id (forgery)
         await setupAndPumpRevealScreen(
           tester: tester,
           localPlayerId: 'local_player_id',
           unmaskDeadline: now + 15000,
-          votes: {'local_player_id': 'TRUTH', 'guest_id': 'local_player_id'},
+          votes: {'local_player_id': 'local_player_id', 'guest_id': 'guest_id'},
         );
 
         // Settle intro beats

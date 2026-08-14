@@ -794,7 +794,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
 
                 newReadyMap[p.id] = true;
                 if (currentTargetId != p.id) {
-                  newVotes[p.id] = 'TRUTH';
+                  newVotes[p.id] = currentTargetId;
                 }
               }
               newCards[cardIdx] = card.copyWith(votes: newVotes);
@@ -855,7 +855,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
           throw Exception("Player did not cast a vote for this card.");
         }
 
-        if (card.votes[guesserId] == 'TRUTH') {
+        if (card.votes[guesserId] == card.targetPlayerId) {
           throw Exception("Only players who fell for a forgery can make an unmask guess.");
         }
 
@@ -995,7 +995,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final timesFooledDeltas = <String, int>{};
       final playersDeceivedDeltas = <String, int>{};
       currentCard.votes.forEach((voterId, votedForId) {
-        if (votedForId != 'TRUTH' && votedForId != voterId) {
+        if (votedForId != currentCard.targetPlayerId && votedForId != voterId) {
           timesFooledDeltas[voterId] = (timesFooledDeltas[voterId] ?? 0) + 1;
           playersDeceivedDeltas[votedForId] = (playersDeceivedDeltas[votedForId] ?? 0) + 1;
         }
@@ -1015,7 +1015,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         }
       }
 
-      final hasFooled = currentCard.votes.values.any((v) => v != 'TRUTH');
+      final hasFooled = currentCard.votes.values.any((v) => v != currentCard.targetPlayerId);
       final unmaskDeadline = hasFooled ? DateTime.now().millisecondsSinceEpoch + 20000 : null;
 
       nextState = nextState.copyWith(

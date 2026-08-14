@@ -142,7 +142,7 @@ void main() {
           await tick(400);
         } else {
           final currentTargetId = gameService.gameState!.currentReaderId!;
-          await gameService.castVote(currentTargetId, gameService.currentPlayerId!, 'TRUTH');
+          await gameService.castVote(currentTargetId, gameService.currentPlayerId!, currentTargetId);
           await tick(100);
         }
 

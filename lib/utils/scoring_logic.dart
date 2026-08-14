@@ -10,7 +10,7 @@ class ScoringLogic {
   static Map<String, int> calculateScores({
     required GameState state,
     required CardModel currentCard,
-    required Map<String, String> playerVotes, // VoterID -> VotedForID (or "TRUTH")
+    required Map<String, String> playerVotes, // VoterID -> VotedForAuthorID
   }) {
     Map<String, int> deltas = {};
     
@@ -22,7 +22,7 @@ class ScoringLogic {
     playerVotes.forEach((voterId, votedForId) {
       if (voterId == votedForId) return; // Self-vote prevention!
       
-      if (votedForId == 'TRUTH') {
+      if (votedForId == currentCard.targetPlayerId) {
         // The voter gets points for finding the truth
         deltas[voterId] = (deltas[voterId] ?? 0) + truthReward;
         
