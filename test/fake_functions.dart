@@ -867,6 +867,10 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
           throw Exception("Cannot guess yourself as the author.");
         }
 
+        if (guessedAuthorId == card.targetPlayerId) {
+          throw Exception("The card's target wrote the truth and cannot be accused of forgery.");
+        }
+
         final newUnmasks = Map<String, String>.from(card.unmaskGuesses);
         newUnmasks[guesserId] = guessedAuthorId;
         cards[cardIdx] = card.copyWith(unmaskGuesses: newUnmasks);

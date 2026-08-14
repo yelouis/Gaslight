@@ -267,5 +267,83 @@ void main() {
         gameService.dispose();
       }
     });
+
+    testWidgets('Widget Test F: Revenge candidate chips exclude card target who wrote truth (Issue 79)', (WidgetTester tester) async {
+      try {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final localPlayer = PlayerState(id: 'local_player_id', name: 'LocalPlayer', joinedAt: 100);
+        final targetPlayer = PlayerState(id: 'target_player_id', name: 'TargetPlayer', joinedAt: 200);
+        final forgerPlayer = PlayerState(id: 'forger_player_id', name: 'ForgerPlayer', joinedAt: 300);
+
+        final card = CardModel(
+          targetPlayerId: 'target_player_id',
+          promptText: 'Whose secret is this?',
+          truthAnswer: 'I love cats',
+          sabotageAnswers: {'forger_player_id': 'I love dogs'},
+          votes: {
+            'local_player_id': 'forger_player_id', // fooled!
+            'forger_player_id': 'target_player_id', // truth
+          },
+        );
+
+        final gameState = GameState(
+          roomCode: 'TEST',
+          currentPhase: GamePhase.reveal,
+          totalPlayers: 3,
+          currentReaderId: 'target_player_id',
+          cards: [card],
+          readyPlayers: {'local_player_id': true, 'target_player_id': true, 'forger_player_id': true},
+          resolutionOrder: ['target_player_id'],
+          unmaskDeadline: now + 15000,
+        );
+
+        await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc('local_player_id').set(
+          localPlayer.toMap()..['authUid'] = 'local_auth_uid',
+        );
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc('target_player_id').set(
+          targetPlayer.toMap()..['authUid'] = 'target_auth_uid',
+        );
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc('forger_player_id').set(
+          forgerPlayer.toMap()..['authUid'] = 'forger_auth_uid',
+        );
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('room_code', 'TEST');
+        await prefs.setString('player_id', 'local_player_id');
+        await gameService.tryRejoinSession();
+        gameService.listenToRoom('TEST');
+        await tester.runAsync(() async {
+          await Future.delayed(const Duration(milliseconds: 100));
+        });
+
+        // Resize virtual screen to prevent vertical layout overflows
+        tester.view.physicalSize = const Size(1200, 2000);
+        tester.view.devicePixelRatio = 1.0;
+
+        await tester.pumpWidget(
+          ChangeNotifierProvider<GameService>.value(
+            value: gameService,
+            child: const MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(accessibleNavigation: true),
+                child: Phase4RevealScreen(),
+              ),
+            ),
+          ),
+        );
+
+        await settleReveal(tester, 4000);
+
+        // Candidate button for FORGERPLAYER must be present
+        expect(find.text('FORGERPLAYER'), findsOneWidget);
+        // Candidate button for TARGETPLAYER must NOT be present
+        expect(find.text('TARGETPLAYER'), findsNothing);
+        // Candidate button for LOCALPLAYER (self) must NOT be present
+        expect(find.text('LOCALPLAYER'), findsNothing);
+      } finally {
+        gameService.dispose();
+      }
+    });
   });
 }

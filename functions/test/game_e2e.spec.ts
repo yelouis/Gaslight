@@ -1801,6 +1801,107 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(targetSnap.data()?.totalScore).to.equal(3);
       });
     });
+
+    describe('Issue 79: Exclude card target from unmask revenge accusation', () => {
+      it('rejects accusing the card target with INVALID_ARGUMENT and accepts valid forger guess', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+
+        // Truth phase
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice Truth', isTruth: true });
+        await callFn('submitAnswer', guest1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob Truth', isTruth: true });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie Truth', isTruth: true });
+
+        let roomSnap = await roomRef.get();
+        const assignments = roomSnap.data()?.currentCardAssignments;
+
+        // Forgery phase
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_host'], authorId: 'p_host', text: 'Alice Lie', isTruth: false });
+        await callFn('submitAnswer', guest1User.idToken, { roomCode, targetCardId: assignments['p_g1'], authorId: 'p_g1', text: 'Bob Lie', isTruth: false });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: assignments['p_g2'], authorId: 'p_g2', text: 'Charlie Lie', isTruth: false });
+
+        roomSnap = await roomRef.get();
+        const targetCardId = roomSnap.data()?.currentReaderId; // Target who wrote the truth
+        const sealedSnap = await roomRef.collection('sealed').doc(targetCardId).get();
+        const sealedData = sealedSnap.data() as any;
+        const truthOptId = sealedData.truthAnswerId;
+        const answerAuthors = sealedData.answerAuthors; // optId -> authorId
+
+        let forgeryOptId = '';
+        let forgerAuthorId = '';
+        for (const [optId, aId] of Object.entries(answerAuthors)) {
+          if (optId !== truthOptId) {
+            forgeryOptId = optId;
+            forgerAuthorId = aId as string;
+            break;
+          }
+        }
+
+        const allPlayers = [
+          { id: 'p_host', token: hostUser.idToken },
+          { id: 'p_g1', token: guest1User.idToken },
+          { id: 'p_g2', token: guest2User.idToken },
+        ];
+        const reader = allPlayers.find(p => p.id === targetCardId)!;
+        const otherVoter = allPlayers.find(p => p.id !== targetCardId && p.id !== forgerAuthorId)!;
+        const forgerVoter = allPlayers.find(p => p.id === forgerAuthorId)!;
+
+        // otherVoter votes for forgery (fooled!)
+        await callFn('castVote', otherVoter.token, { roomCode, targetCardId, voterId: otherVoter.id, votedForId: forgeryOptId });
+        // forgerVoter votes for truth
+        await callFn('castVote', forgerVoter.token, { roomCode, targetCardId, voterId: forgerVoter.id, votedForId: truthOptId });
+
+        await callFn('setReady', reader.token, { roomCode, playerId: reader.id, ready: true });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+
+        // 1. Falsifying assertion: otherVoter attempts to accuse targetCardId (who wrote truth)
+        let rejectedTargetAccusation = false;
+        try {
+          await callFn('submitUnmaskGuess', otherVoter.token, {
+            roomCode,
+            guesserId: otherVoter.id,
+            guessedAuthorId: targetCardId,
+          });
+        } catch (err: any) {
+          rejectedTargetAccusation = true;
+          expect(err.status).to.equal('INVALID_ARGUMENT');
+        }
+        expect(rejectedTargetAccusation).to.be.true;
+
+        // 2. Over-reach guard: accusing the real forger succeeds and adjusts scores (+1 guesser, -1 forger)
+        const forgerScoreBefore = (await roomRef.collection('players').doc(forgerAuthorId).get()).data()?.totalScore || 0;
+        const guesserScoreBefore = (await roomRef.collection('players').doc(otherVoter.id).get()).data()?.totalScore || 0;
+
+        await callFn('submitUnmaskGuess', otherVoter.token, {
+          roomCode,
+          guesserId: otherVoter.id,
+          guessedAuthorId: forgerAuthorId,
+        });
+
+        const forgerScoreAfter = (await roomRef.collection('players').doc(forgerAuthorId).get()).data()?.totalScore || 0;
+        const guesserScoreAfter = (await roomRef.collection('players').doc(otherVoter.id).get()).data()?.totalScore || 0;
+
+        expect(guesserScoreAfter).to.equal(guesserScoreBefore + 1);
+        expect(forgerScoreAfter).to.equal(forgerScoreBefore - 1);
+      });
+    });
   });
 });
 

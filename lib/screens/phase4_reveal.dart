@@ -684,8 +684,15 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                   }
                 } else {
                   if (isTimerActive) {
+                    // Paired with the identical exclusion in functions/src/index.ts:submitUnmaskGuess. The client
+                    // copy keeps the impossible choice off screen; the server copy is the real
+                    // guard — a stale or modified client must not be able to submit it. Change
+                    // both or neither.
                     final candidates = gs.players
-                        .where((p) => p.id != me.id && p.role != PlayerRole.spectator)
+                        .where((p) =>
+                            p.id != me.id &&
+                            p.id != card.targetPlayerId &&
+                            p.role != PlayerRole.spectator)
                         .toList();
                     return Column(
                       children: [

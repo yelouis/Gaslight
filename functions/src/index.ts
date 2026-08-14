@@ -1010,6 +1010,12 @@ async function advancePhaseInternal(
 
     const forgeriesPerCard = room.forgeriesPerCard ?? room.sabotageAnswersCount ?? 2;
     if (room.currentRotationIndex < forgeriesPerCard) {
+      for (const card of currentCards) {
+        const sealedData = sealedDataMap[card.targetPlayerId];
+        const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
+        transaction.set(sealedRef, sealedData, { merge: true });
+      }
+
       const nextRot = room.currentRotationIndex + 1;
       const nextAssignments = room.rotationPlan[nextRot.toString()] || {};
       const endTime = room.isTimerDisabled ? null : Date.now() + forgeryDuration;
@@ -1374,6 +1380,17 @@ export const submitUnmaskGuess = onCall(async (request) => {
 
     if (guessedAuthorId === voterId) {
       throw new HttpsError("invalid-argument", "Cannot guess yourself as the author.");
+    }
+
+    // Paired with the identical exclusion in lib/screens/phase4_reveal.dart:_buildRevengeGuessTray. The client
+    // copy keeps the impossible choice off screen; the server copy is the real
+    // guard — a stale or modified client must not be able to submit it. Change
+    // both or neither.
+    if (guessedAuthorId === currentCard.targetPlayerId) {
+      throw new HttpsError(
+        "invalid-argument",
+        "The card's target wrote the truth and cannot be accused of forgery."
+      );
     }
 
     const unmaskGuesses = currentCard.unmaskGuesses ? { ...currentCard.unmaskGuesses } : {};
