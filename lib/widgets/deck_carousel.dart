@@ -188,6 +188,7 @@ class _DeckCarouselState extends State<DeckCarousel> with TickerProviderStateMix
           }
 
           return GestureDetector(
+            key: ValueKey('deck_$deckId'),
             onTap: () {
               _pageController.animateToPage(
                 index,

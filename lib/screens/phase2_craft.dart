@@ -429,6 +429,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                         ),
                         const SizedBox(height: 30),
                         TextField(
+                          key: const ValueKey('answer_field'),
                           controller: _answerController,
                           maxLines: 3,
                           enabled: !_isSubmitting,

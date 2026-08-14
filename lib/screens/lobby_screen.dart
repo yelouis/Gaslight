@@ -567,6 +567,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                     ).map((f) {
                                       final isSelected = forgeries == f;
                                       return ChoiceChip(
+                                        key: ValueKey('forgeries_$f'),
                                         label: Text('$f'),
                                         selected: isSelected,
                                         selectedColor: AppColors.brass,
@@ -598,6 +599,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                     children: [1, 2, 3, 4, 5].map((r) {
                                       final isSelected = totalRounds == r;
                                       return ChoiceChip(
+                                        key: ValueKey('rounds_$r'),
                                         label: Text('$r'),
                                         selected: isSelected,
                                         selectedColor: AppColors.brass,
@@ -969,6 +971,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                               ),
                               SizedBox(height: isSmallHeight ? 8 : 16),
                               TextField(
+                                key: const ValueKey('player_name_field'),
                                 controller: _nameController,
                                 style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, fontSize: 16),
                                 decoration: InputDecoration(
@@ -1055,6 +1058,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                 ),
                               ),
                               TextField(
+                                key: const ValueKey('room_code_field'),
                                 controller: _roomCodeController,
                                 style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, letterSpacing: 8, fontSize: 18),
                                 textAlign: TextAlign.center,

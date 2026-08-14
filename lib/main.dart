@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -17,10 +18,15 @@ import 'screens/phase4_reveal.dart';
 import 'screens/game_over_screen.dart';
 import 'services/game_service.dart';
 
+import 'package:marionette_flutter/marionette_flutter.dart';
 import 'widgets/gaslight_route.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  if (kDebugMode) {
+    MarionetteBinding.ensureInitialized();
+  } else {
+    WidgetsFlutterBinding.ensureInitialized();
+  }
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await dotenv.load(fileName: ".env");
 
