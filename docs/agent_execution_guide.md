@@ -1,472 +1,335 @@
-# Agent Execution Guide — Active Build: E1 → E2 → E3 → E4 (Issues 78, 79, 77, then the playthrough) — August 13, 2026
+# Agent Execution Guide — Blocked on two selections; then D1 → D2 → D3 — August 14, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**What happened.** A manual three-player playthrough on August 13 found five defects. Root-causing them turned up something larger: **production has been running `6d9c178` since August 10**. Three commits touching `functions/src` — `4986cc7`, `3aa3148`, `1e12748` — were committed *after* the last deploy and never shipped. Issues 71, 72 and 76 are genuinely fixed in this repository and have never been true of the running game. Every verification pass that marked them Resolved read source and never asked production what it was running.
+**What is done.** Issues 78 and 79 are genuinely resolved — verified in source this session, not from commit messages, with real falsifying tests at two inputs (§7). The `votes` contract and the unmask bounds are now written into the design docs. Functions and `firestore.rules` are deployed. **Do not rework any of it.**
 
-**One of the five is not a deploy gap.** Issue 78 is a live defect in HEAD: `3aa3148` redefined what `votes` holds and updated one of its nine readers. Deploying without fixing it ships a *different* wrong scoring rule.
+**What is not done, and why this guide exists:**
 
-**The user has selected. This queue is approved and ordered:**
+1. **The deploy gap recurred inside the cycle that was meant to close it.** `1122f68` — a Firestore transaction-ordering fix for the round-1 → round-2 transition — was committed at `04:56Z`; the newest deployed function is `04:43Z`. **Production is one commit behind again** (Issue 81).
+2. **The playthrough report cannot be trusted as written.** It records 13 PASS / 1 NOT RUN. Four of those verdicts are unsupported: A3/A4 quote **18 prompts from a 12-prompt deck**, none of which exist anywhere in the repository; A9/A10 tested end-of-match navigation instead of the leave/eviction flow and never observed the required string; A12's stated arithmetic is wrong; A13/A14 overclaim (Issue 82).
 
-| Item | Issue | Selection |
-|---|---|---|
-| **E1** | Issue 78 — `votes` sentinel purge | Option A |
-| **E2** | Issue 79 — revenge tray offers the truth's author | Option A, *"leave comments to address the cons"* |
-| **E3** | Issue 77 — deploy `4986cc7…HEAD` | Option A (E1+E2 first, one deploy) |
-| **E4** | Issue 70 / Issue 80 — re-run the playthrough on the correct build | Option D, Marionette-driven |
+**Two issues need a `Your selection:` line before the work is fully determined — Issues 81 and 82 in `docs/ongoing_general_errors.md`.** §2 says exactly what is blocked and what is not.
 
-**Every number and literal string below is deliberate — implement as written; do not substitute your own.** Full issue text, options and rationale live in `docs/ongoing_general_errors.md`; this guide is the how.
+**Every number and literal string below is deliberate — implement as written; do not substitute your own.**
 
 ---
 
-## Standing constraints — these apply to every item
+## Standing constraints
 
-- **One item = one commit.** E1 and E2 are separate commits. Do not batch them: Issues 71–76 landed as one commit, five were real, one was untouched, and the batch read as complete.
-- **Write validation that fails against the broken state, and observe it fail before you fix anything.** Record the failure output in the commit body. This is not optional here — all four gates were green while Issues 71, 76 and 78 were live.
+- **One item = one commit.**
+- **Write validation that fails against the broken state, and observe it fail** before fixing. Record the failure output in the commit body.
+- **Every quoted game string in any report you write must be findable in source with `grep -F`.** If it cannot be, you did not observe it — record **NOT RUN**. This is not a style rule; it is the check that would have caught Issue 82.
 - **`flutter analyze lib test`, never bare `flutter analyze`.**
-- **Do not weaken an assertion or delete a test to reach green.**
-- **Do not fix Issue 80.** The user selected: re-run the assertion after E1–E3 land. If it still fails, file the design question then.
 - **Never fill in a `Your selection: _____` line.**
-- **Do not touch anything in §10–§12.**
+- **Do not weaken an assertion or delete a test to reach green.**
+- **Do not touch anything in §7 or §8.**
 
 ---
 
 ## 1. Verified baseline — the regression bar
 
-Re-measured **August 13, 2026** at `1e12748`; unchanged at `0c5aef1` (docs-only since).
+Measured **August 14, 2026** at `0052741`, clean tree. These are this session's numbers.
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors** ✅ (24 warnings, 197 infos — 221 issues total) |
-| `flutter test` | **127/127** ✅ |
+| `flutter analyze lib test` | **0 errors** ✅ (25 warnings, 197 infos — 222 issues) |
+| `flutter test` | **130/130** ✅ (was 127; E1/E2 added 3) |
 | `npm --prefix functions run build` | clean ✅ |
-| `npm --prefix functions test` | **43/43** ✅ |
-| **Deployed backend** | ❌ **STALE** — production runs `6d9c178`; three commits undeployed (E3) |
-| **The playthrough** | ⚠️ Ran August 13 against the **stale** build; must be re-run (E4) |
+| `npm --prefix functions test` | **46/46** ✅ (was 43; E1/E2 added 3) |
+| **Deployed functions** | ❌ **ONE COMMIT BEHIND** — newest `04:43Z`, last `functions/src` commit `04:56Z` (Issue 81) |
+| **Deployed rules** | ✅ ruleset released `2026-08-14T04:24:13Z`, after `3aa3148` |
+| **The playthrough** | ⚠️ 8 of 14 assertions have usable evidence; 5 do not; 1 NOT RUN (Issue 82) |
 
-**The battery had a hole, and this closes it.** A green suite says nothing about what is deployed. Run this in every future pass and compare against `git log -1 --format=%cI -- functions/src`:
+### The deploy check — run this every pass
+
+`gcloud functions list` shows functions only. **Rules need a different call, and the last two cycles had no way to see them at all:**
 
 ```bash
 /Users/louisye/Downloads/google-cloud-sdk/bin/gcloud functions list --project=gaslight-46368 --format="table(name,updateTime)"
 ```
 
-**`gcloud` is not on this shell's `PATH`** — it is at `/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud`. **`~/.pub-cache/bin` is not on `PATH`** either.
+```bash
+TOKEN=$(/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud auth print-access-token); curl -s -H "Authorization: Bearer $TOKEN" -H "x-goog-user-project: gaslight-46368" "https://firebaserules.googleapis.com/v1/projects/gaslight-46368/releases"
+```
+
+Compare both against `git log -1 --format=%cI -- functions/src` and `git log -1 --format=%cI -- firestore.rules`. **The `x-goog-user-project` header is required** — without it the Rules API returns `PERMISSION_DENIED / SERVICE_DISABLED`, which reads like a missing API and is really a missing quota project.
+
+**`firebase functions:list` is not a deploy check.** It prints version, trigger, location, memory and runtime — **no timestamps**. Pasting it is what let Issue 81 through.
 
 ### ⚠️ Traps that have each cost a cycle
 
-1. **Analyzer scope.** `flutter analyze lib test`, **never bare `flutter analyze`** — it walks `build/{ios,macos}/SourcePackages` and reports ~678 phantom errors from vendored plugin source.
+1. **Analyzer scope.** `flutter analyze lib test`, **never bare `flutter analyze`**.
 2. **Analyze ≠ compile.**
 3. **Working directory persists** between Bash calls. Use `npm --prefix functions`.
 4. **BSD `sed` has no `\b`**; **`rg -r` is `--replace`, not "recursive"**.
 5. **`Image.asset` loads no bytes under `flutter test`.**
 6. **`test/fake_functions.dart` does not enforce `firestore.rules`** but does model the server's error shape — keep it that way.
-7. **Widget tests on animated screens hang unless you set `accessibleNavigation: true`.** `toImage()` must be inside `tester.runAsync`. **E2's client test needs this.**
-8. **`firebase.json`'s `predeploy` runs the test suite.** It gates `--only functions`, **not `--only firestore:rules`** — the two must be deployed as separate commands (E3). Needs Java.
+7. **Widget tests on animated screens hang unless you set `accessibleNavigation: true`.** `toImage()` must be inside `tester.runAsync`.
+8. **`firebase.json`'s `predeploy` runs the test suite.** It gates `--only functions`, **not `--only firestore:rules`** — separate commands. Needs Java.
 9. **A cmap presence check proves nothing about a glyph.** Use `scripts/inspect_glyph.py`.
-10. **A green suite is not evidence about anything it cannot observe.**
+10. **A green suite is not evidence about anything it cannot observe — or about what is deployed.**
 11. **Check which artefact a measurement describes, and in what units.**
 12. **A raw `Error` from a callable flattens to `INTERNAL`.** Use `HttpsError`; match on the **code**.
-13. **Line numbers in this guide will drift as you edit.** Re-grep for the *expression*, not the number, before every edit. E1 changes nine sites in four files; after the third edit every number below it is stale.
+13. **Line numbers drift.** Re-grep for the expression, never the number.
+14. **`cah_dark_humor` has exactly 12 prompts** (`lib/utils/prompt_decks.dart`, mirrored in `functions/src/prompt_decks.ts`). Any run reporting more re-rolls than that on this deck is reporting something that did not happen.
 
 ---
 
-## 2. Execution order
+## 2. What is blocked, and what is not
 
-| # | Item | Why this position |
+| Item | Depends on | Status |
 |---|---|---|
-| **E1** | Issue 78 — purge the `'TRUTH'` sentinel | First, because E3 must not ship the current scoring rule and because E2's "who was fooled" logic reads the same broken predicate. Fixing E2 on top of E1 is clean; the reverse order means writing E2's test against a value that is about to change meaning. |
-| **E2** | Issue 79 — exclude the truth's author from the revenge tray | After E1, before the deploy, so one deploy carries both. |
-| **E3** | Issue 77 — deploy functions **and rules** | Only after E1 and E2 are green. This is the user's selected Option A: one deploy, one re-test. |
-| **E4** | Re-run the playthrough (Marionette, M1–M5) | Last. Running it before E3 measures `6d9c178` — the exact mistake that produced this queue. |
+| **D1** — deploy `1122f68` | Issue 81 selection | **All three options begin with deploying.** Only what happens *after* differs. Do not run it until a selection is recorded — the selection line is what authorises a production change. |
+| **D2** — deploy-freshness gate | Issue 81 = **A** | Specced in full at §4. Skip entirely if B or C is chosen. |
+| **D3** — re-run the unsupported assertions | Issue 82 selection | Scope branches three ways (§5). **A = five assertions, B = all fourteen, C = relabel now and defer.** |
+| **Issue 80** | folded into D3 | Verified as part of A13 under options A and B; stays open under C. |
+
+**If both selection lines are still blank: stop and say so.** Do not pick for the user, and do not start D1 "since every option includes it" — a production deploy is not a safe default.
 
 ---
 
-## 3. E1 — Issue 78: purge the retired `'TRUTH'` sentinel
+## 3. D1 — Deploy `1122f68`
 
-**What this means for the user:** today a player who correctly picks the truth scores **nothing**, the person who told the truth is paid as though they had fooled someone, and the game tells *every* player they were fooled — including the one who was right. This is the defect that made the reveal read `Unknown: +1` while standings stayed at `0`.
+**What this means for the user:** the fix for the round-1 → round-2 transition — the bug the last playthrough hit live — is sitting in the repository and is not in the game. A three-round match today runs the transaction-ordering bug.
 
 ### The gap
 
-`3aa3148` changed what `votes` holds. It used to map `voterId → optionId | 'TRUTH'`. It now maps `voterId → resolvedAuthorId` (`functions/src/index.ts:583`), so **a vote for the truth stores the card target's player id** and the string `'TRUTH'` is never written by `castVote` again.
-
-Exactly one reader was updated (`index.ts:1367`). **Nine were not.** Two further consequences follow from the same root and must be fixed in this commit:
-
-- Because `advancePhaseInternal` only applies deltas whose key is an active player id (`index.ts:1111–1124`), a delta keyed to anything else is **silently dropped** — which is why the reveal and the standings disagreed.
-- `debugSimulateBotResponses` still *writes* the dead sentinel, so the debug path seeds data no reader can interpret.
+`1122f68` reorders `advanceToNextResolution` so every `transaction.get` on the sealed documents happens before any write, via `Promise.all`. Firestore requires this; the previous interleaving throws inside the transaction on the round boundary. Committed `2026-08-14T04:56:13Z`; `advanceToNextResolution` in production is from `04:43:19Z`.
 
 ### Implementation
 
-**The rule, stated once:** a vote is a truth vote **iff `votedForId == card.targetPlayerId`**. There is no sentinel. Apply that substitution at every site below.
-
-| # | File | Expression today | Change to |
-|---|---|---|---|
-| 1 | `functions/src/scoring_logic.ts:54` | `votedForId === 'TRUTH'` | `votedForId === currentCard.targetPlayerId` |
-| 2 | `lib/utils/scoring_logic.dart:25` | `votedForId == 'TRUTH'` | `votedForId == currentCard.targetPlayerId` |
-| 3 | `lib/screens/phase4_reveal.dart:105` | `votedFor != 'TRUTH'` | `votedFor != card.targetPlayerId` |
-| 4 | `lib/screens/phase4_reveal.dart:250` | `currentCard.votes[me.id] != 'TRUTH'` | `… != currentCard.targetPlayerId` |
-| 5 | `lib/screens/phase4_reveal.dart:265` | `currentCard.votes[me.id] != 'TRUTH'` | `… != currentCard.targetPlayerId` |
-| 6 | `lib/screens/phase4_reveal.dart:359` | `_buildOptionRow('TRUTH', currentCard.truthAnswer, …, isTruth: true)` | `_buildOptionRow(currentCard.targetPlayerId, currentCard.truthAnswer, …, isTruth: true)` |
-| 7 | `lib/screens/phase4_reveal.dart:554` | `card.votes[me.id] != 'TRUTH'` | `… != card.targetPlayerId` |
-| 8 | `lib/screens/phase4_reveal.dart:757` | `card.votes[p.id] != 'TRUTH'` | `… != card.targetPlayerId` |
-| 9 | `functions/src/index.ts:1544` | `votes[p.id] = "TRUTH";` | `votes[p.id] = currentTargetId;` |
-
-**Site 6 deserves a second look before you change it.** `_buildOptionRow` is declared at `phase4_reveal.dart:804` and uses its `authorId` parameter at `:806` to find that option's voters: `gs.players.where((p) => card.votes[p.id] == authorId)`. With `'TRUTH'` passed in, that comparison is never true, so **the truth row currently shows no voters at all**. Passing the target id fixes it. The label and border are governed by the separate `isTruth: true` flag, not by `authorId` — **re-read `:804–830` and confirm that before editing**, because if any label branch keys off `authorId` the truth row would start rendering as "FORGERY BY <target>".
-
-**Also in this commit:**
-
-- **`functions/src/index.ts:1367`** — `if (votedForId === "TRUTH" || votedForId === currentCard.targetPlayerId)`. The first disjunct is now dead. Delete it, leaving the target-id check. This is the one reader that was already correct; make it unambiguous.
-- **`lib/utils/scoring_logic.dart:13`** — the doc comment reads `// VoterID -> VotedForID (or "TRUTH")`. **Update it.** A stale comment describing a retired contract is how this bug propagated in the first place.
-- **`lib/screens/phase3_vote.dart:52–64`** — `_generateShuffledAnswers` builds `_AnonymizedAnswer('TRUTH', card.truthAnswer)` from `card.truthAnswer` and `card.sabotageAnswers`. **This path is dead:** the live grid is built from `currentCard.options` at `phase3_vote.dart:412`, and `_shuffledAnswers` is assigned but never read. **Delete the method, its call at `:135`, and the `_shuffledAnswers` / `_shuffledCardId` fields at `:48–49`.** Leaving it is how the sentinel comes back.
-
-After the edits, this must return nothing outside of display copy:
-
-```bash
-grep -rn "'TRUTH'\|\"TRUTH\"" lib functions/src | grep -v "THE TRUTH\|RECORD OF TRUTH\|YOUR TRUTH\|IS THE TRUTH"
-```
-
-### Validation
-
-**Observe the failure first.** Write the tests, run them against unmodified code, record the output, then fix.
-
-**Falsifying assertion (server, `functions/test/game_e2e.spec.ts`).** Today's code gives a correct truth-voter **0**. Assert the real reward, `ceil((P − 1) / (S + 1))`, **at two different inputs — one value cannot pass both**:
-
-| Case | Players `P` | `forgeriesPerCard` `S` | Expected truth-voter delta |
-|---|---|---|---|
-| A | 4 | 1 | **2** |
-| B | 5 | 3 | **1** |
-
-Case A alone would also pass a "give the voter a flat 1" mis-fix; case B alone would also pass today's "give the voter 0 but the target 1" if you only checked the target. Both are required.
-
-In each case have one player vote the truth option and one vote a forgery, then assert on the player documents after the phase advances:
-
-- the truth-voter's `totalScore` increased by exactly the expected reward;
-- the **card target's** `totalScore` increased by exactly `1` per truth-voter;
-- the **forger's** `totalScore` increased by exactly `1`.
-
-**Over-reach guard, in the same test:** the player who voted for a forgery must **not** receive the truth reward, and the card target must **not** be credited for the forgery vote. A fix that pays everyone would otherwise pass.
-
-**Falsifying assertion (client, new `test/scoring_logic_test.dart`).** `ScoringLogic.calculateScores` is a pure function — call it directly with a hand-built `GameState` and `CardModel` for the same two cases and assert the same numbers. This is the cheap mirror of the server test and it is what the reveal actually renders.
-
-**Regression guard for the "fooled" predicate.** A widget or unit test asserting that a player whose vote equals `card.targetPlayerId` is **not** treated as fooled. Today that predicate is true for everyone, so this assertion fails before the fix and passes after. Set `accessibleNavigation: true` if you drive the reveal screen (trap 7).
-
-**Battery:** `flutter analyze lib test` 0 errors · `flutter test` **≥127** · functions build clean · `npm --prefix functions test` **≥43**. New tests raise these counts; they must never lower them.
-
-### Blast radius
-
-`functions/src/scoring_logic.ts`, `functions/src/index.ts`, `lib/utils/scoring_logic.dart`, `lib/screens/phase4_reveal.dart`, `lib/screens/phase3_vote.dart`, plus the new/updated tests. **`test/fake_functions.dart` models the server's error shape — check whether it stores votes, and if so keep it consistent with the new contract.**
-
-Commit: `fix(scoring): resolve truth votes by target identity, not the retired 'TRUTH' sentinel`. Put the pre-fix failure output in the body.
-
----
-
-## 4. E2 — Issue 79: exclude the truth's author from the revenge tray
-
-**What this means for the user:** the revenge round currently offers you the chance to accuse the person who wrote the truth of having forged it. It is a wasted guess, and offering it tells the player the game is not tracking who did what.
-
-### The gap
-
-`lib/screens/phase4_reveal.dart:~688` builds the candidate list as:
-
-```dart
-final candidates = gs.players
-    .where((p) => p.id != me.id && p.role != PlayerRole.spectator)
-    .toList();
-```
-
-It excludes only the guesser. The **card's target** — who by definition wrote the truth for this card, not a forgery — is offered on every card. The server does not reject it either: `submitUnmaskGuess` (`functions/src/index.ts:1375`) rejects only self-accusation.
-
-### Implementation
-
-**Client** — add the target to the exclusion at `phase4_reveal.dart:~688`:
-
-```dart
-final candidates = gs.players
-    .where((p) =>
-        p.id != me.id &&
-        p.id != card.targetPlayerId &&
-        p.role != PlayerRole.spectator)
-    .toList();
-```
-
-**Server** — in `submitUnmaskGuess`, immediately after the self-accusation guard at `index.ts:1375`, add:
-
-```ts
-    if (guessedAuthorId === currentCard.targetPlayerId) {
-      throw new HttpsError(
-        "invalid-argument",
-        "The card's target wrote the truth and cannot be accused of forgery."
-      );
-    }
-```
-
-**The user asked for the cons of Option A to be addressed in comments.** Option A's stated cost is that the same exclusion is now expressed twice, in two languages, and can drift. Add a short comment at **both** sites naming the other one and saying why both exist — the client copy is UX, the server copy is the actual bound, because a client-only bound is not a bound. Something a future reader cannot misread as duplication to be cleaned up:
-
-```
-// Paired with the identical exclusion in <the other file:symbol>. The client
-// copy keeps the impossible choice off screen; the server copy is the real
-// guard — a stale or modified client must not be able to submit it. Change
-// both or neither.
-```
-
-### Validation
-
-**Falsifying assertion (server, `game_e2e.spec.ts`).** A player who fell for a forgery calls `submitUnmaskGuess` with `guessedAuthorId` set to the card's `targetPlayerId`. Expect a rejection with code **`invalid-argument`** — match on the **code**, never the message (trap 12). Today this call **succeeds**; observe that first.
-
-**Over-reach guard, same test:** a guess naming a genuine forger on the same card must still succeed and must still apply `+1` to the guesser and `−1` to the forger (`index.ts:1395–1400`). A fix that rejects everything would otherwise pass.
-
-**Falsifying assertion (client).** A widget test on the reveal at the unmask stage asserting the candidate chips contain the other forger and **do not** contain the card target. Set `accessibleNavigation: true` (trap 7).
-
-**Battery** as in E1.
-
-### Blast radius
-
-`lib/screens/phase4_reveal.dart`, `functions/src/index.ts`, plus tests. Note that `index.ts:1367` already rejects guesses from players who voted the truth — E2 is the complementary bound on *who may be accused*, not on *who may accuse*. Do not merge the two guards.
-
-Commit: `fix(reveal): reject accusing the card target, who wrote the truth`.
-
----
-
-## 5. E3 — Issue 77: deploy functions and rules
-
-**What this means for the user:** four fixed issues are sitting in the repository and have never reached anyone playing the game.
-
-**This is a production change, and the user has authorised it** by selecting Option A on Issue 77 — which is explicitly "fix Issue 78 first, then deploy `4986cc7…HEAD` in one go". **Announce the deploy before running it. Do not run it before E1 and E2 are committed and green.**
-
-### Implementation
-
-1. Confirm the working tree is clean and the battery is at or above §1.
-2. Record the pre-deploy state so the change is provable:
-
-```bash
-/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud functions list --project=gaslight-46368 --format="table(name,updateTime)"
-```
-
-3. Deploy functions. `firebase.json`'s `predeploy` runs the test suite on this path and needs Java:
+1. Confirm a clean tree and the battery at or above §1.
+2. Capture the **before** table using the §1 commands — the real one, with `updateTime`.
+3. Deploy. `predeploy` runs the suite on this path and needs Java:
 
 ```bash
 npx firebase-tools deploy --only functions --project gaslight-46368
 ```
 
-4. **Deploy rules separately.** `firestore.rules` was last changed in `3aa3148` — which is also undeployed — and `predeploy` does **not** gate `--only firestore:rules` (trap 8):
-
-```bash
-npx firebase-tools deploy --only firestore:rules --project gaslight-46368
-```
+4. Rules are already current (`04:24:13Z` > `3aa3148`). **Re-check anyway** with the Rules API call in §1 — if `firestore.rules` has changed since, deploy it separately.
 
 ### Validation
 
-**The falsifying check:** re-run the `gcloud functions list` command. **All 14 functions** must report an `updateTime` later than `git log -1 --format=%cI -- functions/src`. Paste the before and after tables into the commit or the findings doc. A partial deploy — some functions updated, some not — is a failure, not a partial success: `castVote` and `advancePhase` disagreeing about what `votes` holds is worse than either version alone.
+**The falsifying check:** every one of the **14** functions must report an `updateTime` later than `git log -1 --format=%cI -- functions/src`. Paste the before and after tables. Expected functions: `advancePhase`, `advanceToNextResolution`, `castVote`, `createRoom`, `debugAddBots`, `debugSimulateBotResponses`, `handleDisconnect`, `joinRoom`, `rerollPrompt`, `setReady`, `startGame`, `submitAnswer`, `submitUnmaskGuess`, `updateLobbySettings`.
 
-Expected function list: `advancePhase`, `advanceToNextResolution`, `castVote`, `createRoom`, `debugAddBots`, `debugSimulateBotResponses`, `handleDisconnect`, `joinRoom`, `rerollPrompt`, `setReady`, `startGame`, `submitAnswer`, `submitUnmaskGuess`, `updateLobbySettings`.
+**A partial deploy is a failure, not a partial success.** Two functions disagreeing about a transaction's read/write ordering is worse than either version alone.
 
-**If the deploy fails**, do not retry blindly and do not disable `predeploy` to get past it. Record the error and STOP per §9.
+Commit only if something changed in the tree; the deploy itself is recorded in D3's report.
 
 ---
 
-## 6. E4 — Re-run the playthrough against the correct build
+## 4. D2 — Deploy-freshness gate *(only if Issue 81 = Option A)*
 
-Marionette MCP is **already installed** — `marionette_flutter: ^0.6.0` is in `pubspec.yaml`, the binding is in `lib/main.dart`, `.agents/mcp_config.json` registers three servers, and the six stable keys landed in `f3a5a1d`. A previous agent reached the M3 connect gate (`docs/playthrough_evidence/m3_gate_p1.png`) and stalled there without writing findings. **Verify the setup rather than redoing it.**
+**What this means for the user:** twice now, four fixed issues and then a transaction fix have sat undeployed while every document said "done". A written instruction did not prevent the second occurrence.
 
-### Setup
+### Implementation
 
-- **`.env` must contain `USE_EMULATOR=false`.** It is a bundled asset — changing it requires a rebuild.
-- **Debug build.** The server refuses debug callables when `debugEnabled` is false, and release builds expose no VM service.
-- **Three real clients. Never `DEBUG: ADD 9 BOTS`** — bots are server-seeded documents that never traverse the client write path or the security rules, which is the exact blind spot this run exists to cover.
-- **One Marionette server process holds one connection.** Three players means the three registered server entries, not one server reconnected. There is no session id on any other tool.
+Create `scripts/check_deploy_fresh.sh`, executable, no arguments:
 
-```bash
-xcrun simctl boot "iPhone 17"; xcrun simctl boot "iPhone 17 Pro"; xcrun simctl boot "iPhone Air"; open -a Simulator
-```
+1. `LAST_SRC=$(git log -1 --format=%cI -- functions/src)` and `LAST_RULES=$(git log -1 --format=%cI -- firestore.rules)`.
+2. Fetch function `updateTime`s with the `gcloud` command in §1 (`--format="value(name,updateTime)"` parses more easily than `table`).
+3. Fetch the rules release `updateTime` with the Rules API call in §1, including the `x-goog-user-project` header.
+4. **Exit 1** if any function's `updateTime` is earlier than `LAST_SRC`, or the rules release is earlier than `LAST_RULES`. Print the offending names and both timestamps.
+5. **Exit 2, with a distinct message, if `gcloud` is absent or unauthenticated.** Option A's stated con is exactly this case — it must be distinguishable from "the deploy is stale", never silently treated as a pass.
+6. **Exit 0** otherwise, printing the newest and oldest deployed timestamps so a passing run still shows its work.
+
+Add it to the battery in this guide's §1 as a fifth gate.
+
+### Validation
+
+**The falsifying check, and you must observe both halves:**
+- Run it at `HEAD` **before** D1's deploy — or against a temporary commit touching `functions/src` — and watch it **exit 1** and name `advanceToNextResolution`. A gate that has never failed has not been tested.
+- Run it after D1 and watch it **exit 0**.
+- Run it with `PATH` stripped of `gcloud` and confirm **exit 2** with the credentials message, not a false pass.
+
+Commit: `test(ci): fail the battery when deployed functions or rules lag the tree`.
+
+---
+
+## 5. D3 — Re-run the unsupported assertions
+
+**What this means for the user:** five of the fourteen assertions in the current report say PASS on the strength of things the harness never returned. The eight with real evidence stand; these five have to be earned.
+
+**Scope branches on the Issue 82 selection:**
+
+- **Option A** — re-run **A3, A4, A9, A10, A13** and rewrite those five blocks in place. Leave the other nine.
+- **Option B** — discard `docs/playthrough_findings_marionette.md` and re-run **all fourteen**.
+- **Option C** — **do not run anything.** Edit the five blocks to `NOT RUN`, stating for each what was recorded and why it is not evidence, and stop. The work stays queued.
+
+### Setup (options A and B)
+
+Marionette is already installed: `marionette_flutter: ^0.6.0`, the binding in `lib/main.dart`, three servers in `.agents/mcp_config.json`, six stable keys from `f3a5a1d`. **Verify rather than redo.**
+
+- **`.env` must contain `USE_EMULATOR=false`** — it is a bundled asset; changing it needs a rebuild.
+- **Rebuild after D1.** The client changed in `d34af33` and `1eda59f`; a stale app binary would re-test the old client against the new backend.
+- **Debug build. Three real clients. Never `DEBUG: ADD 9 BOTS`** — bots are server-seeded and never traverse the client write path or the rules.
+- **One Marionette server holds one connection**; use all three registered entries.
+- Boot, uninstall, then launch **one device at a time** (concurrent builds corrupt `build/`):
 
 ```bash
 for U in $(xcrun simctl list devices booted | grep -oE '[0-9A-F-]{36}'); do xcrun simctl uninstall "$U" com.whylabs.gaslight 2>/dev/null; done
 ```
 
-Launch **one device at a time** — two concurrent builds against the same `build/` directory corrupt each other:
-
 ```bash
 flutter run -d <UDID> --debug > /tmp/gaslight_p1.log 2>&1 &
 ```
-
-Extract each VM service URI and convert it to the WebSocket form Marionette expects:
 
 ```bash
 grep -oE 'http://127\.0\.0\.1:[0-9]+/[^ ]*' /tmp/gaslight_p1.log | tail -1 | sed -e 's|^http|ws|' -e 's|/$|/ws|'
 ```
 
-`marionette-p1.connect` → P1's URI, and so on. Record which UDID sits behind each server; every observation must name its device.
+**Gate:** `take_screenshots` on all three must show `THE GUEST LEDGER` before any assertion.
 
-**Gate before any assertion:** `take_screenshots` on all three must show **`THE GUEST LEDGER`**. Three devices, not two — the minimum player count is enforced server-side.
+**Three hazards, each of which produces a false pass rather than a visible failure:**
+1. `get_interactive_elements` on P1 must show `forgeries_*` and `rounds_*` as **distinct keyed elements** before you touch House Rules — both rows are `ChoiceChip`s labelled with bare numerals (`lobby_screen.dart:569`, `:600`).
+2. Leave **`Family-Friendly Decks Only` off** (`lobby_screen.dart:643`, defaults `false`) — it hides `cah_dark_humor`.
+3. Turn **`Disable Game Timers` on** (`lobby_screen.dart:623`) and record it as a deviation.
 
-### Three hazards, all of which produce a false pass rather than a visible failure
+Also: `get_interactive_elements` returns only **visible** elements — `scroll_to` first. And labels are literal ALL-CAPS strings; `tap(text: 'Create Room')` will not match `'CREATE ROOM'`.
 
-1. **The Forgeries and Rounds choosers are both `ChoiceChip`s labelled with bare numerals** (`lobby_screen.dart:569` and `:600`). `get_interactive_elements` on P1 must show `forgeries_*` and `rounds_*` as **distinct keyed elements** before you touch House Rules. If it does not, **stop** — assertion 1 cannot be trusted and neither can any House Rule you set.
-2. **`Family-Friendly Decks Only`** (`lobby_screen.dart:643`) hides `cah_dark_humor`, which assertion 4 needs. It defaults to `false` — **leave it off**.
-3. **Phase auto-advance fires faster than an agent can read-then-tap.** Turn **`Disable Game Timers` on** (`lobby_screen.dart:623`) and record it as a deliberate deviation.
+### The five assertions, and exactly what each needs
 
-Two more that cost a cycle each: `get_interactive_elements` returns only **visible** elements, so `scroll_to` before concluding a control is absent; and this app renders labels as literal ALL-CAPS strings (`'THE GUEST LEDGER'`, `'CREATE ROOM'`, `'RE-ROLL PROMPT'`, `'SUBMIT DOSSIER'`, `'CONFIRM VOTE'`) — `tap(text: 'Create Room')` will not match.
+**A3 — Re-roll variety.** Select `cah_dark_humor` via `tap(key: 'deck_cah_dark_humor')`, then re-roll repeatedly, capturing the prompt text after each roll.
+- **The deck holds 12 prompts. You cannot observe 13 distinct ones.**
+- **Anti-fabrication gate, mandatory:** every prompt you record must pass `grep -F "<prompt>" lib/utils/prompt_decks.dart`. Run it. Paste the result. A prompt that does not match is proof the capture is wrong — do not "clean it up", record NOT RUN and say why.
+- PASS requires: distinct prompts on every roll, no repeat, all traceable to the deck.
 
-### Player setup
+**A4 — Deck exhaustion.** Continue A3 past the 12th prompt.
+- The message must read exactly `No more prompts left in this deck.` (`phase2_craft.dart:506`; the server raises it as `resource-exhausted` in `prompt_decks.ts:158`).
+- PASS requires that exact string, not the generic fallback, on the roll after the deck is empty.
 
-P1 is host: `enter_text` into `player_name_field` → `Alpha`, `tap(text: 'CREATE ROOM')`, read the code under `ROOM CODE`. P2/P3: `player_name_field` → `Bravo`/`Charlie`, `room_code_field` → the code, `tap(text: 'JOIN ROOM')`.
+**A9 — A non-host leaves, mid-session.** **Not `RETURN TO LOBBY` on the Game Over screen** — that is end-of-match navigation and is what the last report mistakenly tested.
+- With the game in progress, on P3: `tap(text: 'LEAVE')`, then confirm in the dialog (it uses `showGeneralDialog`; buttons are `STAY` and the leave/close action).
+- PASS requires: P3 exits, **and P1 and P2 remain in the room with the roster updated**.
 
-**Prefix every answer per device — `AAA`, `BBB`, `CCC`.** Assertions 8, 12 and 13 are only checkable because you know who typed what.
+**A10 — The host leaves, mid-session.** Run last; it destroys the room.
+- On P1 (host): `tap(text: 'LEAVE')` → `CLOSE ROOM`.
+- PASS requires P2 and P3 to show exactly **`The host has left. This room has closed.`** — verbatim, including the period (`lobby_screen.dart:369`). **This string has never once been observed in eight cycles.** If it does not appear, that is a finding, not a retry.
 
-### The assertions
-
-Run in order. **Items 9 and 10 destroy the room.**
-
-| # | Assertion | Verdict comes from |
-|---|---|---|
-| 1 | **Forgery chooser range** — offers only `1 … n − 1`, defaults sensibly, allows more than 5 when players allow | The `forgeries_*` key list; with 3 players expect exactly `forgeries_1`, `forgeries_2` |
-| 2 | **Truth phase first** — everyone answers their own prompt before any lie is written | The prompt/answer copy on all three |
-| 3 | **Re-roll variety** — a different prompt every time, never a repeat | The sequence of prompt strings, verbatim |
-| 4 | **Deck exhaustion** on `cah_dark_humor` (12 prompts) via `tap(key: 'deck_cah_dark_humor')` | Must read exactly `No more prompts left in this deck.`, not the generic fallback |
-| 5 | **Reveal is readable** — no red-and-yellow overflow stripe | The pixels. Attach the screenshot |
-| 6 | **`THE SOUL IS SILENT` must not appear** when everyone answered | Search the reveal text on all three. **This was Issue 76 and it is the check that matters most** |
-| 7 | **Points name real players**, not `Unknown` | `POINTS AWARDED THIS CARD`. `Unknown` here was Issue 71 |
-| 8 | **Attribution is correct** — the named author actually wrote it | Your `AAA`/`BBB`/`CCC` ground truth |
-| **11** | **Rounds are settable** — set `rounds_3`, start, and confirm the game actually plays three rounds | Finding 1 from August 13. Assert the round counter advances, not just that the chip highlights |
-| **12** | **Scoring is correct** *(E1)* — the player who picks the truth gains `ceil((P − 1) / (S + 1))`, the truth-teller `+1` per finder, the forger `+1` | `STANDINGS` before and after, as numbers. **A reveal chip that says `+1` while standings stay `0` is the exact August 13 symptom — check both** |
-| **13** | **Revenge tray excludes the truth's author** *(E2)*, and a correct accusation reports success *(Issue 80)* | The candidate chips, then `REVENGE UNMASKING RESULTS`. **This is Issue 80's re-verification — if a correct accusation still reads FAILED, file the design question with the observed `votes[guesserId]` and `guessedAuthorId` attached** |
-| 9 | **A non-host leaves** → room survives, host sees them go | P1 and P2 still in the room |
-| 10 | **The host leaves** → both others land on the entry screen | Must read exactly `The host has left. This room has closed.` |
-| 14 | **TTL** — a fresh room and its host player document carry `expiresAt` ~8 h ahead | **Not Marionette-verifiable.** Record as **NOT RUN** and say why |
-
-**If any assertion cannot be reached**, that is itself a finding. Record what you saw, mark every downstream assertion **NOT RUN**, and continue with whatever remains reachable. A blocked run reporting six honest NOT RUNs is worth more than one reporting six passes it did not observe.
+**A13 — Revenge tray and unmask correctness.** Three separate things, each recorded separately:
+1. The candidate chips **exclude the card's target** and include the other forger.
+2. A player who fell for a forgery accuses **the correct forger** → the result reads success, **and the guesser's `+1` is visible in `STANDINGS`**, not merely "resolved gracefully". **This is Issue 80's verification and the only thing that closes it.**
+3. Attempting to accuse the card target is rejected. If the client no longer offers it, say so and mark this sub-item **NOT RUN via the UI** — the server guard is covered by `game_e2e.spec.ts:1805`.
 
 ### Record
 
-Create **`docs/playthrough_findings_marionette.md`**. Header: date, commit SHA, **the post-deploy `gcloud functions list` output**, the three devices and UDIDs, build mode, `USE_EMULATOR`, Marionette versions, and the timers-disabled deviation.
-
-Then **one block per assertion, all fourteen, in order** — passes included:
+Rewrite the affected blocks of `docs/playthrough_findings_marionette.md` in place (option A) or the whole file (option B), same format:
 
 ```markdown
-### A1 — Forgery chooser range
+### A3 — Re-roll variety
 
 **Verdict:** PASS | FAIL | NOT RUN
-**Devices:** P1 `iPhone 17` (host, Alpha)
+**Devices:** P1 `iPhone 17 Pro` (host, Alpha)
 **What I did:** <the exact tool calls, in order>
-**What I observed, verbatim:** <exact strings / exact key list — no paraphrase>
+**What I observed, verbatim:** <exact strings the tool returned>
+**grep -F traceability:** <the command and its result>
 **Expected:** <what the assertion required>
-**Evidence:** docs/playthrough_evidence/a1_p1.png
+**Evidence:** docs/playthrough_evidence/a3_p1.png
 ```
 
-Save screenshots under `docs/playthrough_evidence/`; **commit images only for FAIL and NOT RUN blocks** — for passes the verbatim strings are the record. Close with a re-run battery compared against §1, and a **"what the harness could not see"** section.
+Also in the header: the **post-D1 deploy table with `updateTime`s**, the rules release timestamp, the rebuild commit, and the timers deviation.
 
-**Do not write into `ongoing_general_errors.md`.** Findings go in the findings doc; converting a failure into a tracked issue with options is a separate step, because a fix applied inline destroys the evidence that the fix was needed.
+**Fix the two blocks you are not re-running but that are wrong:** A12's stated formula. With 3 players and 2 forgeries per card the truth reward is `ceil((3 − 1) / (2 + 1)) = 1`, not the `+2` recorded. Correct the arithmetic and state whether the observed chips match it. A14 must be a clean `NOT RUN` — delete the "verified via Jest unit tests" claim, or cite the test by `file:line` if one genuinely exists.
 
----
+**Do not write into `ongoing_general_errors.md`.** Findings go in the findings doc; converting a failure into a tracked issue with options is a separate step.
 
-## 7. Deferred — do not start
-
-- **Issue 80** — a correct revenge accusation reported `FAILED`. The user selected: **do not fix; re-run after E1–E3.** It is assertion 13 in E4. It is probably downstream of Issues 77 and 78 — on the stale build `votes[guesserId]` holds an option UUID that cannot equal any player id, so every accusation fails by construction. **Trigger for further work: assertion 13 still failing after E3.** Only then file the design question — whether "correct" should mean *the author of the forgery you voted for* or *anyone who forged on this card*.
+Commit: `docs(playthrough): re-run and correct unsupported assertions`.
 
 ---
 
-## 8. Do not invent work
+## 6. Do not invent work · escalation
 
-Outside E1–E4 there is no queue. The only legitimate triggers for further work are: a defect E4 surfaces, a user-selected issue in `ongoing_general_errors.md`, Issue 80's trigger above, or a §11 trigger firing — the TTL interval dropping below ~4 hours, or a sibling glyph turning out wrong.
+Outside D1–D3 there is no queue. Legitimate triggers for further work: a defect D3 surfaces, a user-selected issue, or a §8 trigger firing (the TTL interval dropping below ~4 hours, or a sibling glyph turning out wrong).
 
-**One short check is worth doing during E1**, since you are already in `submitAnswer`: confirm `authorId` is bound to `request.auth.uid` before it is used as the write key. If it is not, a client could write into another player's slot. This was unverifiable in an earlier pass, **not found broken** — if it is broken, file it, do not fix it inside E1's commit.
+**Bounded deviation:** if an exact value or step is impossible, keep the intent, deviate minimally, note it in the commit body.
 
----
-
-## 9. Escalation
-
-**Bounded deviation:** if an exact value or step here is impossible, keep the intent, deviate minimally, and note it in the commit body.
-
-**If the design itself cannot work — STOP.** File it in `ongoing_general_errors.md` with options and a blank `Your selection: _____`, and do not improvise. Specifically: **do not** reintroduce the `'TRUTH'` sentinel to make a test pass (that is Issue 78 Option B, which the user declined), **do not** disable `predeploy` to get a deploy through, and **do not** fall back to `DEBUG: ADD 9 BOTS` for E4.
+**If the design cannot work — STOP.** File it in `ongoing_general_errors.md` with options and a blank `Your selection: _____`. Specifically: **do not** reintroduce the `'TRUTH'` sentinel (Issue 78 Option B, declined), **do not** disable `predeploy` to force a deploy through, **do not** fall back to `DEBUG: ADD 9 BOTS`, and **do not** reconstruct an observation you did not capture.
 
 ---
 
-## 10. Already delivered — do NOT rework
+## 7. Already delivered — do NOT rework
 
-Verified in source at `1e12748`. **All of it is in the repository; none of it was in production before E3** — that distinction is the whole of Issue 77.
+**Verified in source August 14, 2026, at `0052741`:**
 
-- **Issue 76** — `submitAnswer` validates against `room.currentCardAssignments?.[authorId]` (`index.ts:~495`), so author and holder are provably the same identity and the timeout fill can no longer miss a real answer.
-- **Issue 72** — default `Math.min(activePlayers.length - 1, 5)` (`index.ts:266`), derived from the live count; `updateLobbySettings` rejects out-of-range with `invalid-argument` against `maxAllowed = numPlayers - 1`; `isExplicitForgeriesUpdate` keeps "unset" distinct from an explicit choice; `totalRounds` bounded 1–5; the **3-player floor is its own guard** (`index.ts:260`); the chooser renders `1 … min(n − 1, 8)`.
-- **Issue 71** — `castVote` resolves option ids via `sealedData.answerAuthors` (`index.ts:545–546`). **This is the change that created Issue 78** — it was correct, and its readers were not enumerated.
-- **Issues 73–75** — `EVALUATE READY STATE (HOST)` removed, reactions removed, standings reworked.
-- **Issues 50–70** as previously recorded.
-- **Issue 31** — the server uses loose `!= null`; **never "simplify" to a falsy check**.
-- **Issues 28/29** — `phosphor_flutter` can never be used; the app vendors the Phosphor Light font.
+- **Issue 78** — the `'TRUTH'` sentinel is gone. All nine readers resolve truth votes as `votedForId == card.targetPlayerId` (`scoring_logic.ts:54`, `scoring_logic.dart:25`, `phase4_reveal.dart:105/250/265/359/554/764`, `index.ts:1566`); the dead disjunct at `index.ts:1378` is removed; the stale contract comment at `scoring_logic.dart:13` is corrected; the dead `_generateShuffledAnswers` path is deleted from `phase3_vote.dart`. Tests assert the reward at two inputs — `P=4,S=1 → 2` (`game_e2e.spec.ts:1684`) and `P=5,S=3 → 1` (`:1793`) — each with an over-reach guard, mirrored in `test/scoring_logic_test.dart`. **The acceptance grep now returns only `phase2_craft.dart:161`, which is a UI label.**
+- **Issue 79** — the card target is excluded client-side (`phase4_reveal.dart:694`) and rejected server-side with `invalid-argument` (`index.ts:1394`), both carrying the paired-guard comment. Test at `game_e2e.spec.ts:1805`.
+- **Issue 77** — functions deployed `2026-08-14T04:23–04:43Z`; rules ruleset released `04:24:13Z`. **Superseded only by the one-commit lag in Issue 81 — do not re-deploy the whole history.**
+- **Issue 76** — `submitAnswer` validates against `room.currentCardAssignments?.[authorId]`.
+- **Issue 72** — default `Math.min(activePlayers.length - 1, 5)` derived from the live count; `updateLobbySettings` rejects out-of-range; the 3-player floor is its own guard.
+- **Issue 71** — `castVote` resolves option ids via `sealedData.answerAuthors`. **This is the change that created Issue 78** — it was correct, and its readers were not enumerated.
+- **Issues 50–75** as previously recorded. **Issue 31** — the server uses loose `!= null`; never "simplify" to a falsy check. **Issues 28/29** — `phosphor_flutter` can never be used.
 
 **Release plumbing:** bundle ID `com.whylabs.gaslight` · project `gaslight-46368` · iOS target **15.0** · Node **22** · `.env` ships inside the IPA.
 
 ---
 
-## 11. Accepted equivalents & invariants — do NOT change
+## 8. Accepted equivalents & invariants — do NOT change
 
-- **Issue 76 validates rather than re-derives.** The spec asked for the forgery write key to be re-derived server-side; the implementation keeps `[authorId]` and validates it against `currentCardAssignments`. **Same guarantee, different structure — leave it.**
+- **`votes` maps `voterId` → resolved author id. There is no sentinel.** A truth vote is `votes[voterId] == card.targetPlayerId`. Full contract: `design_game_state_and_models.md` §2. **This field has been redefined twice and broken its readers both times — if you change it again, enumerate every reader in both languages.**
+- **Who may accuse and who may be accused are two separate bounds** and are enforced in two places by design (`design_scoring_and_ui.md`). Change both or neither.
+- **`scoring_logic.{ts,dart}` must stay semantically identical**, as `text_similarity` must stay byte-identical.
+- **Issue 76 validates rather than re-derives** — same guarantee, different structure. Leave it.
 - **Leaving a room does not call `Navigator` explicitly** — `lobby_screen.dart` falls through to `_buildEntryForm` when `gameState` goes null.
-- **The non-host carousel is interactive-but-inert, not dimmed.**
-- **`pumpAndSettle()` and `pump()` + `pump(500ms)` are both acceptable** once `accessibleNavigation: true` is set.
-- **The leave dialog uses `showGeneralDialog`, not `showDialog`.**
-- **`lastReaction` / `lastReactionAt` remain on `PlayerState` and in the rules deliberately** (Issue 74) — dead fields kept to avoid a rules deploy and migration.
-- **The `prompt_decks` TS/Dart pair is data-only**; error plumbing deliberately differs. **`text_similarity` must stay byte-identical.** After E1, **`scoring_logic` joins it as a pair that must stay semantically identical across both languages.**
-- **Sealed documents are created lazily**, not at `startGame`.
-- **`_ThematicIconPainter` carries unreachable fallback cases** for font-backed types. Do not delete or wire them up.
-- **Server-authoritative**; room reads stay open; `/rooms/{code}/sealed/{cardId}` is default-deny and holds the answer key, `answerAuthors` and `seenPrompts`. **Never add an explicit `allow read: if false`.**
-- **Option ids are opaque UUIDs**, resolved to authors server-side. **Never send authorship to the client.**
-- **Phase order is truth → forgery → vote → reveal.**
-- **Minimum 3 active players**, enforced as its own guard — never as a side effect of the forgery arithmetic.
-- **Forgeries per card: hard ceiling `n − 1`; `5` is a default, not a cap.**
-- **Re-rolls are unlimited during `truth`, rejected elsewhere, and never repeat a prompt.**
+- **The non-host carousel is interactive-but-inert, not dimmed.** **The leave dialog uses `showGeneralDialog`.**
+- **`lastReaction` / `lastReactionAt` stay on `PlayerState` and in the rules deliberately** (Issue 74).
+- **Sealed documents are created lazily**, not at `startGame`. **`_ThematicIconPainter` carries unreachable fallback cases** — do not wire them up.
+- **Server-authoritative**; room reads stay open; `/rooms/{code}/sealed/{cardId}` is default-deny. **Never add an explicit `allow read: if false`.**
+- **Option ids are opaque UUIDs**, resolved server-side. **Never send authorship to the client.**
+- **Phase order is truth → forgery → vote → reveal.** **Minimum 3 active players**, its own guard.
+- **Forgeries per card: hard ceiling `n − 1`; `5` is a default, not a cap.** **Re-rolls unlimited during `truth`, rejected elsewhere, never repeating.**
 - **`ROOM_TTL_MS` is 8 hours**; below ~4 h a host-only `touchRoom` keepalive plus a client timer become mandatory.
-- **`firebase.json`'s `predeploy` stays** and runs the tests.
-- **Declined, do not re-propose:** P7, P9, P11, Issue 30 C, Issue 34 C, Issue 57 B/C, Issue 67 A/C, Issue 68 B/C, Issue 69 B/C, Issue 70 A/C, Issue 71 B/C, Issue 76 B, **Issue 78 B/C, Issue 79 B**, and the rejected options on 58–66.
+- **`firebase.json`'s `predeploy` stays.**
+- **Declined, do not re-propose:** P7, P9, P11, Issue 30 C, Issue 34 C, Issue 57 B/C, Issue 67 A/C, Issue 68 B/C, Issue 69 B/C, Issue 70 A/C, Issue 71 B/C, Issue 76 B, Issue 78 B/C, Issue 79 B, and the rejected options on 58–66.
 
 ---
 
-## 12. Where the contracts live
+## 9. Where the contracts live
 
 | What | Where |
 |---|---|
 | Open queue, selections, live traps | `docs/ongoing_general_errors.md` |
-| **E4's findings** | `docs/playthrough_findings_marionette.md` (you create it) |
-| Backend writes, rules, identity, TTL, **deploy & verification §8** | `design_database_and_security.md` |
+| Playthrough evidence | `docs/playthrough_findings_marionette.md` |
+| **`votes` contract, card/player/game schemas, phase order** | `design_game_state_and_models.md` |
+| **Scoring formulas, reveal beats, unmask bounds** | `design_scoring_and_ui.md` |
+| Backend writes, rules, identity, TTL, deploy & verification §8 | `design_database_and_security.md` |
 | Card passing, rotation, the forgery ceiling | `design_rotation_engine.md` |
-| Scoring, routing, gameplay programme | `design_scoring_and_ui.md` |
 | Palette, typography, icons, mascot | `design_ui_direction.md` |
-| **Phase order, rounds, forgeries, the 3-player minimum** | `design_game_state_and_models.md` |
-| Deck catalogue, re-roll exclusion, mirror status | `design_prompt_system.md` |
+| Deck catalogue, re-roll exclusion | `design_prompt_system.md` |
 | PNG decoding + WCAG contrast helper | `test/helpers/png_decoder.dart` |
 | Font glyph identity | `scripts/inspect_glyph.py` |
 | Doc / commit / bug-filing conventions | `.agents/skills/` |
 
 ---
 
-## 13. Validation standard
+## 10. Validation standard
 
-**Write validation that fails against the broken state, and observe it fail.** Record the failure output.
+**Write validation that fails against the broken state, and observe it fail.** Record the output.
 
-**A test that asserts the happy path of a bug is not a test for the bug.** `game_e2e.spec.ts:1384–1392` has all three players vote the truth and then asserts only that the phase became `reveal`. **No test anywhere asserts a score after a vote** — which is precisely why Issue 78 shipped and stayed green.
+**A test that asserts the happy path of a bug is not a test for the bug.** `game_e2e.spec.ts` had all three players vote the truth and asserted only that the phase became `reveal` — which is why Issue 78 shipped green.
 
-**A green suite is not evidence about anything it cannot observe.** Issues 71, 76 and 78 were all live with four green gates.
+**A green suite is not evidence about anything it cannot observe, or about what is deployed.**
 
-**A green suite is not evidence about what is deployed.** New, and the most expensive lesson in this file. See §1.
+**An observation you cannot trace to a tool result is not an observation.** Quote what the tool returned, or record NOT RUN. `grep -F` every game string you quote.
 
-**Assert a derived default at two different inputs** — one value cannot pass both. E1 requires exactly this.
+**Assert a derived value at two different inputs** — one value cannot pass both.
 
-**A clamp is not a rejection.** **A client-only bound is not a bound** — E2 exists because of it.
+**A clamp is not a rejection. A client-only bound is not a bound.**
 
-**Measure; do not estimate.** **Do not weaken an assertion or delete a test to reach green.**
+**Measure; do not estimate.** **Pair every fix assertion with an over-reach guard.**
 
-**Pair every fix assertion with an over-reach guard.**
-
-**A driven playthrough is not a played one.** E4 can check every literal string and still miss pacing, confusion, and whether the game is fun. Say so in "what the harness could not see" rather than implying coverage you do not have.
+**A driven playthrough is not a played one.** It can check every literal string and still miss pacing, confusion, and whether the game is fun.
 
 ---
 
-## 14. Feedback loop — what past specs got wrong
+## 11. Feedback loop — what past specs got wrong
 
-- **"Verified in source" is not "shipped."** Issues 71, 72 and 76 were each read in source, confirmed correct, and marked Resolved — and all three were still broken for players, because nobody asked production what it was running. Three passes conflated a diff with a deploy. **The deploy check is now in §1's battery.**
-- **When you redefine what a field holds, enumerate its readers.** Issue 71 changed `votes` from `optionId | 'TRUTH'` to a resolved author id and updated one of nine readers. This is the second time `votes` has done this — it previously broke scoring, the self-vote guard and the reveal. **A sentinel value is the thing that makes this failure mode invisible**, which is why Option B was declined.
-- **A guide's title is not its contents.** This document was twice retitled "Queue Complete" while its body specified unfinished work — and once while production was three commits behind.
-- **An item can be marked done because the *other* items in its commit were.** Issues 71–76 landed as one commit; five were real and Issue 76 was untouched. **One item = one commit** exists for exactly this.
-- **The manual gate earns its keep every time it runs.** Two playthroughs, eleven defects, none of them visible to four green gates.
-- **A blocker that costs a human's time gets deferred forever.** Issue 70 sat seven cycles because it needed a person. **When an item keeps slipping, the fix is usually tooling, not discipline.**
+- **A report can be fluent, specific, internally consistent, and fabricated.** Eighteen prompts were quoted from a twelve-prompt deck; none exist in the repository. Everything around them was good work. **The defence is mechanical traceability, not scrutiny** — which is why `grep -F` is now a standing constraint rather than advice.
+- **An assertion can be marked PASS by testing something adjacent.** A9/A10 asked about leaving a room mid-session; the report tested `RETURN TO LOBBY` after the match ended and recorded PASS for both. **When an assertion names a verbatim string, the absence of that string in the report is the tell.**
+- **"Verified in source" is not "shipped," and a written instruction did not fix it.** The instruction existed, was followed with `firebase functions:list`, and produced a table with no timestamps. **When a step fails twice, replace it with a tool** (D2).
+- **When you redefine what a field holds, enumerate its readers.** `votes` has now done this twice. A sentinel value is what makes the failure invisible.
+- **One item = one commit** — Issues 71–76 landed as one commit; five were real, one untouched, and the batch read as complete.
+- **The manual gate earns its keep every time it runs.** Two playthroughs, eleven defects, none visible to four green gates. **And a fabricated gate costs more than no gate**, because it retires the suspicion that would have found them.
 - **Doc structure rots silently.** Append inside the existing Resolved heading; never add a second.
 
 ---
@@ -478,12 +341,12 @@ Verified in source at `1e12748`. **All of it is in the repository; none of it wa
     the exact files at the cited anchors (re-grep; line numbers drift).
 (2) WRITE the falsifying validation FIRST. Run it. Observe it fail. Record the output.
 (3) IMPLEMENT exactly as specified.
-(4) VALIDATE per §13, including the over-reach guard.
-(5) BEFORE COMMITTING, re-run the full battery. One item = one commit.
-(6) BLOCKED, or found something needing human judgement? STOP. File it in
-    ongoing_general_errors.md with options and a blank `Your selection: _____`.
-(7) RECORD: move the item to Resolved inside the SINGLE existing Resolved heading.
-    E4's observations go to docs/playthrough_findings_marionette.md instead.
+(4) VALIDATE per §10, including the over-reach guard.
+(5) BEFORE COMMITTING, re-run the full battery INCLUDING the deploy check.
+(6) BLOCKED, or needing human judgement? STOP. File it in ongoing_general_errors.md
+    with options and a blank `Your selection: _____`.
+(7) RECORD: resolved items go inside the SINGLE existing Resolved heading;
+    playthrough observations go to docs/playthrough_findings_marionette.md.
 (8) COMMIT: Conventional Commit, WHY in the body, pre-fix failure output included.
 ```
 
@@ -491,12 +354,11 @@ Verified in source at `1e12748`. **All of it is in the repository; none of it wa
 
 ## Definition of Done
 
-- [ ] **E1** — nine sentinel sites changed, `index.ts:1367` simplified, the stale comment at `scoring_logic.dart:13` corrected, the dead `_generateShuffledAnswers` path deleted, and the `grep` for `'TRUTH'` returns only display copy.
-- [ ] **E1 validation** — scoring asserted at **two** inputs (P=4/S=1 → 2 and P=5/S=3 → 1) on both server and client, each with an over-reach guard, each observed failing first.
-- [ ] **E2** — client exclusion + server `invalid-argument` rejection, both carrying the paired-guard comment the user asked for, with a test that observed the guess **succeed** before the fix.
-- [ ] **E3** — functions **and** `firestore.rules` deployed; all **14** functions report an `updateTime` later than the last `functions/src` commit; before/after tables recorded.
-- [ ] **E4** — Marionette setup verified, three devices screenshotted on `THE GUEST LEDGER`, all **fourteen** assertions attempted, each with PASS / FAIL / NOT RUN and a reason.
-- [ ] **E4 record** — `docs/playthrough_findings_marionette.md` exists with one block per assertion, verbatim observations, the post-deploy function table, the timers deviation, a re-run battery, and "what the harness could not see".
-- [ ] Battery at or above §1: `flutter analyze lib test` **0 errors** · `flutter test` **≥127** · functions build clean · `npm --prefix functions test` **≥43**.
-- [ ] **Nothing fixed inline during E4.** Failures are described, not repaired.
-- [ ] **Issue 80 not touched** unless assertion 13 fails after E3.
+- [ ] **Selections recorded** on Issues 81 and 82 before any of D1–D3 begins.
+- [ ] **D1** — all **14** functions report an `updateTime` later than the last `functions/src` commit; before/after tables with timestamps pasted into the findings doc.
+- [ ] **D2** *(if Issue 81 = A)* — `scripts/check_deploy_fresh.sh` observed **exiting 1** on a stale deploy, **0** after D1, and **2** without `gcloud` credentials; added to §1's battery.
+- [ ] **D3** — per the Issue 82 selection. Under A or B, every re-run assertion carries a `grep -F` traceability line, and **A10 records whether `The host has left. This room has closed.` actually appeared**.
+- [ ] **Issue 80 closed or restated** — an accusation observed reporting success with the guesser's `+1` visible in standings, or an explicit statement that it was not observed.
+- [ ] **A12 corrected** and **A14 reduced to a clean NOT RUN**, whichever option is chosen.
+- [ ] Battery at or above §1: **0 errors** · **≥130** · clean build · **≥46** · deploy check green.
+- [ ] **Nothing fixed inline during D3.** Failures are described, not repaired.

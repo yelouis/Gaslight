@@ -28,7 +28,9 @@ A card represents a prompt assigned to a player, holding their answers, vote cho
 * `truthAnswer` (String): The Target's own answer (populated on the public room document at `reveal` phase; stored in server-only `/rooms/{code}/sealed/{cardId}` subcollection prior to reveal).
 * `sabotageAnswers` (Map<String, String>): A map of `saboteurPlayerId` to their written sabotage answers (populated on the public room document at `reveal` phase; stored in server-only `/rooms/{code}/sealed/{cardId}` subcollection prior to reveal). `submitAnswer` derives the author key server-side from `currentCardAssignments[authorId]`, ensuring key synchronization with `advancePhaseInternal` and preventing spurious `kMissingAnswerPlaceholder` (`THE SOUL IS SILENT`) entries.
 * `options` (List<CardAnswerOption>?): Unlabelled, shuffled options list (`id`, `text`) supplied to public cards during the `vote` phase to conceal answer origin.
-* `votes` (Map<String, String>): A map of `voterPlayerId` to `votedForPlayerId` (or `'TRUTH'`), representing votes cast during the `vote` phase.
+* `votes` (Map<String, String>): A map of `voterPlayerId` to the **resolved author id** of the option they chose, representing votes cast during the `vote` phase. The client sends an opaque option UUID; `castVote` resolves it through `sealed/{cardId}.answerAuthors` and stores the author, never the raw client value.
+  * **There is no sentinel.** A vote is a truth vote **iff `votes[voterId] == card.targetPlayerId`**, because the target authored the truth for their own card. The retired `'TRUTH'` string must never be reintroduced.
+  * **This contract has broken twice.** Issue 62/63 redefined the value once; Issue 71 redefined it again and left nine readers testing the dead sentinel (Issue 78), which silently zeroed the reward for finding the truth and marked every player as "fooled". **Both `ScoringLogic` implementations and every `phase4_reveal.dart` predicate read this field — when you change what it holds, enumerate its readers.**
 * `unmaskGuesses` (Map<String, String>?): A map of `guesserPlayerId` to `accusedPlayerId` representing unmask guesses cast during the `reveal` phase.
 
 ---

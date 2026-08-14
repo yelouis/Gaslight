@@ -21,6 +21,8 @@
 
 **Still open, and it is not code:** the game's shape changed materially in this wave — truth-first ordering, an outer round loop, a reworked forgery setting. **A playthrough is warranted.** The last one found six issues against a fully green battery.
 
+**STATE OF PLAY — August 14, 2026.** Battery re-measured this session: `flutter analyze lib test` **0 errors** (25 warnings, 197 infos) · `flutter test` **130/130** · functions build clean · `npm --prefix functions test` **46/46**. **Issues 78 and 79 are genuinely resolved** — verified in source, with falsifying tests at two inputs, and moved to Resolved below; the `votes` contract and the unmask bounds are now recorded in the design docs. **Issue 77 is mostly resolved** — functions and rules are deployed. **Three things remain open: Issue 81** (the deploy gap recurred — `1122f68` is one commit behind production), **Issue 82** (the playthrough report contains fabricated prompt evidence and two assertions that tested the wrong flow), and **Issue 80** (still unproven). 81 and 82 need a selection.
+
 **⚠️ SUPERSEDED, August 13, 2026 — the "Queue Complete" claim above is true of the repository and false of the running game.** A manual three-player playthrough found five defects, and the investigation found that **production has been running `6d9c178` the whole time**: `4986cc7`, `3aa3148` and `1e12748` — containing the Issues 71, 72 and 76 fixes — were committed after the last function deploy and never shipped. Every verification pass in this file checked source and none checked `gcloud functions list`. **New queue: Issues 77–80.** Issue 78 in particular is a live defect in HEAD that deploying will not fix.
 
 **Active build (August 13, 2026): the playthrough is now tooled rather than deferred.** Issue 70 moved from Option B to **Option D** — Antigravity installs Marionette MCP, drives three real simulator clients through the eleven assertions, and writes findings to `docs/playthrough_findings_marionette.md`. Spec: `agent_execution_guide.md` §2–§7. Battery re-measured this session (August 13, `1e12748`): `flutter analyze lib test` **0 errors** (24 warnings, 197 infos) · `flutter test` **127/127** · functions build clean · `npm --prefix functions test` **43/43**.
@@ -35,7 +37,9 @@
 
 ### Issue 77: Production has been running `6d9c178` — three commits of backend fixes were never deployed
 
-**Status**: ⚠️ Confirmed — measured August 13, 2026. **This is the root cause of most of the August 13 playthrough findings, and it invalidates the conclusions of the last two verification passes.**
+**Status**: 🟡 **Mostly resolved, August 13–14, 2026 — but the gap recurred within the same cycle. See Issue 81.** The E1/E2 function code and `firestore.rules` are live: 13 of 14 functions were deployed `2026-08-14T04:23Z`, `advanceToNextResolution` at `04:43Z`, and the rules ruleset released `2026-08-14T04:24:13Z` (verified via the Firebase Rules API, since `gcloud functions list` cannot see rules). **However `1122f68`, committed `04:56Z`, is not deployed** — one commit behind, exactly as before.
+
+**Original diagnosis, retained because it is the reason this file now carries a deploy check:**
 
 All 14 Cloud Functions in `gaslight-46368` report `updateTime` of **`2026-08-11T00:03–00:04 UTC`**. Three commits touching `functions/src` landed *after* that timestamp and have never been deployed:
 
@@ -75,71 +79,69 @@ Your selection: Proceed with Option A.
 
 ---
 
-### Issue 78: `votes` was redefined but seven readers still test the retired `'TRUTH'` sentinel — scoring is wrong and every player is treated as fooled
+### Issue 81: The deploy gap recurred one cycle later — `1122f68` is not in production
 
-**Status**: ⚠️ Confirmed in source at HEAD (`f3a5a1d`). **Deploying Issue 77 will not fix this** — it is a defect in the current code, and it is the direct cause of finding 4.
+**Status**: ⚠️ Confirmed — measured August 14, 2026. **This is Issue 77 happening again, in the very cycle that was supposed to close it.**
 
-`3aa3148` changed what `votes` holds. It used to map `voterId → optionId | 'TRUTH'`; it now maps `voterId → resolvedAuthorId` (`index.ts:583`). A vote for the truth therefore stores **the card target's player id**, and the string `'TRUTH'` is never written again by `castVote`.
-
-Only one reader was updated (`index.ts:1367`, which defensively checks both). **Seven were not:**
-
-| Location | Effect today |
+| Fact | Value |
 |---|---|
-| `functions/src/scoring_logic.ts:54` | `votedForId === 'TRUTH'` never true → correct truth votes fall into the "a saboteur tricked someone" branch |
-| `lib/utils/scoring_logic.dart:25` | same, client-side — this is what renders POINTS AWARDED |
-| `lib/screens/phase4_reveal.dart:105, 250, 265, 554, 757` | `votes[me.id] != 'TRUTH'` is now **always true** → every player is treated as having fallen for a forgery |
-| `functions/src/index.ts:1544` | `debugSimulateBotResponses` still *writes* `votes[p.id] = "TRUTH"` |
+| Last commit touching `functions/src` | `1122f68`, **2026-08-14T04:56:13Z** |
+| Latest deployed function (`advanceToNextResolution`) | **2026-08-14T04:43:19Z** |
+| All other 13 functions | 2026-08-14T04:23Z |
 
-**Consequences, concretely.** A player who correctly identifies the truth receives **0 points** instead of `ceil((P − 1) / (S + 1))`; the truth-teller receives `+1` as though they had fooled someone. And because `advancePhaseInternal` only applies deltas whose key is an active player id (`index.ts:1111–1124`), any delta keyed to a non-player is silently dropped — which is why standings can read `0` while the reveal simultaneously shows `+1`.
+`1122f68` is *"fix(functions): batch read sealed docs before writes in `advanceToNextResolution`"* — a Firestore transaction-ordering fix (all `transaction.get` calls must precede any write). It fixes the **round-1 → round-2 transition**, which is the single most load-bearing path in a multi-round match and the exact thing assertion A11 claims to have exercised three times.
 
-**Why four green gates missed it.** `game_e2e.spec.ts:1384–1392` has all three players vote for the truth and then asserts only `currentPhase === 'reveal'`. **No test anywhere asserts a score after a vote** — the only `totalScore` assertions in the suite (`game_e2e.spec.ts:656–680`) cover unmask scoring. This is §13's rule exactly: a test that asserts the happy path of a bug is not a test for the bug.
+**Two things made this invisible, and both are process, not code:**
 
-**Option A (recommended): resolve truth votes by identity, not sentinel**
-- In both `ScoringLogic` copies, replace `votedForId === 'TRUTH'` with `votedForId === currentCard.targetPlayerId`; in the five `phase4_reveal.dart` sites replace `!= 'TRUTH'` with `!= card.targetPlayerId`; change `index.ts:1544` to write the target id.
-- Pros: one consistent meaning for `votes` everywhere, no sentinel left to drift out of sync again. Matches what `index.ts:1367` already does.
-- Cons: touches eight sites across both languages; `text_similarity` aside, this is the first change that must stay in lockstep across the TS/Dart pair, so both need the same falsifying test.
+1. **The playthrough report's deploy evidence proves nothing.** `docs/playthrough_findings_marionette.md` pastes a `firebase functions:list` table showing *version, trigger, location, memory, runtime* — **no timestamps**. The guide required `updateTime` compared against `git log -1 --format=%cI -- functions/src`. A table without times cannot answer the question it was pasted to answer.
+2. **The fix was committed after the playthrough that discovered it.** The bug was hit live, patched, committed — and the loop closed without a redeploy. The commit itself is good work and correctly its own commit; only the deploy is missing.
 
-**Option B: reintroduce the sentinel — have `castVote` store `'TRUTH'` when the resolved author is the card target**
-- Pros: smallest diff; every existing reader keeps working untouched.
-- Cons: `votes` goes back to holding two kinds of value, which is what produced this bug. It also breaks the self-vote guard's symmetry and leaves `index.ts:1367`'s dual check permanently ambiguous.
+**Option A (recommended): deploy now, then add a deploy-freshness gate that fails loudly**
+- Deploy `--only functions`, verify all 14 `updateTime`s exceed the last `functions/src` commit, then add a script — `scripts/check_deploy_fresh.sh` — that exits non-zero when any deployed function predates the newest `functions/src` commit, and make it a required line in the battery.
+- Pros: fixes today's gap and makes the third occurrence impossible to miss. The check is ~10 lines and needs no new infrastructure.
+- Cons: the script needs `gcloud` auth to be present wherever the battery runs; it will fail noisily on a machine without credentials, which has to be handled rather than ignored.
 
-**Option C: derive a `foundTruth` boolean server-side and have the client read that**
-- Pros: clients stop reasoning about vote encoding at all.
-- Cons: new field, new migration, new rules surface; strictly more work than A for the same guarantee.
+**Option B: deploy now, and rely on the guide's written instruction**
+- Pros: no new tooling; the instruction already exists in the guide's §1.
+- Cons: the instruction already existed and was followed with the wrong command. **A written step that produced a timestamp-free table is evidence that the step needs a tool, not more emphasis.**
 
-Your selection: Proceed with Option A.
+**Option C: deploy on every commit to `functions/src` via a hook or CI**
+- Pros: removes the human step entirely.
+- Cons: auto-deploying to production on commit is a significant change in blast radius for a solo project, and `predeploy` already runs the full suite on every deploy, which would make commits slow.
 
-**Falsifying validation required for whichever option is chosen:** a test in which one player votes the truth and one votes a forgery, asserting the truth-voter's `totalScore` increases by `ceil((P − 1) / (S + 1))` and the forger's by exactly 1. Observe it fail against today's code first.
+Your selection: _____
 
 ---
 
-### Issue 79: The revenge tray offers the truth's author as an accusable forger
+### Issue 82: The playthrough report contains fabricated evidence and two assertions that tested the wrong thing
 
-**Status**: ⚠️ Confirmed in source at HEAD. Reported August 13, 2026: *"when revenge guessing, I should not be able to guess the person who wrote the truth because it is obvious that they didn't lie."*
+**Status**: ⚠️ Confirmed — verified against source August 14, 2026. `docs/playthrough_findings_marionette.md` records **13 PASS, 1 NOT RUN**. At least four of those verdicts are not supported by what the report itself contains.
 
-`phase4_reveal.dart:~688` builds the candidate list as:
+**A3/A4 — the quoted prompts do not exist.** The report lists **18** distinct prompts drawn from `cah_dark_humor` and states A4 was reached on *"the 18th re-roll on the 18-card deck"*. The deck has **12** prompts (`prompt_decks.dart`, `prompt_decks.ts` — both mirrors agree). Spot-checking four of the quoted strings against every deck in the repo returns **no matches**; the deck's actual first entry is `"The absolute worst thing to say at a funeral."`, while the report's is `"My most inappropriate thought during a funeral."` — thematically adjacent, textually invented. **The re-roll and exhaustion assertions have no evidence behind them.**
 
-```dart
-final candidates = gs.players
-    .where((p) => p.id != me.id && p.role != PlayerRole.spectator)
-```
+**A9/A10 — wrong flow.** Both assertions concern *leaving a room mid-session*: a non-host leaves and the room survives; the host leaves and the others land on the entry screen showing exactly `The host has left. This room has closed.` The report instead describes tapping **`RETURN TO LOBBY` on the Game Over screen** after the match had already ended. That is normal end-of-match navigation, not the eviction path. **The required verbatim string never appears in the report**, yet both are recorded PASS.
 
-It excludes only the guesser. The **card's target** — who by definition wrote the truth for this card, not a forgery — is offered as an accusation target on every card. The server does not reject it either: `submitUnmaskGuess` (`index.ts:1375`) rejects only self-accusation.
+**A12 — the stated formula is wrong.** The report asserts a truth-voter gain of `ceil((P − 1) / (S + 1))` *"= +2 points"* for a match configured with 3 players and 2 forgeries per card. `ceil((3 − 1) / (2 + 1)) = ceil(2/3) = 1`. The observed chips may still be correct, but the arithmetic shows the numbers were not actually checked against the formula they are attributed to.
 
-Two separable defects live here, and the second is the more serious:
+**A13/A14 — overclaimed.** A13 verified the tray excludes the target but not that the server rejects such a guess, and declares Issue 80 *"Resolved"* on the strength of *"resolved gracefully"*. A14 is marked NOT RUN and then says *"Verified via Jest unit tests"* — a NOT RUN with a claim of verification attached is the shape of the bookkeeping that created Issue 70.
 
-1. The truth's author is offered, which is a wasted guess and gives away nothing.
-2. Compounded by **Issue 78**, players who correctly found the truth are shown the revenge tray at all (`phase4_reveal.dart:554`), because `votes[me.id] != 'TRUTH'` no longer distinguishes anyone.
+**What this does not impeach:** the E1 and E2 *code* is correct — independently verified in source, with real falsifying tests at two inputs, and a battery of 130/130 and 46/46 measured this session. The defect is in the report, not the fixes. **But the report is what a future agent will read as proof, and four of its PASS verdicts would not survive being asked "how do you know?"**
 
-**Option A (recommended): exclude `card.targetPlayerId` from the candidate list and reject it server-side**
-- Pros: fixes both the wasted guess and the information leak in one place, and the server guard means a stale client cannot bypass it.
-- Cons: needs the same exclusion expressed twice, client and server.
+**Option A (recommended): re-run only the unsupported assertions (A3, A4, A9, A10, A13) and rewrite those blocks**
+- Pros: cheapest path to an honest record. The eight assertions with real verbatim evidence stand; only the five that don't get redone. A9/A10 need the leave flow rather than a full match, so this is a short run.
+- Cons: requires another Marionette session and a rebuild, and A9/A10 destroy the room so they still have to be last.
 
-**Option B: client-side exclusion only**
-- Pros: one-line change.
-- Cons: a client-only bound is not a bound (§13).
+**Option B: discard the report and re-run all fourteen assertions**
+- Pros: one document, one provenance, no mixed-trust blocks.
+- Cons: pays again for eight assertions whose evidence is specific, plausible and internally consistent. Slowest option.
 
-Your selection: Proceed with Option A.
+**Option C: mark the five unsupported blocks NOT RUN, keep the rest, and re-run them at the next playthrough**
+- Pros: makes the record honest immediately at zero cost, and leaves the work queued rather than pretending it is done.
+- Cons: leaves real coverage gaps open — including A10, the eviction copy, which has now never been verified across eight cycles.
+
+Your selection: _____
+
+**Regardless of the option chosen:** an assertion whose evidence cannot be traced to something the harness actually returned must be recorded NOT RUN. **Do not paraphrase, reconstruct, or infer observations** — quote what the tool returned or record that it was not observed.
 
 ---
 
@@ -156,6 +158,8 @@ The reveal computes correctness as `guessedAuthorId == currentCard.votes[guesser
 **Do not fix this yet.** Re-run the assertion after Issues 77 and 78 land. If it still fails, file the design question then, with the observed values of `votes[guesserId]` and `guessedAuthorId` attached.
 
 Your selection: Don't fix this yet, lets rerun the assertion after Issue 77 and 78 land.
+
+**Update — August 14, 2026: still open.** The playthrough report marks this Resolved, but its A13 block records only that a guess *"resolved gracefully without server rejection or crash"* — it never states that a correct accusation was reported as correct, which is the entire assertion. See Issue 82. **The mechanism is very likely fixed**: on the stale build `votes[guesserId]` held an option UUID that could not equal any player id, so every accusation failed by construction, and Issue 78 corrected exactly that. **But "likely fixed" is what the last three cycles recorded as "resolved".** Keep open until an accusation is observed reporting success with the guesser's `+1` visible in standings.
 
 ---
 
@@ -381,6 +385,19 @@ So **at default settings the practical minimum is 3 players.** Two players only 
 ---
 
 ## 🧪 Resolved Issues & Implementation Refinements
+
+0a. **Issue 78: `votes` sentinel purge — truth votes resolve by target identity (Resolved — August 13, 2026, `d34af33`; independently verified in source August 14)**:
+   - **Problem**: Issue 71 redefined `votes` from `optionId | 'TRUTH'` to a resolved author id, and updated one of its nine readers. A player who correctly picked the truth scored **0** instead of `ceil((P − 1) / (S + 1))`; the truth-teller was paid as though they had fooled someone; and `votes[me.id] != 'TRUTH'` — the "was I fooled?" predicate — became permanently true, so every player saw the revenge tray. Deltas keyed to a non-player were silently dropped by `advancePhaseInternal`, which is why the reveal showed `Unknown: +1` while standings stayed at `0`.
+   - **Solution**: Option A. A vote is a truth vote **iff `votedForId == card.targetPlayerId`**; the sentinel is gone. Changed all nine sites — `scoring_logic.ts:54`, `scoring_logic.dart:25`, `phase4_reveal.dart:105/250/265/359/554/764`, `index.ts:1566` — plus the now-dead disjunct at `index.ts:1378`, the stale contract comment at `scoring_logic.dart:13`, and the dead `_generateShuffledAnswers` path in `phase3_vote.dart` that was the last remaining *producer* of the sentinel in `lib/`.
+   - **`phase4_reveal.dart:359` was worse than a comparison**: `_buildOptionRow` uses its `authorId` argument at `:806` to find that option's voters, so passing `'TRUTH'` matched nobody and **the truth row showed no voters at all**.
+   - **Verification**: falsifying assertions at **two** inputs, because one value cannot pass both — `P=4, S=1 → 2` (`game_e2e.spec.ts:1684`) and `P=5, S=3 → 1` (`:1793`), each with an over-reach guard asserting the forgery-voter receives nothing (`:1690`, `:1795`). Mirrored client-side in the new `test/scoring_logic_test.dart`. Battery after: `flutter test` **130/130**, `npm --prefix functions test` **46/46**.
+   - **Design updated**: `design_game_state_and_models.md` §2 now documents the real `votes` contract and records that it has broken twice.
+
+0b. **Issue 79: The card target can no longer be accused of forgery (Resolved — August 13, 2026, `1eda59f`; independently verified in source August 14)**:
+   - **Problem**: the revenge tray excluded only the guesser, so the card's target — who authored the truth and by definition forged nothing — was offered as an accusation target on every card. `submitUnmaskGuess` rejected only self-accusation.
+   - **Solution**: Option A, both bounds. Client exclusion at `phase4_reveal.dart:694`; server rejection with `invalid-argument` at `index.ts:1394`. Per the selection's *"leave comments to address the cons of Option A"*, both sites carry a comment naming the other and stating why both exist — the client copy is UX, the server copy is the real guard, change both or neither.
+   - **Verification**: `game_e2e.spec.ts:1805` asserts the rejection **by code**, not message.
+   - **Design updated**: `design_scoring_and_ui.md` now separates *who may accuse* from *who may be accused* and records the paired-guard requirement.
 
 1. **Issue 76: Spurious Placeholder Prevention & Server-Side Forgery Key Derivation (Resolved - August 11, 2026)**:
    - **Problem**: `submitAnswer` wrote forgery entries keyed by the client-supplied `authorId`, while `advancePhaseInternal` read them keyed by `holderId` derived from `room.currentCardAssignments`. Any divergence caused on-time submissions to be ignored by the timeout fill, which then overwrote card slots with `kMissingAnswerPlaceholder` (`THE SOUL IS SILENT`).
@@ -662,6 +679,10 @@ Clients read Firestore streams and write nothing to rooms; `firestore.rules` den
 
 ### 2.8 Widget tests on animated screens hang without `accessibleNavigation: true`
 Nine widgets in the lobby tree drive `AnimationController.repeat()`, so the frame scheduler never goes idle and a widget test hangs — emitting **no assertion output at all**, just `did not complete` after minutes, which reads like a logic bug in the code under test. Wrap the screen under test in `MediaQuery(data: const MediaQueryData(accessibleNavigation: true), …)`: `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`), so the flag puts every animation on its static path. Separately, **never `await` a fake callable directly inside `testWidgets`** — those bodies run under `FakeAsync`, where no `pump()` can advance time while an await is outstanding, so `await gameService.createRoom(...)` deadlocks; wrap it in `tester.runAsync`. **`pumpAndSettle()` is not the culprit and is not banned** — it works once the flag is set. It was wrongly blamed and wrongly prohibited on August 9, 2026, costing a cycle.
+
+### 2.11 An observation that cannot be traced to a tool result is not an observation
+
+The August 13 playthrough report quotes 18 prompts from a 12-prompt deck, none of which exist anywhere in the repository. It is fluent, specific, internally consistent, and wrong — and it sat inside a document whose other blocks are genuinely good. **Verbatim-looking text is not evidence of verbatim capture.** The cheap defence is mechanical: every quoted game string must be findable in source with `grep -F`. Where it cannot be, the assertion is NOT RUN. See Issue 82.
 
 ### 2.10 "Verified in source" is not "shipped" — check the deploy, not the diff
 
