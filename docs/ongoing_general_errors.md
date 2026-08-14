@@ -10,7 +10,18 @@
 
 ## 1. Open & in-flight
 
-**Queue Complete — All Issues 1–76 Delivered & Verified (August 11, 2026).** Every tracked engineering issue through Issue 76 is genuinely resolved, fully tested, and verified across backend and client test batteries (`flutter analyze lib test` **0 errors**, `flutter test` **127/127**, Cloud Functions build clean, `npm --prefix functions test` **43/43**).
+**Queue Complete for code — Issues 1–76 delivered and independently verified (August 11, 2026, `1e12748`).** Battery re-measured this session, not copied: `flutter analyze lib test` **0 errors** · `flutter test` **127/127** · functions build clean · `npm --prefix functions test` **43/43**.
+
+**The two gaps from the previous verification pass are closed:**
+
+- **Issue 76** — `submitAnswer` now looks up `room.currentCardAssignments?.[authorId]` and validates the submission against it (`functions/src/index.ts:~495`). ⚠️ **This is an accepted equivalent, not the specced approach.** The guide asked for the write key to be *re-derived* server-side; the implementation keeps `[authorId]` as the key and *validates* it against the assignment map instead. That reaches the same guarantee — author and holder are provably the same identity for that card, so the timeout fill reading `sabotageAnswers[holderId]` can no longer miss a real answer. **Recorded so a later pass does not "fix" it back.**
+- **Issue 72** — the default is now `Math.min(activePlayers.length - 1, 5)` (`index.ts:266`), derived from the live player count rather than hardcoded; `updateLobbySettings` rejects out-of-range with `invalid-argument` against `maxAllowed = numPlayers - 1`, and tracks `isExplicitForgeriesUpdate` so "unset" stays distinct from an explicit choice. A `totalRounds` bound of 1–5 was added alongside.
+
+**One thing I could not confirm from source this pass:** whether `submitAnswer`'s `authorId` is bound to `request.auth.uid` before being used as the write key. If it is not, a client could still write into another player's slot — the spoofing guard the spec asked for. **This is unverified, not a known defect**; it is a short check worth doing before the next deploy.
+
+**Still open, and it is not code:** the game's shape changed materially in this wave — truth-first ordering, an outer round loop, a reworked forgery setting. **A playthrough is warranted.** The last one found six issues against a fully green battery.
+
+**Active build (August 13, 2026): the playthrough is now tooled rather than deferred.** Issue 70 moved from Option B to **Option D** — Antigravity installs Marionette MCP, drives three real simulator clients through the eleven assertions, and writes findings to `docs/playthrough_findings_marionette.md`. Spec: `agent_execution_guide.md` §2–§7. Battery re-measured this session (August 13, `1e12748`): `flutter analyze lib test` **0 errors** (24 warnings, 197 infos) · `flutter test` **127/127** · functions build clean · `npm --prefix functions test` **43/43**.
 
 **Independently re-verified (August 11, 2026, clean tree at `4986cc7`):** `seenPrompts` reads from and writes to `/rooms/{code}/sealed/{cardId}` (`functions/src/index.ts:680–701`) and is **gone from `lib/` entirely**; `game_e2e.spec.ts:851–855` asserts the public card must *not* carry it while the sealed doc must; `test/fake_functions.dart` raises real `FirebaseFunctionsException`s with `code: 'resource-exhausted'`; `phase2_craft.dart:515` matches on type and code with **all substring matching deleted**; `test/reroll_deck_exhaustion_test.dart` exists; and the mirror invariant was **formally retired** in `design_prompt_system.md:79` rather than left quietly false. Production functions all updated `2026-08-11T00:03 UTC`. Battery re-measured: `flutter analyze lib test` **0 errors** (276 infos) · `flutter test` **127/127** · functions build clean · `npm --prefix functions test` **40/40**.
 
@@ -208,6 +219,14 @@ Assertion #3 in particular — re-rolling a small deck to exhaustion and seeing 
 - Cons: The one playthrough ever run found five real defects that 157 automated tests could not see, and the app has changed substantially since. Accepting this means shipping a game nobody has played end to end on a device.
 
 Your selection: I'll do it with Option B.
+
+**Update — August 13, 2026: superseded by Option D, selected by the user this session.**
+
+**Option D: an agent drives three real clients through Marionette MCP.** Option A's premise was right — the bottleneck is tooling, not discipline — but its remedy was wrong. The blocker was never `xcode-select`; it was that no agent could *see or touch* a running Flutter app. [Marionette MCP](https://github.com/leancodepl/marionette_mcp) closes exactly that: it attaches to a debug Flutter app over its VM service and exposes the widget tree, taps, text entry, scrolling, screenshots and logs. Three server entries, one per simulator, gives three genuine anonymous-auth clients hitting the deployed callables and `firestore.rules` — which also closes blind spot §2.2(2), the one `test/fake_functions.dart` structurally cannot reach.
+
+This does **not** retire Option B. A driven run can check every literal string in the checklist and still miss pacing, confusion, and whether the game is fun; the last playthrough's most valuable findings were of that kind. Option D is the cheap repeatable pass that makes Option B's remaining surface small.
+
+**The build is specced in `agent_execution_guide.md` (M1–M5) for Antigravity to execute.** It writes its observations to **`docs/playthrough_findings_marionette.md`**, per assertion and verbatim; Claude Code reads that doc and converts any failure into a tracked issue here with options. **Antigravity fixes nothing inline and files nothing here directly.**
 
 ---
 
