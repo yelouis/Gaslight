@@ -109,7 +109,7 @@ Your selection: Proceed with Option A.
 - Pros: removes the human step entirely.
 - Cons: auto-deploying to production on commit is a significant change in blast radius for a solo project, and `predeploy` already runs the full suite on every deploy, which would make commits slow.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -139,7 +139,7 @@ Your selection: _____
 - Pros: makes the record honest immediately at zero cost, and leaves the work queued rather than pretending it is done.
 - Cons: leaves real coverage gaps open — including A10, the eviction copy, which has now never been verified across eight cycles.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Regardless of the option chosen:** an assertion whose evidence cannot be traced to something the harness actually returned must be recorded NOT RUN. **Do not paraphrase, reconstruct, or infer observations** — quote what the tool returned or record that it was not observed.
 
