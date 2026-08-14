@@ -2,7 +2,11 @@
 
 **You are an engineering agent with no memory of this project.** This build is written for **Antigravity**, which can install and use MCP servers.
 
-**The code queue is empty.** Every tracked engineering issue through Issue 76 is delivered and verified in source (§9). **Do not write, refactor, or "improve" game logic.** If you find yourself editing `functions/`, `lib/models/`, `lib/services/`, `lib/utils/`, or `firestore.rules`, you have left this build.
+**⚠️ August 13, 2026 — the code queue is NOT empty. Read this before anything else.** A manual playthrough found five defects, and the investigation found that **production has been running `6d9c178` since August 10**: `4986cc7`, `3aa3148` and `1e12748` were committed after the last function deploy and never shipped. Issues 71/72/76 are delivered *in source* and were never true of the running game. **Issues 77–80 are now open in `ongoing_general_errors.md`, three of them awaiting a `Your selection:` line.** Issue 78 is a live defect in HEAD that deploying will not fix.
+
+**Until Issue 77 and Issue 78 are resolved, a playthrough measures the wrong build.** M1–M2 (install and instrument) are still worth doing and are independent. **Do not run M4 against undeployed functions** — every observation would be about `6d9c178`.
+
+**Otherwise: do not write, refactor, or "improve" game logic.** Outside the issues selected in `ongoing_general_errors.md`, if you find yourself editing `functions/`, `lib/models/`, `lib/services/`, `lib/utils/`, or `firestore.rules`, you have left this build.
 
 **What is actually open is a playthrough**, and it has been deferred across seven cycles because no agent could drive the app. The game's shape changed materially in the last wave — truth-first ordering, an outer round loop, a reworked forgery setting — and the last playthrough found **six issues against a fully green battery**. Two were production correctness defects.
 
@@ -36,7 +40,14 @@ Re-measured **August 13, 2026**, at `1e12748` with only doc edits in the tree. T
 | `flutter test` | **127/127** ✅ |
 | `npm --prefix functions run build` | clean ✅ |
 | `npm --prefix functions test` | **43/43** ✅ |
-| **The playthrough** | ❌ **NEVER RUN** — this is why this build exists |
+| **Deployed backend** | ❌ **STALE** — production runs `6d9c178`; three commits undeployed (Issue 77) |
+| **The playthrough** | ⚠️ Run manually August 13 against the **stale** build — found five defects (Issues 77–80) |
+
+**The battery has a hole and this is the fix: a green suite says nothing about what is deployed.** Add this to every future pass and compare it against `git log -1 --format=%cI -- functions/src`:
+
+```bash
+/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud functions list --project=gaslight-46368 --format="table(name,updateTime)"
+```
 
 **`gcloud` is not on this shell's `PATH`**; it is at `/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud`.
 **`~/.pub-cache/bin` is not on this shell's `PATH` either** — §3 depends on this.
@@ -400,6 +411,7 @@ Verified in source at `1e12748`:
 - **An item can be marked done because the *other* items in its commit were.** Issues 71–76 landed as one commit; five were real and Issue 76 was untouched, yet the batch read as complete. **One item = one commit** exists for exactly this.
 - **A default that must be derived from live state cannot be baked in at creation.** `min(n − 1, 5)` is `0` at `createRoom`, so the first implementation fell back to a constant and the rule quietly vanished.
 - **The manual gate earns its keep every time it runs.** One playthrough surfaced six issues, two of them production correctness defects four green gates could not see.
+- **"Verified in source" is not "shipped."** Issues 71, 72 and 76 were each read in source, confirmed correct, and marked Resolved — and all three were still broken for players, because nobody ever asked production what it was running. Three verification passes conflated a diff with a deploy. **The deploy check now belongs in §1's battery.**
 - **A blocker that costs a human's time gets deferred forever.** Issue 70 sat for seven cycles not because it was hard but because it needed a person. **When an item keeps slipping, the fix is usually tooling, not discipline** — this build is that fix.
 - **When you redefine what a field holds, enumerate its readers.** `votes` silently changed meaning and broke scoring, the self-vote guard, and the reveal.
 - **Doc structure rots silently.** Append inside the existing Resolved heading; never add a second.
