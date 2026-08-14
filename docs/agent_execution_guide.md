@@ -39,9 +39,10 @@ Measured **August 14, 2026** at `0052741`, clean tree. This session's numbers.
 | `flutter test` | **130/130** ✅ |
 | `npm --prefix functions run build` | clean ✅ |
 | `npm --prefix functions test` | **46/46** ✅ |
-| **Deployed functions** | ❌ **ONE COMMIT BEHIND** — newest `2026-08-14T04:43:19Z`, last `functions/src` commit `04:56:13Z` (D1) |
+| `./scripts/check_deploy_fresh.sh` | **exit 0 (FRESH)** ✅ — all 14 functions and rules exceed latest tree commits |
+| **Deployed functions** | ✅ **14/14 DEPLOYED** — newest `2026-08-14T17:48:24Z`, after `1122f68` |
 | **Deployed rules** | ✅ ruleset released `2026-08-14T04:24:13Z`, after `3aa3148` |
-| **The playthrough** | ⚠️ 8 of 14 assertions have usable evidence; 5 do not; 1 NOT RUN (D3) |
+| **The playthrough** | ⚠️ 8 of 14 assertions have usable evidence; 5 to be re-run in D3; 1 NOT RUN |
 
 ### The deploy check — until D2 lands, run these by hand
 

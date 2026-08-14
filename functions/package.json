@@ -3,7 +3,7 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "test": "npm run build && export PATH=\"/opt/homebrew/bin:/opt/homebrew/opt/openjdk/bin:$PATH\" && npx firebase-tools emulators:exec --only auth,functions,firestore 'npm run test:inner'",
+    "test": "npm run build && export FIREBASE_CLI_TELEMETRY=0 && export PATH=\"/opt/homebrew/bin:/opt/homebrew/opt/openjdk/bin:$PATH\" && npx firebase-tools emulators:exec --only auth,functions,firestore 'npm run test:inner'",
     "test:inner": "npx mocha -r ts-node/register 'test/**/*.spec.ts' --timeout 30000"
   },
   "engines": {
