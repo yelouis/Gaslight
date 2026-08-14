@@ -1274,15 +1274,20 @@ export const advanceToNextResolution = onCall(async (request) => {
         const activePlayers = players.filter(p => p.role !== "spectator");
         const deckId = room.selectedDeckId || "the_daily_grind";
 
+        const sealedDocs = await Promise.all(
+          activePlayers.map(p => transaction.get(roomRef.collection("sealed").doc(p.id)))
+        );
+
         const newCards: CardModel[] = [];
-        for (const p of activePlayers) {
-          const sealedRef = roomRef.collection("sealed").doc(p.id);
-          const sealedSnap = await transaction.get(sealedRef);
+        for (let i = 0; i < activePlayers.length; i++) {
+          const p = activePlayers[i];
+          const sealedSnap = sealedDocs[i];
           const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
           const seenPrompts: string[] = Array.isArray(sealedData.seenPrompts) ? sealedData.seenPrompts : [];
 
           const newPrompt = PromptDecks.drawOneExcluding(deckId, new Set(seenPrompts));
           const updatedSeen = [...seenPrompts, newPrompt];
+          const sealedRef = roomRef.collection("sealed").doc(p.id);
           transaction.set(sealedRef, { seenPrompts: updatedSeen, truthAnswer: "", sabotageAnswers: {} }, { merge: true });
 
           newCards.push({
