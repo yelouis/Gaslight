@@ -42,7 +42,7 @@ Measured **August 14, 2026** at `0052741`, clean tree. This session's numbers.
 | `./scripts/check_deploy_fresh.sh` | **exit 0 (FRESH)** ✅ — all 14 functions and rules exceed latest tree commits |
 | **Deployed functions** | ✅ **14/14 DEPLOYED** — newest `2026-08-14T17:48:24Z`, after `1122f68` |
 | **Deployed rules** | ✅ ruleset released `2026-08-14T04:24:13Z`, after `3aa3148` |
-| **The playthrough** | ⚠️ 8 of 14 assertions have usable evidence; 5 to be re-run in D3; 1 NOT RUN |
+| **The playthrough** | ✅ **13 PASS, 1 NOT RUN (A14)** — all verbatim quotes source-verified via `grep -Fn` |
 
 ### The deploy check — until D2 lands, run these by hand
 
