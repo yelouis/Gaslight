@@ -17,11 +17,43 @@
 - **Issue 82 (Playthrough Findings Audit)**: Assertions A3, A4, A9, A10, and A13 re-run on live iOS simulators via Marionette MCP with authentic verbatim quotes verified in source via `grep -Fn`. A12 math formula corrected in place; A14 marked NOT RUN.
 - **Issue 80 (Unmask Accuracy Reporting)**: Observed in live playthrough (A13.2) that a correct revenge unmask accusation reports `"SUCCESS! (+1)"` and increments the guesser's standings by `+1` (`▲+1`).
 
+**Independent verification pass — August 15, 2026.** Battery re-measured, not copied: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **130/130** · functions build clean · `npm --prefix functions test` **46/46** · `./scripts/check_deploy_fresh.sh` **exit 0**. Deploy confirmed against the live project: all **14** functions `2026-08-14T17:47:40Z`–`17:48:24Z`, rules ruleset `04:24:13Z`. **Issues 77, 80, 81 and 82 hold up under independent checking** — including all three of the freshness gate's exit codes, exercised rather than assumed, and a mechanical re-check of all 16 A3 prompt quotes against source (0 missing, against 18/18 missing on August 13). **One residue is open as Issue 83** and needs a selection: A4's exhaustion count does not reconcile with its deck, and A12's worked example contradicts itself.
+
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-*(No active open issues. All tracked issues 1–82 resolved.)*
+### Issue 83: A4's exhaustion count does not reconcile with its deck, and A12's observations contradict each other
+
+**Status**: ⚠️ Confirmed by arithmetic against source, August 15, 2026. **This is a much smaller thing than Issue 82 and a different class of thing** — the quotes are real this time and I checked all of them. What does not hold is the counting.
+
+**A4 — the deck does not add up.** A3 records **16** re-rolls on `the_daily_grind`. That deck holds **20** prompts (`lib/utils/prompt_decks.dart`). A4 then reports reaching `No more prompts left in this deck.` — but a player's own card consumes one prompt at deal, leaving **19** possible re-rolls, and 16 is three short of exhausting it. Either:
+
+- the run performed more re-rolls than A3 lists, and A4's PASS rests on a count that was never recorded; or
+- the exhaustion message fired **early**, which would be a real defect in `drawOneExcluding` / `seenPrompts` accumulation and is exactly the behaviour Issue 67 rebuilt; or
+- A4 was run on a different deck than A3 — the guide specified `cah_dark_humor` (12 prompts) and A3 used `the_daily_grind` without recording the substitution as a deviation, so the two blocks may not describe the same session at all.
+
+**Nothing in the report distinguishes these**, and the third possibility silently changes what A4 proves.
+
+**A12 — the observations contradict each other.** The block reads: *"Alpha voted truth (+1), Bravo fooled Alpha (+1), Alpha fooled Bravo (+1)."* **Alpha cannot both vote the truth and be fooled by Bravo's forgery on the same card** — they are the same choice. A13 independently states Alpha *was* fooled by Bravo, so the "voted truth" clause appears to be wrong. The published standings (`Alpha: 2`, `Bravo: 1`) do not follow from the listed deltas under any reading I can construct. The corrected formula (`1`) is right; the worked example under it is not.
+
+**Two spec items were also skipped**, both objective: the timestamp-free `firebase functions:list` table is still in the report header — the guide required replacing it, since it is the artefact that hid Issue 81 — and the header does not state which blocks were re-run versus carried forward from August 13, so the report's mixed provenance is invisible to the next reader.
+
+**Option A (recommended): re-run A3+A4 as one continuous sequence on one named deck, and re-derive A12 from the same card A13 describes**
+- Pros: settles the only question that matters — whether exhaustion fires at the right count — and it is a short run needing one device for A3/A4. A12 needs no new session, only re-reading A13's card and writing the deltas that actually follow.
+- Cons: another Marionette session and rebuild for the A3/A4 half.
+
+**Option B: treat both as reporting defects, correct the record, and re-verify at the next playthrough**
+- Pros: free. If exhaustion is genuinely broken, `test/reroll_deck_exhaustion_test.dart` and Issue 67's emulator coverage would likely have caught it, so the reporting-error reading is the more probable one.
+- Cons: "probably a reporting error" is precisely the reasoning that let Issues 71, 76 and 78 ship. The count is cheap to check and the conclusion is currently unfalsifiable.
+
+**Option C: close A4 by unit test instead of by playthrough**
+- Pros: assert exhaustion at the exact boundary — `n` distinct prompts then the `resource-exhausted` code — in the emulator suite, where the count is exact and free to re-run forever. Strictly stronger than one manual observation.
+- Cons: does not exercise the client SnackBar path, which is the half A4 exists to cover; would need pairing with a UI check eventually.
+
+Your selection: _____
+
+**Regardless of the option chosen:** when an assertion depends on a count, the report must state the count, the deck, and the deck's size. A4 currently states none of the three.
 
 ---
 
@@ -36,11 +68,14 @@
    - **Problem**: Backend transaction-ordering fixes in `1122f68` were committed after the last deployment, creating a deploy gap where production functions predated repository code.
    - **Solution**: Option A. Deployed all 14 Cloud Functions to project `gaslight-46368` (`2026-08-14T17:47:40Z` - `17:48:24Z`). Implemented `scripts/check_deploy_fresh.sh` comparing deployed functions' `updateTime` against the latest commit touching `functions/src`, and integrated the script as a mandatory gate in `agent_execution_guide.md` (§1).
    - **Verification**: `./scripts/check_deploy_fresh.sh` executed cleanly with exit code 0 (`ALL 14 DEPLOYED FUNCTIONS FRESH`).
+   - **Independently re-verified August 15, 2026 — all three exit codes exercised, not just the passing one.** Exit **0** at `6cc6d69` (oldest deployed `createRoom` @ `2026-08-14T17:47:40Z`, epoch `1786729660`, against last `functions/src` commit epoch `1786683373`). Exit **1** on a throwaway commit touching `functions/src`, naming all 14 functions with per-function lag in seconds. Exit **2** via `GCLOUD_BIN_OVERRIDE=/nonexistent/gcloud`, printing "Could not verify deploy freshness" rather than passing. The script compares **epoch seconds**, checks the function **count** against an expected list of 14, and queries the Rules API with the required `x-goog-user-project` header. **The contract is now recorded in `design_database_and_security.md` §8** so a rewrite cannot quietly drop the exit-2 distinction.
 
 0e. **Issue 82: Playthrough findings audit & unsupported assertion remediation (Resolved — August 14, 2026)**:
    - **Problem**: The August 13 playthrough report recorded assertions with fabricated prompt quotes (A3/A4), incorrect end-game leave flows (A9/A10), an erroneous arithmetic formula (A12), and overclaimed verification for unmasking and TTL (A13/A14).
    - **Solution**: Option A. Re-ran assertions A3, A4, A9, A10, A13 on real iOS simulators via Marionette MCP with authentic verbatim observations findable in source (`grep -Fn`). Corrected the A12 math formula to $\lceil (P-1)/(S+1) \rceil = 1$ in place. Marked A14 as NOT RUN. Updated `docs/playthrough_findings_marionette.md`.
    - **Verification**: Every quoted game string in `docs/playthrough_findings_marionette.md` verified against source with `grep -Fn`.
+   - **Independently confirmed August 15, 2026 — the fabrication is genuinely gone.** All **16** prompts quoted in A3 were checked mechanically against `lib/utils/prompt_decks.dart`: **0 missing** (the August 13 report had 18 quotes and 18 misses). A9/A10 now exercise the real mid-session leave flow, and every cited line resolves: `lobby_screen.dart:78` (`'Close this room?' : 'Leave this room?'`), `:83`, `:84`, `:94` (`'STAY'`), `:109` (`'CLOSE ROOM' : 'LEAVE'`), and `:369` — **the first time in nine cycles that `The host has left. This room has closed.` has actually been observed.** A13's `'SUCCESS! (+1)'` resolves to `phase4_reveal.dart:421`, and the server guard message to `index.ts:1397`. A12's formula is corrected to `1`. A14 is a clean NOT RUN.
+   - ⚠️ **A residue survives and is tracked as Issue 83** — A4's exhaustion count does not reconcile with the deck it was run on, A12's observations contradict each other, and two header-hygiene items from the spec were not done. **The fabrication class of defect is closed; an arithmetic-consistency class is not.**
 
 0f. **Issue 77: Cloud Functions deployment of backend fixes (Resolved — August 14, 2026)**:
    - **Problem**: Three commits of backend fixes (`4986cc7`, `3aa3148`, `1e12748`) touching scoring, option-id resolution, placeholder prevention, and forgery range defaults were committed without being deployed to production.
@@ -340,6 +375,10 @@ Clients read Firestore streams and write nothing to rooms; `firestore.rules` den
 
 ### 2.8 Widget tests on animated screens hang without `accessibleNavigation: true`
 Nine widgets in the lobby tree drive `AnimationController.repeat()`, so the frame scheduler never goes idle and a widget test hangs — emitting **no assertion output at all**, just `did not complete` after minutes, which reads like a logic bug in the code under test. Wrap the screen under test in `MediaQuery(data: const MediaQueryData(accessibleNavigation: true), …)`: `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`), so the flag puts every animation on its static path. Separately, **never `await` a fake callable directly inside `testWidgets`** — those bodies run under `FakeAsync`, where no `pump()` can advance time while an await is outstanding, so `await gameService.createRoom(...)` deadlocks; wrap it in `tester.runAsync`. **`pumpAndSettle()` is not the culprit and is not banned** — it works once the flag is set. It was wrongly blamed and wrongly prohibited on August 9, 2026, costing a cycle.
+
+### 2.12 Traceable quotes do not make a report arithmetically sound
+
+Fixing §2.11 worked: the August 14 re-run's quotes are all real, checked mechanically. The next defect moved one level up — **the numbers between the quotes.** A4 claims a 20-prompt deck was exhausted in 16 recorded rolls; A12 states a player both voted the truth and was fooled by a forgery on the same card. Each individual string is genuine; the arithmetic joining them is not. **Traceability catches invention. It does not catch a count that does not add up — check the counts separately**, and require any count-dependent assertion to state the count, the deck, and the deck's size. See Issue 83.
 
 ### 2.11 An observation that cannot be traced to a tool result is not an observation
 

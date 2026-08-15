@@ -107,7 +107,16 @@ npx firebase-tools deploy --only functions,firestore:rules --project gaslight-46
 
 > ⚠️ **Limitation:** `predeploy` is attached to the `functions` configuration block in `firebase.json`. Running a rules-only deploy (`firebase deploy --only firestore:rules`) bypasses the `functions` predeploy hook. Rules deploys must still be verified independently via Check 3 below.
 
-**Verify — four checks, none of which is "the command exited 0".** `gcloud` is not on the default `PATH`; it lives at `/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud`.
+**⚠️ The manual checks below are now mechanized. Run `./scripts/check_deploy_fresh.sh` — it is a required gate in the test battery** (added under Issue 81, August 14 2026, after this section's written instruction failed **twice**: once for Issues 71/72/76, and again one cycle later for `1122f68`). Both times the instruction existed and was followed with `firebase functions:list`, which prints version, trigger, location, memory and runtime and **no timestamps at all**. When a written step fails twice, replace it with a tool.
+
+The script's contract, which any replacement must preserve:
+
+* **Three exit codes, and conflating any two of them defeats the gate.** `0` fresh · `1` stale, naming every lagging function with its lag in seconds · `2` **could not verify** — `gcloud` missing, unauthenticated, or the Rules API unreachable. **Exit 2 must never be reported as a pass.** A gate that reports success when it did not run is the same defect class as a fabricated test report.
+* **It checks the function *count*, not just timestamps.** A function that fails to deploy does not appear with an old timestamp — it may not appear at all. Fewer than 14 is exit 1.
+* **Timestamps are compared as epoch seconds, never as strings.** `git` emits local offsets (`2026-08-13T21:56:13-07:00`); Google emits Zulu with nanosecond precision (`2026-08-14T04:43:19.711837007Z`). Lexicographically the first sorts *before* the second, so a naive `>` reports a **774-second-stale deploy as fresh** — measured on this repo's real values, not hypothetical. Take git's side as `git log -1 --format=%ct` and truncate Google's fractional part to 19 characters before `datetime.fromisoformat`.
+* **Rules need a separate call.** `gcloud functions list` cannot see them; the Firebase Rules API (`firebaserules.googleapis.com/v1/projects/{id}/releases`) can, and **requires an `x-goog-user-project` header** — without it it returns `PERMISSION_DENIED / SERVICE_DISABLED`, which reads like a disabled API and is really a missing quota project.
+
+**The four manual checks remain the definition of what the script automates** — use them when the script exits 2, or when auditing it. `gcloud` is not on the default `PATH`; it lives at `/Users/louisye/Downloads/google-cloud-sdk/bin/gcloud`.
 
 1. **Every function's timestamp moved.**
    ```bash
