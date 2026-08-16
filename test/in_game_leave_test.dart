@@ -6,6 +6,7 @@ import 'package:gaslight/models/player_state.dart';
 import 'package:gaslight/screens/phase2_craft.dart';
 import 'package:gaslight/screens/phase3_vote.dart';
 import 'package:gaslight/screens/phase4_reveal.dart';
+import 'package:gaslight/widgets/auto_advance_timer.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -239,6 +240,7 @@ void main() {
 
       final leaveButton = find.byTooltip('Leave game');
       expect(leaveButton, findsOneWidget);
+      expect(find.byType(AutoAdvanceTimer), findsNothing);
 
       await tester.tap(leaveButton);
       await tester.pump(const Duration(milliseconds: 300));
@@ -280,6 +282,7 @@ void main() {
 
       final leaveButton = find.byTooltip('Leave game');
       expect(leaveButton, findsOneWidget);
+      expect(find.byType(AutoAdvanceTimer), findsNothing);
 
       await tester.tap(leaveButton);
       await tester.pump(const Duration(milliseconds: 300));
@@ -321,6 +324,7 @@ void main() {
 
       final leaveButton = find.byTooltip('Leave game');
       expect(leaveButton, findsOneWidget);
+      expect(find.byType(AutoAdvanceTimer), findsNothing);
 
       await tester.tap(leaveButton);
       await tester.pump(const Duration(milliseconds: 300));
