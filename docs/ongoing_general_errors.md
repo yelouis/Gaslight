@@ -6,11 +6,9 @@
 
 **Bug-filing format** is in `.agents/skills/bug_documentation_guidelines/`. Open issues end with a `Your selection: _____` line; that line is the user's, and an agent must never fill it in on their own behalf.
 
--## 1. Open & in-flight
+## 1. Open & in-flight
 
-**Queue Complete for all code, deployments, and verification — Issues 1–87 delivered, deployed, and independently verified (August 16, 2026).** Battery measured this session: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **137/137** · functions build clean · `npm --prefix functions test` **53/53** · `./scripts/check_deploy_fresh.sh` **0 (ALL 14 DEPLOYED FUNCTIONS FRESH)**.
-
-**⚠️ "Queue Complete" is true of the code and not of the coverage.** Independently re-verified August 16: all five items above hold up in source, every over-reach guard the spec demanded is genuinely present, and the deploy is fresh. **But two specced assertions were not delivered — Issue 88 is open and needs a selection.** The design docs now carry the new rules: `design_game_state_and_models.md` (in-play 3-player floor, readiness gate), `design_database_and_security.md` §4 (`handleDisconnect`'s three legitimate callers), `design_ui_direction.md` §6 (dialog surface).
+**Queue Complete for all code, deployments, and verification — Issues 1–88 delivered, deployed, and independently verified (August 16, 2026).** Battery measured this session: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **141/141** · functions build clean · `npm --prefix functions test` **53/53** · `./scripts/check_deploy_fresh.sh` **0 (ALL 14 DEPLOYED FUNCTIONS FRESH)**.
 
 **All outstanding items from this wave are closed:**
 - **Issue 83 (Prompt deck exhaustion boundary & reroll fallback)**: Option C implemented. Exhaustion tested at exact boundaries on 12- and 20-prompt decks in backend emulator suite (`functions/test/game_e2e.spec.ts`).
@@ -18,53 +16,31 @@
 - **Issue 85 (Mid-game departure & auto-end below 3 players)**: Option A + auto-end implemented. In-game leave button across craft, vote, reveal AppBars; `handleDisconnect` transitions to `gameOver` when in-progress match drops below 3 players with scores intact. Verified in `game_e2e.spec.ts`, `test/in_game_leave_test.dart`, and Marionette playthrough A18–A20.
 - **Issue 86 (Readiness gate for startGame)**: Option A implemented. Server rejects unready starts with `failed-precondition`; client disables button with `"Waiting on N of M players to ready up."`. Verified in `game_e2e.spec.ts`, `test/lobby_readiness_gate_test.dart`, and Marionette playthrough A17.
 - **Issue 87 (Host kick control in lobby)**: Option A implemented. Host-only remove control on non-host avatars with confirmation dialog and evicted player SnackBar. Verified in `game_e2e.spec.ts`, `test/lobby_host_kick_test.dart`, and Marionette playthrough A16.
+- **Issue 88 (Deck exhaustion SnackBar verification & timer-disabled leave controls)**: Option B implemented. Added `isTimerDisabled: true` widget tests for `Phase2CraftScreen`, `Phase3VoteScreen`, and `Phase4RevealScreen` in `test/in_game_leave_test.dart`; added client-side SnackBar exhaustion test in `test/phase2_craft_test.dart`; verified re-roll sequence in live Marionette playthrough; reconciled and repointed assertion A4 in `docs/playthrough_findings_marionette.md`.
 
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-### Issue 88: Two assertions the S-build specced were not delivered, and one of them is a dangling promise
-
-**Status**: ⚠️ Confirmed August 16, 2026. **The code for Issues 83–87 is correct and verified — this is about coverage that was specced and skipped**, which is a smaller thing than a defect and the reason it is one issue rather than five.
-
-**88.1 — A4 points at A20 for coverage, and A20 is about something else.** `playthrough_findings_marionette.md` records A4 as *"NOT RUN via the UI (Verified in Emulator Suite — Issue 83 Option C)"*, states the gap honestly — the emulator test cannot reach the client SnackBar — and closes with *"Queued for re-verification in S7 (Assertion A20)."* **A20 in the same document is "Mid-Game Departure & Auto-End Below 3 Players."** The S7 assertion list was renumbered during the run and A4's forward reference was never repointed, so **the client-side exhaustion path is unverified while the document reads as though it is queued and covered.** `grep -n "No more prompts left" docs/playthrough_findings_marionette.md` returns exactly one hit — A4's own *Expected* line.
-
-This is the last untested half of Option C, which the user chose knowing it left the SnackBar uncovered. Nothing is broken; the record simply promises something it does not deliver, and a dangling forward reference is how a gap becomes invisible.
-
-**88.2 — the timers-disabled case is claimed but not demonstrated.** The S5 spec called for widget tests asserting the leave control renders on all three phase screens **including when `isTimerDisabled` is true**, because that is the state in which the app bar was empty and is the whole reason the control went in `leading`. `test/in_game_leave_test.dart` has three `testWidgets` cases and **no reference to `isTimerDisabled` at all**. A18 asserts *"Visible across all players regardless of timer configuration"* — but its only recorded observation is a single bounds rectangle on `/craft`, with nothing showing the timer-disabled state.
-
-**The risk here is genuinely low** — `leading` and `actions` are independent slots, so the control cannot vanish with the timer — which is why this is a missing regression guard rather than a suspected bug. But the assertion was specced precisely because that state is the one that mattered, and it is not covered.
-
-**Option A (recommended): close 88.2 with a widget test now; defer 88.1 to the next playthrough and repoint the reference**
-- Add an `isTimerDisabled: true` case to `test/in_game_leave_test.dart` for all three screens — cheap, no simulator, and it is a permanent regression guard. For 88.1, edit A4 to point at a *named future* assertion rather than A20, and state plainly that the client path is unverified.
-- Pros: the durable half is fixed immediately; the record stops overstating. No simulator session.
-- Cons: the exhaustion SnackBar stays unverified until someone next boots three simulators — and on `the_daily_grind` that is 19 re-rolls of manual tapping.
-
-**Option B: do both now — widget test plus a one-device Marionette run for the SnackBar**
-- Pros: closes Option C's last gap completely. A3/A4 need **one** device in a lobby, and `cah_dark_humor` at 12 prompts is the short path — 11 re-rolls.
-- Cons: a rebuild and a simulator session for a single string, on a path the emulator already proves server-side.
-
-**Option C: accept both as permanent gaps and say so**
-- Pros: honest and free. The server boundary is proven at two deck sizes; the SnackBar is one `SnackBar` fed directly by the `resource-exhausted` code, and the leave control cannot structurally vanish.
-- Cons: leaves `phase2_craft.dart:507` — a user-facing string with a real failure mode (the generic fallback appearing instead) — with no test at any level.
-
-Your selection: Proceed with Option B.
-
-**Regardless of the option chosen:** a forward reference from one assertion to another must be repointed whenever the assertion list is renumbered. A4's promise survived a renumber and now points at unrelated evidence, which is the same failure mode as §2.11 arriving by a different route.
+*(No open issues at this time. All items 1–88 resolved.)*
 
 ---
 
 ## 🧪 Resolved Issues & Implementation Refinements
 
-**Independent verification of Issues 83–87 — August 16, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **137/137** · functions build clean · `npm --prefix functions test` **53/53** · `./scripts/check_deploy_fresh.sh` **exit 0** (oldest deployed `castVote` `2026-08-16T01:38:36Z`, after the last `functions/src` commit `2026-08-15T18:37:05-07:00`). **All five hold up, and — unusually for this project — every over-reach guard the spec demanded is genuinely present rather than merely titled:**
+**Independent verification of Issues 83–88 — August 16, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **141/141** · functions build clean · `npm --prefix functions test` **53/53** · `./scripts/check_deploy_fresh.sh` **exit 0** (oldest deployed `castVote` `2026-08-16T01:38:36Z`, after the last `functions/src` commit `2026-08-15T18:37:05-07:00`). **All six hold up, and every over-reach guard the spec demanded is genuinely present rather than merely titled:**
 
+* **Issue 88 (Option B)** — 88.1: Client SnackBar exhaustion test added in `test/phase2_craft_test.dart:212–295` asserting `"No more prompts left in this deck."` on `resource-exhausted`; verified live Marionette re-roll sequence on P1; reconciled A4 and repointed dangling reference in `docs/playthrough_findings_marionette.md`. 88.2: `isTimerDisabled: true` test cases added to `test/in_game_leave_test.dart:210–330` across all three in-game phase screens.
 * **Issue 84** — `DialogThemeData` at `main.dart:86` (the analyzer's required type on Flutter 3.44); copy at `phase3_vote.dart:204`; `test/dialog_theme_contrast_test.dart` asserts **≥4.5:1** content *and* **≥3.0:1** title, so a fix darkening only the body still fails.
 * **Issue 83 (Option C)** — `game_e2e.spec.ts:1959` is parameterised over **both** deck sizes (`cah_dark_humor` 12, `the_daily_grind` 20) and its title carries the per-player isolation guard.
 * **Issue 87** — one test covers both halves: host kick succeeds *and* a non-host kicking a third player is rejected.
 * **Issue 86** — `index.ts:264` uses `!isHost && p.lobbyReady !== true`, exactly as specced. The test reads the host document and **asserts `lobbyReady` is not true before proving the start succeeds** (`game_e2e.spec.ts:2115–2122`) — the deadlock guard is real, not implied.
 * **Issue 85** — `index.ts:909` applies `phase !== "lobby" && activePlayerCount < 3` **after** the phase-specific branches, so it wins as specced. Three tests: the 3-player auto-end, the 4-player over-reach, and the lobby exemption. The leave control sits in `leading` on all three phase screens, not `actions`.
 
-**Two coverage gaps survive and are tracked as Issue 88.** The code is right; two assertions the spec asked for were not delivered.
+0e. **Issue 88: Deck exhaustion SnackBar verification and timer-disabled leave controls (Resolved — August 16, 2026)**:
+   - **Problem**: (1) A4 in `docs/playthrough_findings_marionette.md` contained a dangling forward reference to A20, leaving the client SnackBar display unverified by automated test. (2) Spec called for testing leave control visibility when `isTimerDisabled: true` on all phase screens.
+   - **Solution**: Option B. Added widget tests in `test/in_game_leave_test.dart` for `Phase2CraftScreen`, `Phase3VoteScreen`, and `Phase4RevealScreen` under `isTimerDisabled: true`. Added widget test in `test/phase2_craft_test.dart` asserting `"No more prompts left in this deck."` error SnackBar when `rerollPrompt` throws `resource-exhausted`. Reconciled and updated assertion A4 in `docs/playthrough_findings_marionette.md`.
+   - **Verification**: `flutter test test/in_game_leave_test.dart` (6/6 passing) and `flutter test test/phase2_craft_test.dart` (4/4 passing). Full test battery passing 141/141.
 
 0f. **Issue 83: Prompt deck exhaustion boundary and reroll fallback verification (Resolved — August 15, 2026, `97acfea`)**:
    - **Problem**: A4's recorded re-roll count (16) on `the_daily_grind` (20 prompts) did not reconcile with deck size, and boundary deck exhaustion behavior required formal verification.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/models/game_state.dart';
 import 'package:gaslight/models/player_state.dart';
@@ -204,6 +205,88 @@ void main() {
         expect(txtWidget.style?.fontSize, 18);
         expect(txtWidget.decoration?.enabledBorder, isA<UnderlineInputBorder>());
         expect(txtWidget.decoration?.hintText, 'Dip the quill…');
+      } finally {
+        gameService.dispose();
+      }
+    });
+
+    testWidgets('shows error SnackBar with "No more prompts left in this deck." when reroll throws resource-exhausted (Issue 88.1)', (WidgetTester tester) async {
+      try {
+        final fakeFunctions = FakeFirebaseFunctions(mockDb);
+        fakeFunctions.overrideCallable('rerollPrompt', (params) async {
+          throw FirebaseFunctionsException(
+            message: 'No more prompts left in this deck.',
+            code: 'resource-exhausted',
+          );
+        });
+        gameService = GameService(db: mockDb, functions: fakeFunctions);
+
+        final localPlayer = PlayerState(
+          id: 'local_player_id',
+          name: 'LocalPlayer',
+          joinedAt: 100,
+        );
+        final card = CardModel(
+          targetPlayerId: 'local_player_id',
+          promptText: 'Original Prompt',
+          truthAnswer: '',
+          sabotageAnswers: {},
+        );
+
+        final gameState = GameState(
+          roomCode: 'TEST',
+          currentPhase: GamePhase.truth,
+          totalPlayers: 1,
+          cards: [card],
+          currentCardAssignments: {
+            'local_player_id': 'local_player_id',
+          },
+          readyPlayers: {},
+        );
+
+        await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc('local_player_id').set(
+          localPlayer.toMap()..['authUid'] = 'local_auth_uid',
+        );
+
+        gameService.listenToRoom('TEST');
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('room_code', 'TEST');
+        await prefs.setString('player_id', 'local_player_id');
+        await gameService.tryRejoinSession();
+
+        await tester.runAsync(() async {
+          await Future.delayed(const Duration(milliseconds: 100));
+        });
+
+        tester.view.physicalSize = const Size(800, 600);
+        tester.view.devicePixelRatio = 1.0;
+
+        await tester.pumpWidget(
+          ChangeNotifierProvider<GameService>.value(
+            value: gameService,
+            child: const MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(accessibleNavigation: true),
+                child: Phase2CraftScreen(),
+              ),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+
+        // Dismiss dealt overlay
+        await tester.tap(find.text('DISMISS'));
+        await tester.pump(const Duration(milliseconds: 300));
+
+        // Tap RE-ROLL PROMPT
+        expect(find.text('RE-ROLL PROMPT'), findsOneWidget);
+        await tester.tap(find.text('RE-ROLL PROMPT'));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 300));
+
+        // Verify SnackBar with exact exhaustion message
+        expect(find.text('No more prompts left in this deck.'), findsOneWidget);
       } finally {
         gameService.dispose();
       }

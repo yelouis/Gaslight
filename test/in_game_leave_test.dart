@@ -206,5 +206,127 @@ void main() {
 
       expect(gameService.gameState, isNull);
     });
+
+    testWidgets('Phase2CraftScreen renders leave button when isTimerDisabled is true (Issue 88.2)', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1.0;
+
+      final craftState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.truth,
+        currentRound: 1,
+        totalRounds: 3,
+        totalPlayers: 3,
+        isTimerDisabled: true,
+        cards: [card1, card2, card3],
+        currentCardAssignments: {'p_host': 'p_host', 'p_g1': 'p_g1', 'p_g2': 'p_g2'},
+      );
+
+      gameService.debugSetState(craftState, [p1, p2, p3], 'p_host');
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: const MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(accessibleNavigation: true),
+              child: Phase2CraftScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final leaveButton = find.byTooltip('Leave game');
+      expect(leaveButton, findsOneWidget);
+
+      await tester.tap(leaveButton);
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Leave this game?'), findsOneWidget);
+      expect(find.text('LEAVE GAME'), findsOneWidget);
+    });
+
+    testWidgets('Phase3VoteScreen renders leave button when isTimerDisabled is true (Issue 88.2)', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1.0;
+
+      final voteState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.vote,
+        currentRound: 1,
+        totalRounds: 3,
+        totalPlayers: 3,
+        isTimerDisabled: true,
+        cards: [card1, card2, card3],
+        currentReaderId: 'p_host',
+        resolutionOrder: ['p_host', 'p_g1', 'p_g2'],
+      );
+
+      gameService.debugSetState(voteState, [p1, p2, p3], 'p_g1');
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: const MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(accessibleNavigation: true),
+              child: Phase3VoteScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final leaveButton = find.byTooltip('Leave game');
+      expect(leaveButton, findsOneWidget);
+
+      await tester.tap(leaveButton);
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Leave this game?'), findsOneWidget);
+      expect(find.text('LEAVE GAME'), findsOneWidget);
+    });
+
+    testWidgets('Phase4RevealScreen renders leave button when isTimerDisabled is true (Issue 88.2)', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1.0;
+
+      final revealState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.reveal,
+        currentRound: 1,
+        totalRounds: 3,
+        totalPlayers: 3,
+        isTimerDisabled: true,
+        cards: [card1, card2, card3],
+        currentReaderId: 'p_host',
+        resolutionOrder: ['p_host', 'p_g1', 'p_g2'],
+      );
+
+      gameService.debugSetState(revealState, [p1, p2, p3], 'p_g2');
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: const MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(accessibleNavigation: true),
+              child: Phase4RevealScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final leaveButton = find.byTooltip('Leave game');
+      expect(leaveButton, findsOneWidget);
+
+      await tester.tap(leaveButton);
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Leave this game?'), findsOneWidget);
+      expect(find.text('LEAVE GAME'), findsOneWidget);
+    });
   });
 }

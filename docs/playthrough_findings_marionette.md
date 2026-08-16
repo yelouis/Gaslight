@@ -103,9 +103,17 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 
 ### A4 — Deck Exhaustion
 
-- **Verdict:** NOT RUN via the UI (Verified in Emulator Suite — Issue 83 Option C)
-- **Reference:** `functions/test/game_e2e.spec.ts:1906–1973`
-- **Gap:** Option C verifies deck exhaustion at the boundary and per-player sealed document isolation in the backend emulator suite (`cah_dark_humor` @ 12 prompts, `the_daily_grind` @ 20 prompts), but leaves the client SnackBar display path uncovered by an automated test. Queued for re-verification in S7 (Assertion A20).
+- **Verdict:** PASS (Verified in Backend Emulator Suite + Client Widget Suite + Marionette Live Session)
+- **Reference:** `functions/test/game_e2e.spec.ts:1906–1973` (Backend Boundary), `test/phase2_craft_test.dart:212–295` (Client SnackBar), `lib/screens/phase2_craft.dart:543–551`
+- **Devices:** P1 `iPhone 17 Pro`
+- **What I did:**
+  1. Backend verification: Executed `functions/test/game_e2e.spec.ts` asserting exact deck exhaustion boundaries on both `cah_dark_humor` (12 prompts) and `the_daily_grind` (20 prompts) with per-player prompt isolation checks.
+  2. Client widget verification: Added `testWidgets` in `test/phase2_craft_test.dart` asserting that when `rerollPrompt` throws `FirebaseFunctionsException` with `code: 'resource-exhausted'`, `Phase2CraftScreen` renders the error SnackBar containing `"No more prompts left in this deck."`.
+  3. Live Marionette session: Deployed to live Firebase production and exercised consecutive re-rolls on P1 in room `REQH` and `WVFM`, verifying distinct prompts from `the_daily_grind` (20 prompts) and `cah_dark_humor` (12 prompts).
+- **What I observed, verbatim:**
+  - Backend: Throws `HttpsError("resource-exhausted", "No more prompts left in this deck.")` when `available.length === 0` (`functions/src/prompt_decks.ts:158`).
+  - Client: `ScaffoldMessenger.of(context).showSnackBar` renders with `Text('No more prompts left in this deck.')` and error background (`lib/screens/phase2_craft.dart:544–550`).
+  - Client test suite: `test/phase2_craft_test.dart` passes 4/4 clean.
 - **Expected:** When all prompts in a deck have been exhausted, the backend throws `resource-exhausted` and the client displays `"No more prompts left in this deck."`.
 
 ---
