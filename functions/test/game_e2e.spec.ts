@@ -1969,6 +1969,62 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         });
       }
     });
+
+    describe('Issue 87: Host kick in the lobby and non-host permission guard', () => {
+      it('allows host to kick a lobby player and rejects non-host attempting to kick another player', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+
+        let playersSnap = await roomRef.collection('players').get();
+        expect(playersSnap.docs.length).to.equal(3);
+
+        // 1. Over-reach guard: guest1 attempts to kick guest2 (must be rejected with PERMISSION_DENIED)
+        let nonHostKickRejected = false;
+        try {
+          await callFn('handleDisconnect', guest1User.idToken, {
+            roomCode,
+            disconnectedPlayerId: 'p_g2'
+          });
+        } catch (err: any) {
+          nonHostKickRejected = true;
+          expect(err.status).to.equal('PERMISSION_DENIED');
+        }
+        expect(nonHostKickRejected).to.be.true;
+
+        // Verify guest2 is still present
+        const g2Doc = await roomRef.collection('players').doc('p_g2').get();
+        expect(g2Doc.exists).to.be.true;
+
+        // 2. Falsifying assertion: host kicks guest1 from the lobby
+        await callFn('handleDisconnect', hostUser.idToken, {
+          roomCode,
+          disconnectedPlayerId: 'p_g1'
+        });
+
+        // Assert guest1 doc no longer exists
+        const g1DocAfter = await roomRef.collection('players').doc('p_g1').get();
+        expect(g1DocAfter.exists).to.be.false;
+
+        // Assert remaining roster is intact (host and guest2)
+        playersSnap = await roomRef.collection('players').get();
+        expect(playersSnap.docs.length).to.equal(2);
+        const playerIds = playersSnap.docs.map(d => d.id);
+        expect(playerIds).to.include('p_host');
+        expect(playerIds).to.include('p_g2');
+      });
+    });
   });
 });
 

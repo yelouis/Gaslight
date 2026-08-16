@@ -57,8 +57,10 @@ class GameService extends ChangeNotifier {
   List<PlayerState> _players = [];
   String? _currentPlayerId;
   bool _roomClosed = false;
+  bool _playerRemoved = false;
 
   bool get roomClosed => _roomClosed;
+  bool get playerRemoved => _playerRemoved;
 
   GameState? get gameState => _gameState;
   List<PlayerState> get players => _players;
@@ -161,6 +163,7 @@ class GameService extends ChangeNotifier {
 
   Future<void> createRoom(String playerName, String? playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex, bool isTimerDisabled = false, bool debugEnabled = false}) async {
     _roomClosed = false;
+    _playerRemoved = false;
     await ensureAuthenticated();
     final resolvedPlayerId = playerId ?? await getOrCreateStablePlayerId();
 
@@ -186,6 +189,7 @@ class GameService extends ChangeNotifier {
 
   Future<void> joinRoom(String roomCode, String playerName, String? playerId, {int? avatarIndex}) async {
     _roomClosed = false;
+    _playerRemoved = false;
     await ensureAuthenticated();
     final resolvedPlayerId = playerId ?? await getOrCreateStablePlayerId();
 
@@ -326,6 +330,15 @@ class GameService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> kickPlayer(String playerId) async {
+    final roomCode = _gameState?.roomCode;
+    if (roomCode == null || currentPlayer?.isHost != true) return;
+    await _functions.httpsCallable('handleDisconnect').call({
+      'roomCode': roomCode,
+      'disconnectedPlayerId': playerId,
+    });
+  }
+
   void listenToRoom(String roomCode) {
     _roomSubscription?.cancel();
     _playersSubscription?.cancel();
@@ -351,6 +364,10 @@ class GameService extends ChangeNotifier {
     _playersSubscription = _db.collection('rooms').doc(roomCode).collection('players').snapshots().listen((snapshot) {
       _players = snapshot.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
       
+      if (_currentPlayerId != null && _gameState != null && _gameState!.currentPhase == GamePhase.lobby && !_players.any((p) => p.id == _currentPlayerId)) {
+        _playerRemoved = true;
+      }
+
       final now = DateTime.now().millisecondsSinceEpoch;
       
       // Clean up inactive/dead players (30 seconds threshold)

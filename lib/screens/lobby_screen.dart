@@ -117,6 +117,29 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     );
   }
 
+  void _confirmKick(BuildContext context, GameService gs, PlayerState player) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove player?'),
+        content: Text('Remove ${player.name} from this room? They can rejoin with the room code.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await gs.kickPlayer(player.id);
+            },
+            child: const Text('REMOVE'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -360,7 +383,18 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final gs = context.watch<GameService>();
-    if (gs.roomClosed) {
+    if (gs.playerRemoved) {
+      if (_handledRoomClosedKey != 'removed') {
+        _handledRoomClosedKey = 'removed';
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('The host has removed you from this room.')),
+            );
+          }
+        });
+      }
+    } else if (gs.roomClosed) {
       if (_handledRoomClosedKey != 'closed') {
         _handledRoomClosedKey = 'closed';
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -824,7 +858,36 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  PlayerAvatar(player: player, size: 48, showName: false),
+                                  Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      PlayerAvatar(player: player, size: 48, showName: false),
+                                      if (isHost && !player.isHost)
+                                        Positioned(
+                                          top: -4,
+                                          right: -4,
+                                          child: GestureDetector(
+                                            key: ValueKey('kick_${player.id}'),
+                                            onTap: () => _confirmKick(context, gs, player),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: const BoxDecoration(
+                                                color: AppColors.groundRaised,
+                                                shape: BoxShape.circle,
+                                                border: Border.fromBorderSide(
+                                                  BorderSide(color: AppColors.brass, width: 1),
+                                                ),
+                                              ),
+                                              child: const ThematicIcon(
+                                                type: ThematicIconType.depart,
+                                                size: 12,
+                                                color: AppColors.oxblood,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                   const SizedBox(height: 6),
                                   Text(
                                     player.name,
