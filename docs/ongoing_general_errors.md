@@ -19,9 +19,59 @@
 
 **Independent verification pass — August 15, 2026.** Battery re-measured, not copied: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **130/130** · functions build clean · `npm --prefix functions test` **46/46** · `./scripts/check_deploy_fresh.sh` **exit 0**. Deploy confirmed against the live project: all **14** functions `2026-08-14T17:47:40Z`–`17:48:24Z`, rules ruleset `04:24:13Z`. **Issues 77, 80, 81 and 82 hold up under independent checking** — including all three of the freshness gate's exit codes, exercised rather than assumed, and a mechanical re-check of all 16 A3 prompt quotes against source (0 missing, against 18/18 missing on August 13). **One residue is open as Issue 83** and needs a selection: A4's exhaustion count does not reconcile with its deck, and A12's worked example contradicts itself.
 
+**Manual testing, August 15, 2026** (three simulators, fresh debug install, production backend, deploy gate exit 0) found **Issue 84** — the "End Voting?" host dialog renders its warning at a measured **1.02:1** contrast, so the text is present and invisible. Needs a selection. **The three simulators found this in minutes; nine automated gates and two driven playthroughs never touched it**, because no assertion has ever looked at a dialog the host only sees when advancing early.
+
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
+
+### Issue 84: The "End Voting?" dialog renders its warning at 1.02:1 contrast — the text is there and cannot be seen
+
+**Status**: ⚠️ Confirmed and measured, August 15, 2026. Found in manual testing on iPhone 17 Pro. **Reported as "no information on what proceed to reveal will do" — the information is present and invisible**, which changes what the fix is.
+
+`phase3_vote.dart:167` already carries the warning the report asked for:
+
+```dart
+content: const Text('End voting now? Unvoted players will score nothing this card.'),
+```
+
+That copy is also **accurate** — `advancePhaseInternal`'s vote branch tallies `currentCard.votes` and a player with no entry receives no deltas and is not counted as fooled. Nothing fills a missing vote, unlike the answer path's `kMissingAnswerPlaceholder`.
+
+**The defect is that it cannot be read.** Measured with the WCAG formula against the real palette values:
+
+| Element | Colour on `parchment #F4EBD8` | Ratio | WCAG AA |
+|---|---|---|---|
+| **Content text** | `ivory #F5EEDB` | **1.02 : 1** | needs 4.5 : 1 — **fails by 4.4×** |
+| **Title** | `brass #C9A24B` | **2.02 : 1** | needs 3.0 : 1 (large) — fails |
+| `CANCEL` / `PROCEED` | `oxblood` | 9.67 : 1 | passes |
+| *(what it should be)* | `ink #2C1E16` | 13.59 : 1 | passes |
+
+Ivory and parchment differ by **fewer than 3 values per channel**. The buttons passing at 9.67:1 is why the dialog looks like a chrome-only prompt with no message.
+
+**Root cause is the theme, not the screen.** `main.dart:73–84` sets `textTheme.apply(bodyColor: AppColors.ivory, displayColor: AppColors.brass)` — correct for the dark ground — while `ColorScheme.dark(surface: AppColors.parchment, onSurface: AppColors.ink)` makes Material 3 paint every `AlertDialog` on **parchment**. The explicit `textTheme` colours win over `onSurface`, so any bare `AlertDialog` gets ground text on a paper surface.
+
+**There are exactly two `AlertDialog`s in `lib/`, and the difference between them proves the diagnosis.** `lobby_screen.dart:71` sets `backgroundColor: AppColors.groundRaised` and explicit styles (`brass` title, `AppTextStyles.bodyIvory` content) — it is readable, and its copy was quoted verbatim in the August 14 playthrough. `phase3_vote.dart:165` sets neither. **The next bare `AlertDialog` anyone adds will be invisible too.**
+
+**Option A (recommended): add a `dialogTheme` to `ThemeData` so the default is correct, and tighten the copy**
+- Give `ThemeData` a `DialogTheme` with `backgroundColor: AppColors.groundRaised`, `titleTextStyle` in `brass` and `contentTextStyle` in `ivory` — matching the lobby dialog, which is the established pattern and already an accepted equivalent. Then delete nothing: `lobby_screen.dart`'s explicit styles keep overriding harmlessly.
+- Pros: fixes the screen, the class, and every future dialog in one place. The failing element becomes ivory on `groundRaised` rather than ivory on parchment.
+- Cons: a theme-level change touches every dialog at once, so it needs a contrast assertion rather than a look-at-it check.
+
+**Option B: style the `phase3_vote.dart` dialog explicitly, exactly as `lobby_screen.dart` does**
+- Pros: smallest possible diff, zero blast radius, and it copies a pattern already shipped and verified.
+- Cons: leaves the trap armed — the third `AlertDialog` will land on parchment again, and the theme still says one thing while every call site says another.
+
+**Option C: keep the parchment surface and switch the text to `ink`**
+- Pros: 13.59:1, the best ratio of any option, and parchment-with-ink is the app's own paper metaphor.
+- Cons: dialogs would stop matching the dark chrome the rest of the game uses, and it needs per-dialog overrides anyway since the global `textTheme` would still be fighting it.
+
+Your selection: _____
+
+**Whichever is chosen, the copy should also say what "nothing" means**, since that is what prompted the report. Suggested: `End voting now? Players who have not voted will score nothing on this card, and their vote cannot be cast later.` Reword freely — but the sentence must state the consequence, not just the action.
+
+**Falsifying validation required:** a widget test that renders the dialog and asserts the measured contrast between the content text colour and the dialog's actual background is **≥ 4.5:1**, using the WCAG helper in `test/helpers/png_decoder.dart`. Run it against today's code first and observe it report **1.02:1**. **A test that only asserts the string is present would pass today** — that is exactly the bug.
+
+---
 
 ### Issue 83: A4's exhaustion count does not reconcile with its deck, and A12's observations contradict each other
 
