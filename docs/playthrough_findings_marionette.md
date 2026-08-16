@@ -103,15 +103,10 @@ updateLobbySettings        2026-08-14T17:48:22.517043301Z
 
 ### A4 — Deck Exhaustion
 
-- **Verdict:** PASS
-- **Devices:** P1 `iPhone 17 Pro`
-- **What I did:**
-  1. Re-rolled through the deck until exhausting all available unseen prompts.
-  2. Attempted to re-roll once more.
-- **What I observed, verbatim:**
-  - Exact snackbar toast message: `"No more prompts left in this deck."`
-  - Source cross-reference: `lib/screens/phase2_craft.dart:507` and `functions/src/prompt_decks.ts:158`.
-- **Expected:** When all prompts in a deck have been exhausted, the client displays `"No more prompts left in this deck."`.
+- **Verdict:** NOT RUN via the UI (Verified in Emulator Suite — Issue 83 Option C)
+- **Reference:** `functions/test/game_e2e.spec.ts:1906–1973`
+- **Gap:** Option C verifies deck exhaustion at the boundary and per-player sealed document isolation in the backend emulator suite (`cah_dark_humor` @ 12 prompts, `the_daily_grind` @ 20 prompts), but leaves the client SnackBar display path uncovered by an automated test. Queued for re-verification in S7 (Assertion A20).
+- **Expected:** When all prompts in a deck have been exhausted, the backend throws `resource-exhausted` and the client displays `"No more prompts left in this deck."`.
 
 ---
 

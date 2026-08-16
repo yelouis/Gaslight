@@ -1902,6 +1902,73 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(forgerScoreAfter).to.equal(forgerScoreBefore - 1);
       });
     });
+
+    describe('Issue 83 Option C: Deck exhaustion boundary and per-player isolation for two deck sizes', () => {
+      const testCases = [
+        { deckId: 'cah_dark_humor', totalPrompts: 12 },
+        { deckId: 'the_daily_grind', totalPrompts: 20 },
+      ];
+
+      for (const tc of testCases) {
+        it(`exhausts ${tc.deckId} (${tc.totalPrompts} prompts) at the boundary and permits second player to re-roll`, async () => {
+          const hostUser = await createAnonUser();
+          const guest1User = await createAnonUser();
+          const guest2User = await createAnonUser();
+
+          const createRes = await callFn('createRoom', hostUser.idToken, {
+            playerName: 'Alice',
+            playerId: 'p_host',
+            forgeriesPerCard: 1,
+            debugEnabled: true
+          });
+          const roomCode = createRes.roomCode;
+          const roomRef = db.collection('rooms').doc(roomCode);
+
+          await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+          await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+
+          await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: tc.deckId });
+
+          let roomSnap = await roomRef.get();
+          expect(roomSnap.data()?.currentPhase).to.equal('truth');
+
+          // Host starts with 1 prompt; other 2 players hold 2 prompts.
+          // In a 3-player match, available prompts for host = totalPrompts - 3 active cards.
+          const expectedHostRerolls = tc.totalPrompts - 3;
+          const seenByHost = new Set<string>();
+
+          const initialHostCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+          seenByHost.add(initialHostCard.promptText);
+
+          for (let i = 0; i < expectedHostRerolls; i++) {
+            await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+            roomSnap = await roomRef.get();
+            const updatedCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+            expect(seenByHost.has(updatedCard.promptText)).to.be.false;
+            seenByHost.add(updatedCard.promptText);
+          }
+
+          expect(seenByHost.size).to.equal(expectedHostRerolls + 1);
+
+          // The next re-roll must throw RESOURCE_EXHAUSTED (match on code, trap 12)
+          let threwExhaustion = false;
+          try {
+            await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+          } catch (err: any) {
+            threwExhaustion = true;
+            expect(err.status).to.equal('RESOURCE_EXHAUSTED');
+          }
+          expect(threwExhaustion).to.be.true;
+
+          // Over-reach guard: Guest 1 in the same room must still be able to re-roll successfully
+          const guest1InitialCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_g1');
+          await callFn('rerollPrompt', guest1User.idToken, { roomCode, playerId: 'p_g1' });
+          roomSnap = await roomRef.get();
+          const guest1UpdatedCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_g1');
+          expect(guest1UpdatedCard.promptText).to.not.equal(guest1InitialCard.promptText);
+        });
+      }
+    });
   });
 });
 
