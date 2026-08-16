@@ -95,6 +95,10 @@ Your selection (motif intensity): Option A
 
 ## 6. Component-by-component upgrades
 
+**Dialogs (`ThemeData.dialogTheme`) — shipped Issue 84, August 2026.** Dialogs render on **`groundRaised`** with a **`brass`** title and **`ivory`** content, set once in `main.dart` so bare `AlertDialog`s inherit it.
+
+> ⚠️ **Do not let dialogs fall back to `colorScheme.surface`.** `surface` is `parchment` — correct for cards and sheets, and fatal for dialogs, because the global `textTheme` paints body copy `ivory` and titles `brass`, both of which are chosen for the dark ground. Before the fix, `phase3_vote.dart`'s confirmation rendered **ivory on parchment at a measured 1.02:1** — the text was present, correct, and literally invisible, while its oxblood buttons sat at 9.67:1 and looked fine. The regression guard asserts a **contrast ratio**, not the presence of a string: a string test passed throughout the defect's life. Helpers: `relativeLuminance` / `contrastRatio` in `test/helpers/png_decoder.dart`; thresholds 4.5:1 content, 3.0:1 title.
+
 **Buttons (`shared_ui.dart`).** `PrimaryButton` is solid burgundy — good for "commit" actions (SUBMIT, CONFIRM VOTE). Add a **pressed "stamp" feel**: on tap, a quick scale-down + a faint wax-ring flash, echoing the vote seal. `SecondaryButton` is emerald — retheme to verdigris and reserve it strictly for host/utility actions so color = meaning.
 
 **Player tokens (`player_avatar.dart`).** Strong already. Two upgrades: (1) add a thin **engraved bevel** (inner highlight top-left, shadow bottom-right) so chips read as pressed metal/stone; (2) give the **active reader** a **brass halo / lamplight ring** so "whose card is this" is unmistakable at a glance.

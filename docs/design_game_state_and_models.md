@@ -17,6 +17,31 @@ enum GamePhase { lobby, truth, forgery, vote, reveal, gameOver }
 
 `startGame` enforces a strict floor of **3 active players** (`activePlayers.length < 3` → rejected with `failed-precondition`). This is a deliberate rule enforced as an independent guard, not a side-effect of forgery arithmetic.
 
+**The floor now applies during play as well** (Issue 85, August 2026). `handleDisconnect` ends the match when a departure drops the room below the floor:
+
+```ts
+if (phase !== "lobby" && activePlayerCount < 3) { … currentPhase: "gameOver" … }
+```
+
+Three properties of that rule, each with a test behind it:
+* **It is exempt in the lobby.** Below-3 is the normal pre-start state; `startGame` is what guards that boundary. A lobby losing a player must not end anything.
+* **It wins over the phase-specific branches**, including the older `resolutionOrder`-empty → `gameOver` transition — it is applied after them.
+* **It computes no scores.** `totalScore` already lives on the player documents and `game_over_screen.dart` reads them; the rule is a phase transition and nothing more.
+
+### Lobby readiness gate (Issue 86, August 2026)
+
+`startGame` additionally rejects with `failed-precondition` when **any non-host active player** has `lobbyReady !== true`:
+
+```ts
+const unreadyNonHosts = activePlayers.filter(p => !p.isHost && p.lobbyReady !== true);
+```
+
+* **The host is deliberately exempt, and this is a deadlock guard, not an oversight.** The host has no ready toggle — `lobby_screen.dart:909` renders it for the current player and the host's equivalent control *is* the start button. Requiring `hostPlayer.lobbyReady` would make every lobby unstartable. **The emulator suite asserts a start succeeds with the host's own `lobbyReady` false**; keep that assertion.
+* **Use `!== true`, never a falsy check.** An absent `lobbyReady` on a legacy player document must count as *not ready* (see Issue 31's `null`-is-not-absent rule).
+* **It is a separate guard from the 3-player floor.** Do not merge them; each must be able to fail on its own.
+* **`lobbyReady` is reset to `false` for every player after a start** (`index.ts:435`), so a returning lobby begins unready.
+* The client mirrors this in `startWarning` for explanation only. **The server guard is the bound** — before Issue 86 the client computed `allNonHostsReady` and spent it on a button *decoration* while both layers let an unready start through.
+
 ## 2. Card Model (`CardModel`)
 
 A card represents a prompt assigned to a player, holding their answers, vote choices, and unmask guesses.
