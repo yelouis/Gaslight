@@ -23,12 +23,93 @@
 
 - **Issue 84** — the "End Voting?" host dialog renders its warning at a measured **1.02:1** contrast, so the text is present and invisible.
 - **Issue 85** — there is no exit control anywhere in a match: no player quit, no host end-game. `handleDisconnect` already handles mid-game departure completely; nothing in the UI calls it between the lobby and Game Over. **This also corrects a claim I made in the August 15 verification pass** — A9/A10 did not test a mid-session leave flow, because none exists.
+- **Issue 86** — the lobby computes `allNonHostsReady` and uses it to *decorate* the START GAME button rather than gate it; the server never reads `lobbyReady` as a condition at all.
+- **Issue 87** — the host cannot remove a lobby player, although `handleDisconnect` already authorises exactly that.
+
+**⚠️ Issues 86 and 87 must be decided together.** Gating the start on everyone being ready without giving the host a way to remove an idle player lets one AFK guest hold a lobby hostage.
+
+**A pattern across 85, 86 and 87: the backend is ahead of the client.** `handleDisconnect` already handles mid-match departure and already authorises host-initiated removal; `lobbyReady` is already written, cleared and shipped in both models. Three of the last four reports are missing *affordances and gates*, not missing logic — which is the class of defect no server test and no source audit can see, and the reason the manual gate keeps earning its keep.
 
 **Both were found in minutes by three simulators and a human. Nine automated gates and two driven playthroughs found neither** — one is a dialog only the host sees when advancing early, the other is the *absence* of a control, which no assertion written against the app's actual screens can see.
 
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
+
+### Issue 86: Readiness decorates the START GAME button instead of gating it — and the server never checks it at all
+
+**Status**: ⚠️ Confirmed in source, August 15, 2026. Found in manual testing.
+
+The lobby has a full readiness mechanism and **uses it for styling only**. `lobby_screen.dart:452–456` computes exactly the value needed:
+
+```dart
+final nonHostPlayers = playingPlayers.where((p) => !p.isHost).toList();
+final readyNonHostsCount = nonHostPlayers.where((p) => p.lobbyReady).length;
+final totalNonHostsCount = nonHostPlayers.length;
+final allNonHostsReady = totalNonHostsCount > 0 && readyNonHostsCount == totalNonHostsCount;
+```
+
+`readyNonHostsCount` is rendered as `(2/3 Ready)` at `:787`, and `allNonHostsReady` is read at **`:871` — in a `decoration`**, to glow the button. **It is never read in the `onPressed` gate.** That gate is `startWarning != null || _isStartingGame` (`:885`), and `startWarning` (`:443–450`) covers only three things: fewer than 3 active players, forgeries ≥ player count, and deck too small. **Readiness is not among them.** So the app counts who is ready, decides whether everyone is, lights the button up about it, and then starts anyway.
+
+**The server does not check either.** `startGame` (`index.ts:229–266`) validates the caller is host, that `activePlayers.length >= 3`, and that `forgeriesPerCard` is sane. `lobbyReady` exists in the server's `PlayerState` (`index.ts:33`), is initialised `false` at `createRoom` (`:126`) and `joinRoom` (`:209`), and is reset to `false` after a start (`:426–428`) — **the server writes and clears the field and never once reads it as a condition.**
+
+This matters beyond tidiness: **a client-only bound is not a bound** (§2 and this project's standing invariant). Fixing only the button leaves a modified client able to start regardless.
+
+**⚠️ This issue and Issue 87 interact — decide them together.** Gating the start on everyone being ready, while the host has no way to remove an idle player, means **one AFK player can hold a lobby hostage indefinitely.** Option A below is only safe if Issue 87 also ships.
+
+**Option A (recommended, paired with Issue 87): gate in both places**
+- Server: `startGame` rejects with `failed-precondition` when any non-host active player has `lobbyReady !== true`. Client: add the condition to `startWarning` — e.g. `"Waiting on N of M players to ready up."` — so `allNonHostsReady` finally drives the gate it already decorates.
+- Pros: the real bound lives on the server; the client explains it. Reuses a value that is already computed and already displayed, so the diff is small.
+- Cons: requires a deploy, and is unsafe on its own — see the interaction note.
+
+**Option B: client-side gate only**
+- Pros: no deploy; ships in one edit by adding readiness to `startWarning`.
+- Cons: not a bound. This project has already recorded "a client-only bound is not a bound" as a standing lesson, and Issue 72 was reopened for exactly this shape.
+
+**Option C: leave it advisory — the glow is the signal, and the host may override**
+- Pros: defensible as designed. A host often *must* start with someone idle, and today that is the only way to do it. Zero work.
+- Cons: then the readiness toggle is decoration for players too, and the report will recur. If chosen, say so in `design_scoring_and_ui.md` so it stops reading as a bug.
+
+Your selection: _____
+
+**Falsifying validation for A or B:** a test where two of three players are ready and the third is not, asserting the start is refused — server-side by `failed-precondition` code (never the message), client-side by the button being disabled. **Over-reach guard in the same test:** with all non-hosts ready the start must still succeed, and **the host's own `lobbyReady` must not be required** — the host has no ready toggle, so requiring it would deadlock every lobby.
+
+---
+
+### Issue 87: The host cannot remove a player from the lobby
+
+**Status**: ⚠️ Confirmed in source, August 15, 2026. Found in manual testing. **The backend already authorises this; only the affordance is missing.**
+
+There is no kick control anywhere in `lobby_screen.dart`. A host faced with an idle, duplicate, or unwanted player has no recourse but to close the room and have everyone rejoin.
+
+**`handleDisconnect` already permits it.** Its authorisation check reads (`index.ts:786–789`):
+
+```ts
+if (!callerPlayer || (!callerPlayer.isHost && callerPlayer.id !== disconnectedPlayerId && !isDead)) {
+  throw new HttpsError("permission-denied", "Not authorized to trigger disconnect.");
+}
+```
+
+A host is explicitly allowed to disconnect **any** player — the condition only rejects non-hosts acting on someone else's document. And the lobby path is the simple one: with no card dealt yet, `handleDisconnect` takes the `!hasCard` branch (`index.ts:804–807`) and just deletes the player document. **No new callable is needed; this is client-only work**, exactly like Issue 85's quit affordance.
+
+**Option A (recommended): host-only kick in the lobby roster**
+- Add a control on each non-host row in the lobby player list, host-only, with a confirmation naming the player. Call `handleDisconnect` with that player's id. Show the removed player the same entry-screen return the leave flow already produces.
+- Pros: no backend change, no rules change, no deploy. Unblocks Issue 86 Option A, which is otherwise a hostage situation.
+- Cons: the kicked player currently gets no explanation — they simply land on the entry screen. Worth a distinct message, which does not exist yet.
+
+**Option B: kick available at any time, including mid-match**
+- Pros: covers the AFK-mid-game case too, and `handleDisconnect`'s phase-aware branch already handles a mid-match removal correctly (Issue 85).
+- Cons: a much bigger social and correctness surface — removing a player mid-round changes card assignments and scoring mid-flight. Wider than the report asked for.
+
+**Option C: do not build; rely on closing and recreating the room**
+- Pros: zero work; the close-room path exists and is verified.
+- Cons: punishes every other player for one problem player, and leaves Issue 86 Option A unsafe.
+
+Your selection: _____
+
+**Falsifying validation:** a host calls `handleDisconnect` for another lobby player and the player document is gone; a **non-host** attempting the same call is rejected with `permission-denied` — matched on the **code**. The second half is the over-reach guard, and it is the one that matters: it is what stops a kick control from becoming a kick-anyone control.
+
+---
 
 ### Issue 85: There is no way out of a game in progress — no player quit, no host end-game
 
