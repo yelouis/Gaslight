@@ -1,10 +1,10 @@
 # Marionette Playthrough Findings & Multi-Device Verification Report
 
-- **Date:** August 14, 2026
-- **Commit SHA:** `a428201` (Deploy freshness gate added; functions deployed from `1122f68`)
+- **Date:** August 16, 2026
+- **Commit SHA:** `54c8c62` (S5 mid-match quit and auto-end below 3 players)
 - **Build Mode:** Debug (Flutter 3.x / iOS Simulators)
 - **Backend Environment:** Live Firebase Production (`gaslight-46368`), `USE_EMULATOR: false`
-- **Deploy Verification:** `./scripts/check_deploy_fresh.sh` exited 0. All 14 Cloud Functions deployed between `2026-08-14T17:47:40Z` and `17:48:24Z`.
+- **Deploy Verification:** `./scripts/check_deploy_fresh.sh` exited 0. All 14 Cloud Functions deployed between `2026-08-16T01:38:36Z` and `01:40:20Z`.
 - **MCP Servers & Harness Configuration:**
   - `marionette-p1` -> Player 1 (Host "Alpha"): iPhone 17 Pro (`F920EEA1-5EEB-44DA-B917-102CA0BC9364`, DDS port 8181)
   - `marionette-p2` -> Player 2 (Guest "Bravo"): iPhone Air (`2F9850F3-E4CF-496C-B507-F9454CF2BBD8`, DDS port 8182)
@@ -20,20 +20,20 @@
 
 ```
 NAME                       UPDATE_TIME
-advancePhase               2026-08-14T17:48:24.211808782Z
-advanceToNextResolution    2026-08-14T17:48:23.912798305Z
-castVote                   2026-08-14T17:48:19.333760076Z
-createRoom                 2026-08-14T17:47:40.692608178Z
-debugAddBots               2026-08-14T17:48:22.805213430Z
-debugSimulateBotResponses  2026-08-14T17:48:23.086718334Z
-handleDisconnect           2026-08-14T17:48:24.881297076Z
-joinRoom                   2026-08-14T17:47:46.541284083Z
-rerollPrompt               2026-08-14T17:48:22.609390504Z
-setReady                   2026-08-14T17:48:22.112994455Z
-startGame                  2026-08-14T17:48:19.959748284Z
-submitAnswer               2026-08-14T17:48:19.969535092Z
-submitUnmaskGuess          2026-08-14T17:48:23.334413646Z
-updateLobbySettings        2026-08-14T17:48:22.517043301Z
+advancePhase               2026-08-16T01:38:36.737496462Z
+advanceToNextResolution    2026-08-16T01:39:38.553566824Z
+castVote                   2026-08-16T01:38:36.803692538Z
+createRoom                 2026-08-16T01:38:36.126970493Z
+debugAddBots               2026-08-16T01:39:40.977307322Z
+debugSimulateBotResponses  2026-08-16T01:40:20.032793326Z
+handleDisconnect           2026-08-16T01:39:38.733822046Z
+joinRoom                   2026-08-16T01:38:36.041107230Z
+rerollPrompt               2026-08-16T01:38:38.167639737Z
+setReady                   2026-08-16T01:38:36.701281606Z
+startGame                  2026-08-16T01:38:37.660285857Z
+submitAnswer               2026-08-16T01:38:36.278288093Z
+submitUnmaskGuess          2026-08-16T01:39:40.444833151Z
+updateLobbySettings        2026-08-16T01:39:39.296891474Z
 ```
 
 ---
