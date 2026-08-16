@@ -38,6 +38,29 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
   GamePhase? _lastPhase;
   int? _lastRotation;
 
+  void _confirmLeaveGame(BuildContext context, GameService gs) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave this game?'),
+        content: const Text('Your card and answers will be removed from this round. You cannot rejoin a game in progress.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('STAY'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await gs.leaveRoom();
+            },
+            child: const Text('LEAVE GAME'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _submitAnswer(GameService gs) async {
     final text = _answerController.text.trim();
     if (text.isEmpty) return;
@@ -125,6 +148,12 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     final theme = Theme.of(context);
 
     if (state == null || me == null) {
+      if (!_isNavigating) {
+        _isNavigating = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+        });
+      }
       return const Scaffold(backgroundColor: AppColors.ground, body: Center(child: LampLightingIndicator()));
     }
 
@@ -155,6 +184,14 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
+          leading: IconButton(
+            icon: ThematicIcon(
+              type: ThematicIconType.depart,
+              color: theme.colorScheme.secondary,
+            ),
+            onPressed: () => _confirmLeaveGame(context, gs),
+            tooltip: 'Leave game',
+          ),
           title: Column(
             children: [
               TitleSettle(

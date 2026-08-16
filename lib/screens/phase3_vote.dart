@@ -74,6 +74,29 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
   }
 
 
+  void _confirmLeaveGame(BuildContext context, GameService gs) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave this game?'),
+        content: const Text('Your card and answers will be removed from this round. You cannot rejoin a game in progress.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('STAY'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await gs.leaveRoom();
+            },
+            child: const Text('LEAVE GAME'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final gs = context.watch<GameService>();
@@ -82,6 +105,12 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
     final theme = Theme.of(context);
 
     if (state == null || me == null) {
+      if (!_isNavigating) {
+        _isNavigating = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+        });
+      }
       return const Scaffold(backgroundColor: AppColors.ground, body: Center(child: LampLightingIndicator()));
     }
 
@@ -111,6 +140,14 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
+          leading: IconButton(
+            icon: ThematicIcon(
+              type: ThematicIconType.depart,
+              color: theme.colorScheme.secondary,
+            ),
+            onPressed: () => _confirmLeaveGame(context, gs),
+            tooltip: 'Leave game',
+          ),
           title: Column(
             children: [
               TitleSettle(

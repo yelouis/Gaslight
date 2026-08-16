@@ -2126,6 +2126,119 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(roomSnap.data()?.currentPhase).to.equal('truth');
       });
     });
+
+    describe('Issue 85: Quit game in progress and auto-end below 3 players', () => {
+      it('flips match to gameOver and preserves remaining scores when 3-player match drops to 2', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true, totalScore: 5 });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true, totalScore: 7 });
+        await roomRef.collection('players').doc('p_host').update({ totalScore: 10 });
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+
+        // 1. Falsifying assertion: In a 3-player match, guest2 leaves mid-match
+        await callFn('handleDisconnect', guest2User.idToken, {
+          roomCode,
+          disconnectedPlayerId: 'p_g2'
+        });
+
+        // Assert room flips to gameOver
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('gameOver');
+        expect(roomSnap.data()?.unmaskDeadline).to.be.null;
+        expect(roomSnap.data()?.endTime).to.be.null;
+
+        // Assert remaining players' totalScore values are preserved
+        const hostDoc = await roomRef.collection('players').doc('p_host').get();
+        const g1Doc = await roomRef.collection('players').doc('p_g1').get();
+        expect(hostDoc.data()?.totalScore).to.equal(10);
+        expect(g1Doc.data()?.totalScore).to.equal(5);
+      });
+
+      it('over-reach guard: 4-player match losing 1 player stays in active phase and decrements totalPlayers to 3', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+        const guest3User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await callFn('joinRoom', guest3User.idToken, { roomCode, playerName: 'Dave', playerId: 'p_g3' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g3').update({ lobbyReady: true });
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+
+        // guest3 leaves 4-player match
+        await callFn('handleDisconnect', guest3User.idToken, {
+          roomCode,
+          disconnectedPlayerId: 'p_g3'
+        });
+
+        // Match stays in truth phase, totalPlayers becomes 3
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+        expect(roomSnap.data()?.totalPlayers).to.equal(3);
+      });
+
+      it('over-reach guard: 3-player lobby losing 1 player stays in lobby phase and does not flip to gameOver', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('lobby');
+
+        // guest2 leaves lobby
+        await callFn('handleDisconnect', guest2User.idToken, {
+          roomCode,
+          disconnectedPlayerId: 'p_g2'
+        });
+
+        // Phase remains lobby
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('lobby');
+      });
+    });
   });
 });
 

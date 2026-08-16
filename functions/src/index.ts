@@ -906,6 +906,15 @@ export const handleDisconnect = onCall(async (request) => {
       }
     }
 
+    if (phase !== "lobby" && activePlayerCount < 3) {
+      nextState = {
+        ...nextState,
+        currentPhase: "gameOver",
+        unmaskDeadline: null,
+        endTime: null,
+      };
+    }
+
     transaction.update(roomRef, nextState);
 
     // Host transfer logic if the host was the one who disconnected
