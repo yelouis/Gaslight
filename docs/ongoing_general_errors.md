@@ -16,13 +16,51 @@
 - **Issue 85 (Mid-game departure & auto-end below 3 players)**: Option A + auto-end implemented. In-game leave button across craft, vote, reveal AppBars; `handleDisconnect` transitions to `gameOver` when in-progress match drops below 3 players with scores intact. Verified in `game_e2e.spec.ts`, `test/in_game_leave_test.dart`, and Marionette playthrough A18–A20.
 - **Issue 86 (Readiness gate for startGame)**: Option A implemented. Server rejects unready starts with `failed-precondition`; client disables button with `"Waiting on N of M players to ready up."`. Verified in `game_e2e.spec.ts`, `test/lobby_readiness_gate_test.dart`, and Marionette playthrough A17.
 - **Issue 87 (Host kick control in lobby)**: Option A implemented. Host-only remove control on non-host avatars with confirmation dialog and evicted player SnackBar. Verified in `game_e2e.spec.ts`, `test/lobby_host_kick_test.dart`, and Marionette playthrough A16.
+**⚠️ Independently re-verified August 16, 2026 — the tests hold up; one verdict line does not.** Battery: `flutter analyze lib test` **0 errors** (222) · `flutter test` **141/141** · functions build clean · `npm --prefix functions test` **53/53** · `./scripts/check_deploy_fresh.sh` **exit 0**. T0's stale reference is gone (`grep -c "Assertion A20"` → **0**). The `isTimerDisabled` cases carry **both** required assertions — leave button present *and* `AutoAdvanceTimer` absent — on all three phase screens. The new SnackBar test genuinely guards the `resource-exhausted` → string mapping, which is the branch that degrades silently. **But A4's verdict cites a "Marionette Live Session" and its observation section records no device data, and the T1 falsification was never performed. Both are tracked as Issue 89**, which needs a selection.
+
 - **Issue 88 (Deck exhaustion SnackBar verification & timer-disabled leave controls)**: Option B implemented. Added `isTimerDisabled: true` widget tests for `Phase2CraftScreen`, `Phase3VoteScreen`, and `Phase4RevealScreen` in `test/in_game_leave_test.dart`; added client-side SnackBar exhaustion test in `test/phase2_craft_test.dart`; verified re-roll sequence in live Marionette playthrough; reconciled and repointed assertion A4 in `docs/playthrough_findings_marionette.md`.
 
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-*(No open issues at this time. All items 1–88 resolved.)*
+### Issue 89: A4 claims a live session and records no live observation
+
+**Status**: ⚠️ Confirmed August 16, 2026. **The code and the tests are good — this is about one PASS verdict that its own block does not support**, plus one skipped Definition-of-Done step.
+
+**89.1 — A4's evidence does not match A4's verdict.** The block now reads **`PASS (Verified in Backend Emulator Suite + Client Widget Suite + Marionette Live Session)`** and describes step 3 as *"Live Marionette session: … exercised consecutive re-rolls on P1 in room `REQH` and `WVFM`, verifying distinct prompts from `the_daily_grind` (20 prompts) and `cah_dark_humor` (12 prompts)."*
+
+Its **"What I observed, verbatim"** section contains three bullets: a backend source citation, a client source citation, and `test/phase2_craft_test.dart` passing 4/4. **Not one of them is an observation from a device.** Measured against the block itself:
+
+| Required by the T2 spec | Present |
+|---|---|
+| Ordered list of distinct prompts | **0 entries** |
+| `grep -cF` traceability per prompt | **0 mentions** |
+| The reconciling arithmetic (12 − 1 = 11 re-rolls, message on attempt 12) | absent |
+| The exhaustion string observed **on device**, at a stated attempt index | absent |
+
+This is the Issue 82 pattern arriving one level up — **milder, because nothing is fabricated.** Two rooms are named, which reads like a real session happened; what is missing is everything that session was supposed to produce. **A verdict citing a live session, in a block containing no live data, is exactly the shape that took three cycles to detect last time.**
+
+**What genuinely did land, and is better than the spec asked for:** `test/phase2_craft_test.dart:213` stubs `rerollPrompt` to throw `FirebaseFunctionsException(code: 'resource-exhausted')` and asserts the SnackBar renders `"No more prompts left in this deck."`. That guards the real failure mode — `phase2_craft.dart:543` falls through to the generic `'Something went wrong. Try again.'` for any other error, so a broken code match degrades silently rather than crashing. **A durable regression guard is worth more than a one-off manual observation**, and this one did not exist before. The gap is only that it does not prove the deployed backend reaches that branch at the real deck boundary.
+
+**89.2 — the T1 falsification was not recorded.** The spec required moving the leave `IconButton` from `leading` to `actions`, observing the new timer-disabled case **fail** while the timers-enabled case still **passed**, reverting, and recording both outcomes in the commit body. `f0d878b`'s message is a single line with no body; `ec3a976`'s body lists changes only. **No commit records the observation.** The tests themselves are correct — `isTimerDisabled: true`, leave button present, `AutoAdvanceTimer` absent, `accessibleNavigation: true` — so this is a missing proof-of-work, not a suspected defect. But "a guard that has never failed has not been tested" is a standing rule here, and it was skipped.
+
+**Option A (recommended): downgrade A4's verdict to what the evidence supports; re-run the T1 falsification**
+- Rewrite A4 as **`PASS (backend boundary + client widget mapping) · NOT RUN on device`**, delete the unsupported "Marionette Live Session" clause, and state plainly that the end-to-end path from a deployed `resource-exhausted` to the rendered SnackBar has not been observed. Separately, perform the T1 falsification and record both outcomes.
+- Pros: the record becomes exactly true at zero risk, and both halves are cheap — the falsification is two edits and one test run, no simulator. It also keeps the genuinely valuable widget test front and centre.
+- Cons: leaves the device path unobserved, which was the whole point of Option B on Issue 88.
+
+**Option B: run the device session that A4 claims, and record it properly**
+- Pros: makes the verdict honest by making it true. Needs three devices (re-roll requires the truth phase, which requires 3 players and every non-host ready), with bots permitted for the two filler seats.
+- Cons: a rebuild and a full simulator session for one string, on a path now covered at both the backend boundary and the client mapping. This is the third cycle spent on this single assertion.
+
+**Option C: accept the widget test as sufficient and retire the device assertion**
+- Pros: defensible on the merits. The backend proves the throw at two deck sizes, the widget test proves the code→string mapping, and the only untested seam is Firebase's own exception marshalling. Removes an assertion that keeps consuming cycles.
+- Cons: nothing then exercises the real client against the real backend at the boundary, and the project's own history is that end-to-end gaps hide exactly there.
+
+Your selection: _____
+
+**Regardless of the option chosen:** a verdict line must not name a verification method the block records no data for. If a session ran and its output was lost, that is **NOT RUN**, not PASS with a citation.
 
 ---
 
@@ -383,6 +421,10 @@ Clients read Firestore streams and write nothing to rooms; `firestore.rules` den
 
 ### 2.8 Widget tests on animated screens hang without `accessibleNavigation: true`
 Nine widgets in the lobby tree drive `AnimationController.repeat()`, so the frame scheduler never goes idle and a widget test hangs — emitting **no assertion output at all**, just `did not complete` after minutes, which reads like a logic bug in the code under test. Wrap the screen under test in `MediaQuery(data: const MediaQueryData(accessibleNavigation: true), …)`: `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`), so the flag puts every animation on its static path. Separately, **never `await` a fake callable directly inside `testWidgets`** — those bodies run under `FakeAsync`, where no `pump()` can advance time while an await is outstanding, so `await gameService.createRoom(...)` deadlocks; wrap it in `tester.runAsync`. **`pumpAndSettle()` is not the culprit and is not banned** — it works once the flag is set. It was wrongly blamed and wrongly prohibited on August 9, 2026, costing a cycle.
+
+### 2.14 A verdict line can name a method the block has no data for
+
+A4 now reads `PASS (… + Marionette Live Session)` and names two room codes. Its observation section contains two source citations and a test pass count — **no prompts, no counts, no device output at all.** Nothing is fabricated; the claim is simply larger than the evidence, and the specificity of the room codes makes it read as verified. **Check the verdict line against the observation section as two separate things**, and treat a named method with no corresponding data as NOT RUN. See Issue 89.
 
 ### 2.13 A forward reference survives a renumber; the promise it made does not
 
