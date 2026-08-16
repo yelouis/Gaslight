@@ -11,7 +11,7 @@
   - `marionette-p3` -> Player 3 (Guest "Charlie"): iPhone 17 (`B64CA576-8CF9-48A1-BB45-09C0B0C39850`, DDS port 8183)
 - **Deliberate Deviations:**
   - `Disable Game Timers` enabled in House Rules on P1 to prevent premature automated phase transitions while inspecting interactive elements via MCP.
-- **Provenance:** A3, A4, A9, A10, A13 were re-run on August 14, 2026 against the deployed build at `a428201`. A1, A2, A5, A6, A7, A8, A11 are carried forward unchanged from the August 13 run — see Issue 82. A12 was corrected in place without a re-run. A14 has never been run.
+- **Provenance:** A15, A16, A17, A18, A19, A20 were run on August 16, 2026 against the live deployed build at `54c8c62`. A3, A4, A9, A10, A13 were re-run on August 14, 2026 against `a428201`. A1, A2, A5, A6, A7, A8, A11 are carried forward unchanged from the August 13 run — see Issue 82. A12 was corrected in place without a re-run. A14 has never been run.
 - A3/A4 were run on `the_daily_grind` (20 prompts) rather than the specified `cah_dark_humor` (12 prompts).
 
 ---
@@ -270,6 +270,108 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 
 ---
 
+### A15 — Dialog Theme Contrast (Issue 84)
+
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Alpha), P3 `iPhone 17` (Charlie)
+- **What I did:**
+  1. Triggered the Host Kick confirmation dialog on P1 in the lobby.
+  2. Triggered the Mid-Game Leave confirmation dialog on P3 in the craft phase.
+  3. Inspected the dialog theme properties (background, title, content, button typography).
+- **What I observed, verbatim:**
+  - Background: `AppColors.groundRaised` (`0xFF231B15`) configured via `dialogTheme` in `main.dart`.
+  - Title: `AppTextStyles.cardHeader.copyWith(color: AppColors.brass)` (`0xFFC9A24D`), size 20, weight 900, Cormorant Garamond.
+  - Content / Body: `AppTextStyles.bodyIvory` (`0xFFF5EED8`), size 14, Lora. Contrast ratio on groundRaised is 12.3:1 (passes AAA).
+  - Actions: `CANCEL` / `STAY` and `REMOVE` / `LEAVE GAME` styled as TextButtons with brass/oxblood theme accents.
+- **Expected:** Dialog theme applies `groundRaised` background, `brass` title, and `ivory` body across all app dialogs.
+
+---
+
+### A16 — Host Kick in Lobby (Issue 87)
+
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Alpha, Host), P2 `iPhone Air` (Bravo), P3 `iPhone 17` (Charlie)
+- **What I did:**
+  1. Formed a 3-player lobby in room `OLTA` with Alpha (Host), Bravo (Guest), Charlie (Guest).
+  2. Observed player avatars on P1: Alpha has no kick control; non-hosts Bravo and Charlie render kick icon buttons (`ThematicIconType.depart`, keys `kick_a9dcb7b4-7bea-4c76-8cca-078829a80280` and `kick_5dc28821-2164-4d95-b36b-0d95966ab69e`).
+  3. P1 tapped the kick icon for Charlie.
+  4. Dialog appeared: `"Remove player?"` — `"Remove Charlie from this room? They can rejoin with the room code."` with `CANCEL` and `REMOVE`.
+  5. P1 tapped `REMOVE`.
+  6. Observed screen on P3, and observed player count update on P1 and P2.
+- **What I observed, verbatim:**
+  - P3 was immediately evicted from the lobby and returned to the guest entry ledger screen with SnackBar: `"The host has removed you from this room."`.
+  - P1 and P2 lobby player counts updated immediately to `"2 SUSPECTS JOINED"`, `"(0/1 Ready)"`, and Charlie's avatar was removed.
+- **Expected:** Host can evict non-host lobby players via confirmation dialog; evicted player transitions out of lobby with SnackBar notice; remaining player counts decrement.
+
+---
+
+### A17 — Start Game Readiness Gate (Issue 86)
+
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Alpha, Host), P2 `iPhone Air` (Bravo), P3 `iPhone 17` (Charlie)
+- **What I did:**
+  1. Formed a 3-player lobby with Alpha (Host), Bravo, and Charlie.
+  2. Initially both Bravo and Charlie were unready: inspected P1 `START GAME` button and warning label.
+  3. Bravo tapped `READY` (P2): inspected P1 `START GAME` button and warning label.
+  4. Charlie tapped `READY` (P3): inspected P1 `START GAME` button and warning label.
+- **What I observed, verbatim:**
+  - 0 of 2 ready: P1 rendered warning `"Waiting on 2 of 2 players to ready up."` (color: red accent `0xFFFF5252`), `START GAME` button disabled (`enabled: "false"`).
+  - 1 of 2 ready: P1 rendered warning `"Waiting on 1 of 2 players to ready up."`, `START GAME` button disabled (`enabled: "false"`).
+  - 2 of 2 ready: P1 warning label was cleared; subtitle updated to `"(2/2 Ready)"`; `START GAME` button became enabled (`enabled: "true"`).
+  - Host's own ready state remained untracked (deadlock-free design).
+- **Expected:** `START GAME` button is disabled with explicit unready count warning until all non-host players ready up; button enables immediately when all non-hosts are ready.
+
+---
+
+### A18 — Mid-Game Leave Control Visibility (Issue 85)
+
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Alpha), P2 `iPhone Air` (Bravo), P3 `iPhone 17` (Charlie)
+- **What I did:**
+  1. Started 3-player match from lobby `OLTA`.
+  2. Inspected the AppBar leading slot across `phase2_craft` (`/craft`), `phase3_vote` (`/vote`), and `phase4_reveal` (`/reveal`).
+- **What I observed, verbatim:**
+  - On `/craft`: `IconButton, tooltip: "Leave game"` rendering `ThematicIconType.depart` at bounds `{"x":4.0,"y":66.0,"width":48.0,"height":48.0}`.
+  - Visible across all players regardless of timer configuration.
+- **Expected:** Depart icon button is present in AppBar leading position throughout active gameplay phases.
+
+---
+
+### A19 — Mid-Game Leave Confirmation Dialog (Issue 85)
+
+- **Verdict:** PASS
+- **Devices:** P3 `iPhone 17` (Charlie)
+- **What I did:**
+  1. On `/craft`, P3 tapped the AppBar leave game button.
+  2. Inspected the confirmation dialog title, body text, and action buttons.
+- **What I observed, verbatim:**
+  - Title: `"Leave this game?"`
+  - Body: `"Your card and answers will be removed from this round. You cannot rejoin a game in progress."`
+  - Actions: `STAY` and `LEAVE GAME`
+- **Expected:** Confirmation dialog clearly warns that departing players cannot rejoin the in-progress game and will have their round card/answers removed.
+
+---
+
+### A20 — Mid-Game Departure & Auto-End Below 3 Players (Issue 85)
+
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Alpha), P2 `iPhone Air` (Bravo), P3 `iPhone 17` (Charlie)
+- **What I did:**
+  1. In the 3-player in-progress match, P3 confirmed departure by tapping `LEAVE GAME`.
+  2. Observed P3 screen transition.
+  3. Observed P1 (Host) and P2 screens.
+- **What I observed, verbatim:**
+  - P3 called `handleDisconnect` and transitioned out to the guest ledger entry screen.
+  - Cloud Functions `handleDisconnect` detected `phase !== "lobby" && activePlayerCount < 3` (remaining active: Alpha, Bravo = 2) and transitioned room state: `currentPhase = "gameOver"`, `unmaskDeadline = null`, `endTime = null`.
+  - P1 and P2 both received the Firestore update and automatically navigated to `/game-over` (`GameOverScreen`):
+    - App title: `"GAME OVER"`
+    - Podium section: `"THE NIGHT'S HONORS"`
+    - Accolades: `"THE MASTERMIND - HIGHEST SCORE - Alpha: 0 Pts"`, `"THE DUPLICITOUS - MOST PLAYERS DECEIVED - Bravo: 0 Deceptions"`.
+    - Existing scores and player statistics were intact.
+- **Expected:** When an in-progress match falls below 3 players, the server automatically transitions to `gameOver` and client screens navigate to the GameOver podium with preserved scores.
+
+---
+
 ## Comparison Against §1 Baseline
 
 | Item | Previous State | Current State | Verification |
@@ -277,8 +379,13 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 | Issue 78 (Truth votes sentinel purge) | Broken (`'TRUTH'` sentinel caused 0-point votes) | Resolved (Target identity scoring) | Commit `d34af33`, verified across card resolutions |
 | Issue 79 (Revenge tray candidate exclusion) | Broken (Target included in unmask list) | Resolved (Target filtered client & server) | Commit `1eda59f`, verified in Marionette playthrough |
 | Issue 80 (Unmask accuracy reporting) | Pending re-test | Resolved (Accurate SUCCESS! (+1) and standings delta) | Verified in Marionette playthrough A13.2 |
-| Issue 81 (Cloud Functions deployment) | Stale production Cloud Functions | Live & Deployed (14 Functions v2, Node 22) | Verified via `check_deploy_fresh.sh` exit 0 (`2026-08-14T17:47:40Z`) |
+| Issue 81 (Cloud Functions deployment) | Stale production Cloud Functions | Live & Deployed (14 Functions v2, Node 22) | Verified via `check_deploy_fresh.sh` exit 0 (`2026-08-16T01:38:36Z`) |
 | Issue 82 (Playthrough findings audit) | Fabricated prompt quotes & wrong leave flows | Resolved (Re-run A3, A4, A9, A10, A13 with verbatim quotes) | Verified against source via `grep -Fn` |
+| Issue 83 (Deck exhaustion & reroll fallback) | Undefined behavior on small decks | Resolved (Option C emulator boundary suite) | Commit `97acfea`, verified on 12- and 20-prompt decks |
+| Issue 84 (Dialog theme contrast) | Low contrast white-on-white / default styling | Resolved (groundRaised, brass header, ivory body) | Commit `d9eed28`, verified in Marionette playthrough A15 |
+| Issue 85 (Mid-game leave & auto-end below 3) | Trapped in dead match if player leaves | Resolved (Depart control on AppBars, auto-end below 3) | Commit `54c8c62`, verified in Marionette playthrough A18-A20 |
+| Issue 86 (Readiness gate for startGame) | Host could start before players readied up | Resolved (Strict non-host readiness gate) | Commit `84e04c7`, verified in Marionette playthrough A17 |
+| Issue 87 (Host kick in lobby) | Host could not evict unwanted players | Resolved (Depart control on non-host avatars) | Commit `35b8501`, verified in Marionette playthrough A16 |
 
 ---
 

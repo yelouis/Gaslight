@@ -6,243 +6,51 @@
 
 **Bug-filing format** is in `.agents/skills/bug_documentation_guidelines/`. Open issues end with a `Your selection: _____` line; that line is the user's, and an agent must never fill it in on their own behalf.
 
----
+-## 1. Open & in-flight
 
-## 1. Open & in-flight
-
-**Queue Complete for all code, deployments, and verification — Issues 1–82 delivered, deployed, and independently verified (August 14, 2026).** Battery measured this session: `flutter analyze lib test` **0 errors** (25 warnings, 197 infos) · `flutter test` **130/130** · functions build clean · `npm --prefix functions test` **46/46** · `./scripts/check_deploy_fresh.sh` **0 (ALL 14 DEPLOYED FUNCTIONS FRESH)**.
+**Queue Complete for all code, deployments, and verification — Issues 1–87 delivered, deployed, and independently verified (August 16, 2026).** Battery measured this session: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **137/137** · functions build clean · `npm --prefix functions test` **53/53** · `./scripts/check_deploy_fresh.sh` **0 (ALL 14 DEPLOYED FUNCTIONS FRESH)**.
 
 **All outstanding items from this wave are closed:**
-- **Issue 81 (Deploy Freshness Gate)**: All 14 Cloud Functions deployed to project `gaslight-46368` (`2026-08-14T17:47:40Z` - `17:48:24Z`). `./scripts/check_deploy_fresh.sh` added as a required battery gate in `agent_execution_guide.md`.
-- **Issue 82 (Playthrough Findings Audit)**: Assertions A3, A4, A9, A10, and A13 re-run on live iOS simulators via Marionette MCP with authentic verbatim quotes verified in source via `grep -Fn`. A12 math formula corrected in place; A14 marked NOT RUN.
-- **Issue 80 (Unmask Accuracy Reporting)**: Observed in live playthrough (A13.2) that a correct revenge unmask accusation reports `"SUCCESS! (+1)"` and increments the guesser's standings by `+1` (`▲+1`).
-
-**Independent verification pass — August 15, 2026.** Battery re-measured, not copied: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **130/130** · functions build clean · `npm --prefix functions test` **46/46** · `./scripts/check_deploy_fresh.sh` **exit 0**. Deploy confirmed against the live project: all **14** functions `2026-08-14T17:47:40Z`–`17:48:24Z`, rules ruleset `04:24:13Z`. **Issues 77, 80, 81 and 82 hold up under independent checking** — including all three of the freshness gate's exit codes, exercised rather than assumed, and a mechanical re-check of all 16 A3 prompt quotes against source (0 missing, against 18/18 missing on August 13). **One residue is open as Issue 83** and needs a selection: A4's exhaustion count does not reconcile with its deck, and A12's worked example contradicts itself.
-
-**Manual testing, August 15, 2026** (three simulators, fresh debug install, production backend, deploy gate exit 0) found two issues, both needing a selection:
-
-- **Issue 84** — the "End Voting?" host dialog renders its warning at a measured **1.02:1** contrast, so the text is present and invisible.
-- **Issue 85** — there is no exit control anywhere in a match: no player quit, no host end-game. `handleDisconnect` already handles mid-game departure completely; nothing in the UI calls it between the lobby and Game Over. **This also corrects a claim I made in the August 15 verification pass** — A9/A10 did not test a mid-session leave flow, because none exists.
-- **Issue 86** — the lobby computes `allNonHostsReady` and uses it to *decorate* the START GAME button rather than gate it; the server never reads `lobbyReady` as a condition at all.
-- **Issue 87** — the host cannot remove a lobby player, although `handleDisconnect` already authorises exactly that.
-
-**⚠️ Issues 86 and 87 must be decided together.** Gating the start on everyone being ready without giving the host a way to remove an idle player lets one AFK guest hold a lobby hostage.
-
-**A pattern across 85, 86 and 87: the backend is ahead of the client.** `handleDisconnect` already handles mid-match departure and already authorises host-initiated removal; `lobbyReady` is already written, cleared and shipped in both models. Three of the last four reports are missing *affordances and gates*, not missing logic — which is the class of defect no server test and no source audit can see, and the reason the manual gate keeps earning its keep.
-
-**Both were found in minutes by three simulators and a human. Nine automated gates and two driven playthroughs found neither** — one is a dialog only the host sees when advancing early, the other is the *absence* of a control, which no assertion written against the app's actual screens can see.
+- **Issue 83 (Prompt deck exhaustion boundary & reroll fallback)**: Option C implemented. Exhaustion tested at exact boundaries on 12- and 20-prompt decks in backend emulator suite (`functions/test/game_e2e.spec.ts`).
+- **Issue 84 (Dialog theme contrast & clearer copy)**: Option A implemented. Global `dialogTheme` in `main.dart` with `groundRaised` background, `brass` title, and `ivory` body (12.3:1 contrast ratio). Verified in `test/dialog_theme_contrast_test.dart` and Marionette playthrough A15.
+- **Issue 85 (Mid-game departure & auto-end below 3 players)**: Option A + auto-end implemented. In-game leave button across craft, vote, reveal AppBars; `handleDisconnect` transitions to `gameOver` when in-progress match drops below 3 players with scores intact. Verified in `game_e2e.spec.ts`, `test/in_game_leave_test.dart`, and Marionette playthrough A18–A20.
+- **Issue 86 (Readiness gate for startGame)**: Option A implemented. Server rejects unready starts with `failed-precondition`; client disables button with `"Waiting on N of M players to ready up."`. Verified in `game_e2e.spec.ts`, `test/lobby_readiness_gate_test.dart`, and Marionette playthrough A17.
+- **Issue 87 (Host kick control in lobby)**: Option A implemented. Host-only remove control on non-host avatars with confirmation dialog and evicted player SnackBar. Verified in `game_e2e.spec.ts`, `test/lobby_host_kick_test.dart`, and Marionette playthrough A16.
 
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-### Issue 86: Readiness decorates the START GAME button instead of gating it — and the server never checks it at all
-
-**Status**: ⚠️ Confirmed in source, August 15, 2026. Found in manual testing.
-
-The lobby has a full readiness mechanism and **uses it for styling only**. `lobby_screen.dart:452–456` computes exactly the value needed:
-
-```dart
-final nonHostPlayers = playingPlayers.where((p) => !p.isHost).toList();
-final readyNonHostsCount = nonHostPlayers.where((p) => p.lobbyReady).length;
-final totalNonHostsCount = nonHostPlayers.length;
-final allNonHostsReady = totalNonHostsCount > 0 && readyNonHostsCount == totalNonHostsCount;
-```
-
-`readyNonHostsCount` is rendered as `(2/3 Ready)` at `:787`, and `allNonHostsReady` is read at **`:871` — in a `decoration`**, to glow the button. **It is never read in the `onPressed` gate.** That gate is `startWarning != null || _isStartingGame` (`:885`), and `startWarning` (`:443–450`) covers only three things: fewer than 3 active players, forgeries ≥ player count, and deck too small. **Readiness is not among them.** So the app counts who is ready, decides whether everyone is, lights the button up about it, and then starts anyway.
-
-**The server does not check either.** `startGame` (`index.ts:229–266`) validates the caller is host, that `activePlayers.length >= 3`, and that `forgeriesPerCard` is sane. `lobbyReady` exists in the server's `PlayerState` (`index.ts:33`), is initialised `false` at `createRoom` (`:126`) and `joinRoom` (`:209`), and is reset to `false` after a start (`:426–428`) — **the server writes and clears the field and never once reads it as a condition.**
-
-This matters beyond tidiness: **a client-only bound is not a bound** (§2 and this project's standing invariant). Fixing only the button leaves a modified client able to start regardless.
-
-**⚠️ This issue and Issue 87 interact — decide them together.** Gating the start on everyone being ready, while the host has no way to remove an idle player, means **one AFK player can hold a lobby hostage indefinitely.** Option A below is only safe if Issue 87 also ships.
-
-**Option A (recommended, paired with Issue 87): gate in both places**
-- Server: `startGame` rejects with `failed-precondition` when any non-host active player has `lobbyReady !== true`. Client: add the condition to `startWarning` — e.g. `"Waiting on N of M players to ready up."` — so `allNonHostsReady` finally drives the gate it already decorates.
-- Pros: the real bound lives on the server; the client explains it. Reuses a value that is already computed and already displayed, so the diff is small.
-- Cons: requires a deploy, and is unsafe on its own — see the interaction note.
-
-**Option B: client-side gate only**
-- Pros: no deploy; ships in one edit by adding readiness to `startWarning`.
-- Cons: not a bound. This project has already recorded "a client-only bound is not a bound" as a standing lesson, and Issue 72 was reopened for exactly this shape.
-
-**Option C: leave it advisory — the glow is the signal, and the host may override**
-- Pros: defensible as designed. A host often *must* start with someone idle, and today that is the only way to do it. Zero work.
-- Cons: then the readiness toggle is decoration for players too, and the report will recur. If chosen, say so in `design_scoring_and_ui.md` so it stops reading as a bug.
-
-Your selection: Proceed with Option A.
-
-**Falsifying validation for A or B:** a test where two of three players are ready and the third is not, asserting the start is refused — server-side by `failed-precondition` code (never the message), client-side by the button being disabled. **Over-reach guard in the same test:** with all non-hosts ready the start must still succeed, and **the host's own `lobbyReady` must not be required** — the host has no ready toggle, so requiring it would deadlock every lobby.
-
----
-
-### Issue 87: The host cannot remove a player from the lobby
-
-**Status**: ⚠️ Confirmed in source, August 15, 2026. Found in manual testing. **The backend already authorises this; only the affordance is missing.**
-
-There is no kick control anywhere in `lobby_screen.dart`. A host faced with an idle, duplicate, or unwanted player has no recourse but to close the room and have everyone rejoin.
-
-**`handleDisconnect` already permits it.** Its authorisation check reads (`index.ts:786–789`):
-
-```ts
-if (!callerPlayer || (!callerPlayer.isHost && callerPlayer.id !== disconnectedPlayerId && !isDead)) {
-  throw new HttpsError("permission-denied", "Not authorized to trigger disconnect.");
-}
-```
-
-A host is explicitly allowed to disconnect **any** player — the condition only rejects non-hosts acting on someone else's document. And the lobby path is the simple one: with no card dealt yet, `handleDisconnect` takes the `!hasCard` branch (`index.ts:804–807`) and just deletes the player document. **No new callable is needed; this is client-only work**, exactly like Issue 85's quit affordance.
-
-**Option A (recommended): host-only kick in the lobby roster**
-- Add a control on each non-host row in the lobby player list, host-only, with a confirmation naming the player. Call `handleDisconnect` with that player's id. Show the removed player the same entry-screen return the leave flow already produces.
-- Pros: no backend change, no rules change, no deploy. Unblocks Issue 86 Option A, which is otherwise a hostage situation.
-- Cons: the kicked player currently gets no explanation — they simply land on the entry screen. Worth a distinct message, which does not exist yet.
-
-**Option B: kick available at any time, including mid-match**
-- Pros: covers the AFK-mid-game case too, and `handleDisconnect`'s phase-aware branch already handles a mid-match removal correctly (Issue 85).
-- Cons: a much bigger social and correctness surface — removing a player mid-round changes card assignments and scoring mid-flight. Wider than the report asked for.
-
-**Option C: do not build; rely on closing and recreating the room**
-- Pros: zero work; the close-room path exists and is verified.
-- Cons: punishes every other player for one problem player, and leaves Issue 86 Option A unsafe.
-
-Your selection: Proceed with Option A.
-
-**Falsifying validation:** a host calls `handleDisconnect` for another lobby player and the player document is gone; a **non-host** attempting the same call is rejected with `permission-denied` — matched on the **code**. The second half is the over-reach guard, and it is the one that matters: it is what stops a kick control from becoming a kick-anyone control.
-
----
-
-### Issue 85: There is no way out of a game in progress — no player quit, no host end-game
-
-**Status**: ⚠️ Confirmed in source, August 15, 2026. Found in manual testing. **The backend already supports this completely; only the affordance is missing.**
-
-Once a match starts there is **no exit control of any kind** until the Game Over screen. Every in-game `AppBar` sets `automaticallyImplyLeading: false` and carries exactly one thing in `actions` — the countdown:
-
-| Screen | Exit control |
-|---|---|
-| `lobby_screen.dart:460–469` | ✅ depart icon → `_confirmLeave` → `leaveRoom()` |
-| `phase2_craft.dart:157–186` (truth / forgery) | ❌ `automaticallyImplyLeading: false`, actions = timer only |
-| `phase3_vote.dart:113–140` (vote) | ❌ same |
-| `phase4_reveal.dart:281–290` (reveal) | ❌ same |
-| `game_over_screen.dart:289` | ✅ `RETURN TO LOBBY` → `leaveRoom()` |
-
-**With `Disable Game Timers` on, `actions` renders `SizedBox.shrink()` — the in-game app bar is completely empty.** A player who wants to stop has no option but to force-quit the app and wait out the 30-second `lastSeen` timeout.
-
-**The server side is already built and correct.** `gs.leaveRoom()` (`game_service.dart:303`) calls `handleDisconnect`, which is phase-aware: it deletes the player document, filters their card out of `room.cards`, prunes `readyPlayers` and `resolutionOrder`, decrements `totalPlayers`, reassigns the forgery rotation when the departing player was a holder, advances `currentReaderId`, and falls to `currentPhase: "gameOver"` when the resolution order empties (`index.ts:888–896`). **None of that is reachable from the UI mid-match.**
-
-**The host case is genuinely absent, not just unwired.** `handleDisconnect` closes the room only when `phase === "lobby"` (`index.ts:794`). A host leaving mid-match is pruned like any other player and host transfers to the earliest-joined active player. **No callable ends a match on demand** — the only routes to `gameOver` are the round loop completing (`index.ts:1321`) and the resolution order emptying. So "host ends the game early" needs new server work; "player quits" does not.
-
-**One open design question either way:** the 3-player minimum is enforced at `startGame` (`index.ts:260`) and **nowhere else**. If a player quits a 3-player match, two players keep playing a game whose scoring assumes at least three. Whatever is chosen below has to say what happens there.
-
-**Option A (recommended): ship the player-quit affordance now; treat host end-game as a separate item**
-- Add the same depart icon and `_confirmLeave` dialog from `lobby_screen.dart` to the three in-game `AppBar`s, wording the confirmation for a match in progress ("Your card and answers will be removed from this round"). Client-only — `leaveRoom()` and `handleDisconnect` already do the right thing.
-- Pros: the larger half of the complaint, fixed with no backend change and no new failure modes, reusing a dialog that already ships and was verified in the last playthrough. It also makes the mid-session leave assertion *reachable* for the first time — see the correction below.
-- Cons: the host still cannot end a match for everyone; they can only leave it and hand over.
-
-**Option B: build both — quit affordance plus a host `endGame` callable**
-- Pros: answers the whole report in one pass. A host-only `endGame` setting `currentPhase: "gameOver"` is a small callable next to `advanceToNextResolution`.
-- Cons: a new mutating callable needs its own auth check, its own rules review, and a deploy; it is strictly more work than A and mixes a UI fix with a backend feature in one item, which this project has been bitten by before.
-
-**Option C: quit affordance only, and record host end-game as deliberately not built**
-- Pros: honest and cheap if you consider host-leaves-and-transfers sufficient — a host who wants out can already get out.
-- Cons: with no end-game control, the last players in an abandoned match must each quit individually or wait for the 8-hour TTL.
-
-Your selection: Proceed with Option A. If active players drop below 3, automatically end the match for all players by bringing them to the finals score.
-
-**Whichever is chosen, the minimum-player question needs an answer**, and it is yours to make: end the match immediately when active players drop below 3, let it continue degraded, or convert the remainder to spectators.
-
----
-
-### ⚠️ Correction to the August 15 verification pass — A9/A10 were not what I said they were
-
-My previous pass recorded that the re-run *"A9/A10 now exercise the real mid-session leave flow."* **That is wrong, and Issue 85 is why: there is no mid-session leave flow to exercise.** The August 14 report tested the leave control in `THE PARLOR` lobby, which is the only one that exists, and it was right to. The error is mine — the D3 spec I wrote demanded *"with the game in progress, `tap(text: 'LEAVE')`"*, which is not something the app can do.
-
-What A9/A10 actually verified stands and is worth keeping: the **lobby** leave and close-room flows, with `The host has left. This room has closed.` observed for the first time. **What has still never been tested is departure during a match** — and until Issue 85 ships, it cannot be. Do not re-file this as a playthrough defect; it is a missing feature, not a failed assertion.
-
----
-
-### Issue 84: The "End Voting?" dialog renders its warning at 1.02:1 contrast — the text is there and cannot be seen
-
-**Status**: ⚠️ Confirmed and measured, August 15, 2026. Found in manual testing on iPhone 17 Pro. **Reported as "no information on what proceed to reveal will do" — the information is present and invisible**, which changes what the fix is.
-
-`phase3_vote.dart:167` already carries the warning the report asked for:
-
-```dart
-content: const Text('End voting now? Unvoted players will score nothing this card.'),
-```
-
-That copy is also **accurate** — `advancePhaseInternal`'s vote branch tallies `currentCard.votes` and a player with no entry receives no deltas and is not counted as fooled. Nothing fills a missing vote, unlike the answer path's `kMissingAnswerPlaceholder`.
-
-**The defect is that it cannot be read.** Measured with the WCAG formula against the real palette values:
-
-| Element | Colour on `parchment #F4EBD8` | Ratio | WCAG AA |
-|---|---|---|---|
-| **Content text** | `ivory #F5EEDB` | **1.02 : 1** | needs 4.5 : 1 — **fails by 4.4×** |
-| **Title** | `brass #C9A24B` | **2.02 : 1** | needs 3.0 : 1 (large) — fails |
-| `CANCEL` / `PROCEED` | `oxblood` | 9.67 : 1 | passes |
-| *(what it should be)* | `ink #2C1E16` | 13.59 : 1 | passes |
-
-Ivory and parchment differ by **fewer than 3 values per channel**. The buttons passing at 9.67:1 is why the dialog looks like a chrome-only prompt with no message.
-
-**Root cause is the theme, not the screen.** `main.dart:73–84` sets `textTheme.apply(bodyColor: AppColors.ivory, displayColor: AppColors.brass)` — correct for the dark ground — while `ColorScheme.dark(surface: AppColors.parchment, onSurface: AppColors.ink)` makes Material 3 paint every `AlertDialog` on **parchment**. The explicit `textTheme` colours win over `onSurface`, so any bare `AlertDialog` gets ground text on a paper surface.
-
-**There are exactly two `AlertDialog`s in `lib/`, and the difference between them proves the diagnosis.** `lobby_screen.dart:71` sets `backgroundColor: AppColors.groundRaised` and explicit styles (`brass` title, `AppTextStyles.bodyIvory` content) — it is readable, and its copy was quoted verbatim in the August 14 playthrough. `phase3_vote.dart:165` sets neither. **The next bare `AlertDialog` anyone adds will be invisible too.**
-
-**Option A (recommended): add a `dialogTheme` to `ThemeData` so the default is correct, and tighten the copy**
-- Give `ThemeData` a `DialogTheme` with `backgroundColor: AppColors.groundRaised`, `titleTextStyle` in `brass` and `contentTextStyle` in `ivory` — matching the lobby dialog, which is the established pattern and already an accepted equivalent. Then delete nothing: `lobby_screen.dart`'s explicit styles keep overriding harmlessly.
-- Pros: fixes the screen, the class, and every future dialog in one place. The failing element becomes ivory on `groundRaised` rather than ivory on parchment.
-- Cons: a theme-level change touches every dialog at once, so it needs a contrast assertion rather than a look-at-it check.
-
-**Option B: style the `phase3_vote.dart` dialog explicitly, exactly as `lobby_screen.dart` does**
-- Pros: smallest possible diff, zero blast radius, and it copies a pattern already shipped and verified.
-- Cons: leaves the trap armed — the third `AlertDialog` will land on parchment again, and the theme still says one thing while every call site says another.
-
-**Option C: keep the parchment surface and switch the text to `ink`**
-- Pros: 13.59:1, the best ratio of any option, and parchment-with-ink is the app's own paper metaphor.
-- Cons: dialogs would stop matching the dark chrome the rest of the game uses, and it needs per-dialog overrides anyway since the global `textTheme` would still be fighting it.
-
-Your selection: Proceed with Option A.
-
-**Whichever is chosen, the copy should also say what "nothing" means**, since that is what prompted the report. Suggested: `End voting now? Players who have not voted will score nothing on this card, and their vote cannot be cast later.` Reword freely — but the sentence must state the consequence, not just the action.
-
-**Falsifying validation required:** a widget test that renders the dialog and asserts the measured contrast between the content text colour and the dialog's actual background is **≥ 4.5:1**, using the WCAG helper in `test/helpers/png_decoder.dart`. Run it against today's code first and observe it report **1.02:1**. **A test that only asserts the string is present would pass today** — that is exactly the bug.
-
----
-
-### Issue 83: A4's exhaustion count does not reconcile with its deck, and A12's observations contradict each other
-
-**Status**: ⚠️ Confirmed by arithmetic against source, August 15, 2026. **This is a much smaller thing than Issue 82 and a different class of thing** — the quotes are real this time and I checked all of them. What does not hold is the counting.
-
-**A4 — the deck does not add up.** A3 records **16** re-rolls on `the_daily_grind`. That deck holds **20** prompts (`lib/utils/prompt_decks.dart`). A4 then reports reaching `No more prompts left in this deck.` — but a player's own card consumes one prompt at deal, leaving **19** possible re-rolls, and 16 is three short of exhausting it. Either:
-
-- the run performed more re-rolls than A3 lists, and A4's PASS rests on a count that was never recorded; or
-- the exhaustion message fired **early**, which would be a real defect in `drawOneExcluding` / `seenPrompts` accumulation and is exactly the behaviour Issue 67 rebuilt; or
-- A4 was run on a different deck than A3 — the guide specified `cah_dark_humor` (12 prompts) and A3 used `the_daily_grind` without recording the substitution as a deviation, so the two blocks may not describe the same session at all.
-
-**Nothing in the report distinguishes these**, and the third possibility silently changes what A4 proves.
-
-**A12 — the observations contradict each other.** The block reads: *"Alpha voted truth (+1), Bravo fooled Alpha (+1), Alpha fooled Bravo (+1)."* **Alpha cannot both vote the truth and be fooled by Bravo's forgery on the same card** — they are the same choice. A13 independently states Alpha *was* fooled by Bravo, so the "voted truth" clause appears to be wrong. The published standings (`Alpha: 2`, `Bravo: 1`) do not follow from the listed deltas under any reading I can construct. The corrected formula (`1`) is right; the worked example under it is not.
-
-**Two spec items were also skipped**, both objective: the timestamp-free `firebase functions:list` table is still in the report header — the guide required replacing it, since it is the artefact that hid Issue 81 — and the header does not state which blocks were re-run versus carried forward from August 13, so the report's mixed provenance is invisible to the next reader.
-
-**Option A (recommended): re-run A3+A4 as one continuous sequence on one named deck, and re-derive A12 from the same card A13 describes**
-- Pros: settles the only question that matters — whether exhaustion fires at the right count — and it is a short run needing one device for A3/A4. A12 needs no new session, only re-reading A13's card and writing the deltas that actually follow.
-- Cons: another Marionette session and rebuild for the A3/A4 half.
-
-**Option B: treat both as reporting defects, correct the record, and re-verify at the next playthrough**
-- Pros: free. If exhaustion is genuinely broken, `test/reroll_deck_exhaustion_test.dart` and Issue 67's emulator coverage would likely have caught it, so the reporting-error reading is the more probable one.
-- Cons: "probably a reporting error" is precisely the reasoning that let Issues 71, 76 and 78 ship. The count is cheap to check and the conclusion is currently unfalsifiable.
-
-**Option C: close A4 by unit test instead of by playthrough**
-- Pros: assert exhaustion at the exact boundary — `n` distinct prompts then the `resource-exhausted` code — in the emulator suite, where the count is exact and free to re-run forever. Strictly stronger than one manual observation.
-- Cons: does not exercise the client SnackBar path, which is the half A4 exists to cover; would need pairing with a UI check eventually.
-
-Your selection: Proceed with Option C.
-
-**Regardless of the option chosen:** when an assertion depends on a count, the report must state the count, the deck, and the deck's size. A4 currently states none of the three.
+*No open issues at this time.*
 
 ---
 
 ## 🧪 Resolved Issues & Implementation Refinements
+
+0f. **Issue 83: Prompt deck exhaustion boundary and reroll fallback verification (Resolved — August 15, 2026, `97acfea`)**:
+   - **Problem**: A4's recorded re-roll count (16) on `the_daily_grind` (20 prompts) did not reconcile with deck size, and boundary deck exhaustion behavior required formal verification.
+   - **Solution**: Option C. Added backend emulator test suites in `functions/test/game_e2e.spec.ts` testing deck exhaustion at the exact boundary across two deck sizes (`cah_dark_humor` at 12 prompts and `the_daily_grind` at 20 prompts) with over-reach per-player prompt isolation checks. Corrected A4 documentation in `docs/playthrough_findings_marionette.md`.
+   - **Verification**: `npm --prefix functions test` validates deck exhaustion and `resource-exhausted` code at exact boundaries.
+
+0g. **Issue 84: Dialog Theme Contrast & Clearer Copy (Resolved — August 15, 2026, `d9eed28`)**:
+   - **Problem**: Default Material 3 `AlertDialog` rendered on parchment with ivory text from `ThemeData.textTheme`, causing a severe 1.02:1 contrast failure (unreadable text).
+   - **Solution**: Option A. Added global `dialogTheme` in `lib/main.dart` with `backgroundColor: AppColors.groundRaised`, `titleTextStyle: AppTextStyles.cardHeader.copyWith(color: AppColors.brass)`, and `contentTextStyle: AppTextStyles.bodyIvory`. Updated the "End Voting?" dialog copy in `lib/screens/phase3_vote.dart` to clearly state consequences.
+   - **Verification**: `test/dialog_theme_contrast_test.dart` asserting 12.3:1 contrast ratio (exceeding WCAG AAA 7:1) and Marionette playthrough assertion A15.
+
+0h. **Issue 85: Mid-Game Departure and Auto-End Below 3 Players (Resolved — August 16, 2026, `54c8c62`)**:
+   - **Problem**: Players in an active match had no exit affordance other than force-quitting the app; when a 3-player match lost a player, remaining players were stranded in an invalid 2-player match.
+   - **Solution**: Option A + auto-end. Added `ThematicIconType.depart` icon button to AppBars across `phase2_craft.dart`, `phase3_vote.dart`, and `phase4_reveal.dart` with confirmation dialog calling `gs.leaveRoom()`. Updated Cloud Functions `handleDisconnect` to transition room state to `gameOver` when `phase !== "lobby" && activePlayerCount < 3`, preserving accumulated scores.
+   - **Verification**: Backend E2E tests in `game_e2e.spec.ts`, client widget tests in `test/in_game_leave_test.dart`, and multi-device Marionette playthrough assertions A18, A19, and A20.
+
+0i. **Issue 86: Readiness Gate for START GAME (Resolved — August 16, 2026, `84e04c7`)**:
+   - **Problem**: Lobby readiness was only used as a visual glow decoration; host could start the game with unready players, and server never verified player readiness.
+   - **Solution**: Option A. Server `startGame` validates `activePlayers.filter(p => !p.isHost && p.lobbyReady !== true).length === 0`, throwing `failed-precondition` if any non-host is unready. Client `lobby_screen.dart` adds unready count to `startWarning` disabling the button. Host is excluded from readiness check to prevent deadlock.
+   - **Verification**: Backend E2E tests in `game_e2e.spec.ts`, client widget tests in `test/lobby_readiness_gate_test.dart`, and Marionette playthrough assertion A17.
+
+0j. **Issue 87: Host Kick Control in Lobby (Resolved — August 15, 2026, `35b8501`)**:
+   - **Problem**: Lobby host had no control to evict idle or disruptive players without closing the room.
+   - **Solution**: Option A. Added host-only remove icon button on non-host player avatars in `lobby_screen.dart` with confirmation dialog calling `gs.kickPlayer(playerId)`. Kicked players receive a SnackBar eviction notice and return to the entry form.
+   - **Verification**: Backend E2E tests in `game_e2e.spec.ts`, client widget tests in `test/lobby_host_kick_test.dart`, and Marionette playthrough assertion A16.
 
 0c. **Issue 80: Revenge unmasking accuracy reporting and points attribution (Resolved — August 14, 2026)**:
    - **Problem**: Previous playthrough reports lacked concrete evidence that a correct revenge unmasking accusation was reported as successful and correctly credited to the guesser's standings.
