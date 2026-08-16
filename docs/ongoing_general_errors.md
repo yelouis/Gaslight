@@ -70,7 +70,7 @@ This matters beyond tidiness: **a client-only bound is not a bound** (§2 and th
 - Pros: defensible as designed. A host often *must* start with someone idle, and today that is the only way to do it. Zero work.
 - Cons: then the readiness toggle is decoration for players too, and the report will recur. If chosen, say so in `design_scoring_and_ui.md` so it stops reading as a bug.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Falsifying validation for A or B:** a test where two of three players are ready and the third is not, asserting the start is refused — server-side by `failed-precondition` code (never the message), client-side by the button being disabled. **Over-reach guard in the same test:** with all non-hosts ready the start must still succeed, and **the host's own `lobbyReady` must not be required** — the host has no ready toggle, so requiring it would deadlock every lobby.
 
@@ -105,7 +105,7 @@ A host is explicitly allowed to disconnect **any** player — the condition only
 - Pros: zero work; the close-room path exists and is verified.
 - Cons: punishes every other player for one problem player, and leaves Issue 86 Option A unsafe.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Falsifying validation:** a host calls `handleDisconnect` for another lobby player and the player document is gone; a **non-host** attempting the same call is rejected with `permission-denied` — matched on the **code**. The second half is the over-reach guard, and it is the one that matters: it is what stops a kick control from becoming a kick-anyone control.
 
@@ -146,7 +146,7 @@ Once a match starts there is **no exit control of any kind** until the Game Over
 - Pros: honest and cheap if you consider host-leaves-and-transfers sufficient — a host who wants out can already get out.
 - Cons: with no end-game control, the last players in an abandoned match must each quit individually or wait for the 8-hour TTL.
 
-Your selection: _____
+Your selection: Proceed with Option A. If active players drop below 3, automatically end the match for all players by bringing them to the finals score.
 
 **Whichever is chosen, the minimum-player question needs an answer**, and it is yours to make: end the match immediately when active players drop below 3, let it continue degraded, or convert the remainder to spectators.
 
@@ -200,7 +200,7 @@ Ivory and parchment differ by **fewer than 3 values per channel**. The buttons p
 - Pros: 13.59:1, the best ratio of any option, and parchment-with-ink is the app's own paper metaphor.
 - Cons: dialogs would stop matching the dark chrome the rest of the game uses, and it needs per-dialog overrides anyway since the global `textTheme` would still be fighting it.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Whichever is chosen, the copy should also say what "nothing" means**, since that is what prompted the report. Suggested: `End voting now? Players who have not voted will score nothing on this card, and their vote cannot be cast later.` Reword freely — but the sentence must state the consequence, not just the action.
 
@@ -236,7 +236,7 @@ Your selection: _____
 - Pros: assert exhaustion at the exact boundary — `n` distinct prompts then the `resource-exhausted` code — in the emulator suite, where the count is exact and free to re-run forever. Strictly stronger than one manual observation.
 - Cons: does not exercise the client SnackBar path, which is the half A4 exists to cover; would need pairing with a UI check eventually.
 
-Your selection: _____
+Your selection: Proceed with Option C.
 
 **Regardless of the option chosen:** when an assertion depends on a count, the report must state the count, the deck, and the deck's size. A4 currently states none of the three.
 
