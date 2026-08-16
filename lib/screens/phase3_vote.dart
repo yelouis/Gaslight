@@ -164,7 +164,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('End Voting?'),
-          content: const Text('End voting now? Unvoted players will score nothing this card.'),
+          content: const Text('End voting now? Players who have not voted will score nothing on this card, and their vote cannot be cast later.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),

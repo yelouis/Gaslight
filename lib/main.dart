@@ -9,6 +9,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'theme/app_colors.dart';
+import 'theme/app_text_styles.dart';
 
 // Screens
 import 'screens/lobby_screen.dart';
@@ -81,6 +82,11 @@ class GaslightApp extends StatelessWidget {
           tertiary: AppColors.verdigris,
           surface: AppColors.parchment,
           onSurface: AppColors.ink,
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: AppColors.groundRaised,
+          titleTextStyle: AppTextStyles.cardHeader.copyWith(color: AppColors.brass),
+          contentTextStyle: AppTextStyles.bodyIvory,
         ),
         useMaterial3: true,
       ),
