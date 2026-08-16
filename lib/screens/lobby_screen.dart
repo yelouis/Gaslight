@@ -474,6 +474,12 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
         ? totalPromptsNeeded
         : PromptDecks.getDeckSize(selectedDeckId);
     
+    final playingPlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
+    final nonHostPlayers = playingPlayers.where((p) => !p.isHost).toList();
+    final readyNonHostsCount = nonHostPlayers.where((p) => p.lobbyReady).length;
+    final totalNonHostsCount = nonHostPlayers.length;
+    final allNonHostsReady = totalNonHostsCount > 0 && readyNonHostsCount == totalNonHostsCount;
+
     String? startWarning;
     if (activeCount < 3) {
       startWarning = "Need at least 3 active players to start.";
@@ -481,13 +487,9 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
       startWarning = "Need more players than forgeries per card ($forgeries).";
     } else if (deckSize < totalPromptsNeeded) {
       startWarning = "Deck too small: selected deck has $deckSize prompts but you need $totalPromptsNeeded prompts ($activeCount players × $totalRounds rounds).";
+    } else if (!allNonHostsReady) {
+      startWarning = "Waiting on ${totalNonHostsCount - readyNonHostsCount} of $totalNonHostsCount players to ready up.";
     }
-
-    final playingPlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
-    final nonHostPlayers = playingPlayers.where((p) => !p.isHost).toList();
-    final readyNonHostsCount = nonHostPlayers.where((p) => p.lobbyReady).length;
-    final totalNonHostsCount = nonHostPlayers.length;
-    final allNonHostsReady = totalNonHostsCount > 0 && readyNonHostsCount == totalNonHostsCount;
 
     return Scaffold(
       backgroundColor: Colors.transparent,

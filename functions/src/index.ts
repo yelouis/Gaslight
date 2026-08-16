@@ -261,6 +261,14 @@ export const startGame = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "At least 3 players are required to start the game.");
     }
 
+    const unreadyNonHosts = activePlayers.filter(p => !p.isHost && p.lobbyReady !== true);
+    if (unreadyNonHosts.length > 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        `Every player must be ready before starting (${unreadyNonHosts.length} not ready).`
+      );
+    }
+
     let forgeriesPerCard = room.forgeriesPerCard ?? room.sabotageAnswersCount;
     if (forgeriesPerCard == null) {
       forgeriesPerCard = Math.min(activePlayers.length - 1, 5);
@@ -1461,7 +1469,7 @@ export const debugAddBots = onCall(async (request) => {
       colorValue: botColors[i % botColors.length],
       avatarIndex: i % 6,
       joinedAt: Date.now() + i,
-      lobbyReady: false,
+      lobbyReady: true,
       totalScore: 0,
       role: "unassigned",
       isReady: false,

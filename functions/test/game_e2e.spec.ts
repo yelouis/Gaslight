@@ -104,6 +104,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       playerId: 'p_guest2'
     });
 
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
+
     // 3. Start Game
     await callFn('startGame', hostUser.idToken, {
       roomCode,
@@ -428,6 +431,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       playerId: 'p_guest2'
     });
 
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
+
     await callFn('startGame', hostUser.idToken, {
       roomCode,
       selectedDeckId: 'the_daily_grind'
@@ -530,6 +536,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       playerName: 'Charlie',
       playerId: 'p_guest2'
     });
+
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest1').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
 
     await callFn('startGame', hostUser.idToken, {
       roomCode,
@@ -762,7 +771,11 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       customPrompts: ['Alice prompt 1', 'Alice prompt 2']
     });
     await roomRef.collection('players').doc('p_guest').update({
-      customPrompts: ['Bob prompt 1']
+      customPrompts: ['Bob prompt 1'],
+      lobbyReady: true
+    });
+    await roomRef.collection('players').doc('p_guest2').update({
+      lobbyReady: true
     });
 
     await callFn('startGame', hostUser.idToken, {
@@ -815,6 +828,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       playerName: 'Charlie',
       playerId: 'p_guest2'
     });
+
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
 
     await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
 
@@ -880,6 +896,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       playerName: 'Charlie',
       playerId: 'p_guest2'
     });
+
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
 
     // cah_dark_humor has exactly 12 prompts. With 3 players, 3 are drawn initially.
     await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
@@ -966,7 +985,11 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     });
     // Seed p_guest with 0 prompts (so all custom prompts in pool must come from p_host)
     await roomRef.collection('players').doc('p_guest').update({
-      customPrompts: []
+      customPrompts: [],
+      lobbyReady: true
+    });
+    await roomRef.collection('players').doc('p_guest2').update({
+      lobbyReady: true
     });
 
     await callFn('startGame', hostUser.idToken, {
@@ -1011,6 +1034,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       playerName: 'Charlie',
       playerId: 'p_guest2'
     });
+
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
 
     // 3. Start Game
     await callFn('startGame', hostUser.idToken, {
@@ -1162,6 +1188,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         playerId: 'p_guest2'
       });
 
+      await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+      await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
+
       const roomRef = db.collection('rooms').doc(roomCode);
       await roomRef.update({ sabotageAnswersCount: 0, forgeriesPerCard: 0 });
 
@@ -1234,6 +1263,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         playerName: 'Charlie',
         playerId: 'p_guest2'
       });
+
+      await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+      await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
 
       // Start game so phase is no longer lobby
       await callFn('startGame', hostUser.idToken, {
@@ -1347,6 +1379,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
           playerId: 'p_guest2'
         });
 
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
+
         const roomRef = db.collection('rooms').doc(roomCode);
 
         // 1. Lobby phase
@@ -1409,6 +1444,8 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         const roomCode = createRes.roomCode;
         await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest1' });
         await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest1').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
         await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
 
         await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice truth', isTruth: true });
@@ -1474,6 +1511,8 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         const roomCode = createRes.roomCode;
         await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest1' });
         await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest1').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
         await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
 
         await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice truth', isTruth: true });
@@ -1543,6 +1582,10 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
         await callFn('joinRoom', guest3User.idToken, { roomCode, playerName: 'Dave', playerId: 'p_guest3' });
 
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest3').update({ lobbyReady: true });
+
         // 2. updateLobbySettings range validation: 0 or activePlayers (4) must be rejected
         let rejectedZero = false;
         try {
@@ -1572,6 +1615,7 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         const create9Res = await callFn('createRoom', hostUser.idToken, { playerName: 'Alice', playerId: 'p_host', debugEnabled: true });
         const room9Code = create9Res.roomCode;
         await callFn('joinRoom', guestUser.idToken, { roomCode: room9Code, playerName: 'Bob', playerId: 'p_guest' });
+        await db.collection('rooms').doc(room9Code).collection('players').doc('p_guest').update({ lobbyReady: true });
         await callFn('debugAddBots', hostUser.idToken, { roomCode: room9Code }); // adds 7 bots -> total 9
 
         // 5. Update settings to 7 forgeries (selectable at 9 players)
@@ -1607,6 +1651,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
         await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
         await callFn('joinRoom', guest3User.idToken, { roomCode, playerName: 'Dave', playerId: 'p_g3' });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_g1').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_g2').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_g3').update({ lobbyReady: true });
 
         await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
 
@@ -1710,6 +1757,10 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         await callFn('joinRoom', g2.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
         await callFn('joinRoom', g3.idToken, { roomCode, playerName: 'Dave', playerId: 'p_g3' });
         await callFn('joinRoom', g4.idToken, { roomCode, playerName: 'Eve', playerId: 'p_g4' });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_g1').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_g2').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_g3').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_g4').update({ lobbyReady: true });
 
         await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
 
@@ -1819,6 +1870,8 @@ describe('Gaslight E2E Game Emulator Tests', () => {
 
         await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
         await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_g1').update({ lobbyReady: true });
+        await db.collection('rooms').doc(roomCode).collection('players').doc('p_g2').update({ lobbyReady: true });
 
         await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
 
@@ -1926,6 +1979,8 @@ describe('Gaslight E2E Game Emulator Tests', () => {
 
           await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
           await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+          await db.collection('rooms').doc(roomCode).collection('players').doc('p_g1').update({ lobbyReady: true });
+          await db.collection('rooms').doc(roomCode).collection('players').doc('p_g2').update({ lobbyReady: true });
 
           await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: tc.deckId });
 
@@ -2023,6 +2078,52 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         const playerIds = playersSnap.docs.map(d => d.id);
         expect(playerIds).to.include('p_host');
         expect(playerIds).to.include('p_g2');
+      });
+    });
+
+    describe('Issue 86: Gate startGame on lobby readiness for all non-host players', () => {
+      it('rejects startGame when any non-host is unready, and succeeds when all non-hosts are ready regardless of host lobbyReady', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+
+        // Set guest1 ready, but guest2 unready
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: false });
+
+        // 1. Falsifying assertion: 1 of 2 non-hosts is unready -> startGame must throw failed-precondition
+        let rejectedUnreadyStart = false;
+        try {
+          await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+        } catch (err: any) {
+          rejectedUnreadyStart = true;
+          expect(err.status).to.equal('FAILED_PRECONDITION');
+        }
+        expect(rejectedUnreadyStart).to.be.true;
+
+        // 2. Over-reach guard: Set guest2 ready as well. Host's lobbyReady is still false.
+        // startGame must succeed (deadlock guard: host lobbyReady is not required).
+        const hostDoc = await roomRef.collection('players').doc('p_host').get();
+        expect(hostDoc.data()?.lobbyReady).to.not.be.true;
+
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        const startRes = await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+        expect(startRes.success).to.be.true;
+
+        const roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
       });
     });
   });
