@@ -11,30 +11,29 @@
   - `marionette-p3` -> Player 3 (Guest "Charlie"): iPhone 17 (`B64CA576-8CF9-48A1-BB45-09C0B0C39850`, DDS port 8183)
 - **Deliberate Deviations:**
   - `Disable Game Timers` enabled in House Rules on P1 to prevent premature automated phase transitions while inspecting interactive elements via MCP.
+- **Provenance:** A3, A4, A9, A10, A13 were re-run on August 14, 2026 against the deployed build at `a428201`. A1, A2, A5, A6, A7, A8, A11 are carried forward unchanged from the August 13 run — see Issue 82. A12 was corrected in place without a re-run. A14 has never been run.
+- A3/A4 were run on `the_daily_grind` (20 prompts) rather than the specified `cah_dark_humor` (12 prompts).
 
 ---
 
-## Deployed Cloud Functions (`gcloud functions list` / `firebase functions:list`)
+## Deployed Cloud Functions (`gcloud functions list`)
 
 ```
-┌───────────────────────────┬─────────┬──────────┬─────────────┬────────┬──────────┐
-│ Function                  │ Version │ Trigger  │ Location    │ Memory │ Runtime  │
-├───────────────────────────┼─────────┼──────────┼─────────────┼────────┼──────────┤
-│ advancePhase              │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ advanceToNextResolution   │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ castVote                  │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ createRoom                │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ debugAddBots              │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ debugSimulateBotResponses │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ handleDisconnect          │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ joinRoom                  │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ rerollPrompt              │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ setReady                  │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ startGame                 │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ submitAnswer              │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ submitUnmaskGuess         │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-│ updateLobbySettings       │ v2      │ callable │ us-central1 │ 256    │ nodejs22 │
-└───────────────────────────┴─────────┴──────────┴─────────────┴────────┴──────────┘
+NAME                       UPDATE_TIME
+advancePhase               2026-08-14T17:48:24.211808782Z
+advanceToNextResolution    2026-08-14T17:48:23.912798305Z
+castVote                   2026-08-14T17:48:19.333760076Z
+createRoom                 2026-08-14T17:47:40.692608178Z
+debugAddBots               2026-08-14T17:48:22.805213430Z
+debugSimulateBotResponses  2026-08-14T17:48:23.086718334Z
+handleDisconnect           2026-08-14T17:48:24.881297076Z
+joinRoom                   2026-08-14T17:47:46.541284083Z
+rerollPrompt               2026-08-14T17:48:22.609390504Z
+setReady                   2026-08-14T17:48:22.112994455Z
+startGame                  2026-08-14T17:48:19.959748284Z
+submitAnswer               2026-08-14T17:48:19.969535092Z
+submitUnmaskGuess          2026-08-14T17:48:23.334413646Z
+updateLobbySettings        2026-08-14T17:48:22.517043301Z
 ```
 
 ---
@@ -175,6 +174,7 @@
 ### A9 — Non-Host Leaves Room
 
 - **Verdict:** PASS
+- **Scope:** lobby leave flow. Departure during a match is not reachable until Issue 85 ships — see S7.
 - **Devices:** P3 `iPhone 17` (Charlie), P1 `iPhone 17 Pro` (Alpha, Host), P2 `iPhone Air` (Bravo)
 - **What I did:**
   1. In the parlor lobby (`THE PARLOR`), P3 (Charlie, non-host) tapped the AppBar Leave button (`tooltip: 'Leave room'`).
@@ -194,6 +194,7 @@
 ### A10 — Host Leaves Room
 
 - **Verdict:** PASS
+- **Scope:** lobby leave flow. Departure during a match is not reachable until Issue 85 ships — see S7.
 - **Devices:** P1 `iPhone 17 Pro` (Alpha, Host), P2 `iPhone Air` (Bravo)
 - **What I did:**
   1. In the parlor lobby (`THE PARLOR`), P1 (Alpha, Host) tapped the AppBar Leave button (`tooltip: 'Leave room'`).
