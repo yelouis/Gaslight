@@ -48,7 +48,7 @@ This is the last untested half of Option C, which the user chose knowing it left
 - Pros: honest and free. The server boundary is proven at two deck sizes; the SnackBar is one `SnackBar` fed directly by the `resource-exhausted` code, and the leave control cannot structurally vanish.
 - Cons: leaves `phase2_craft.dart:507` — a user-facing string with a real failure mode (the generic fallback appearing instead) — with no test at any level.
 
-Your selection: _____
+Your selection: Proceed with Option B.
 
 **Regardless of the option chosen:** a forward reference from one assertion to another must be repointed whenever the assertion list is renumbered. A4's promise survived a renumber and now points at unrelated evidence, which is the same failure mode as §2.11 arriving by a different route.
 
