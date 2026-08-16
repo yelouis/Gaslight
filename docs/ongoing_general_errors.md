@@ -19,11 +19,65 @@
 
 **Independent verification pass — August 15, 2026.** Battery re-measured, not copied: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **130/130** · functions build clean · `npm --prefix functions test` **46/46** · `./scripts/check_deploy_fresh.sh` **exit 0**. Deploy confirmed against the live project: all **14** functions `2026-08-14T17:47:40Z`–`17:48:24Z`, rules ruleset `04:24:13Z`. **Issues 77, 80, 81 and 82 hold up under independent checking** — including all three of the freshness gate's exit codes, exercised rather than assumed, and a mechanical re-check of all 16 A3 prompt quotes against source (0 missing, against 18/18 missing on August 13). **One residue is open as Issue 83** and needs a selection: A4's exhaustion count does not reconcile with its deck, and A12's worked example contradicts itself.
 
-**Manual testing, August 15, 2026** (three simulators, fresh debug install, production backend, deploy gate exit 0) found **Issue 84** — the "End Voting?" host dialog renders its warning at a measured **1.02:1** contrast, so the text is present and invisible. Needs a selection. **The three simulators found this in minutes; nine automated gates and two driven playthroughs never touched it**, because no assertion has ever looked at a dialog the host only sees when advancing early.
+**Manual testing, August 15, 2026** (three simulators, fresh debug install, production backend, deploy gate exit 0) found two issues, both needing a selection:
+
+- **Issue 84** — the "End Voting?" host dialog renders its warning at a measured **1.02:1** contrast, so the text is present and invisible.
+- **Issue 85** — there is no exit control anywhere in a match: no player quit, no host end-game. `handleDisconnect` already handles mid-game departure completely; nothing in the UI calls it between the lobby and Game Over. **This also corrects a claim I made in the August 15 verification pass** — A9/A10 did not test a mid-session leave flow, because none exists.
+
+**Both were found in minutes by three simulators and a human. Nine automated gates and two driven playthroughs found neither** — one is a dialog only the host sees when advancing early, the other is the *absence* of a control, which no assertion written against the app's actual screens can see.
 
 ---
 
 ## ⚠️ Unresolved Issues & Suggestions
+
+### Issue 85: There is no way out of a game in progress — no player quit, no host end-game
+
+**Status**: ⚠️ Confirmed in source, August 15, 2026. Found in manual testing. **The backend already supports this completely; only the affordance is missing.**
+
+Once a match starts there is **no exit control of any kind** until the Game Over screen. Every in-game `AppBar` sets `automaticallyImplyLeading: false` and carries exactly one thing in `actions` — the countdown:
+
+| Screen | Exit control |
+|---|---|
+| `lobby_screen.dart:460–469` | ✅ depart icon → `_confirmLeave` → `leaveRoom()` |
+| `phase2_craft.dart:157–186` (truth / forgery) | ❌ `automaticallyImplyLeading: false`, actions = timer only |
+| `phase3_vote.dart:113–140` (vote) | ❌ same |
+| `phase4_reveal.dart:281–290` (reveal) | ❌ same |
+| `game_over_screen.dart:289` | ✅ `RETURN TO LOBBY` → `leaveRoom()` |
+
+**With `Disable Game Timers` on, `actions` renders `SizedBox.shrink()` — the in-game app bar is completely empty.** A player who wants to stop has no option but to force-quit the app and wait out the 30-second `lastSeen` timeout.
+
+**The server side is already built and correct.** `gs.leaveRoom()` (`game_service.dart:303`) calls `handleDisconnect`, which is phase-aware: it deletes the player document, filters their card out of `room.cards`, prunes `readyPlayers` and `resolutionOrder`, decrements `totalPlayers`, reassigns the forgery rotation when the departing player was a holder, advances `currentReaderId`, and falls to `currentPhase: "gameOver"` when the resolution order empties (`index.ts:888–896`). **None of that is reachable from the UI mid-match.**
+
+**The host case is genuinely absent, not just unwired.** `handleDisconnect` closes the room only when `phase === "lobby"` (`index.ts:794`). A host leaving mid-match is pruned like any other player and host transfers to the earliest-joined active player. **No callable ends a match on demand** — the only routes to `gameOver` are the round loop completing (`index.ts:1321`) and the resolution order emptying. So "host ends the game early" needs new server work; "player quits" does not.
+
+**One open design question either way:** the 3-player minimum is enforced at `startGame` (`index.ts:260`) and **nowhere else**. If a player quits a 3-player match, two players keep playing a game whose scoring assumes at least three. Whatever is chosen below has to say what happens there.
+
+**Option A (recommended): ship the player-quit affordance now; treat host end-game as a separate item**
+- Add the same depart icon and `_confirmLeave` dialog from `lobby_screen.dart` to the three in-game `AppBar`s, wording the confirmation for a match in progress ("Your card and answers will be removed from this round"). Client-only — `leaveRoom()` and `handleDisconnect` already do the right thing.
+- Pros: the larger half of the complaint, fixed with no backend change and no new failure modes, reusing a dialog that already ships and was verified in the last playthrough. It also makes the mid-session leave assertion *reachable* for the first time — see the correction below.
+- Cons: the host still cannot end a match for everyone; they can only leave it and hand over.
+
+**Option B: build both — quit affordance plus a host `endGame` callable**
+- Pros: answers the whole report in one pass. A host-only `endGame` setting `currentPhase: "gameOver"` is a small callable next to `advanceToNextResolution`.
+- Cons: a new mutating callable needs its own auth check, its own rules review, and a deploy; it is strictly more work than A and mixes a UI fix with a backend feature in one item, which this project has been bitten by before.
+
+**Option C: quit affordance only, and record host end-game as deliberately not built**
+- Pros: honest and cheap if you consider host-leaves-and-transfers sufficient — a host who wants out can already get out.
+- Cons: with no end-game control, the last players in an abandoned match must each quit individually or wait for the 8-hour TTL.
+
+Your selection: _____
+
+**Whichever is chosen, the minimum-player question needs an answer**, and it is yours to make: end the match immediately when active players drop below 3, let it continue degraded, or convert the remainder to spectators.
+
+---
+
+### ⚠️ Correction to the August 15 verification pass — A9/A10 were not what I said they were
+
+My previous pass recorded that the re-run *"A9/A10 now exercise the real mid-session leave flow."* **That is wrong, and Issue 85 is why: there is no mid-session leave flow to exercise.** The August 14 report tested the leave control in `THE PARLOR` lobby, which is the only one that exists, and it was right to. The error is mine — the D3 spec I wrote demanded *"with the game in progress, `tap(text: 'LEAVE')`"*, which is not something the app can do.
+
+What A9/A10 actually verified stands and is worth keeping: the **lobby** leave and close-room flows, with `The host has left. This room has closed.` observed for the first time. **What has still never been tested is departure during a match** — and until Issue 85 ships, it cannot be. Do not re-file this as a playthrough defect; it is a missing feature, not a failed assertion.
+
+---
 
 ### Issue 84: The "End Voting?" dialog renders its warning at 1.02:1 contrast — the text is there and cannot be seen
 
