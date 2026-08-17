@@ -107,6 +107,12 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final avatarIndex = params['avatarIndex'];
 
       final doc = await db.collection('rooms').doc(roomCode).get();
+      if (!doc.exists) {
+        throw FirebaseFunctionsException(
+          code: 'not-found',
+          message: 'Game room not found.',
+        );
+      }
       final roomState = GameState.fromMap(doc.data()!, doc.id);
 
       final playerDoc = await db.collection('rooms').doc(roomCode).collection('players').doc(playerId).get();

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -203,7 +204,25 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
       await gameService.joinRoom(roomCode, name, playerId, avatarIndex: _selectedAvatarIndex);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        final String msg;
+        if (e is FirebaseFunctionsException) {
+          switch (e.code) {
+            case 'not-found':
+              msg = 'No room with that code. Check the four letters and try again.';
+              break;
+            case 'invalid-argument':
+              msg = 'Enter your name and a four-letter room code.';
+              break;
+            case 'unauthenticated':
+              msg = 'Could not sign in. Check your connection and try again.';
+              break;
+            default:
+              msg = 'Something went wrong. Try again.';
+          }
+        } else {
+          msg = 'Something went wrong. Try again.';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
     }
   }
