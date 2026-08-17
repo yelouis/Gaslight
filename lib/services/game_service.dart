@@ -81,9 +81,10 @@ class GameService extends ChangeNotifier {
 
   // Duplicate-advance guards
   final Map<String, String> _advancedStateKeys = {};
-  final Set<String> _mySubmittedAnswers = {};
+  final Map<String, Set<String>> _mySubmittedByCard = {};
   
-  bool isMySubmittedAnswer(String text) => _mySubmittedAnswers.contains(text.trim());
+  bool isMySubmittedAnswer(String cardId, String text) =>
+      _mySubmittedByCard[cardId]?.contains(text.trim()) ?? false;
 
   // Disconnect in-flight guards
   final Set<String> _disconnectsInFlight = {};
@@ -297,7 +298,7 @@ class GameService extends ChangeNotifier {
     _players = [];
     _currentPlayerId = null;
     _advancedStateKeys.clear();
-    _mySubmittedAnswers.clear();
+    _mySubmittedByCard.clear();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('room_code');
@@ -480,7 +481,7 @@ class GameService extends ChangeNotifier {
   Future<void> submitCardAnswer(String targetCardId, String authorId, String text, bool isTruth) async {
     if (_gameState == null) return;
     if (text.trim().isNotEmpty) {
-      _mySubmittedAnswers.add(text.trim());
+      _mySubmittedByCard.putIfAbsent(targetCardId, () => {}).add(text.trim());
     }
     await _functions.httpsCallable('submitAnswer').call({
       'roomCode': _gameState!.roomCode,

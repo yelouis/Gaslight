@@ -419,7 +419,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
 
     final gs = context.watch<GameService>();
     final gridAnswers = currentCard?.options.map((opt) {
-      final isSelf = gs.isMySubmittedAnswer(opt.text);
+      final isSelf = gs.isMySubmittedAnswer(currentCard.targetPlayerId, opt.text);
       return VotingAnswer(authorId: opt.id, text: opt.text, isSelfAnswer: isSelf);
     }).toList() ?? [];
 
