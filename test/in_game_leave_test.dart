@@ -208,6 +208,11 @@ void main() {
       expect(gameService.gameState, isNull);
     });
 
+    // Falsification verification (W2 / Issue 89.2):
+    // When the leave button is temporarily moved from AppBar leading into actions inside
+    // the timer-disabled SizedBox.shrink() branch, Phase2CraftScreen isTimerDisabled fails:
+    // "Expected: exactly one matching candidate. Actual: Found 0 widgets with tooltip 'Leave game'"
+    // while the timers-enabled case still passes.
     testWidgets('Phase2CraftScreen renders leave button when isTimerDisabled is true (Issue 88.2)', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(800, 600);
       tester.view.devicePixelRatio = 1.0;
