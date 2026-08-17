@@ -24,7 +24,11 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issues 89 and 90 are open and both need a selection.** **Issue 90 is the more serious of the two — a gameplay-correctness defect found in manual testing on August 16**: self-answer detection matches by text across the whole session, so options written by *other* players become unvotable and a player's vote can be forced. Issue 89 is evidence discipline, not code.
+**Issue 89 is selected (Option A) and actionable. Issue 90 still needs a selection.**
+
+**Issue 90 is the more serious of the two — a gameplay-correctness defect found in manual testing on August 16**: self-answer detection matches by text across the whole session, so options written by *other* players become unvotable and a player's vote can be forced. It now carries a **revised option set**, because the question *"why can't we do both A and B?"* was a fair challenge and **my original claim that Option B was blocked was wrong** — a callable's response is a private channel, and returning the caller's *own* option id leaks nothing. See the answer under Issue 90 and the new **Option D**.
+
+Issue 89 is evidence discipline, not code.
 
 ### Issue 90: Self-answer detection matches by text across the whole session, blocking legitimate votes
 
@@ -61,6 +65,29 @@ So any option whose text matches *anything the player has submitted anywhere in 
 **Option C: stop blocking on the client; let the server reject**
 - Pros: exactly correct by construction — `castVote` already throws `failed-precondition` on a real self-vote. Deletes the heuristic instead of narrowing it.
 - Cons: the player can tap their own answer and be refused, which is worse UX than a greyed tile; and the reveal's "(Your Forgery)" labelling would need its own answer.
+
+Your selection: Why can't we do both Option A and B?
+
+**Answer — August 16, 2026. You can, and my original framing of Option B was wrong.** I wrote that the client "is never told which option id is its own, by design" and that there is "no existing private channel to carry it." The first half is true and the second half is misleading: **a callable's response *is* a private channel**, and creating one is not the same as leaking authorship.
+
+**The asymmetry I missed.** The invariant is *never send authorship to the client* — meaning **other players'** authorship. Telling a player which opaque option id corresponds to **their own** submission reveals nothing they do not already know: they wrote the text, they can see it in the list. A callable that returns *only the caller's own* option id for the current card is safe by construction, because its response goes to exactly one authenticated player and contains exactly one fact that player already possesses.
+
+Sketch: `getMyOptionId(roomCode, cardId)` verifies the caller owns their player document (same pattern as `castVote`, `index.ts:548`), reads `sealed/{cardId}.answerAuthors`, finds the entry whose **value** is the caller's player id, and returns the **key**. It returns nothing when the caller authored nothing on that card. No rules change — the sealed document stays default-deny and is read server-side, exactly as `castVote` already reads it.
+
+**So A and B are not alternatives; they are layers**, which is the real reason to do both:
+
+* **B is the authority.** Exact, immune to duplicate text, and it makes `card_grid.dart:45`'s dead identity clause live again — this time comparing an option id to an option id instead of to a player id.
+* **A is the fallback.** B needs a network round trip that can be slow or fail, and the grid renders before it resolves. Something has to decide what to grey out in the meantime, and **"text I submitted for this card"** is a safe answer where "text I submitted at any point this match" is not.
+
+The failure mode of doing B alone is the one worth naming: **if the id fetch fails and the client blocks nothing, a player can tap their own answer and be rejected by the server** — correct, but confusing. If it blocks everything, they cannot vote at all. A gives that path a sane default.
+
+**Revised option set — please pick from these:**
+
+**Option D (recommended): both, layered.** Ship A first as its own commit (client-only, no deploy), then B as a second commit with the callable and a deploy. Grey out by option id when it is known; fall back to current-card text when it is not.
+- Pros: the reported bug dies with the first commit; the heuristic stops being load-bearing with the second. Each half is independently testable and independently revertible.
+- Cons: two commits, one deploy, one new callable to maintain. The fallback path needs its own test, or it will be the untested branch that bites later.
+
+**Option A alone**, **Option B alone**, and **Option C** remain as written above.
 
 Your selection: _____
 
@@ -104,7 +131,7 @@ This is the Issue 82 pattern arriving one level up — **milder, because nothing
 - Pros: defensible on the merits. The backend proves the throw at two deck sizes, the widget test proves the code→string mapping, and the only untested seam is Firebase's own exception marshalling. Removes an assertion that keeps consuming cycles.
 - Cons: nothing then exercises the real client against the real backend at the boundary, and the project's own history is that end-to-end gaps hide exactly there.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Regardless of the option chosen:** a verdict line must not name a verification method the block records no data for. If a session ran and its output was lost, that is **NOT RUN**, not PASS with a citation.
 
