@@ -24,58 +24,18 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-### Issue 92: X1's wedge check tests the wrong card, and failure-caching was removed without a decision
-
-**Status**: ⚠️ Confirmed August 17, 2026, and **92.1 is demonstrated, not argued.** The guard itself is correct and correctly placed — `_optionIdFetchesInFlight` at `game_service.dart:86`, marked at `:517`, cleared in a real `finally` at `:532–534`, cleared in teardown at `:307`, and `phase3_vote.dart` untouched as specified. Battery: **0 errors** (26 warnings, 196 infos) · **147/147** · clean build · **54/54** · deploy gate **exit 0**. **The defects are in the test and in an unrecorded behaviour change.**
-
-**92.1 — the wedge check does not test the wedge.** `test/fetch_my_option_id_test.dart:148` throws on **`card_a`** and then fetches **`card_b`**:
-
-```dart
-      final res1 = await gameService.fetchMyOptionId('card_a');   // throws
-      …
-      final res2 = await gameService.fetchMyOptionId('card_b');   // different card
-      expect(res2, isNotNull);
-```
-
-`card_b` was never in the in-flight set, so **the assertion holds whether or not the `finally` exists.** It is a duplicate of the "different card" over-reach guard one test above it. The spec said *"call `fetchMyOptionId` for **that same card** again."*
-
-**Demonstrated:** deleting the `finally` block outright and running `flutter test test/fetch_my_option_id_test.dart` gives **`+3: All tests passed!`**. The guard's own regression test cannot fail. (Probe reverted; tree clean at `557bea0`.)
-
-**92.2 — failure-caching was silently removed, and it inverts the fix in the failure path.** The `catch` used to write `_myOptionIdByCard[cardId] = null`. X1 deleted that line without recording it:
-
-| Path | Before X1 | After X1 |
-|---|---|---|
-| Fetch succeeds | cached; **1 call ever** | cached; **1 call ever** |
-| Fetch **fails** | cached as `null`; **1 call ever** | **nothing cached; one call per rebuild**, serialised by the guard |
-
-So for a card whose fetch persistently fails, **X1 increased total invocations relative to the code it was fixing** — the opposite of Issue 91's intent. The two findings are connected: dropping the cache was presumably meant to let a same-card retry reach the callable, and then the test used a different card anyway, **so the behaviour change bought nothing.**
-
-**The real design question this exposes, which is yours to decide:** *should a failed option-id fetch ever be retried?* The two are coupled — **if failures are cached, the `finally` is unobservable through the public API** (the completion cache short-circuits before the guard is consulted), so it becomes defence-in-depth that no test can reach. If failures are not cached, the `finally` is load-bearing and testable. **The current code chose "not cached" and then did not test it.**
-
-**Option A (recommended): keep retry-on-failure, and fix the test to use the same card**
-- Change the wedge check's second call to `fetchMyOptionId('card_a')` and assert it reaches the callable — `getMyOptionIdCallCount` increments to **2** and the recovered value is returned. Verify by deleting the `finally` and watching it fail.
-- Pros: the `finally` becomes load-bearing and genuinely guarded; transient failures (a network blip) recover instead of poisoning that card's option-id authority for the rest of the round. One test edit, no production change.
-- Cons: a *persistent* failure still retries once per rebuild. Bounded in concurrency, unbounded in total — the residue of 92.2 stays.
-
-**Option B: restore failure-caching, and drop the misleading wedge test**
-- Put `_myOptionIdByCard[cardId] = null` back in the `catch`; keep the `finally` as defence-in-depth; delete the wedge check and record in a comment that the in-flight leak is unobservable because the completion cache short-circuits first.
-- Pros: restores the pre-X1 ceiling of one invocation per card ever, which is the strongest possible answer to Issue 91. Simple and provably bounded.
-- Cons: a transient failure permanently downgrades that card to the text fallback, with no recovery for the rest of the round — and it deletes a test rather than fixing it, which needs the reasoning written down or it reads as coverage loss.
-
-**Option C: cache failures with a bounded retry**
-- Cache the failure but allow it to be re-attempted a fixed number of times (once), e.g. by tracking an attempt count per card.
-- Pros: recovers from a blip *and* bounds the persistent-failure case. Strictly the best behaviour of the three.
-- Cons: most code and a new piece of state to clear in teardown; the test needs to assert both the retry and the ceiling, which is two more assertions than either alternative.
-
-Your selection: Proceed with Option A.
-
-**Regardless of the option chosen:** a test written to prove a guard must be run with the guard removed. **92.1 existed because that step was performed for the leave-control guard (Issue 89.2) and not for this one**, two waves apart, under the same standing rule.
+*(No open issues)*
 
 ---
 
 ## 🧪 Resolved Issues & Implementation Refinements
 
-**Independent verification of Issues 89–95 — August 17, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **155/155** · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions fresh).
+**Independent verification of Issues 89–95 — August 17, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **156/156** · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions fresh).
+
+* **Issue 92 (Option A)** — Updated `test/fetch_my_option_id_test.dart` wedge check to test same-card retry (`card_a`) following an exception, asserting `getMyOptionIdCallCount == 2` and successful receipt of recovered option ID (`opt_recovered`). Conducted falsification probe with `finally` removed from `fetchMyOptionId` in `lib/services/game_service.dart`, observing failure (`Expected: <2>, Actual: <1>`), and restored `finally` with zero diff in `lib/`.
+* **Issue 95 (Option A)** — Added busy state management (`_isCreatingRoom` / `_isJoiningRoom`) with `PrimaryButton` loading indicators and disabled `onPressed` callbacks in `lib/screens/lobby_screen.dart`. Cleared in `finally` blocks to guarantee button re-enabling on error. Verified in `test/lobby_busy_state_test.dart` (falsification in-flight loading state, single invocation idempotency guard, and `finally` error recovery).
+* **Issue 94 (Option A)** — Made option ID an authoritative ternary choice over text heuristic in `lib/widgets/card_grid.dart:47` and replaced text accumulation with latest-only overwrite in `lib/services/game_service.dart:490`. Verified in `test/phase3_vote_test.dart` (falsification: prevented double-sealing when resubmitted text matches another player's submission; over-reach: null option ID fallback and authoritative self-answer lockout).
+* **Issue 93 (Option A)** — Mapped `joinRoom` callable error codes (`not-found`, `invalid-argument`, `unauthenticated`, and fallback) to human-readable sentences in `lib/screens/lobby_screen.dart:206-227`, eliminating raw exception stringification and stack trace dumping into the UI. Verified in `test/lobby_join_error_test.dart` (falsification: mapped copy + absence of stack traces/`pigeon` markers; over-reach: mapped specific codes and generic fallback).
 
 **Independently verified August 17, 2026 — all three hold up, and every guard the spec named is present.** Battery re-measured: `flutter analyze lib test` **0 errors** (26 warnings, 196 infos) · `flutter test` **156/156** (was 147) · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0**.
 

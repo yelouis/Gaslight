@@ -67,6 +67,9 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
   Future<HttpsCallableResult<T>> call<T>([dynamic parameters]) async {
     final params = parameters as Map<String, dynamic>? ?? {};
     onCall?.call(name, params);
+    if (name == 'getMyOptionId') {
+      parent?.getMyOptionIdCallCount++;
+    }
     if (overrideHandler != null) {
       final res = await overrideHandler!(params);
       return FakeHttpsCallableResult(res as T);
@@ -421,7 +424,6 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
     }
 
     if (name == 'getMyOptionId') {
-      parent?.getMyOptionIdCallCount++;
       if (parent?.getMyOptionIdCompleter != null) {
         await parent!.getMyOptionIdCompleter!.future;
       }

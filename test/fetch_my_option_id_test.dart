@@ -145,24 +145,35 @@ void main() {
       expect(resB, 'opt_b2');
     });
 
-    test('wedge check: exception during callable does not permanently wedge in-flight set (finally guard)', () async {
+    test('wedge check: a card whose fetch threw can be fetched again (proves the finally)', () async {
+      /*
+       * Falsification run with finally block removed from fetchMyOptionId in lib/services/game_service.dart:
+       * Expected: fakeFunctions.getMyOptionIdCallCount == 2, res2 == 'opt_recovered'
+       * Observed failure on code without finally:
+       *   Expected: <2>
+       *     Actual: <1>
+       *   The finally must clear the in-flight marker so the same card can be fetched again
+       */
       fakeFunctions.getMyOptionIdCallCount = 0;
       fakeFunctions.overrideCallable('getMyOptionId', (params) async {
         throw Exception('Simulated network failure');
       });
 
-      // First fetch throws and catches
+      // First fetch throws and catches (callCount reaches 1)
       final res1 = await gameService.fetchMyOptionId('card_a');
       expect(res1, isNull);
+      expect(fakeFunctions.getMyOptionIdCallCount, 1);
 
-      // Clear override by overriding with valid result:
+      // Clear override by providing a valid response for retry:
       fakeFunctions.overrideCallable('getMyOptionId', (params) async {
         return {'optionId': 'opt_recovered'};
       });
 
-      // Second fetch should NOT be blocked by stale in-flight marker
-      final res2 = await gameService.fetchMyOptionId('card_b');
-      expect(res2, isNotNull);
+      // Second fetch for THAT SAME CARD must reach callable and succeed
+      final res2 = await gameService.fetchMyOptionId('card_a');
+      expect(fakeFunctions.getMyOptionIdCallCount, 2,
+          reason: 'The finally must clear the in-flight marker so the same card can be fetched again');
+      expect(res2, 'opt_recovered');
     });
   });
 }
