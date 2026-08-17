@@ -24,6 +24,52 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
+**Issues 89 and 90 are open and both need a selection.** **Issue 90 is the more serious of the two — a gameplay-correctness defect found in manual testing on August 16**: self-answer detection matches by text across the whole session, so options written by *other* players become unvotable and a player's vote can be forced. Issue 89 is evidence discipline, not code.
+
+### Issue 90: Self-answer detection matches by text across the whole session, blocking legitimate votes
+
+**Status**: ⚠️ Confirmed in source, August 16, 2026. Found in manual testing on iPhone 17 Pro. **Your hypothesis was right, and the mechanism is worse than mislabelling: the affected options cannot be voted for at all.**
+
+**The reported symptom.** On Cole's card the reporter saw three options — `"They were dumb"` votable, `"asdf"` and `"we're"` both stamped **SEALED / (Your Forgery)** — having written only one forgery for that card. Earlier in the match, every player had been asked to write the same forgery text on a *different* card.
+
+**The mechanism, end to end:**
+
+1. `game_service.dart:483` — `submitCardAnswer` adds every answer's trimmed **text** to `_mySubmittedAnswers`, for truths and forgeries alike.
+2. `game_service.dart:300` — that set is cleared **only in the teardown path**, beside `_gameState = null`. **It accumulates across every card and every round for the entire session.**
+3. `game_service.dart:86` — `isMySubmittedAnswer(text) => _mySubmittedAnswers.contains(text.trim())`. Pure text membership; no card, no round, no author.
+4. `phase3_vote.dart:422` — `final isSelf = gs.isMySubmittedAnswer(opt.text);`
+5. `card_grid.dart:45` — `final isSelfAnswer = ans.isSelfAnswer || ans.authorId == currentPlayerId;` — **the second clause is dead code.** `ans.authorId` is the *opaque option UUID* (`phase3_vote.dart:423` passes `opt.id`), which can never equal a player id since Issue 63. **The text heuristic is the only mechanism doing this job.**
+6. `card_grid.dart:51` — `onTap: isSelfAnswer ? null : () => onSelect(ans.authorId)`. **A flagged option is untappable.**
+
+So any option whose text matches *anything the player has submitted anywhere in the match* is greyed out and unvotable, no matter who wrote it or which card it belongs to.
+
+**Why this is a correctness defect, not a cosmetic one.** In the reported screenshot two of three options were blocked, leaving exactly one tappable — **the player's vote was forced.** If the survivor is the truth they are handed a point they did not earn; if it is a forgery they are handed a loss they could not avoid. The label is also simply false: `(Your Forgery)` is stamped on another player's answer.
+
+**Why cross-card duplicates are legitimate and will keep happening.** `isTooSimilar` (`index.ts:478`) compares a submission only against **that card's** existing answers. Two different prompts drawing the same short answer — `"asdf"`, `"we're"`, `"I don't know"` — is normal play, not abuse. The reporter's scenario is the deliberate version of something that occurs naturally.
+
+**The server bound is correct and must not be touched.** `castVote` resolves the option id through `sealedData.answerAuthors` and rejects only a genuine self-vote (`index.ts:572`). The client is over-blocking relative to a correct server rule — the inverse of this project's usual failure — so **the fix belongs entirely on the client.**
+
+**Option A (recommended): scope the set to the card being voted on**
+- Clear `_mySubmittedAnswers` on each card/phase transition rather than only at teardown, so it holds only what the player submitted for the current card. Same-card duplicates stay flagged correctly, and cross-card collisions disappear.
+- Pros: client-only, no deploy, no rules change, and it preserves the existing UX exactly where that UX is right. Same-card duplicate text is already prevented server-side by `isTooSimilar`, so the narrowed set loses nothing real.
+- Cons: still a text heuristic. If `isTooSimilar` ever admits a same-card near-duplicate, the wrong option could be blocked — rarer, but the same class of bug.
+
+**Option B: identify the player's own option by id rather than text**
+- Pros: exact, and immune to duplicate text entirely.
+- Cons: **the client is never told which option id is its own, by design.** Options are built server-side at the vote transition, authorship lives only in the default-deny sealed document, and player documents are readable by the room — so there is no existing private channel to carry it. This needs new plumbing and a deploy, and risks weakening the "never send authorship to the client" invariant. **Do not attempt without a design decision first.**
+
+**Option C: stop blocking on the client; let the server reject**
+- Pros: exactly correct by construction — `castVote` already throws `failed-precondition` on a real self-vote. Deletes the heuristic instead of narrowing it.
+- Cons: the player can tap their own answer and be refused, which is worse UX than a greyed tile; and the reveal's "(Your Forgery)" labelling would need its own answer.
+
+Your selection: _____
+
+**Blast radius for any option:** the dead identity clause at `card_grid.dart:45` should be removed or repaired in the same commit — it currently reads as though identity checking is happening when nothing is.
+
+**Falsifying validation:** a widget test where the player has submitted `"asdf"` for a *previous* card, and the current card's options include `"asdf"` written by someone else. Assert the option is **votable** and **not** labelled `(Your Forgery)`. **Over-reach guard in the same test:** an option the player genuinely wrote **for the current card** must still be blocked and labelled — a fix that simply deletes the flagging would otherwise pass.
+
+---
+
 ### Issue 89: A4 claims a live session and records no live observation
 
 **Status**: ⚠️ Confirmed August 16, 2026. **The code and the tests are good — this is about one PASS verdict that its own block does not support**, plus one skipped Definition-of-Done step.
