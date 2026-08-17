@@ -44,7 +44,9 @@ class CardGrid extends StatelessWidget {
       itemCount: answers.length,
       itemBuilder: (context, index) {
         final ans = answers[index];
-        final isSelfAnswer = ans.isSelfAnswer || (myOptionIdForThisCard != null && ans.authorId == myOptionIdForThisCard);
+        final isSelfAnswer = myOptionIdForThisCard != null
+            ? ans.authorId == myOptionIdForThisCard
+            : ans.isSelfAnswer;
         final isSelected = selectedAuthorId == ans.authorId;
 
         return Material(

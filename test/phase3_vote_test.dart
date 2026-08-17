@@ -438,5 +438,136 @@ void main() {
 
       await gameService.leaveRoom();
     });
+
+    testWidgets('falsification: option id overrides superseded text and prevents double-sealing (Issue 94 / Y1)', (WidgetTester tester) async {
+      /*
+       * Falsification run against unmodified code (unioning layers and accumulating superseded text):
+       * Expected: 1 tile disabled ((Your Forgery) on Bob's latest "asdfw4er"), Charlie's "asdf" enabled
+       * Observed failure on pre-Y1 code:
+       *   Expected: exactly one matching candidate
+       *     Actual: Found 2 widgets with text '(Your Forgery)'
+       *   disabledCount was 2, enabledCount was 1.
+       */
+      final p1 = PlayerState(id: 'p1', name: 'Alice', role: PlayerRole.voter, isHost: true);
+      final p2 = PlayerState(id: 'p2', name: 'Bob', role: PlayerRole.voter);
+      final p3 = PlayerState(id: 'p3', name: 'Charlie', role: PlayerRole.voter);
+
+      final initialCard = CardModel(
+        promptText: 'A situation where I completely faked my way through a presentation.',
+        targetPlayerId: 'p1',
+        truthAnswer: 'High school',
+        sabotageAnswers: {},
+        options: [],
+      );
+
+      final initialGameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.forgery,
+        totalPlayers: 3,
+        currentReaderId: 'p1',
+        cards: [initialCard],
+        currentCardAssignments: {'p1': 'p1', 'p2': 'p1', 'p3': 'p1'},
+        readyPlayers: {},
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(initialGameState.toMap());
+      for (var p in [p1, p2, p3]) {
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc(p.id).set(
+          p.toMap()..['authUid'] = 'uid_${p.id}',
+        );
+      }
+      await mockDb.collection('rooms').doc('TEST').collection('sealed').doc('p1').set({
+        'truthAnswer': 'High school',
+        'sabotageAnswers': {},
+      });
+
+      gameService.listenToRoom('TEST');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('room_code', 'TEST');
+      await prefs.setString('player_id', 'p2');
+      await gameService.tryRejoinSession();
+
+      // Bob first submitted "asdf" and then resubmitted "asdfw4er" for card p1
+      await gameService.submitCardAnswer('p1', 'p2', 'asdf', false);
+      await gameService.submitCardAnswer('p1', 'p2', 'asdfw4er', false);
+
+      // Now phase advances to vote. Card p1 has Bob's latest "asdfw4er", Charlie's "asdf", and Alice's "High school"
+      final voteCard = CardModel(
+        promptText: 'A situation where I completely faked my way through a presentation.',
+        targetPlayerId: 'p1',
+        truthAnswer: 'High school',
+        sabotageAnswers: {'p2': 'asdfw4er', 'p3': 'asdf'},
+        options: [
+          CardAnswerOption(id: 'opt_bob', text: 'asdfw4er'),
+          CardAnswerOption(id: 'opt_charlie', text: 'asdf'),
+          CardAnswerOption(id: 'opt_truth', text: 'High school'),
+        ],
+      );
+
+      final voteGameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.vote,
+        totalPlayers: 3,
+        currentReaderId: 'p1',
+        cards: [voteCard],
+        currentCardAssignments: {'p1': 'p1'},
+        readyPlayers: {},
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(voteGameState.toMap());
+      await mockDb.collection('rooms').doc('TEST').collection('sealed').doc('p1').set({
+        'truthAnswer': 'High school',
+        'sabotageAnswers': {'p2': 'asdfw4er', 'p3': 'asdf'},
+        'answerAuthors': {
+          'opt_bob': 'p2',
+          'opt_charlie': 'p3',
+          'opt_truth': 'p1',
+        },
+      });
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: MaterialApp(
+            builder: (context, child) {
+              return MediaQuery(
+                data: const MediaQueryData(accessibleNavigation: true),
+                child: child!,
+              );
+            },
+            home: const Phase3VoteScreen(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Exactly one option should be marked (Your Forgery) - only Bob's "asdfw4er"
+      expect(find.text('(Your Forgery)'), findsOneWidget);
+
+      final inkWells = tester.widgetList<InkWell>(find.byType(InkWell)).where((w) => w.child is AnimatedContainer).toList();
+      final disabledCount = inkWells.where((w) => w.onTap == null).length;
+      final enabledCount = inkWells.where((w) => w.onTap != null).length;
+
+      expect(disabledCount, 1, reason: 'Only Bob\'s latest option (asdfw4er) must be disabled');
+      expect(enabledCount, 2, reason: 'Charlie\'s asdf and Alice\'s High school must be votable');
+
+      final asdfFinder = find.ancestor(
+        of: find.text('asdf'),
+        matching: find.byType(InkWell),
+      );
+      expect(asdfFinder, findsOneWidget);
+      final asdfInkWell = tester.widget<InkWell>(asdfFinder);
+      expect(asdfInkWell.onTap, isNotNull, reason: 'Charlie\'s asdf tile must be votable');
+
+      await gameService.leaveRoom();
+    });
   });
 }

@@ -487,7 +487,7 @@ class GameService extends ChangeNotifier {
   Future<void> submitCardAnswer(String targetCardId, String authorId, String text, bool isTruth) async {
     if (_gameState == null) return;
     if (text.trim().isNotEmpty) {
-      _mySubmittedByCard.putIfAbsent(targetCardId, () => {}).add(text.trim());
+      _mySubmittedByCard[targetCardId] = {text.trim()};
     }
     await _functions.httpsCallable('submitAnswer').call({
       'roomCode': _gameState!.roomCode,
