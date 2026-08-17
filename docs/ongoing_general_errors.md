@@ -24,13 +24,63 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open unresolved issues as of August 16, 2026.**
+### Issue 91: `fetchMyOptionId` has no in-flight guard, and is called from `build()`
+
+**Status**: ⚠️ Confirmed in source, August 17, 2026, during the verification pass on Issues 89/90. **Minor, bounded, and not user-visible — filed because the repository already contains the idiom that fixes it, two lines from the code that omits it.**
+
+**Everything about W3/W4 checks out** (see the resolved entries below) — this is a seam in the new plumbing, not a defect in the logic.
+
+`fetchMyOptionId` (`game_service.dart:509`) caches by completion:
+
+```dart
+    if (_myOptionIdByCard.containsKey(cardId)) {
+      return _myOptionIdByCard[cardId];
+    }
+```
+
+The map is written only on success (`:522`) or in the `catch` (`:527`). **Between issuing the call and its completion, `containsKey` is still false.** The call site is inside `build()`:
+
+```dart
+    final gs = context.watch<GameService>();
+    final cardId = currentCard?.targetPlayerId;
+    if (cardId != null) {
+      gs.fetchMyOptionId(cardId);      // phase3_vote.dart:423
+    }
+```
+
+`context.watch` rebuilds this screen on **every** `GameService` change, and the vote phase is chatty — `readyPlayers` updates as each player votes, plus room snapshots. Every rebuild inside the resolution window issues **another** `getMyOptionId` invocation for the same card.
+
+**Two separable smells:**
+1. **No in-flight guard.** `game_service.dart:93` already defines `final Set<String> _disconnectsInFlight = {}` and uses it at `:405–406` and `:479` for exactly this purpose — preventing duplicate callable invocations for the same key. `fetchMyOptionId` does not use the equivalent.
+2. **A side-effecting async call inside `build()`.** Fragile in Flutter generally, and the reason the missing guard bites: `build` is not a place where "call this once" holds.
+
+**Impact is real but small:** a handful of redundant Cloud Function invocations per card per player — cost and load, no incorrect behaviour, and the cache still converges. **It is invisible to the current tests** because the widget tests pump a settled frame and `test/fake_functions.dart` resolves without a realistic in-flight window.
+
+**Option A (recommended): add the in-flight guard, matching the existing idiom**
+- Add `final Set<String> _optionIdFetchesInFlight = {}`; return early when the card id is present; add before the call and remove in a `finally`. Mirrors `_disconnectsInFlight` exactly.
+- Pros: three lines, uses a pattern already proven in this file, and leaves the call site untouched.
+- Cons: leaves the `build()`-side-effect smell in place.
+
+**Option B: move the fetch out of `build()` as well**
+- Trigger it from `didChangeDependencies` or a post-frame callback when the card id changes, keeping the guard from Option A.
+- Pros: fixes both smells; the fetch fires once per card by construction rather than by guard.
+- Cons: more moving parts on a screen with an existing `_lastReaderId` change-detection pattern to integrate with, and the guard is still wanted for safety.
+
+**Option C: leave it**
+- Pros: honest — the cache converges, behaviour is correct, and the waste is small.
+- Cons: it is a known duplicate-invocation path in a paid callable, and the fix is three lines using an idiom already in the file.
+
+Your selection: _____
+
+**Falsifying validation for A or B:** a test that issues two `fetchMyOptionId` calls for the same card before the first resolves, asserting the underlying callable is invoked **exactly once**. **Over-reach guard:** a fetch for a *different* card must still go through, and a second fetch after the first completes must still return the cached value rather than refetching.
 
 ---
 
 ## 🧪 Resolved Issues & Implementation Refinements
 
 **Independent verification of Issues 89–90 — August 16, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (223 issues) · `flutter test` **144/144** · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions fresh, oldest `getMyOptionId` `2026-08-17T03:39:04Z` after the last commit).
+
+**Independently verified August 17, 2026 — Issues 89 and 90 both hold up, end to end.** Battery re-measured: `flutter analyze lib test` **0 errors** (26 warnings, 197 infos) · `flutter test` **144/144** · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0 with all 15 functions**, `getMyOptionId` deployed `2026-08-17T03:39:04Z` after the last `functions/src` commit. Checked beyond the tests: the callable is **actually wired into the running app**, not merely parameterised for tests — `fetchMyOptionId` (`game_service.dart:509`) → `getMyOptionIdForCard` (`:90`) → `phase3_vote.dart:423/425` → `CardGrid.myOptionIdForThisCard` → the repaired identity clause at `card_grid.dart:47`. The security bound is genuinely asserted (`game_e2e.spec.ts` Bound 3: a non-author querying another player's id gets `PERMISSION_DENIED`, matched on the code), and the W2 falsification artefact quotes the real failure text at `test/in_game_leave_test.dart:212–214`. **One small seam found and filed as Issue 91** — no in-flight guard on the fetch. **This is the first wave in this sequence with no correctness residue.**
 
 * **Issue 90 (Option D)** — Layered approach: (1) W3 scoped `_mySubmittedByCard` per target card ID in `GameService`, eliminating cross-card duplicate false-positives; (2) W4 introduced `getMyOptionId` private callable in `functions/src/index.ts` to identify the caller's own opaque option ID from `sealed/{cardId}.answerAuthors` without disclosing other players' authorship, wired it through `GameService`, `Phase3VoteScreen`, and `CardGrid` (repairing the dead identity clause), while preserving per-card text matching as fallback. Widget tests in `test/phase3_vote_test.dart` prove same-card duplicate text is distinguished and fallback functions under null fetch.
 * **Issue 89 (Option A)** — (1) Downgraded A4 verdict in `docs/playthrough_findings_marionette.md` to `PASS (backend boundary + client widget mapping) · NOT RUN on device`, removing unsupported live session claims. (2) Executed T1 falsification probe on timer-disabled leave controls, observed failure text, and recorded the run in `test/in_game_leave_test.dart`.

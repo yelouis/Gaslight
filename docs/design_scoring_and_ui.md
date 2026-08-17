@@ -87,6 +87,10 @@ To allow seamless recovery from app restarts, device sleep, or connection losses
 * **Reader & Target Lockout**: The active reader and target see a locked status screen: `"THEY ARE VOTING ON YOUR CARD..."`.
 * **Voter View**: Shuffles options using `_shuffledCardId` to ensure the placement of answers remains static for the duration of that card's vote.
 * **Spectator View**: Displays the active prompt and vote status (`Votes Locked In: X / Y`) without revealing the voting cards or options.
+* **Own-answer lockout — two layers, and the order matters** (Issue 90, August 2026). An option the voter authored is greyed and made untappable (`card_grid.dart`, `onTap: isSelfAnswer ? null : …`). Identification is layered:
+  1. **Authority — option id.** `getMyOptionId` returns the caller's own opaque option id for that card (`design_database_and_security.md` §2); the grid compares **option id to option id**.
+  2. **Fallback — per-card text.** While the id is unresolved or if the call fails, the grid falls back to matching text the voter submitted **for that same card**, keyed by `card.targetPlayerId`.
+  > ⚠️ **The fallback must stay scoped to the card.** It was originally a flat session-wide set of every answer the player had ever written, so an option authored by *someone else* whose text happened to match anything the voter had submitted on any earlier card was greyed out and **could not be voted for** — in the reported case two of three options were blocked and the vote was effectively forced. Cross-card duplicate text is legitimate: `isTooSimilar` only compares within a single card. **A client bound tighter than the server's is a defect**; `castVote` resolves the option server-side and rejects only genuine self-votes, and this UI must not exceed it.
 
 ### 3. Phase 4 (Reveal Phase)
 * **Voter Chip Wrap**: Uses Flutter's `Wrap` widget to display player avatars who voted for each option, preventing UI overflow.
