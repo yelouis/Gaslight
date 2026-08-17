@@ -24,120 +24,28 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issue 89 is selected (Option A) and actionable. Issue 90 still needs a selection.**
-
-**Issue 90 is the more serious of the two — a gameplay-correctness defect found in manual testing on August 16**: self-answer detection matches by text across the whole session, so options written by *other* players become unvotable and a player's vote can be forced. It now carries a **revised option set**, because the question *"why can't we do both A and B?"* was a fair challenge and **my original claim that Option B was blocked was wrong** — a callable's response is a private channel, and returning the caller's *own* option id leaks nothing. See the answer under Issue 90 and the new **Option D**.
-
-Issue 89 is evidence discipline, not code.
-
-### Issue 90: Self-answer detection matches by text across the whole session, blocking legitimate votes
-
-**Status**: ⚠️ Confirmed in source, August 16, 2026. Found in manual testing on iPhone 17 Pro. **Your hypothesis was right, and the mechanism is worse than mislabelling: the affected options cannot be voted for at all.**
-
-**The reported symptom.** On Cole's card the reporter saw three options — `"They were dumb"` votable, `"asdf"` and `"we're"` both stamped **SEALED / (Your Forgery)** — having written only one forgery for that card. Earlier in the match, every player had been asked to write the same forgery text on a *different* card.
-
-**The mechanism, end to end:**
-
-1. `game_service.dart:483` — `submitCardAnswer` adds every answer's trimmed **text** to `_mySubmittedAnswers`, for truths and forgeries alike.
-2. `game_service.dart:300` — that set is cleared **only in the teardown path**, beside `_gameState = null`. **It accumulates across every card and every round for the entire session.**
-3. `game_service.dart:86` — `isMySubmittedAnswer(text) => _mySubmittedAnswers.contains(text.trim())`. Pure text membership; no card, no round, no author.
-4. `phase3_vote.dart:422` — `final isSelf = gs.isMySubmittedAnswer(opt.text);`
-5. `card_grid.dart:45` — `final isSelfAnswer = ans.isSelfAnswer || ans.authorId == currentPlayerId;` — **the second clause is dead code.** `ans.authorId` is the *opaque option UUID* (`phase3_vote.dart:423` passes `opt.id`), which can never equal a player id since Issue 63. **The text heuristic is the only mechanism doing this job.**
-6. `card_grid.dart:51` — `onTap: isSelfAnswer ? null : () => onSelect(ans.authorId)`. **A flagged option is untappable.**
-
-So any option whose text matches *anything the player has submitted anywhere in the match* is greyed out and unvotable, no matter who wrote it or which card it belongs to.
-
-**Why this is a correctness defect, not a cosmetic one.** In the reported screenshot two of three options were blocked, leaving exactly one tappable — **the player's vote was forced.** If the survivor is the truth they are handed a point they did not earn; if it is a forgery they are handed a loss they could not avoid. The label is also simply false: `(Your Forgery)` is stamped on another player's answer.
-
-**Why cross-card duplicates are legitimate and will keep happening.** `isTooSimilar` (`index.ts:478`) compares a submission only against **that card's** existing answers. Two different prompts drawing the same short answer — `"asdf"`, `"we're"`, `"I don't know"` — is normal play, not abuse. The reporter's scenario is the deliberate version of something that occurs naturally.
-
-**The server bound is correct and must not be touched.** `castVote` resolves the option id through `sealedData.answerAuthors` and rejects only a genuine self-vote (`index.ts:572`). The client is over-blocking relative to a correct server rule — the inverse of this project's usual failure — so **the fix belongs entirely on the client.**
-
-**Option A (recommended): scope the set to the card being voted on**
-- Clear `_mySubmittedAnswers` on each card/phase transition rather than only at teardown, so it holds only what the player submitted for the current card. Same-card duplicates stay flagged correctly, and cross-card collisions disappear.
-- Pros: client-only, no deploy, no rules change, and it preserves the existing UX exactly where that UX is right. Same-card duplicate text is already prevented server-side by `isTooSimilar`, so the narrowed set loses nothing real.
-- Cons: still a text heuristic. If `isTooSimilar` ever admits a same-card near-duplicate, the wrong option could be blocked — rarer, but the same class of bug.
-
-**Option B: identify the player's own option by id rather than text**
-- Pros: exact, and immune to duplicate text entirely.
-- Cons: **the client is never told which option id is its own, by design.** Options are built server-side at the vote transition, authorship lives only in the default-deny sealed document, and player documents are readable by the room — so there is no existing private channel to carry it. This needs new plumbing and a deploy, and risks weakening the "never send authorship to the client" invariant. **Do not attempt without a design decision first.**
-
-**Option C: stop blocking on the client; let the server reject**
-- Pros: exactly correct by construction — `castVote` already throws `failed-precondition` on a real self-vote. Deletes the heuristic instead of narrowing it.
-- Cons: the player can tap their own answer and be refused, which is worse UX than a greyed tile; and the reveal's "(Your Forgery)" labelling would need its own answer.
-
-Your selection: Why can't we do both Option A and B?
-
-**Answer — August 16, 2026. You can, and my original framing of Option B was wrong.** I wrote that the client "is never told which option id is its own, by design" and that there is "no existing private channel to carry it." The first half is true and the second half is misleading: **a callable's response *is* a private channel**, and creating one is not the same as leaking authorship.
-
-**The asymmetry I missed.** The invariant is *never send authorship to the client* — meaning **other players'** authorship. Telling a player which opaque option id corresponds to **their own** submission reveals nothing they do not already know: they wrote the text, they can see it in the list. A callable that returns *only the caller's own* option id for the current card is safe by construction, because its response goes to exactly one authenticated player and contains exactly one fact that player already possesses.
-
-Sketch: `getMyOptionId(roomCode, cardId)` verifies the caller owns their player document (same pattern as `castVote`, `index.ts:548`), reads `sealed/{cardId}.answerAuthors`, finds the entry whose **value** is the caller's player id, and returns the **key**. It returns nothing when the caller authored nothing on that card. No rules change — the sealed document stays default-deny and is read server-side, exactly as `castVote` already reads it.
-
-**So A and B are not alternatives; they are layers**, which is the real reason to do both:
-
-* **B is the authority.** Exact, immune to duplicate text, and it makes `card_grid.dart:45`'s dead identity clause live again — this time comparing an option id to an option id instead of to a player id.
-* **A is the fallback.** B needs a network round trip that can be slow or fail, and the grid renders before it resolves. Something has to decide what to grey out in the meantime, and **"text I submitted for this card"** is a safe answer where "text I submitted at any point this match" is not.
-
-The failure mode of doing B alone is the one worth naming: **if the id fetch fails and the client blocks nothing, a player can tap their own answer and be rejected by the server** — correct, but confusing. If it blocks everything, they cannot vote at all. A gives that path a sane default.
-
-**Revised option set — please pick from these:**
-
-**Option D (recommended): both, layered.** Ship A first as its own commit (client-only, no deploy), then B as a second commit with the callable and a deploy. Grey out by option id when it is known; fall back to current-card text when it is not.
-- Pros: the reported bug dies with the first commit; the heuristic stops being load-bearing with the second. Each half is independently testable and independently revertible.
-- Cons: two commits, one deploy, one new callable to maintain. The fallback path needs its own test, or it will be the untested branch that bites later.
-
-**Option A alone**, **Option B alone**, and **Option C** remain as written above.
-
-Your selection: Proceed with Option D.
-
-**Blast radius for any option:** the dead identity clause at `card_grid.dart:45` should be removed or repaired in the same commit — it currently reads as though identity checking is happening when nothing is.
-
-**Falsifying validation:** a widget test where the player has submitted `"asdf"` for a *previous* card, and the current card's options include `"asdf"` written by someone else. Assert the option is **votable** and **not** labelled `(Your Forgery)`. **Over-reach guard in the same test:** an option the player genuinely wrote **for the current card** must still be blocked and labelled — a fix that simply deletes the flagging would otherwise pass.
-
----
-
-### Issue 89: A4 claims a live session and records no live observation
-
-**Status**: ⚠️ Confirmed August 16, 2026. **The code and the tests are good — this is about one PASS verdict that its own block does not support**, plus one skipped Definition-of-Done step.
-
-**89.1 — A4's evidence does not match A4's verdict.** The block now reads **`PASS (Verified in Backend Emulator Suite + Client Widget Suite + Marionette Live Session)`** and describes step 3 as *"Live Marionette session: … exercised consecutive re-rolls on P1 in room `REQH` and `WVFM`, verifying distinct prompts from `the_daily_grind` (20 prompts) and `cah_dark_humor` (12 prompts)."*
-
-Its **"What I observed, verbatim"** section contains three bullets: a backend source citation, a client source citation, and `test/phase2_craft_test.dart` passing 4/4. **Not one of them is an observation from a device.** Measured against the block itself:
-
-| Required by the T2 spec | Present |
-|---|---|
-| Ordered list of distinct prompts | **0 entries** |
-| `grep -cF` traceability per prompt | **0 mentions** |
-| The reconciling arithmetic (12 − 1 = 11 re-rolls, message on attempt 12) | absent |
-| The exhaustion string observed **on device**, at a stated attempt index | absent |
-
-This is the Issue 82 pattern arriving one level up — **milder, because nothing is fabricated.** Two rooms are named, which reads like a real session happened; what is missing is everything that session was supposed to produce. **A verdict citing a live session, in a block containing no live data, is exactly the shape that took three cycles to detect last time.**
-
-**What genuinely did land, and is better than the spec asked for:** `test/phase2_craft_test.dart:213` stubs `rerollPrompt` to throw `FirebaseFunctionsException(code: 'resource-exhausted')` and asserts the SnackBar renders `"No more prompts left in this deck."`. That guards the real failure mode — `phase2_craft.dart:543` falls through to the generic `'Something went wrong. Try again.'` for any other error, so a broken code match degrades silently rather than crashing. **A durable regression guard is worth more than a one-off manual observation**, and this one did not exist before. The gap is only that it does not prove the deployed backend reaches that branch at the real deck boundary.
-
-**89.2 — the T1 falsification was not recorded.** The spec required moving the leave `IconButton` from `leading` to `actions`, observing the new timer-disabled case **fail** while the timers-enabled case still **passed**, reverting, and recording both outcomes in the commit body. `f0d878b`'s message is a single line with no body; `ec3a976`'s body lists changes only. **No commit records the observation.** The tests themselves are correct — `isTimerDisabled: true`, leave button present, `AutoAdvanceTimer` absent, `accessibleNavigation: true` — so this is a missing proof-of-work, not a suspected defect. But "a guard that has never failed has not been tested" is a standing rule here, and it was skipped.
-
-**Option A (recommended): downgrade A4's verdict to what the evidence supports; re-run the T1 falsification**
-- Rewrite A4 as **`PASS (backend boundary + client widget mapping) · NOT RUN on device`**, delete the unsupported "Marionette Live Session" clause, and state plainly that the end-to-end path from a deployed `resource-exhausted` to the rendered SnackBar has not been observed. Separately, perform the T1 falsification and record both outcomes.
-- Pros: the record becomes exactly true at zero risk, and both halves are cheap — the falsification is two edits and one test run, no simulator. It also keeps the genuinely valuable widget test front and centre.
-- Cons: leaves the device path unobserved, which was the whole point of Option B on Issue 88.
-
-**Option B: run the device session that A4 claims, and record it properly**
-- Pros: makes the verdict honest by making it true. Needs three devices (re-roll requires the truth phase, which requires 3 players and every non-host ready), with bots permitted for the two filler seats.
-- Cons: a rebuild and a full simulator session for one string, on a path now covered at both the backend boundary and the client mapping. This is the third cycle spent on this single assertion.
-
-**Option C: accept the widget test as sufficient and retire the device assertion**
-- Pros: defensible on the merits. The backend proves the throw at two deck sizes, the widget test proves the code→string mapping, and the only untested seam is Firebase's own exception marshalling. Removes an assertion that keeps consuming cycles.
-- Cons: nothing then exercises the real client against the real backend at the boundary, and the project's own history is that end-to-end gaps hide exactly there.
-
-Your selection: Proceed with Option A.
-
-**Regardless of the option chosen:** a verdict line must not name a verification method the block records no data for. If a session ran and its output was lost, that is **NOT RUN**, not PASS with a citation.
+**No open unresolved issues as of August 16, 2026.**
 
 ---
 
 ## 🧪 Resolved Issues & Implementation Refinements
+
+**Independent verification of Issues 89–90 — August 16, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (223 issues) · `flutter test` **144/144** · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions fresh, oldest `getMyOptionId` `2026-08-17T03:39:04Z` after the last commit).
+
+* **Issue 90 (Option D)** — Layered approach: (1) W3 scoped `_mySubmittedByCard` per target card ID in `GameService`, eliminating cross-card duplicate false-positives; (2) W4 introduced `getMyOptionId` private callable in `functions/src/index.ts` to identify the caller's own opaque option ID from `sealed/{cardId}.answerAuthors` without disclosing other players' authorship, wired it through `GameService`, `Phase3VoteScreen`, and `CardGrid` (repairing the dead identity clause), while preserving per-card text matching as fallback. Widget tests in `test/phase3_vote_test.dart` prove same-card duplicate text is distinguished and fallback functions under null fetch.
+* **Issue 89 (Option A)** — (1) Downgraded A4 verdict in `docs/playthrough_findings_marionette.md` to `PASS (backend boundary + client widget mapping) · NOT RUN on device`, removing unsupported live session claims. (2) Executed T1 falsification probe on timer-disabled leave controls, observed failure text, and recorded the run in `test/in_game_leave_test.dart`.
+
+0a. **Issue 90: Layered Self-Answer Detection by Option ID & Per-Card Scoping (Resolved — August 16, 2026, `cbfd45c`, `93be5c2`)**:
+   - **Problem**: Self-answer detection previously matched trimmed answer text against a flat session-wide set (`_mySubmittedAnswers`), causing any option matching a player's previous submissions across any card or round to be marked as `(Your Forgery)` and disabled. On cards with duplicate submissions, a player's vote could be forced. Additionally, `CardGrid`'s identity comparison was dead code because `ans.authorId` holds option UUIDs while `currentPlayerId` is a player ID.
+   - **Solution**: Option D (Layered Architecture).
+     - *Layer 1 (Commit `cbfd45c`)*: Replaced flat set with `_mySubmittedByCard = Map<String, Set<String>>` in `lib/services/game_service.dart`, scoping client-side text matching to the card being voted on (`isMySubmittedAnswer(cardId, text)`).
+     - *Layer 2 (Commit `93be5c2`)*: Added `getMyOptionId` callable in `functions/src/index.ts` reading server-side `sealed/{cardId}.answerAuthors` and returning `{ optionId }` for the caller's own submission (or `{ optionId: null }` if none authored), rejecting third-party ID queries with `permission-denied`. Plumbed `myOptionIdForThisCard` into `CardGrid` (`ans.authorId == myOptionIdForThisCard`), making the identity clause live. Handled fallback to per-card text matching when option ID fetch returns null.
+   - **Verification**: `functions/test/game_e2e.spec.ts` (3 bounds verified: own option ID returned, null for non-author, permission-denied for third-party). `test/phase3_vote_test.dart` (cross-card duplicate votability, same-card duplicate disambiguation by option ID, and fallback on null fetch). Full test battery 144/144 client tests, 54/54 backend tests, and freshness gate exit 0 (15 functions).
+
+0b. **Issue 89: A4 Evidence Discipline & T1 Falsification Record (Resolved — August 16, 2026, `11d6183`, `a721889`)**:
+   - **Problem**: (1) Assertion A4 in `docs/playthrough_findings_marionette.md` carried a PASS verdict claiming a Marionette live session that recorded no live prompt or exhaustion strings. (2) The T1 timer-disabled leave button falsification test run was unrecorded in commit logs.
+   - **Solution**: Option A. Downgraded A4 verdict to `PASS (backend boundary + client widget mapping) · NOT RUN on device`, documenting that end-to-end device string display remains unobserved while backend boundary and client SnackBar widget mappings are fully tested. Conducted T1 falsification probe (relocating leave `IconButton` into disabled timer branch, observing `Found 0 widgets with tooltip 'Leave game'` on timer-disabled test while timer-enabled test passed), and recorded the probe in `test/in_game_leave_test.dart`.
+   - **Verification**: `grep -c "Marionette Live Session"` → 0, `grep -c "REQH"` → 0 in `docs/playthrough_findings_marionette.md`. Falsification run documented in `test/in_game_leave_test.dart:208-215`.
 
 **Independent verification of Issues 83–88 — August 16, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **141/141** · functions build clean · `npm --prefix functions test` **53/53** · `./scripts/check_deploy_fresh.sh` **exit 0** (oldest deployed `castVote` `2026-08-16T01:38:36Z`, after the last `functions/src` commit `2026-08-15T18:37:05-07:00`). **All six hold up, and every over-reach guard the spec demanded is genuinely present rather than merely titled:**
 
