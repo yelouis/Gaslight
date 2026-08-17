@@ -70,7 +70,7 @@ The map is written only on success (`:522`) or in the `catch` (`:527`). **Betwee
 - Pros: honest — the cache converges, behaviour is correct, and the waste is small.
 - Cons: it is a known duplicate-invocation path in a paid callable, and the fix is three lines using an idiom already in the file.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Falsifying validation for A or B:** a test that issues two `fetchMyOptionId` calls for the same card before the first resolves, asserting the underlying callable is invoked **exactly once**. **Over-reach guard:** a fetch for a *different* card must still go through, and a second fetch after the first completes must still return the cached value rather than refetching.
 
