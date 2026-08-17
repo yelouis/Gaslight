@@ -45,6 +45,8 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
   String? _handledRoomClosedKey;
   bool _isLeaving = false;
   bool _isStartingGame = false;
+  bool _isCreatingRoom = false;
+  bool _isJoiningRoom = false;
 
   void _confirmLeave(BuildContext context, GameService gs, bool isHost) {
     if (_isLeaving) return;
@@ -174,6 +176,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     setState(() => _nameError = name.isEmpty);
     if (name.isEmpty) return;
 
+    setState(() => _isCreatingRoom = true);
     final gameService = context.read<GameService>();
     try {
       final playerId = await gameService.getOrCreateStablePlayerId();
@@ -189,6 +192,10 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
+    } finally {
+      if (mounted) {
+        setState(() => _isCreatingRoom = false);
+      }
     }
   }
 
@@ -198,6 +205,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     setState(() => _nameError = name.isEmpty);
     if (name.isEmpty || roomCode.length != 4) return;
 
+    setState(() => _isJoiningRoom = true);
     final gameService = context.read<GameService>();
     try {
       final playerId = await gameService.getOrCreateStablePlayerId();
@@ -223,6 +231,10 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
           msg = 'Something went wrong. Try again.';
         }
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isJoiningRoom = false);
       }
     }
   }
@@ -1123,7 +1135,8 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                               SizedBox(height: isSmallHeight ? 8 : 20),
                               PrimaryButton(
                                 text: 'CREATE ROOM',
-                                onPressed: _createRoom,
+                                onPressed: (_isCreatingRoom || _isJoiningRoom) ? null : _createRoom,
+                                loading: _isCreatingRoom,
                               ),
                               Padding(
                                 padding: EdgeInsets.symmetric(vertical: isSmallHeight ? 6 : 12),
@@ -1182,8 +1195,17 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                   ),
                                   elevation: 6,
                                 ),
-                                onPressed: _joinRoom,
-                                child: const Text('JOIN ROOM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 2.0)),
+                                onPressed: (_isCreatingRoom || _isJoiningRoom) ? null : _joinRoom,
+                                child: _isJoiningRoom
+                                    ? const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.5,
+                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                        ),
+                                      )
+                                    : const Text('JOIN ROOM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 2.0)),
                               ),
                               SizedBox(height: isSmallHeight ? 6 : 12),
                               TextButton.icon(

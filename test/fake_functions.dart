@@ -27,6 +27,10 @@ class FakeFirebaseFunctions extends Fake implements FirebaseFunctions {
   final Map<String, Future<dynamic> Function(Map<String, dynamic> params)> _callableOverrides = {};
   Completer<void>? getMyOptionIdCompleter;
   int getMyOptionIdCallCount = 0;
+  Completer<void>? createRoomCompleter;
+  int createRoomCallCount = 0;
+  Completer<void>? joinRoomCompleter;
+  int joinRoomCallCount = 0;
 
   FakeFirebaseFunctions(this.db);
 
@@ -70,6 +74,10 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
     final roomCode = params['roomCode'] as String? ?? 'TEST';
 
     if (name == 'createRoom') {
+      parent?.createRoomCallCount++;
+      if (parent?.createRoomCompleter != null) {
+        await parent!.createRoomCompleter!.future;
+      }
       final playerName = params['playerName'];
       final playerId = params['playerId'];
       final colorValue = params['colorValue'];
@@ -100,6 +108,10 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
     }
 
     if (name == 'joinRoom') {
+      parent?.joinRoomCallCount++;
+      if (parent?.joinRoomCompleter != null) {
+        await parent!.joinRoomCompleter!.future;
+      }
       final roomCode = params['roomCode'];
       final playerName = params['playerName'];
       final playerId = params['playerId'];

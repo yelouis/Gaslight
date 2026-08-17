@@ -24,115 +24,6 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-### Issue 94: Two answers sealed again — the option id can add to the text heuristic but never override it
-
-**Status**: ⚠️ Confirmed in source, August 17, 2026. Found in manual testing on iPhone 17. **This is a different mechanism from Issue 90 and survives the W3/W4 fix.**
-
-**The symptom.** On Cole's card (`"A situation where I completely faked my way through a presentation."`) the reporter saw `"High school"` votable and **both** `"asdfw4er"` and `"asdf"` stamped **SEALED / (Your Forgery)**.
-
-**Why the option-id authority cannot have prevented it.** `getMyOptionId` returns **at most one** id. So the id path can flag at most one tile — **the second SEALED tile must have come from the text path.**
-
-**Two defects combine:**
-
-**94.1 — the layers are OR'd, not ordered.** `card_grid.dart:47`:
-
-```dart
-final isSelfAnswer = ans.isSelfAnswer || (myOptionIdForThisCard != null && ans.authorId == myOptionIdForThisCard);
-```
-
-The spec was *"B is the authority; A is the fallback"* — text consulted **only when the id is unknown**. As written the two are unioned, so **the authoritative id can add a tile to the blocked set but can never remove one the heuristic wrongly added.** The layering that was supposed to retire the heuristic instead preserves every one of its false positives.
-
-**94.2 — the per-card record accumulates superseded text.** `game_service.dart:490`:
-
-```dart
-_mySubmittedByCard.putIfAbsent(targetCardId, () => {}).add(text.trim());
-```
-
-A `Set` that only ever grows. Meanwhile the server keeps **only the latest** answer per author — `index.ts:521` does `{ ...existing, [authorId]: text }`. So a player who submits `"asdf"` and then resubmits `"asdfw4er"` **for the same card** leaves the client believing both are theirs, while only the second exists server-side. The first is now free to match *another player's* answer — and in this project's testing, placeholder text like `asdf` is typed on several devices at once.
-
-That is exactly the reported shape: two tiles, one genuinely the reporter's (matched by id **and** text), one a stale text match on someone else's answer.
-
-**Consequences are the same as Issue 90 and just as serious:** the tile is untappable (`card_grid.dart:51`), so with three options and two blocked the vote is forced, and `(Your Forgery)` is a false statement about another player's answer.
-
-**Option A (recommended): make the id a true authority, and keep only the latest text per card**
-- `card_grid.dart:47` becomes an ordered choice, not a union — when `myOptionIdForThisCard != null`, use **only** the id comparison; fall back to `ans.isSelfAnswer` only when it is null. And `_mySubmittedByCard[cardId]` holds **the latest submission**, replacing rather than adding, mirroring the server's overwrite semantics.
-- Pros: fixes both windows — the resolved-id case (94.1) and the pre-resolution fallback (94.2). Two small client edits, no deploy. It also makes the layering match what `design_scoring_and_ui.md` §3.2 already documents, which currently describes behaviour the code does not have.
-- Cons: two changes in one commit; each needs its own assertion or one will be untested.
-
-**Option B: fix the layering only (94.1)**
-- Pros: single-line change, and it is the defect that actually let this through.
-- Cons: leaves the fallback wrong whenever the id has not resolved — the exact window Issue 91's guard makes *longer* on a slow network.
-
-**Option C: fix the accumulation only (94.2)**
-- Pros: keeps both layers unioned, so a stale id cannot unblock a genuinely-own answer.
-- Cons: does not fix the general case — any text collision on the same card still misfires despite an authoritative id being present.
-
-Your selection: Proceed with Option A.
-
-**Falsifying validation:** a widget test where the player submits `"asdf"` and then `"asdfw4er"` **for the same card**, `getMyOptionId` resolves to the `"asdfw4er"` option, and a *different* player's option on that card carries `"asdf"`. Assert **only** the id-matched tile is blocked and labelled, and the `"asdf"` tile is **votable**. Run it against today's code and observe **two** tiles blocked. **Over-reach guard:** with the id `null`, the player's own *current* text must still be blocked — a fix that simply stopped consulting text would otherwise pass.
-
----
-
-### Issue 93: A failed join dumps a raw exception and stack trace into the UI
-
-**Status**: ⚠️ Confirmed in source, August 17, 2026. Found in manual testing on iPhone 17.
-
-Joining a room that does not exist renders, inside the Guest Ledger card, roughly twenty lines beginning `Error: [firebase_functions/not-found] Game room not found.` followed by a `pigeon/messages.pigeon.dart` stack trace through `MethodChannelHttpsCallable.call`, `GameService.joinRoom`, and `_LobbyScreenState._joinRoom`.
-
-The cause is one line — `lobby_screen.dart:206`:
-
-```dart
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-```
-
-`$e` on a `FirebaseFunctionsException` stringifies to message **plus** stack. **The codebase already knows the right pattern:** `phase2_craft.dart:543` matches on `e.code` and maps it to a specific sentence, falling through to `'Something went wrong. Try again.'` for anything else.
-
-**Option A (recommended): map the codes the join path can actually produce, with a generic fallback**
-- **Enumerated from source, August 17, 2026 — `joinRoom` throws exactly three codes** (`index.ts:142–229`): `unauthenticated`, `invalid-argument`, `not-found`. **There is no `failed-precondition` or `permission-denied` on this path**, contrary to my original speculation above; joining a started game is not rejected by code. Map those three and let everything else fall through to the existing generic string. **Never interpolate the exception object into user-facing text.**
-- Pros: matches the established pattern, and the code list is small, closed, and verified rather than guessed.
-- Cons: the map must be re-checked if `joinRoom` ever gains a code — a mismapped code degrades to the generic string, which is safe but silent.
-
-**Option B: a generic message for every failure**
-- Pros: one line, and it can never leak a trace.
-- Cons: "something went wrong" for a mistyped room code is a bad experience for the single most likely error in the app.
-
-**Option C: fix this site and audit every other `Text('Error: $e')`**
-- Pros: this is unlikely to be the only one; a repo-wide grep would settle it.
-- Cons: wider than the report, and each site needs its own sensible copy.
-
-Your selection: Proceed with Option A.
-
-**Falsifying validation:** a widget test where `joinRoom` throws `FirebaseFunctionsException(code: 'not-found')`, asserting the SnackBar shows the mapped sentence and that the rendered text **does not contain** `pigeon` or `#0`. The second half is the assertion that actually pins the defect.
-
----
-
-### Issue 95: No busy state on CREATE ROOM or JOIN ROOM
-
-**Status**: ⚠️ Confirmed in source, August 17, 2026. Found in manual testing.
-
-`CREATE ROOM` and `JOIN ROOM` call callables that take a network round trip, and neither shows that anything is happening — the button looks inert, inviting a second tap. `lobby_screen.dart` has exactly one busy flag, `_isStartingGame` (`:46`), used only by START GAME (`:950–965`).
-
-**⚠️ Correction, August 17, 2026.** I originally wrote that *"`PrimaryButton` has no loading state at all, so there is nothing to render a spinner with today."* **That is wrong.** `PrimaryButton` (`shared_ui.dart:90`) already declares `final bool loading` and `final bool showTextOnLoading`, and its state class drives a `_loadingController` animation from them. **It is already used twice** — `phase2_craft.dart:500` (`loading: _isSubmitting`) and `game_over_screen.dart:281` (`loading: _isSharing`). **Option A is therefore much smaller than described below: two busy flags and two `loading:` arguments, with no change to the shared widget and no call-site audit.** The cons listed under Option A no longer apply.
-
-**Option A (recommended): add a loading state to `PrimaryButton`, then use it on both**
-- Give `PrimaryButton` an `isLoading` flag that swaps the label for a small indicator and disables `onPressed`; add `_isCreatingRoom` / `_isJoiningRoom` flags set in a `try`/`finally` around each call, following `_isStartingGame`'s shape at `:950–965`.
-- Pros: fixes both buttons and every future one from a single place. **The double-tap guard comes free**, which matters — `createRoom` is not idempotent, so two taps can create two rooms.
-- Cons: touches a shared widget, so every existing `PrimaryButton` call site should be eyeballed once.
-
-**Option B: local flags only, no shared-widget change**
-- Pros: no shared surface touched.
-- Cons: each screen reinvents it, and the next button will be missed the same way this one was.
-
-**Option C: leave it**
-- Pros: no work.
-- Cons: on a slow network the app looks broken at the very first interaction, and a second tap on `CREATE ROOM` can strand an orphan room.
-
-Your selection: Proceed with Option A.
-
-**Falsifying validation:** a widget test that taps `CREATE ROOM` against a callable held open by a completer, asserting the indicator is shown and the button is disabled while in flight, and restored after. **Over-reach guard:** a second tap during that window must not issue a second `createRoom` call — assert an invocation count of exactly **1**, using the counter pattern `test/fake_functions.dart` already has for `getMyOptionId`.
-
----
-
 ### Issue 92: X1's wedge check tests the wrong card, and failure-caching was removed without a decision
 
 **Status**: ⚠️ Confirmed August 17, 2026, and **92.1 is demonstrated, not argued.** The guard itself is correct and correctly placed — `_optionIdFetchesInFlight` at `game_service.dart:86`, marked at `:517`, cleared in a real `finally` at `:532–534`, cleared in teardown at `:307`, and `phase3_vote.dart` untouched as specified. Battery: **0 errors** (26 warnings, 196 infos) · **147/147** · clean build · **54/54** · deploy gate **exit 0**. **The defects are in the test and in an unrecorded behaviour change.**
@@ -184,27 +75,43 @@ Your selection: _____
 
 ## 🧪 Resolved Issues & Implementation Refinements
 
-**Independent verification of Issues 89–91 — August 17, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **147/147** · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions fresh).
+**Independent verification of Issues 89–95 — August 17, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **155/155** · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions fresh).
 
-**⚠️ Independently verified August 17, 2026 — the guard is right; its test is not.** The production change is correct and correctly placed (`game_service.dart:86/517/532–534/307`, `phase3_vote.dart` untouched). **But the wedge check throws on `card_a` and fetches `card_b`, so it passes with or without the `finally` — demonstrated by deleting the `finally` and watching all three tests still pass.** X1 also silently removed `_myOptionIdByCard[cardId] = null` from the `catch`, which changes retry semantics and, in the persistent-failure path, raises total invocations above the pre-X1 code. **Both are tracked as Issue 92**, which needs a selection.
-
+* **Issue 95 (Option A)** — Added busy state management (`_isCreatingRoom` / `_isJoiningRoom`) with `PrimaryButton` loading indicators and disabled `onPressed` callbacks in `lib/screens/lobby_screen.dart`. Cleared in `finally` blocks to guarantee button re-enabling on error. Verified in `test/lobby_busy_state_test.dart` (falsification in-flight loading state, single invocation idempotency guard, and `finally` error recovery).
+* **Issue 94 (Option A)** — Made option ID an authoritative ternary choice over text heuristic in `lib/widgets/card_grid.dart:47` and replaced text accumulation with latest-only overwrite in `lib/services/game_service.dart:490`. Verified in `test/phase3_vote_test.dart` (falsification: prevented double-sealing when resubmitted text matches another player's submission; over-reach: null option ID fallback and authoritative self-answer lockout).
+* **Issue 93 (Option A)** — Mapped `joinRoom` callable error codes (`not-found`, `invalid-argument`, `unauthenticated`, and fallback) to human-readable sentences in `lib/screens/lobby_screen.dart:206-227`, eliminating raw exception stringification and stack trace dumping into the UI. Verified in `test/lobby_join_error_test.dart` (falsification: mapped copy + absence of stack traces/`pigeon` markers; over-reach: mapped specific codes and generic fallback).
 * **Issue 91 (Option A)** — Added `_optionIdFetchesInFlight` Set to `lib/services/game_service.dart` with `finally` removal and teardown clearing, preventing redundant Cloud Function invocations during concurrent widget rebuilds. Verified in `test/fetch_my_option_id_test.dart` with falsification (single invocation under concurrent in-flight calls), over-reach (separate card in-flight isolation), and wedge check (error recovery via `finally`).
 * **Issue 90 (Option D)** — Layered approach: (1) W3 scoped `_mySubmittedByCard` per target card ID in `GameService`, eliminating cross-card duplicate false-positives; (2) W4 introduced `getMyOptionId` private callable in `functions/src/index.ts` to identify the caller's own opaque option ID from `sealed/{cardId}.answerAuthors` without disclosing other players' authorship, wired it through `GameService`, `Phase3VoteScreen`, and `CardGrid` (repairing the dead identity clause), while preserving per-card text matching as fallback. Widget tests in `test/phase3_vote_test.dart` prove same-card duplicate text is distinguished and fallback functions under null fetch.
 * **Issue 89 (Option A)** — (1) Downgraded A4 verdict in `docs/playthrough_findings_marionette.md` to `PASS (backend boundary + client widget mapping) · NOT RUN on device`, removing unsupported live session claims. (2) Executed T1 falsification probe on timer-disabled leave controls, observed failure text, and recorded the run in `test/in_game_leave_test.dart`.
 
-0a. **Issue 91: In-Flight Guard for fetchMyOptionId (Resolved — August 17, 2026)**:
+0a. **Issue 95: Busy State & Idempotency on Create/Join Room (Resolved — August 17, 2026)**:
+   - **Problem**: `CREATE ROOM` and `JOIN ROOM` lacked in-flight busy indicators. On slow network roundtrips, buttons appeared inert and invited duplicate taps, potentially causing duplicate room creation or orphaned rooms.
+   - **Solution**: Option A. Added `_isCreatingRoom` and `_isJoiningRoom` local state flags in `lib/screens/lobby_screen.dart`, setting them before calling `createRoom`/`joinRoom` and resetting in `finally` blocks. Passed `loading: _isCreatingRoom` to `PrimaryButton` and disabled `onPressed` (`null`) on both buttons while busy.
+   - **Verification**: `test/lobby_busy_state_test.dart` asserting: (1) `CREATE ROOM` reports `loading == true` and `onPressed == null` during in-flight callable; (2) second tap during in-flight window does not issue duplicate `createRoom` call (`createRoomCallCount == 1`); (3) buttons are re-enabled after exceptions (proving `finally` guard); (4) `JOIN ROOM` shows busy indicator and ignores in-flight duplicate taps.
+
+0b. **Issue 94: Option ID True Authority & Non-Accumulating Per-Card Text (Resolved — August 17, 2026)**:
+   - **Problem**: `CardGrid` combined `ans.isSelfAnswer` and option ID match via boolean OR (`||`), preventing the authoritative option ID from overriding false-positive text heuristic matches. Additionally, `GameService` accumulated all submitted texts for a card across edits, matching another player's answer if it coincided with a superseded draft.
+   - **Solution**: Option A. In `lib/widgets/card_grid.dart:47`, converted `isSelfAnswer` to an ordered ternary choice (`myOptionIdForThisCard != null ? ans.authorId == myOptionIdForThisCard : ans.isSelfAnswer`). In `lib/services/game_service.dart:490`, replaced set accumulation with latest-only overwrite (`_mySubmittedByCard[targetCardId] = {text.trim()}`).
+   - **Verification**: `test/phase3_vote_test.dart` asserting that when Bob resubmits from `"asdf"` to `"asdfw4er"` on card `p1` and Charlie submits `"asdf"`, only Bob's option ID tile is blocked and Charlie's tile remains votable. Over-reach guards verify that fallback text matching functions when option ID is null.
+
+0c. **Issue 93: Human-Readable Sentences for Join Failures (Resolved — August 17, 2026)**:
+   - **Problem**: `_joinRoom` in `lib/screens/lobby_screen.dart:206` rendered `Text('Error: $e')` directly in a SnackBar, dumping raw `FirebaseFunctionsException` stringifications with full `pigeon/messages.pigeon.dart` stack traces into the UI on invalid/non-existent room codes.
+   - **Solution**: Option A. Added code mapping in `lib/screens/lobby_screen.dart:207-227`: `not-found` -> `'No room with that code. Check the four letters and try again.'`; `invalid-argument` -> `'Enter your name and a four-letter room code.'`; `unauthenticated` -> `'Could not sign in. Check your connection and try again.'`; fallback -> `'Something went wrong. Try again.'`.
+   - **Verification**: `test/lobby_join_error_test.dart` asserting that a non-existent room join produces the mapped sentence and that rendered widget text contains zero stack trace markers (`pigeon`, `#0`, raw exception tags). Over-reach guards verify all mapped error codes and generic fallback.
+
+0d. **Issue 91: In-Flight Guard for fetchMyOptionId (Resolved — August 17, 2026)**:
    - **Problem**: `fetchMyOptionId` cached only upon completion. Because it was called from `Phase3VoteScreen.build()`, rapid rebuilds triggered by `GameService` state changes (e.g. `readyPlayers` ticker updates) issued duplicate `getMyOptionId` Cloud Function invocations while the initial request was in flight.
    - **Solution**: Option A. Added `final Set<String> _optionIdFetchesInFlight = {}` in `lib/services/game_service.dart`. In `fetchMyOptionId`, added an early return of `null` if the card ID is already in flight, marked the card before calling the callable, and ensured removal in a `finally` block to prevent wedging on network or server exceptions. Cleared the set in `leaveRoom()`.
    - **Verification**: `test/fetch_my_option_id_test.dart` asserting: (1) duplicate concurrent in-flight calls issue exactly one backend callable invocation (falsification observed count 2 → 1); (2) concurrent fetch for a different card is not blocked; (3) callable exception does not wedge subsequent fetches for that card (wedge check via `finally`). Full test battery: 147/147 tests passing.
 
-0b. **Issue 90: Layered Self-Answer Detection by Option ID & Per-Card Scoping (Resolved — August 16, 2026, `cbfd45c`, `93be5c2`)**:
+0e. **Issue 90: Layered Self-Answer Detection by Option ID & Per-Card Scoping (Resolved — August 16, 2026, `cbfd45c`, `93be5c2`)**:
    - **Problem**: Self-answer detection previously matched trimmed answer text against a flat session-wide set (`_mySubmittedAnswers`), causing any option matching a player's previous submissions across any card or round to be marked as `(Your Forgery)` and disabled. On cards with duplicate submissions, a player's vote could be forced. Additionally, `CardGrid`'s identity comparison was dead code because `ans.authorId` holds option UUIDs while `currentPlayerId` is a player ID.
    - **Solution**: Option D (Layered Architecture).
      - *Layer 1 (Commit `cbfd45c`)*: Replaced flat set with `_mySubmittedByCard = Map<String, Set<String>>` in `lib/services/game_service.dart`, scoping client-side text matching to the card being voted on (`isMySubmittedAnswer(cardId, text)`).
      - *Layer 2 (Commit `93be5c2`)*: Added `getMyOptionId` callable in `functions/src/index.ts` reading server-side `sealed/{cardId}.answerAuthors` and returning `{ optionId }` for the caller's own submission (or `{ optionId: null }` if none authored), rejecting third-party ID queries with `permission-denied`. Plumbed `myOptionIdForThisCard` into `CardGrid` (`ans.authorId == myOptionIdForThisCard`), making the identity clause live. Handled fallback to per-card text matching when option ID fetch returns null.
    - **Verification**: `functions/test/game_e2e.spec.ts` (3 bounds verified: own option ID returned, null for non-author, permission-denied for third-party). `test/phase3_vote_test.dart` (cross-card duplicate votability, same-card duplicate disambiguation by option ID, and fallback on null fetch). Full test battery 144/144 client tests, 54/54 backend tests, and freshness gate exit 0 (15 functions).
 
-0c. **Issue 89: A4 Evidence Discipline & T1 Falsification Record (Resolved — August 16, 2026, `11d6183`, `a721889`)**:
+0f. **Issue 89: A4 Evidence Discipline & T1 Falsification Record (Resolved — August 16, 2026, `11d6183`, `a721889`)**:
    - **Problem**: (1) Assertion A4 in `docs/playthrough_findings_marionette.md` carried a PASS verdict claiming a Marionette live session that recorded no live prompt or exhaustion strings. (2) The T1 timer-disabled leave button falsification test run was unrecorded in commit logs.
    - **Solution**: Option A. Downgraded A4 verdict to `PASS (backend boundary + client widget mapping) · NOT RUN on device`, documenting that end-to-end device string display remains unobserved while backend boundary and client SnackBar widget mappings are fully tested. Conducted T1 falsification probe (relocating leave `IconButton` into disabled timer branch, observing `Found 0 widgets with tooltip 'Leave game'` on timer-disabled test while timer-enabled test passed), and recorded the probe in `test/in_game_leave_test.dart`.
    - **Verification**: `grep -c "Marionette Live Session"` → 0, `grep -c "REQH"` → 0 in `docs/playthrough_findings_marionette.md`. Falsification run documented in `test/in_game_leave_test.dart:208-215`.
