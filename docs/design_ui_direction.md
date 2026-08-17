@@ -95,6 +95,12 @@ Your selection (motif intensity): Option A
 
 ## 6. Component-by-component upgrades
 
+**Error surfaces — shipped Issue 93, August 2026.** **Never interpolate an exception object into user-facing text.** `FirebaseFunctionsException.toString()` carries its stack trace, so `Text('Error: $e')` rendered ~20 lines of `pigeon/messages.pigeon.dart` frames into the Guest Ledger when a player mistyped a room code — the single most likely error in the app.
+
+> The pattern, established at `phase2_craft.dart:543` and now mirrored in `lobby_screen.dart`: **match on `e.code`, map each code the callable actually throws to one sentence, and fall through to `'Something went wrong. Try again.'` for everything else.** Enumerate the codes from the callable's source rather than from expectation — `joinRoom` throws exactly `unauthenticated`, `invalid-argument` and `not-found`, and an earlier draft of the fix guessed at two codes it does not throw. **The regression guard must assert the negative** — that the rendered text contains no `pigeon`, `#0`, or `firebase_functions` — because asserting only that the friendly sentence appears passes while the trace is still displayed beneath it.
+
+**Busy states — shipped Issue 95, August 2026.** `PrimaryButton` carries `loading` and `showTextOnLoading`; pass a flag set before the callable and cleared in a **`finally`**, and disable `onPressed` while busy. **That disabling is a correctness guard, not only feedback: `createRoom` is not idempotent**, so an un-guarded second tap strands an orphan room.
+
 **Dialogs (`ThemeData.dialogTheme`) — shipped Issue 84, August 2026.** Dialogs render on **`groundRaised`** with a **`brass`** title and **`ivory`** content, set once in `main.dart` so bare `AlertDialog`s inherit it.
 
 > ⚠️ **Do not let dialogs fall back to `colorScheme.surface`.** `surface` is `parchment` — correct for cards and sheets, and fatal for dialogs, because the global `textTheme` paints body copy `ivory` and titles `brass`, both of which are chosen for the dark ground. Before the fix, `phase3_vote.dart`'s confirmation rendered **ivory on parchment at a measured 1.02:1** — the text was present, correct, and literally invisible, while its oxblood buttons sat at 9.67:1 and looked fine. The regression guard asserts a **contrast ratio**, not the presence of a string: a string test passed throughout the defect's life. Helpers: `relativeLuminance` / `contrastRatio` in `test/helpers/png_decoder.dart`; thresholds 4.5:1 content, 3.0:1 title.

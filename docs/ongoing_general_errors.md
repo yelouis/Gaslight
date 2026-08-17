@@ -67,7 +67,7 @@ So for a card whose fetch persistently fails, **X1 increased total invocations r
 - Pros: recovers from a blip *and* bounds the persistent-failure case. Strictly the best behaviour of the three.
 - Cons: most code and a new piece of state to clear in teardown; the test needs to assert both the retry and the ceiling, which is two more assertions than either alternative.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Regardless of the option chosen:** a test written to prove a guard must be run with the guard removed. **92.1 existed because that step was performed for the leave-control guard (Issue 89.2) and not for this one**, two waves apart, under the same standing rule.
 
@@ -76,6 +76,13 @@ Your selection: _____
 ## 🧪 Resolved Issues & Implementation Refinements
 
 **Independent verification of Issues 89–95 — August 17, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **155/155** · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions fresh).
+
+**Independently verified August 17, 2026 — all three hold up, and every guard the spec named is present.** Battery re-measured: `flutter analyze lib test` **0 errors** (26 warnings, 196 infos) · `flutter test` **156/156** (was 147) · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0**.
+
+* **Issue 94** — `card_grid.dart:47–49` is now an ordered ternary with **no `||`**; `game_service.dart:490` writes `{text.trim()}`, replacing rather than adding. **The load-bearing over-reach guard is genuinely covered:** with `myOptionIdForThisCard` null, `test/phase3_vote_test.dart:356` asserts `disabledCount == 1` and `enabledCount == 2` — the player's own current text is *still* blocked and the fallback blocks neither everything nor nothing. `phase3_vote.dart` untouched as specified. **The code now matches what `design_scoring_and_ui.md` §3.2 already documented**, so no design edit was needed there — the design was right and only the wiring was wrong.
+* **Issue 93** — the negative assertion is stronger than specced: `test/lobby_join_error_test.dart` rejects `pigeon`, `#0` **and** `firebase_functions`.
+* **Issue 95** — `shared_ui.dart` **unmodified**, as required; four tests including the idempotency guard (a second in-flight tap issues exactly one `createRoom`) and the `finally` recovery guard.
+* **Design updated:** `design_ui_direction.md` §6 now records the error-surface rule (map on `code`, never interpolate the exception, assert the negative) and the busy-state rule (disabling is a correctness guard because `createRoom` is not idempotent).
 
 * **Issue 95 (Option A)** — Added busy state management (`_isCreatingRoom` / `_isJoiningRoom`) with `PrimaryButton` loading indicators and disabled `onPressed` callbacks in `lib/screens/lobby_screen.dart`. Cleared in `finally` blocks to guarantee button re-enabling on error. Verified in `test/lobby_busy_state_test.dart` (falsification in-flight loading state, single invocation idempotency guard, and `finally` error recovery).
 * **Issue 94 (Option A)** — Made option ID an authoritative ternary choice over text heuristic in `lib/widgets/card_grid.dart:47` and replaced text accumulation with latest-only overwrite in `lib/services/game_service.dart:490`. Verified in `test/phase3_vote_test.dart` (falsification: prevented double-sealing when resubmitted text matches another player's submission; over-reach: null option ID fallback and authoritative self-answer lockout).
