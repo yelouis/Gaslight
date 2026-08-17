@@ -89,7 +89,7 @@ The failure mode of doing B alone is the one worth naming: **if the id fetch fai
 
 **Option A alone**, **Option B alone**, and **Option C** remain as written above.
 
-Your selection: _____
+Your selection: Proceed with Option D.
 
 **Blast radius for any option:** the dead identity clause at `card_grid.dart:45` should be removed or repaired in the same commit — it currently reads as though identity checking is happening when nothing is.
 
