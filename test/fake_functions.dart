@@ -25,6 +25,8 @@ class FakeFirebaseFunctions extends Fake implements FirebaseFunctions {
   String? lastCallName;
   final Map<String, int> callableInvocations = {};
   final Map<String, Future<dynamic> Function(Map<String, dynamic> params)> _callableOverrides = {};
+  Completer<void>? getMyOptionIdCompleter;
+  int getMyOptionIdCallCount = 0;
 
   FakeFirebaseFunctions(this.db);
 
@@ -34,11 +36,17 @@ class FakeFirebaseFunctions extends Fake implements FirebaseFunctions {
 
   @override
   HttpsCallable httpsCallable(String name, {HttpsCallableOptions? options}) {
-    return FakeHttpsCallable(db, name, overrideHandler: _callableOverrides[name], onCall: (n, p) {
-      lastCallName = n;
-      lastCallParams = p;
-      callableInvocations[n] = (callableInvocations[n] ?? 0) + 1;
-    });
+    return FakeHttpsCallable(
+      db,
+      name,
+      overrideHandler: _callableOverrides[name],
+      parent: this,
+      onCall: (n, p) {
+        lastCallName = n;
+        lastCallParams = p;
+        callableInvocations[n] = (callableInvocations[n] ?? 0) + 1;
+      },
+    );
   }
 }
 
@@ -47,8 +55,9 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
   final String name;
   final Future<dynamic> Function(Map<String, dynamic> params)? overrideHandler;
   final void Function(String name, Map<String, dynamic> params)? onCall;
+  final FakeFirebaseFunctions? parent;
 
-  FakeHttpsCallable(this.db, this.name, {this.overrideHandler, this.onCall});
+  FakeHttpsCallable(this.db, this.name, {this.overrideHandler, this.onCall, this.parent});
 
   @override
   Future<HttpsCallableResult<T>> call<T>([dynamic parameters]) async {
@@ -394,6 +403,11 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
     }
 
     if (name == 'getMyOptionId') {
+      parent?.getMyOptionIdCallCount++;
+      if (parent?.getMyOptionIdCompleter != null) {
+        await parent!.getMyOptionIdCompleter!.future;
+      }
+
       final roomCode = params['roomCode'] as String?;
       final cardId = params['cardId'] as String?;
       final playerId = params['playerId'] as String?;

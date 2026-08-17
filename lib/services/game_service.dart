@@ -83,6 +83,7 @@ class GameService extends ChangeNotifier {
   final Map<String, String> _advancedStateKeys = {};
   final Map<String, Set<String>> _mySubmittedByCard = {};
   final Map<String, String?> _myOptionIdByCard = {};
+  final Set<String> _optionIdFetchesInFlight = {};
   
   bool isMySubmittedAnswer(String cardId, String text) =>
       _mySubmittedByCard[cardId]?.contains(text.trim()) ?? false;
@@ -303,6 +304,7 @@ class GameService extends ChangeNotifier {
     _advancedStateKeys.clear();
     _mySubmittedByCard.clear();
     _myOptionIdByCard.clear();
+    _optionIdFetchesInFlight.clear();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('room_code');
@@ -511,6 +513,8 @@ class GameService extends ChangeNotifier {
     if (_myOptionIdByCard.containsKey(cardId)) {
       return _myOptionIdByCard[cardId];
     }
+    if (_optionIdFetchesInFlight.contains(cardId)) return null;
+    _optionIdFetchesInFlight.add(cardId);
     try {
       final res = await _functions.httpsCallable('getMyOptionId').call({
         'roomCode': _gameState!.roomCode,
@@ -524,8 +528,9 @@ class GameService extends ChangeNotifier {
       return optionId;
     } catch (e) {
       debugPrint('fetchMyOptionId error: $e');
-      _myOptionIdByCard[cardId] = null;
       return null;
+    } finally {
+      _optionIdFetchesInFlight.remove(cardId);
     }
   }
 
