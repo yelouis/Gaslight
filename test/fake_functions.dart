@@ -393,6 +393,41 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       return FakeHttpsCallableResult({'success': true} as T);
     }
 
+    if (name == 'getMyOptionId') {
+      final roomCode = params['roomCode'] as String?;
+      final cardId = params['cardId'] as String?;
+      final playerId = params['playerId'] as String?;
+
+      if (roomCode == null || cardId == null || playerId == null) {
+        throw FirebaseFunctionsException(
+          message: 'Missing required arguments: roomCode, cardId, and playerId.',
+          code: 'invalid-argument',
+        );
+      }
+
+      final playerSnap = await db.collection('rooms').doc(roomCode).collection('players').doc(playerId).get();
+      if (!playerSnap.exists) {
+        throw FirebaseFunctionsException(
+          message: 'User does not own this player document.',
+          code: 'permission-denied',
+        );
+      }
+
+      final sealedSnap = await db.collection('rooms').doc(roomCode).collection('sealed').doc(cardId).get();
+      if (!sealedSnap.exists) {
+        return FakeHttpsCallableResult({'optionId': null} as T);
+      }
+
+      final answerAuthors = (sealedSnap.data()?['answerAuthors'] as Map<String, dynamic>?) ?? {};
+      for (final entry in answerAuthors.entries) {
+        if (entry.value == playerId) {
+          return FakeHttpsCallableResult({'optionId': entry.key} as T);
+        }
+      }
+
+      return FakeHttpsCallableResult({'optionId': null} as T);
+    }
+
     if (name == 'setReady') {
       final playerId = params['playerId'];
       final ready = params['ready'];

@@ -15,6 +15,7 @@ class CardGrid extends StatelessWidget {
   final List<VotingAnswer> answers;
   final String? selectedAuthorId;
   final String currentPlayerId;
+  final String? myOptionIdForThisCard;
   final ValueChanged<String> onSelect;
 
   const CardGrid({
@@ -22,6 +23,7 @@ class CardGrid extends StatelessWidget {
     required this.answers,
     required this.selectedAuthorId,
     required this.currentPlayerId,
+    this.myOptionIdForThisCard,
     required this.onSelect,
   });
 
@@ -42,7 +44,7 @@ class CardGrid extends StatelessWidget {
       itemCount: answers.length,
       itemBuilder: (context, index) {
         final ans = answers[index];
-        final isSelfAnswer = ans.isSelfAnswer || ans.authorId == currentPlayerId;
+        final isSelfAnswer = ans.isSelfAnswer || (myOptionIdForThisCard != null && ans.authorId == myOptionIdForThisCard);
         final isSelected = selectedAuthorId == ans.authorId;
 
         return Material(

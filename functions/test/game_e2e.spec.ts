@@ -2239,6 +2239,99 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(roomSnap.data()?.currentPhase).to.equal('lobby');
       });
     });
+
+    describe('Issue 90 / W4: getMyOptionId private option identification', () => {
+      it('returns the caller\'s own optionId, returns null for non-author, and rejects cross-player access with permission-denied', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+        const guest3User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await callFn('joinRoom', guest3User.idToken, { roomCode, playerName: 'Dave', playerId: 'p_g3' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g3').update({ lobbyReady: true });
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+
+        // Truth phase: all submit
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice truth', isTruth: true });
+        await callFn('submitAnswer', guest1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob truth', isTruth: true });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie truth', isTruth: true });
+        await callFn('submitAnswer', guest3User.idToken, { roomCode, targetCardId: 'p_g3', authorId: 'p_g3', text: 'Dave truth', isTruth: true });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+        const assignments = roomSnap.data()?.currentCardAssignments || {};
+
+        // Forgery phase: all submit assigned
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_host'], authorId: 'p_host', text: 'Alice forgery', isTruth: false });
+        await callFn('submitAnswer', guest1User.idToken, { roomCode, targetCardId: assignments['p_g1'], authorId: 'p_g1', text: 'Bob forgery', isTruth: false });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: assignments['p_g2'], authorId: 'p_g2', text: 'Charlie forgery', isTruth: false });
+        await callFn('submitAnswer', guest3User.idToken, { roomCode, targetCardId: assignments['p_g3'], authorId: 'p_g3', text: 'Dave forgery', isTruth: false });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+
+        const cardId = 'p_host';
+        const sealedSnap = await roomRef.collection('sealed').doc(cardId).get();
+        const answerAuthors = (sealedSnap.data() as any)?.answerAuthors || {};
+
+        // Find the player who forged p_host's card
+        const playerEntries = [
+          { id: 'p_host', token: hostUser.idToken },
+          { id: 'p_g1', token: guest1User.idToken },
+          { id: 'p_g2', token: guest2User.idToken },
+          { id: 'p_g3', token: guest3User.idToken },
+        ];
+
+        const forgerEntry = playerEntries.find(p => assignments[p.id] === cardId)!;
+        const nonAuthorEntry = playerEntries.find(p => p.id !== cardId && assignments[p.id] !== cardId)!;
+
+        // Bound 1: Forger authored a forgery on cardId -> getMyOptionId returns forger's optionId
+        const forgerRes = await callFn('getMyOptionId', forgerEntry.token, {
+          roomCode,
+          cardId,
+          playerId: forgerEntry.id
+        });
+        expect(forgerRes.optionId).to.be.a('string');
+        expect(answerAuthors[forgerRes.optionId]).to.equal(forgerEntry.id);
+
+        // Bound 2: Non-author who wrote neither truth nor forgery on cardId receives { optionId: null } without throwing
+        const nonAuthorRes = await callFn('getMyOptionId', nonAuthorEntry.token, {
+          roomCode,
+          cardId,
+          playerId: nonAuthorEntry.id
+        });
+        expect(nonAuthorRes.optionId).to.be.null;
+
+        // Bound 3: Security bound — caller cannot obtain another player's option ID.
+        // Calling with a playerId they do not own throws permission-denied.
+        let permissionDeniedThrown = false;
+        try {
+          await callFn('getMyOptionId', nonAuthorEntry.token, {
+            roomCode,
+            cardId,
+            playerId: forgerEntry.id // non-author tries to query forger's ID
+          });
+        } catch (err: any) {
+          permissionDeniedThrown = true;
+          expect(err.status).to.equal('PERMISSION_DENIED');
+        }
+        expect(permissionDeniedThrown).to.be.true;
+      });
+    });
   });
 });
 

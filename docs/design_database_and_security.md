@@ -23,6 +23,7 @@ All game mutations are `onCall` Cloud Functions (`functions/src/index.ts`) that 
 | `joinRoom` | `GameService.joinRoom` | authenticated; **re-binds `authUid`** when a known `playerId` rejoins (seat recovery) |
 | `startGame` | `GameService.startGame` | host only; validates player count, rounds, deck size with descriptive errors |
 | `submitAnswer` | `submitCardAnswer` | seat owner; server-side semantic-similarity check; marks author ready; auto-advances when all active players are ready |
+| `getMyOptionId` | `GameService.fetchMyOptionId` | seat owner; reads default-deny `sealed/{cardId}.answerAuthors` server-side, returning **only the caller's own optionId** (`{ optionId }`) or `{ optionId: null }` if none authored; throws `permission-denied` on ownership mismatch |
 | `castVote` | `castVote` | seat owner; enforces the self-vote guard; marks voter ready; auto-advances |
 | `setReady` | `setPlayerReady` | seat owner; auto-advances when all ready |
 | `advancePhase` | `forceAdvance`/`evaluateReadyState` | host only; applies timeout placeholders, per-card scoring, honor stats |
@@ -30,6 +31,8 @@ All game mutations are `onCall` Cloud Functions (`functions/src/index.ts`) that 
 | `rerollPrompt` | `rerollMyPrompt` | seat owner; unlimited re-rolls allowed during the `truth` phase |
 | `updateLobbySettings` | `updateLobbySettings` | host only |
 | `handleDisconnect` | `handlePlayerDisconnect` | host, self, or anyone for a heartbeat-dead player; idempotent; card pruning, assignment bridging, reader re-indexing, **host transfer** |
+
+> **Authorship invariant & `getMyOptionId`:** The invariant is *never send other players' authorship to the client*. `getMyOptionId` responds over a private callable channel to a single authenticated seat owner, returning only the opaque option ID corresponding to the caller's *own* submission on that card. It reveals nothing the player does not already know (they wrote the text), keeps all other options' authors concealed in the default-deny sealed document, and rejects queries for third-party player IDs with `permission-denied`.
 
 Game logic mirrored in TypeScript: `functions/src/rotation_engine.ts`, `scoring_logic.ts` (per-card `S`, Sharp Eye bonus), `prompt_decks.ts`. **Regression rule: any change to a game rule must land in both the Dart client (display math) and the TS functions (authoritative math) — the functions are the source of truth.**
 

@@ -2,7 +2,7 @@
 set -eo pipefail
 
 PROJECT_ID="gaslight-46368"
-EXPECTED_FUNCTION_COUNT=14
+EXPECTED_FUNCTION_COUNT=15
 EXPECTED_FUNCTIONS=(
   "advancePhase"
   "advanceToNextResolution"
@@ -10,6 +10,7 @@ EXPECTED_FUNCTIONS=(
   "createRoom"
   "debugAddBots"
   "debugSimulateBotResponses"
+  "getMyOptionId"
   "handleDisconnect"
   "joinRoom"
   "rerollPrompt"

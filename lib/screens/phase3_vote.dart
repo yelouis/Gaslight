@@ -418,6 +418,12 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
     }
 
     final gs = context.watch<GameService>();
+    final cardId = currentCard?.targetPlayerId;
+    if (cardId != null) {
+      gs.fetchMyOptionId(cardId);
+    }
+    final myOptionId = cardId != null ? gs.getMyOptionIdForCard(cardId) : null;
+
     final gridAnswers = currentCard?.options.map((opt) {
       final isSelf = gs.isMySubmittedAnswer(currentCard.targetPlayerId, opt.text);
       return VotingAnswer(authorId: opt.id, text: opt.text, isSelfAnswer: isSelf);
@@ -458,6 +464,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                  answers: gridAnswers,
                  selectedAuthorId: _localSelectedAuthorId,
                  currentPlayerId: me.id,
+                 myOptionIdForThisCard: myOptionId,
                  onSelect: (authorId) {
                    setState(() {
                      _localSelectedAuthorId = authorId;

@@ -82,9 +82,12 @@ class GameService extends ChangeNotifier {
   // Duplicate-advance guards
   final Map<String, String> _advancedStateKeys = {};
   final Map<String, Set<String>> _mySubmittedByCard = {};
+  final Map<String, String?> _myOptionIdByCard = {};
   
   bool isMySubmittedAnswer(String cardId, String text) =>
       _mySubmittedByCard[cardId]?.contains(text.trim()) ?? false;
+
+  String? getMyOptionIdForCard(String cardId) => _myOptionIdByCard[cardId];
 
   // Disconnect in-flight guards
   final Set<String> _disconnectsInFlight = {};
@@ -299,6 +302,7 @@ class GameService extends ChangeNotifier {
     _currentPlayerId = null;
     _advancedStateKeys.clear();
     _mySubmittedByCard.clear();
+    _myOptionIdByCard.clear();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('room_code');
@@ -500,6 +504,29 @@ class GameService extends ChangeNotifier {
       'voterId': voterId,
       'votedForId': votedForId,
     });
+  }
+
+  Future<String?> fetchMyOptionId(String cardId) async {
+    if (_gameState == null || _currentPlayerId == null) return null;
+    if (_myOptionIdByCard.containsKey(cardId)) {
+      return _myOptionIdByCard[cardId];
+    }
+    try {
+      final res = await _functions.httpsCallable('getMyOptionId').call({
+        'roomCode': _gameState!.roomCode,
+        'cardId': cardId,
+        'playerId': _currentPlayerId,
+      });
+      final data = res.data;
+      final optionId = data is Map ? (data['optionId'] as String?) : null;
+      _myOptionIdByCard[cardId] = optionId;
+      notifyListeners();
+      return optionId;
+    } catch (e) {
+      debugPrint('fetchMyOptionId error: $e');
+      _myOptionIdByCard[cardId] = null;
+      return null;
+    }
   }
 
   Future<void> startGame(String deckId) async {

@@ -261,5 +261,182 @@ void main() {
 
       await gameService.leaveRoom();
     });
+
+    testWidgets('same-card duplicate text is distinguished by optionId (Issue 90 / W4)', (WidgetTester tester) async {
+      final p1 = PlayerState(id: 'p1', name: 'Alice', role: PlayerRole.voter, isHost: true);
+      final p2 = PlayerState(id: 'p2', name: 'Bob', role: PlayerRole.voter);
+      final p3 = PlayerState(id: 'p3', name: 'Charlie', role: PlayerRole.voter);
+
+      // On card p1, two options have identical text "duplicate_text"
+      // opt1 is Bob's (p2), opt2 is Charlie's (p3)
+      final card = CardModel(
+        promptText: 'Prompt',
+        targetPlayerId: 'p1',
+        truthAnswer: 'truth_text',
+        sabotageAnswers: {'p2': 'duplicate_text', 'p3': 'duplicate_text'},
+        options: [
+          CardAnswerOption(id: 'opt_bob', text: 'duplicate_text'),
+          CardAnswerOption(id: 'opt_charlie', text: 'duplicate_text'),
+          CardAnswerOption(id: 'opt_truth', text: 'truth_text'),
+        ],
+      );
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.vote,
+        totalPlayers: 3,
+        currentReaderId: 'p1',
+        cards: [card],
+        currentCardAssignments: {'p1': 'p1'},
+        readyPlayers: {},
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+      for (var p in [p1, p2, p3]) {
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc(p.id).set(
+          p.toMap()..['authUid'] = 'uid_${p.id}',
+        );
+      }
+      // Populate sealed document with answerAuthors mapping
+      await mockDb.collection('rooms').doc('TEST').collection('sealed').doc('p1').set({
+        'truthAnswer': 'truth_text',
+        'sabotageAnswers': {'p2': 'duplicate_text', 'p3': 'duplicate_text'},
+        'answerAuthors': {
+          'opt_bob': 'p2',
+          'opt_charlie': 'p3',
+          'opt_truth': 'p1',
+        },
+      });
+
+      gameService.listenToRoom('TEST');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('room_code', 'TEST');
+      await prefs.setString('player_id', 'p2');
+      await gameService.tryRejoinSession();
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: MaterialApp(
+            builder: (context, child) {
+              return MediaQuery(
+                data: const MediaQueryData(accessibleNavigation: true),
+                child: child!,
+              );
+            },
+            home: const Phase3VoteScreen(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Exactly one option should be marked (Your Forgery)
+      expect(find.text('(Your Forgery)'), findsOneWidget);
+
+      // Verify that there are two InkWells matching duplicate_text cards:
+      // one is disabled (onTap null for Bob's opt_bob), one is enabled (onTap non-null for Charlie's opt_charlie)
+      final inkWells = tester.widgetList<InkWell>(find.byType(InkWell)).where((w) => w.child is AnimatedContainer).toList();
+      final disabledCount = inkWells.where((w) => w.onTap == null).length;
+      final enabledCount = inkWells.where((w) => w.onTap != null).length;
+
+      expect(disabledCount, 1, reason: 'Only Bob\'s own option must be disabled');
+      expect(enabledCount, 2, reason: 'Charlie\'s duplicate and Alice\'s truth must be votable');
+
+      await gameService.leaveRoom();
+    });
+
+    testWidgets('fallback to per-card text matching when optionId fetch returns null (Issue 90 / W4)', (WidgetTester tester) async {
+      final p1 = PlayerState(id: 'p1', name: 'Alice', role: PlayerRole.voter, isHost: true);
+      final p2 = PlayerState(id: 'p2', name: 'Bob', role: PlayerRole.voter);
+      final p3 = PlayerState(id: 'p3', name: 'Charlie', role: PlayerRole.voter);
+
+      final card = CardModel(
+        promptText: 'Prompt',
+        targetPlayerId: 'p1',
+        truthAnswer: 'truth_text',
+        sabotageAnswers: {'p2': 'bob_forgery', 'p3': 'charlie_forgery'},
+        options: [
+          CardAnswerOption(id: 'opt1', text: 'bob_forgery'),
+          CardAnswerOption(id: 'opt2', text: 'charlie_forgery'),
+          CardAnswerOption(id: 'opt3', text: 'truth_text'),
+        ],
+      );
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.vote,
+        totalPlayers: 3,
+        currentReaderId: 'p1',
+        cards: [card],
+        currentCardAssignments: {'p1': 'p1'},
+        readyPlayers: {},
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+      for (var p in [p1, p2, p3]) {
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc(p.id).set(
+          p.toMap()..['authUid'] = 'uid_${p.id}',
+        );
+      }
+      // Sealed document has NO answerAuthors (simulating missing ID or network fallback)
+      await mockDb.collection('rooms').doc('TEST').collection('sealed').doc('p1').set({
+        'truthAnswer': 'truth_text',
+        'sabotageAnswers': {'p2': 'bob_forgery', 'p3': 'charlie_forgery'},
+      });
+
+      gameService.listenToRoom('TEST');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('room_code', 'TEST');
+      await prefs.setString('player_id', 'p2');
+      await gameService.tryRejoinSession();
+
+      // Bob submitted "bob_forgery" for this card
+      await gameService.submitCardAnswer('p1', 'p2', 'bob_forgery', false);
+      await mockDb.collection('rooms').doc('TEST').update({'readyPlayers': {}});
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: MaterialApp(
+            builder: (context, child) {
+              return MediaQuery(
+                data: const MediaQueryData(accessibleNavigation: true),
+                child: child!,
+              );
+            },
+            home: const Phase3VoteScreen(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // With null optionId, fallback text matching identifies Bob's forgery
+      expect(find.text('(Your Forgery)'), findsOneWidget);
+
+      final inkWells = tester.widgetList<InkWell>(find.byType(InkWell)).where((w) => w.child is AnimatedContainer).toList();
+      final disabledCount = inkWells.where((w) => w.onTap == null).length;
+      final enabledCount = inkWells.where((w) => w.onTap != null).length;
+
+      expect(disabledCount, 1, reason: 'Fallback must disable only Bob\'s submitted answer');
+      expect(enabledCount, 2, reason: 'Fallback must not block everything');
+
+      await gameService.leaveRoom();
+    });
   });
 }

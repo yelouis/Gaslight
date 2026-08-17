@@ -538,6 +538,44 @@ export const submitAnswer = onCall(async (request) => {
   });
 });
 
+// 4.5. Get My Option ID for Current Card (Issue 90 / W4)
+export const getMyOptionId = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+
+  const callerUid = request.auth.uid;
+  const { roomCode, cardId, playerId } = request.data || {};
+  if (!roomCode || !cardId || !playerId) {
+    throw new HttpsError("invalid-argument", "Missing required arguments: roomCode, cardId, and playerId.");
+  }
+
+  const roomRef = db.collection("rooms").doc(roomCode);
+  const playerRef = roomRef.collection("players").doc(playerId);
+
+  const playerSnap = await playerRef.get();
+  if (!playerSnap.exists || (playerSnap.data() as PlayerState).authUid !== callerUid) {
+    throw new HttpsError("permission-denied", "User does not own this player document.");
+  }
+
+  const sealedRef = roomRef.collection("sealed").doc(cardId);
+  const sealedSnap = await sealedRef.get();
+  if (!sealedSnap.exists) {
+    return { optionId: null };
+  }
+
+  const sealedData = sealedSnap.data() as any;
+  const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+
+  for (const [optionId, authorId] of Object.entries(answerAuthors)) {
+    if (authorId === playerId) {
+      return { optionId };
+    }
+  }
+
+  return { optionId: null };
+});
+
 // 5. Cast Vote
 export const castVote = onCall(async (request) => {
   if (!request.auth) {
