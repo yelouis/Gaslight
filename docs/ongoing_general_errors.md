@@ -67,7 +67,7 @@ That is exactly the reported shape: two tiles, one genuinely the reporter's (mat
 - Pros: keeps both layers unioned, so a stale id cannot unblock a genuinely-own answer.
 - Cons: does not fix the general case — any text collision on the same card still misfires despite an authoritative id being present.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Falsifying validation:** a widget test where the player submits `"asdf"` and then `"asdfw4er"` **for the same card**, `getMyOptionId` resolves to the `"asdfw4er"` option, and a *different* player's option on that card carries `"asdf"`. Assert **only** the id-matched tile is blocked and labelled, and the `"asdf"` tile is **votable**. Run it against today's code and observe **two** tiles blocked. **Over-reach guard:** with the id `null`, the player's own *current* text must still be blocked — a fix that simply stopped consulting text would otherwise pass.
 
@@ -88,9 +88,9 @@ The cause is one line — `lobby_screen.dart:206`:
 `$e` on a `FirebaseFunctionsException` stringifies to message **plus** stack. **The codebase already knows the right pattern:** `phase2_craft.dart:543` matches on `e.code` and maps it to a specific sentence, falling through to `'Something went wrong. Try again.'` for anything else.
 
 **Option A (recommended): map the codes the join path can actually produce, with a generic fallback**
-- `not-found` → `No room with that code. Check the four letters and try again.`; `failed-precondition` (game already started) and `permission-denied` get their own sentences; everything else falls through to the existing generic string. **Never interpolate the exception object into user-facing text.**
-- Pros: matches the established pattern, and the codes are already thrown deliberately by `joinRoom`.
-- Cons: needs the callable's actual codes enumerated rather than guessed — read `index.ts`'s `joinRoom` before writing the map.
+- **Enumerated from source, August 17, 2026 — `joinRoom` throws exactly three codes** (`index.ts:142–229`): `unauthenticated`, `invalid-argument`, `not-found`. **There is no `failed-precondition` or `permission-denied` on this path**, contrary to my original speculation above; joining a started game is not rejected by code. Map those three and let everything else fall through to the existing generic string. **Never interpolate the exception object into user-facing text.**
+- Pros: matches the established pattern, and the code list is small, closed, and verified rather than guessed.
+- Cons: the map must be re-checked if `joinRoom` ever gains a code — a mismapped code degrades to the generic string, which is safe but silent.
 
 **Option B: a generic message for every failure**
 - Pros: one line, and it can never leak a trace.
@@ -100,7 +100,7 @@ The cause is one line — `lobby_screen.dart:206`:
 - Pros: this is unlikely to be the only one; a repo-wide grep would settle it.
 - Cons: wider than the report, and each site needs its own sensible copy.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Falsifying validation:** a widget test where `joinRoom` throws `FirebaseFunctionsException(code: 'not-found')`, asserting the SnackBar shows the mapped sentence and that the rendered text **does not contain** `pigeon` or `#0`. The second half is the assertion that actually pins the defect.
 
@@ -110,7 +110,9 @@ Your selection: _____
 
 **Status**: ⚠️ Confirmed in source, August 17, 2026. Found in manual testing.
 
-`CREATE ROOM` and `JOIN ROOM` call callables that take a network round trip, and neither shows that anything is happening — the button looks inert, inviting a second tap. `lobby_screen.dart` has exactly one busy flag, `_isStartingGame` (`:46`), used only by START GAME (`:950–965`). **`PrimaryButton` (`shared_ui.dart:90`) has no loading state at all**, so there is nothing to render a spinner with today.
+`CREATE ROOM` and `JOIN ROOM` call callables that take a network round trip, and neither shows that anything is happening — the button looks inert, inviting a second tap. `lobby_screen.dart` has exactly one busy flag, `_isStartingGame` (`:46`), used only by START GAME (`:950–965`).
+
+**⚠️ Correction, August 17, 2026.** I originally wrote that *"`PrimaryButton` has no loading state at all, so there is nothing to render a spinner with today."* **That is wrong.** `PrimaryButton` (`shared_ui.dart:90`) already declares `final bool loading` and `final bool showTextOnLoading`, and its state class drives a `_loadingController` animation from them. **It is already used twice** — `phase2_craft.dart:500` (`loading: _isSubmitting`) and `game_over_screen.dart:281` (`loading: _isSharing`). **Option A is therefore much smaller than described below: two busy flags and two `loading:` arguments, with no change to the shared widget and no call-site audit.** The cons listed under Option A no longer apply.
 
 **Option A (recommended): add a loading state to `PrimaryButton`, then use it on both**
 - Give `PrimaryButton` an `isLoading` flag that swaps the label for a small indicator and disables `onPressed`; add `_isCreatingRoom` / `_isJoiningRoom` flags set in a `try`/`finally` around each call, following `_isStartingGame`'s shape at `:950–965`.
@@ -125,7 +127,7 @@ Your selection: _____
 - Pros: no work.
 - Cons: on a slow network the app looks broken at the very first interaction, and a second tap on `CREATE ROOM` can strand an orphan room.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Falsifying validation:** a widget test that taps `CREATE ROOM` against a callable held open by a completer, asserting the indicator is shown and the button is disabled while in flight, and restored after. **Over-reach guard:** a second tap during that window must not issue a second `createRoom` call — assert an invocation count of exactly **1**, using the counter pattern `test/fake_functions.dart` already has for `getMyOptionId`.
 
