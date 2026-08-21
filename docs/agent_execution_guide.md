@@ -564,13 +564,13 @@ Paste the before and after tables into the commit body.
 
 ## Definition of Done
 
-- [ ] **SEC1** — `allow list: if false` on `/rooms`; rules test asserts collection enumeration is **denied**, observed failing first; room `get` and players `list` both still succeed.
-- [ ] **SEC1 deploy** — rules released; `check_deploy_fresh.sh` shows the rules release later than the last `firestore.rules` commit.
-- [ ] **SEC2** — re-bind requires ownership, token, or staleness; `PERMISSION_DENIED` for a stranger, observed failing first; **all four** over-reach guards pass (owner rejoins, token holder rejoins, stale seat reclaimable, token absent from every client-readable document); no `role` disclosed on rejection; all `transaction.get` calls precede writes.
-- [ ] **SEC3** — `votes` stores opaque option ids; all **three** guards throw `FAILED_PRECONDITION`, each observed failing first; the stored value asserted **not** to equal the forger's player id; scoring asserted at **two** inputs; all 13 reader sites walked; `design_game_state_and_models.md` §2 updated.
-- [ ] **SEC4** — only the current card carries sealed content; **`advanceToNextResolution` merges the next card** so reveal 2 and 3 are not blank; all three cards of a round walked.
-- [ ] **SEC5** — authorship withheld until `unmaskDeadline` passes, asserted in both states; or **filed with options** if it does not fit one commit.
-- [ ] **SEC6** — non-member and non-host both rejected, observed failing first; host path still works; `EXPECTED_FUNCTION_COUNT` updated if the deployed count changed.
-- [ ] **SEC7** — one functions deploy after SEC2/3/4/6; gate **exit 0**; before/after tables recorded.
-- [ ] Battery at or above §0 throughout: **0 errors** · **≥156** · clean build · **≥54** · gate exit **0**.
-- [ ] **Nothing in §9 changed. Nothing in §10 re-proposed.**
+- [x] **SEC1** — `allow list: if false` on `/rooms`; rules test asserts collection enumeration is **denied**, observed failing first; room `get` and players `list` both still succeed.
+- [x] **SEC1 deploy** — rules released; `check_deploy_fresh.sh` shows the rules release later than the last `firestore.rules` commit.
+- [x] **SEC2** — re-bind requires ownership, token, or staleness; `PERMISSION_DENIED` for a stranger, observed failing first; **all four** over-reach guards pass (owner rejoins, token holder rejoins, stale seat reclaimable, token absent from every client-readable document); no `role` disclosed on rejection; all `transaction.get` calls precede writes.
+- [x] **SEC3** — `votes` stores opaque option ids; all **three** guards throw `FAILED_PRECONDITION`, each observed failing first; the stored value asserted **not** to equal the forger's player id; scoring asserted at **two** inputs; all 13 reader sites walked; `design_game_state_and_models.md` §2 updated.
+- [x] **SEC4** — only the current card carries sealed content; **`advanceToNextResolution` merges the next card** so reveal 2 and 3 are not blank; all three cards of a round walked.
+- [x] **SEC5** — authorship withheld until `unmaskDeadline` passes, asserted in both states; or **filed with options** if it does not fit one commit.
+- [x] **SEC6** — non-member and non-host both rejected, observed failing first; host path still works; `EXPECTED_FUNCTION_COUNT` updated if the deployed count changed.
+- [x] **SEC7** — one functions deploy after SEC2/3/4/6; gate **exit 0**; before/after tables recorded.
+- [x] Battery at or above §0 throughout: **0 errors** · **≥156** · clean build · **≥54** · gate exit **0**.
+- [x] **Nothing in §9 changed. Nothing in §10 re-proposed.**
