@@ -34,6 +34,16 @@ All game mutations are `onCall` Cloud Functions (`functions/src/index.ts`) that 
 
 > **Authorship invariant & `getMyOptionId`:** The invariant is *never send other players' authorship to the client*. `getMyOptionId` responds over a private callable channel to a single authenticated seat owner, returning only the opaque option ID corresponding to the caller's *own* submission on that card. It reveals nothing the player does not already know (they wrote the text), keeps all other options' authors concealed in the default-deny sealed document, and rejects queries for third-party player IDs with `permission-denied`.
 
+### Client call discipline for `getMyOptionId` (Issues 91–92, August 2026)
+
+Three properties of `GameService.fetchMyOptionId` look like oversights and are decisions. **Do not "tidy" any of them without a decision:**
+
+* **It is called from `build()` on purpose.** Relocating it to a card-change trigger was considered and declined; the in-flight guard makes repeated invocation harmless, and the call site stays side-effect-simple.
+* **A failed fetch is NOT cached, and will be retried.** The `catch` deliberately does not write `null` into the completion cache. **This is what makes the `finally` load-bearing and testable** — if failures were cached, the completion cache would short-circuit before the in-flight guard was ever consulted and no test could reach it. It also buys recovery from a transient failure, which the cached version could not.
+* **`_optionIdFetchesInFlight` guards duplicate invocations**, added before the call and cleared in a **`finally`** — without the `finally`, a thrown call wedges that card permanently, because nothing writes the completion cache on that path either. Mirrors `_disconnectsInFlight`, the same idiom used for `handleDisconnect`.
+
+The client falls back to per-card text matching whenever the id is unresolved or the call failed (`design_scoring_and_ui.md` §3.2).
+
 Game logic mirrored in TypeScript: `functions/src/rotation_engine.ts`, `scoring_logic.ts` (per-card `S`, Sharp Eye bonus), `prompt_decks.ts`. **Regression rule: any change to a game rule must land in both the Dart client (display math) and the TS functions (authoritative math) — the functions are the source of truth.**
 
 The Flutter client (`GameService`) is a thin wrapper: each mutation method calls its callable; reads remain live `snapshots()` listeners on the room and players. Setting `USE_EMULATOR=true` (dart-define or `.env`) points the client at local Auth/Firestore/Functions emulators.
