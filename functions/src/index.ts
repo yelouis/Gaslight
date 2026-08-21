@@ -629,6 +629,14 @@ export const castVote = onCall(async (request) => {
     if (!roomSnap.exists) {
       throw new HttpsError("not-found", "Game room not found.");
     }
+    const room = roomSnap.data() as GameState;
+    if (room.currentPhase !== "vote") {
+      throw new HttpsError("failed-precondition", "Votes are only allowed during the vote phase.");
+    }
+    if (targetCardId !== room.currentReaderId) {
+      throw new HttpsError("failed-precondition", "You can only vote on the card being read.");
+    }
+
     const playersSnap = await transaction.get(roomRef.collection("players"));
 
     const sealedRef = roomRef.collection("sealed").doc(targetCardId);
@@ -647,14 +655,17 @@ export const castVote = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "Self-voting is not allowed.");
     }
 
-    const room = roomSnap.data() as GameState;
     const cardIdx = room.cards.findIndex(c => c.targetPlayerId === targetCardId);
     if (cardIdx === -1) {
       throw new HttpsError("not-found", "Target card not found.");
     }
 
     const card = room.cards[cardIdx];
-    const newVotes = { ...card.votes, [voterId]: resolvedAuthorId };
+    if (card.votes?.[voterId]) {
+      throw new HttpsError("failed-precondition", "You have already voted on this card.");
+    }
+
+    const newVotes = { ...card.votes, [voterId]: votedForId };
     const updatedCard = { ...card, votes: newVotes };
     const newCards = [...room.cards];
     newCards[cardIdx] = updatedCard;
@@ -1183,9 +1194,18 @@ async function advancePhaseInternal(
     const mergedCards: CardModel[] = [];
     for (const card of currentCards) {
       const sealedData = sealedDataMap[card.targetPlayerId] || {};
+      const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+
+      // Resolve stored option IDs into author IDs
+      const rawVotes = card.votes || {};
+      const resolvedVotes: Record<string, string> = {};
+      for (const [voterId, votedOptionId] of Object.entries(rawVotes)) {
+        resolvedVotes[voterId] = answerAuthors[votedOptionId] || votedOptionId;
+      }
 
       mergedCards.push({
         ...card,
+        votes: resolvedVotes,
         truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
         sabotageAnswers: sealedData.sabotageAnswers || {}
       });
@@ -1636,6 +1656,11 @@ export const debugSimulateBotResponses = onCall(async (request) => {
         throw new HttpsError("failed-precondition", "No current reader.");
       }
 
+      const sealedRef = roomRef.collection("sealed").doc(currentTargetId);
+      const sealedSnap = await transaction.get(sealedRef);
+      const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
+      const truthAnswerId = sealedData.truthAnswerId || currentTargetId;
+
       const cardIdx = cards.findIndex(c => c.targetPlayerId === currentTargetId);
       if (cardIdx !== -1) {
         const card = { ...cards[cardIdx] };
@@ -1646,7 +1671,7 @@ export const debugSimulateBotResponses = onCall(async (request) => {
 
           readyPlayers[p.id] = true;
           if (currentTargetId !== p.id) {
-            votes[p.id] = currentTargetId;
+            votes[p.id] = truthAnswerId;
           }
         }
         card.votes = votes;

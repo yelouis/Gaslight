@@ -267,7 +267,8 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       expect(err.message).to.contain('host');
     }
 
-    // Guest tries to submit a vote with self-vote (should fail)
+    // Guest tries to submit a vote with self-vote during vote phase (should fail)
+    await db.collection('rooms').doc(roomCode).update({ currentPhase: 'vote', currentReaderId: 'p_host', cards: [{ targetPlayerId: 'p_host', votes: {} }] });
     await db.collection('rooms').doc(roomCode).collection('sealed').doc('p_host').set({
       answerAuthors: { 'opt_guest': 'p_guest' }
     });
@@ -282,6 +283,169 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     } catch (err: any) {
       expect(err.message).to.contain('Self-voting');
     }
+  });
+
+  it('SEC3: should store opaque option id in votes during vote phase and enforce phase, reader, and duplicate vote guards', async () => {
+    /*
+     * Falsification run against current code (where castVote launders resolved author id):
+     * Expected: card.votes[voterId] equals the opaque option ID and not the forger's player ID.
+     * Observed failure on current code:
+     *   AssertionError: expected 'p_charlie' to equal '2db83788-...'
+     */
+    const hostUser = await createAnonUser();
+    const bobUser = await createAnonUser();
+    const charlieUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_alice',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', bobUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_bob'
+    });
+
+    await callFn('joinRoom', charlieUser.idToken, {
+      roomCode,
+      playerName: 'Charlie',
+      playerId: 'p_charlie'
+    });
+
+    // Guard 1: Voting when phase is not 'vote' throws FAILED_PRECONDITION
+    try {
+      await callFn('castVote', bobUser.idToken, {
+        roomCode,
+        targetCardId: 'p_alice',
+        voterId: 'p_bob',
+        votedForId: 'some_opt'
+      });
+      expect.fail('Voting in lobby succeeded but should have failed');
+    } catch (err: any) {
+      if (err.name === 'AssertionError') throw err;
+      expect(err.status).to.equal('FAILED_PRECONDITION');
+    }
+
+    // Ready up in lobby
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_bob').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_charlie').update({ lobbyReady: true });
+
+    // Start game -> truth phase
+    await callFn('startGame', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'the_daily_grind'
+    });
+
+    // Submit truth answers -> forgery phase
+    await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_alice', authorId: 'p_alice', text: 'Alice Truth', isTruth: true });
+    await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: 'p_bob', authorId: 'p_bob', text: 'Bob Truth', isTruth: true });
+    await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: 'p_charlie', authorId: 'p_charlie', text: 'Charlie Truth', isTruth: true });
+
+    // Submit forgeries -> vote phase
+    const roomSnapForgeries = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnapForgeries.data()?.currentPhase).to.equal('forgery');
+    const assignments = roomSnapForgeries.data()?.currentCardAssignments || {};
+
+    await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_alice'], authorId: 'p_alice', text: 'Alice Forgery', isTruth: false });
+    await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: assignments['p_bob'], authorId: 'p_bob', text: 'Bob Forgery', isTruth: false });
+    await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: assignments['p_charlie'], authorId: 'p_charlie', text: 'Charlie Forgery', isTruth: false });
+
+    // Check room is in vote phase
+    const roomDoc = await db.collection('rooms').doc(roomCode).get();
+    const roomData = roomDoc.data()!;
+    expect(roomData.currentPhase).to.equal('vote');
+    const currentReaderId = roomData.currentReaderId;
+    expect(currentReaderId).to.be.a('string');
+
+    // Get the card for current reader
+    const currentCard = roomData.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+    expect(currentCard).to.not.be.undefined;
+    expect(currentCard.options).to.be.an('array').with.lengthOf.at.least(2);
+
+    // Read sealed doc to find a forgery option and its author
+    const sealedSnap = await db.collection('rooms').doc(roomCode).collection('sealed').doc(currentReaderId).get();
+    const answerAuthors = sealedSnap.data()?.answerAuthors || {};
+
+    // Find the forgery option on currentReader card and its author
+    const forgeryEntry = Object.entries(answerAuthors).find(([optId, author]) => author !== currentReaderId);
+    expect(forgeryEntry).to.not.be.undefined;
+    const [forgeryOptId, forgerId] = forgeryEntry!;
+
+    // Find voter who is not the forger
+    const activeVoterId = ['p_alice', 'p_bob', 'p_charlie'].find(id => id !== forgerId)!;
+    const voterToken = activeVoterId === 'p_alice' ? hostUser.idToken : (activeVoterId === 'p_bob' ? bobUser.idToken : charlieUser.idToken);
+
+    // Guard 2: Voting for a card other than currentReaderId throws FAILED_PRECONDITION
+    const wrongCardId = ['p_alice', 'p_bob', 'p_charlie'].find(id => id !== currentReaderId)!;
+    try {
+      await callFn('castVote', voterToken, {
+        roomCode,
+        targetCardId: wrongCardId,
+        voterId: activeVoterId,
+        votedForId: forgeryOptId
+      });
+      expect.fail('Voting on wrong card succeeded but should have failed');
+    } catch (err: any) {
+      if (err.name === 'AssertionError') throw err;
+      expect(err.status).to.equal('FAILED_PRECONDITION');
+    }
+
+    // Cast vote for forgery option on currentReader card
+    await callFn('castVote', voterToken, {
+      roomCode,
+      targetCardId: currentReaderId,
+      voterId: activeVoterId,
+      votedForId: forgeryOptId
+    });
+
+    // Falsification assertion: In public room doc, card.votes[activeVoterId] must be the option ID and NOT the forgerId
+    const roomSnapAfterVote = await db.collection('rooms').doc(roomCode).get();
+    const cardAfterVote = roomSnapAfterVote.data()!.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+    expect(cardAfterVote.votes[activeVoterId]).to.equal(forgeryOptId);
+    expect(cardAfterVote.votes[activeVoterId]).to.not.equal(forgerId);
+
+    // Guard 3: Voting twice on the same card throws FAILED_PRECONDITION and first vote is preserved
+    try {
+      await callFn('castVote', voterToken, {
+        roomCode,
+        targetCardId: currentReaderId,
+        voterId: activeVoterId,
+        votedForId: forgeryOptId
+      });
+      expect.fail('Voting twice succeeded but should have failed');
+    } catch (err: any) {
+      if (err.name === 'AssertionError') throw err;
+      expect(err.status).to.equal('FAILED_PRECONDITION');
+    }
+    const roomSnapAfterDoubleVote = await db.collection('rooms').doc(roomCode).get();
+    const cardAfterDoubleVote = roomSnapAfterDoubleVote.data()!.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+    expect(cardAfterDoubleVote.votes[activeVoterId]).to.equal(forgeryOptId);
+
+    // Over-reach guard: Complete voting on currentReader and assert votes resolve to player IDs at reveal
+    const otherPlayers = ['p_alice', 'p_bob', 'p_charlie'].filter(id => id !== activeVoterId);
+    for (const pid of otherPlayers) {
+      const pToken = pid === 'p_alice' ? hostUser.idToken : (pid === 'p_bob' ? bobUser.idToken : charlieUser.idToken);
+      if (pid === currentReaderId) {
+        await callFn('setReady', pToken, { roomCode, playerId: pid, ready: true });
+      } else {
+        const truthEntry = Object.entries(answerAuthors).find(([optId, author]) => author === currentReaderId)!;
+        await callFn('castVote', pToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: pid,
+          votedForId: truthEntry[0]
+        });
+      }
+    }
+
+    const roomSnapReveal = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnapReveal.data()?.currentPhase).to.equal('reveal');
+    const cardInReveal = roomSnapReveal.data()!.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+    expect(cardInReveal.votes[activeVoterId]).to.equal(forgerId);
   });
 
   it('SEC2: should reject seat takeover without token or ownership, and allow rebind with token, ownership, or staleness', async () => {
@@ -1531,23 +1695,25 @@ describe('Gaslight E2E Game Emulator Tests', () => {
 
         roomSnap = await roomRef.get();
         expect(roomSnap.data()?.currentPhase).to.equal('vote');
-        const targetCard = roomSnap.data()?.cards[0];
-        const targetCardId = targetCard.targetPlayerId;
+        const targetCardId = roomSnap.data()?.currentReaderId;
+        expect(targetCardId).to.be.ok;
 
         const sealedSnap = await roomRef.collection('sealed').doc(targetCardId).get();
         const answerAuthors = sealedSnap.data()?.answerAuthors || {};
 
-        // Find host's option ID on targetCard
-        const hostOptionId = Object.keys(answerAuthors).find(k => answerAuthors[k] === 'p_host');
-        expect(hostOptionId).to.be.ok;
+        // Find an option on targetCard and its author
+        const ownOptionId = Object.keys(answerAuthors)[0];
+        const ownAuthorId = answerAuthors[ownOptionId];
+        const ownUserToken = ownAuthorId === 'p_host' ? hostUser.idToken : (ownAuthorId === 'p_guest1' ? guest1User.idToken : guest2User.idToken);
+        expect(ownOptionId).to.be.ok;
 
-        // Self-vote check: host tries to vote for own option -> fails with FAILED_PRECONDITION
+        // Self-vote check: author tries to vote for own option -> fails with FAILED_PRECONDITION
         try {
-          await callFn('castVote', hostUser.idToken, {
+          await callFn('castVote', ownUserToken, {
             roomCode,
             targetCardId,
-            voterId: 'p_host',
-            votedForId: hostOptionId!
+            voterId: ownAuthorId,
+            votedForId: ownOptionId
           });
           expect.fail('Should have failed self-vote check');
         } catch (err: any) {
