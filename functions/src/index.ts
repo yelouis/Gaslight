@@ -1631,9 +1631,13 @@ export const submitUnmaskGuess = onCall(async (request) => {
 
 // 13. Debug Add Bots
 export const debugAddBots = onCall(async (request) => {
+  if (process.env.FUNCTIONS_EMULATOR !== "true") {
+    throw new HttpsError("permission-denied", "Debug commands are only available in the local emulator.");
+  }
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
   }
+  const callerUid = request.auth.uid;
   const { roomCode } = request.data;
   if (!roomCode) {
     throw new HttpsError("invalid-argument", "roomCode is required.");
@@ -1647,6 +1651,13 @@ export const debugAddBots = onCall(async (request) => {
   const room = roomSnap.data() as GameState;
   if (!room.debugEnabled) {
     throw new HttpsError("permission-denied", "Debug commands are only allowed when debugEnabled is true.");
+  }
+
+  const playersSnap = await roomRef.collection("players").get();
+  const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
+  const callerPlayer = players.find(p => p.authUid === callerUid);
+  if (!callerPlayer || !callerPlayer.isHost) {
+    throw new HttpsError("permission-denied", "Only the host can execute debug commands.");
   }
 
   const botColors = [
@@ -1684,9 +1695,13 @@ export const debugAddBots = onCall(async (request) => {
 
 // 13. Debug Simulate Bot Responses
 export const debugSimulateBotResponses = onCall(async (request) => {
+  if (process.env.FUNCTIONS_EMULATOR !== "true") {
+    throw new HttpsError("permission-denied", "Debug commands are only available in the local emulator.");
+  }
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
   }
+  const callerUid = request.auth.uid;
   const { roomCode } = request.data;
   if (!roomCode) {
     throw new HttpsError("invalid-argument", "roomCode is required.");
@@ -1706,6 +1721,10 @@ export const debugSimulateBotResponses = onCall(async (request) => {
 
     const playersSnap = await transaction.get(roomRef.collection("players"));
     const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
+    const callerPlayer = players.find(p => p.authUid === callerUid);
+    if (!callerPlayer || !callerPlayer.isHost) {
+      throw new HttpsError("permission-denied", "Only the host can execute debug commands.");
+    }
 
     const phase = room.currentPhase;
     const cards = room.cards ? [...room.cards] : [];

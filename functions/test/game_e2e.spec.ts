@@ -722,6 +722,73 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(forgerDoc.data()?.totalScore).to.be.a('number');
   });
 
+  it('SEC6: should require room host for debug callables (debugAddBots, debugSimulateBotResponses) and reject strangers and non-host members', async () => {
+    /*
+     * Falsification run against current code (where any authenticated user can call debug callables in a debugEnabled room):
+     * Expected: stranger without room membership rejected with PERMISSION_DENIED.
+     * Observed failure on current code:
+     *   AssertionError: Stranger call to debugAddBots succeeded unexpectedly
+     */
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+    const strangerUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_alice',
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guestUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_bob'
+    });
+
+    // Guard 1: Stranger caller gets PERMISSION_DENIED on debugAddBots
+    try {
+      await callFn('debugAddBots', strangerUser.idToken, { roomCode });
+      expect.fail('Stranger call to debugAddBots succeeded unexpectedly');
+    } catch (err: any) {
+      if (err.name === 'AssertionError') throw err;
+      expect(err.status).to.equal('PERMISSION_DENIED');
+    }
+
+    // Guard 2: Non-host member (guest) caller gets PERMISSION_DENIED on debugAddBots
+    try {
+      await callFn('debugAddBots', guestUser.idToken, { roomCode });
+      expect.fail('Non-host member call to debugAddBots succeeded unexpectedly');
+    } catch (err: any) {
+      if (err.name === 'AssertionError') throw err;
+      expect(err.status).to.equal('PERMISSION_DENIED');
+    }
+
+    // Guard 3: Stranger caller gets PERMISSION_DENIED on debugSimulateBotResponses
+    try {
+      await callFn('debugSimulateBotResponses', strangerUser.idToken, { roomCode });
+      expect.fail('Stranger call to debugSimulateBotResponses succeeded unexpectedly');
+    } catch (err: any) {
+      if (err.name === 'AssertionError') throw err;
+      expect(err.status).to.equal('PERMISSION_DENIED');
+    }
+
+    // Guard 4: Non-host member (guest) caller gets PERMISSION_DENIED on debugSimulateBotResponses
+    try {
+      await callFn('debugSimulateBotResponses', guestUser.idToken, { roomCode });
+      expect.fail('Non-host member call to debugSimulateBotResponses succeeded unexpectedly');
+    } catch (err: any) {
+      if (err.name === 'AssertionError') throw err;
+      expect(err.status).to.equal('PERMISSION_DENIED');
+    }
+
+    // Over-reach guard: Room host calls debugAddBots and 9 bots are added
+    const addBotsRes = await callFn('debugAddBots', hostUser.idToken, { roomCode });
+    expect(addBotsRes.success).to.be.true;
+    const playersSnap = await db.collection('rooms').doc(roomCode).collection('players').get();
+    expect(playersSnap.docs.length).to.equal(11); // Alice + Bob + 9 bots
+  });
+
   it('SEC2: should reject seat takeover without token or ownership, and allow rebind with token, ownership, or staleness', async () => {
     /*
      * Falsification run against current code (where anyone can rebind any seat):

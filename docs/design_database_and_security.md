@@ -99,6 +99,11 @@ Concretely: changing the deck erased `sabotageAnswersCount` and `isTimerDisabled
 
 **Why the 31-test emulator suite never caught it:** those tests are written in TypeScript, where an omitted key genuinely *is* `undefined`. The failing payload was unreachable from the harness. **When a boundary is crossed by two languages, at least one test must send the payload exactly as the real client sends it** — including explicit nulls. The same real-client blind spot also hides non-host write behaviour, since the fake Firestore used by client tests does not enforce security rules.
 
+## 7.1 Debug Callables Isolation & Authorization (Issue 101 — August 2026)
+
+* **Emulator Environment Isolation**: `debugAddBots` and `debugSimulateBotResponses` are gated on `process.env.FUNCTIONS_EMULATOR === "true"`, rejecting any invocation in production Cloud Functions with `permission-denied`.
+* **Host Authorization Requirement**: In emulator environments, both debug callables require the authenticated caller (`request.auth.uid`) to be a member of the room and hold `isHost === true`, preventing strangers or non-host members from injecting bots or forcing phase transitions in developer/QA rooms.
+
 ---
 
 ## 8. Deployment, and how to prove a deploy actually happened
