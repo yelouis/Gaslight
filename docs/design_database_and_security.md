@@ -20,7 +20,7 @@ All game mutations are `onCall` Cloud Functions (`functions/src/index.ts`) that 
 | Callable | Replaces (old client method) | Guard / behavior |
 |---|---|---|
 | `createRoom` | `GameService.createRoom` | authenticated |
-| `joinRoom` | `GameService.joinRoom` | authenticated; **re-binds `authUid`** when a known `playerId` rejoins (seat recovery) |
+| `joinRoom` | `GameService.joinRoom` | authenticated; re-binds `authUid` for seat recovery **only on ownership, a valid `seatToken`, or a seat stale >30 s** — `playerId` alone is not a credential (§5) |
 | `startGame` | `GameService.startGame` | host only; validates player count, rounds, deck size with descriptive errors |
 | `submitAnswer` | `submitCardAnswer` | seat owner; server-side semantic-similarity check; marks author ready; auto-advances when all active players are ready |
 | `getMyOptionId` | `GameService.fetchMyOptionId` | seat owner; reads default-deny `sealed/{cardId}.answerAuthors` server-side, returning **only the caller's own optionId** (`{ optionId }`) or `{ optionId: null }` if none authored; throws `permission-denied` on ownership mismatch |
@@ -42,7 +42,8 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
 
 ## 3. Security Rules (`firestore.rules`)
 
-* **Room documents**: `allow read: if true` (live game state for all); **`allow write: if false`** — only the Admin SDK (Cloud Functions) writes rooms.
+* **Room documents**: **`allow get: if true`** (live game state for all) and **`allow list: if false`** — plus **`allow write: if false`**; only the Admin SDK (Cloud Functions) writes rooms.
+  > ⚠️ **`get` and `list` are split deliberately (Issue 96, August 2026). Do not collapse them back to `allow read`.** In Firestore, `read` grants both verbs, and because the old condition was the literal `true` and never dereferenced `resource`, an unconstrained query against `/rooms` was permitted — anyone could download **every live room, unauthenticated**, and then harvest every player document. The client never needed it: `game_service.dart:232,359` only ever address a room by exact document ID. Adding `isAuthenticated()` here would be near-worthless under anonymous auth; denying `list` is the change that carries the weight. Guarded by two tests in `functions/test/rules.spec.ts` (authenticated and unauthenticated), each with over-reach guards proving room `get` and the players `list` still succeed.
 * **Player documents**: `allow read: if true`. `create`/`delete`: **denied** (handled by `joinRoom`/`handleDisconnect`). `update`: permitted only when the caller's `request.auth.uid` matches the doc's stored `authUid` **and** the field diff touches none of the protected keys (`role`, `totalScore`, `timesFooled`, `playersDeceived`, `isHost`, `joinedAt`, `hasRerolled`, `authUid`, `id`). That leaves exactly the cosmetic/liveness surface players may write themselves: `name`, `colorValue`, `avatarIndex`, `lastSeen` (heartbeat), `lobbyReady`, `lastReaction`/`lastReactionAt` (emoji reactions).
 * **Why field-diff rules**: clients doing own-doc writes must send **only the fields they intend to change** — a full-object write carrying a stale protected value counts as a change and is denied. The client write paths for reactions and lobby-ready updates (Issue 18) have been refactored to perform targeted, field-scoped updates.
 * File: `firestore.rules` (workspace root); declared in `firebase.json`.
@@ -66,8 +67,26 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
 
 ## 5. Identity Model
 
-* `playerId` is designed to be a **device-stable UUID** persisted in `SharedPreferences`, decoupled from Firebase Auth; the anonymous `authUid` is just the credential currently bound to that seat, and `joinRoom` re-binds it when the same `playerId` returns — so a reinstall or cleared storage keeps the player's seat and score.
+* `playerId` is a **device-stable UUID** persisted in `SharedPreferences`, decoupled from Firebase Auth; the anonymous `authUid` is just the credential currently bound to that seat, and `joinRoom` re-binds it so a reinstall or cleared storage keeps the player's seat and score.
 * The client implements this via persistent UUID generation and rejoins via the `joinRoom` server re-bind endpoint rather than clearing the local session (Issue 16).
+
+### Seat tokens — what actually authorises a re-bind (Issue 97, August 2026)
+
+> ⚠️ **`playerId` is NOT a credential and must never be treated as one.** It is the player document's **ID**, and that subcollection is world-readable (§3) — so every seat's `playerId` is published to anyone who can read the room. Until August 2026 `joinRoom` re-bound `authUid` on nothing more than a matching `playerId`, which meant **any authenticated user who could read a room could take over any seat in it, including the host's**, inherit every host-only callable, and lock the victim out. The "UUIDs are unguessable" assumption gave false comfort: the UUID was never guessed, it was listed.
+
+A re-bind is now permitted only when **one of three** conditions holds:
+
+1. **Ownership** — `existing.authUid === request.auth.uid`. The ordinary reconnect.
+2. **Seat token** — the caller presents the `seatToken` minted for that seat. The token is generated server-side with `randomUUID()` at `createRoom` and at the new-player branch of `joinRoom`, returned to that caller **once** in the callable response, and persisted client-side per room as `seat_token_{roomCode}`. **Only its SHA-256 hash is stored, and only in `sealed/seat_{playerId}` — the default-deny subcollection.** This is the reinstall / second-device path.
+3. **Staleness** — nobody has heartbeated the seat for **30 s** (`Date.now() - (existing.lastSeen ?? 0) > 30000`), mirroring `handleDisconnect`'s `isDead` rule. This is what keeps a crashed player's seat reclaimable when the token is gone.
+
+**Three properties that must not be lost:**
+
+* **The token, and its hash, must never be written into the player document.** That document is world-readable; putting the credential there would recreate the original bug in a new field. A test asserts the player document contains neither `seatToken` nor `seatTokenHash`.
+* **The rejection must precede the `return { role }`.** A failed re-bind must disclose nothing — the old code handed the seat's secret `role` back to the caller. A test asserts `role` is absent on the thrown error.
+* **`existing.lastSeen ?? 0`, not a bare comparison.** A legacy document with no `lastSeen` must count as *stale*, not as fresh-forever.
+
+**Do not simplify this to a single condition.** Staleness alone is too weak — an attacker just waits. Token alone strands any player who reinstalls. All three tested in `functions/test/game_e2e.spec.ts` ("SEC2"), with the stranger-takeover case as the falsifying assertion and four over-reach guards.
 
 ---
 
