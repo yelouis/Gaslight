@@ -8,6 +8,10 @@
 
 ## 1. Open & in-flight
 
+**⚠️ SECURITY QUEUE OPEN — August 17, 2026. The "Queue Complete" note below refers to the feature queue and is no longer the whole picture.** A whole-repository security review found **six verified defects**, filed as Issues 96–101 above and specced as SEC1–SEC7 in `agent_execution_guide.md`. One is **HIGH** (Issue 97 — seat and host takeover via `joinRoom`); one had its exploit **reproduced end-to-end against the emulator** (Issue 98). Two production deploys are required: rules for Issue 96, functions for 97/98/99/101.
+
+**Fix order and why:** Issue 96 first (one line, rules-only, independently deployable, and it removes the mass-automation path); then 97 (the takeover primitive); then 98 and 99 together (both touch the same reveal transition and the same secrecy boundary); then 100 (depends on both); 101 last (small, independent).
+
 **Queue Complete for all code, deployments, and verification — Issues 1–88 delivered, deployed, and independently verified (August 16, 2026).** Battery measured this session: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **141/141** · functions build clean · `npm --prefix functions test` **53/53** · `./scripts/check_deploy_fresh.sh` **0 (ALL 14 DEPLOYED FUNCTIONS FRESH)**.
 
 **All outstanding items from this wave are closed:**
@@ -24,7 +28,126 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-*(No open issues)*
+**Six security defects, filed August 17, 2026 from a whole-repository security review.** Each was produced by a discovery pass and then **independently re-verified by a second reviewer that read the code from scratch and was instructed to reject or downgrade**. Two candidates were downgraded from HIGH, one was rejected outright (recorded at the end so it is not re-proposed), and one exploit was reproduced end-to-end against the Firebase emulator.
+
+**The user approved all six fixes on filing** ("these are all good catches... perform the fix"), so these carry an approved direction rather than an open option set. Implementation detail, validation and the per-item loop live in `agent_execution_guide.md` §§2–8 (SEC1–SEC7). **Where a genuine sub-decision existed it is called out below with the reasoning — do not improvise a different one; file it instead.**
+
+---
+
+### Issue 97: `joinRoom` re-binds `authUid` with no ownership proof — seat and host takeover
+
+**Status**: ⚠️ **HIGH — confirmed in source and independently re-verified (confidence 9/10).** Also spot-checked directly against `functions/src/index.ts:165-190` and `firestore.rules:9-30`.
+
+```ts
+// functions/src/index.ts:171-184
+if (playerSnap.exists) {
+  const existing = playerSnap.data() as PlayerState;
+  transaction.update(playerRef, { authUid: callerUid, name: playerName, ... });
+  return { role: existing.role };
+}
+```
+
+The only gate is `if (!request.auth)` (`:143`) — satisfiable by anyone, since auth is anonymous and **no App Check exists anywhere in the repo**. There is no comparison against `existing.authUid`, no staleness requirement and no token.
+
+**The intended secret is published.** `docs/design_database_and_security.md:69` treats `playerId` as the recovery secret, but the player document ID **is** the client-supplied `playerId` (`index.ts:160`) and `firestore.rules:18` makes that subcollection world-readable. The "UUIDs are unguessable" precedent does not rescue this: **the UUID is not guessed, it is listed.**
+
+**Why it defeats everything else.** Every other callable authorizes by comparing the *stored* `authUid` to `request.auth.uid` — seats at `:459`, `:557`, `:595`, `:668`, `:760`, `:1402`; host checks at `:253`, `:720`, `:828`, `:1234`, `:1304`. Rewriting that one field passes all of them at once.
+
+**Attack path.** Anonymous token → read `/rooms/{CODE}/players` (allowed with no credentials) → collect every document ID and `isHost` → call `joinRoom` with the host's `playerId` → own the seat, and receive its secret `role` in the response. The attacker then holds `startGame`, `advancePhase`, `updateLobbySettings`, `advanceToNextResolution` and `handleDisconnect` against any player, including the lobby branch (`:838-845`) that deletes the room. The victim's heartbeat now fails `firestore.rules:28`, so they are locked out and eventually swept.
+
+**Approved fix:** permit the re-bind only when the caller **already owns the seat**, **presents a seat token**, or the seat is **provably stale (>30 s since `lastSeen`)**. The token is minted server-side, stored **hashed in the default-deny `sealed` subcollection** (never in the world-readable player document), and returned to the caller once.
+
+**Sub-decision, made deliberately:** staleness-only was considered and rejected as too weak (an attacker can simply wait), and token-only was rejected because a reinstall loses the token and would strand the player. The three-way rule keeps legitimate recovery working while closing the attack. **Do not simplify it to one condition.**
+
+**Validation:** `agent_execution_guide.md` §3 — falsifying assertion plus **four** over-reach guards, including that the token appears in no client-readable document.
+
+---
+
+### Issue 98: `castVote` launders `sealed.answerAuthors` into the world-readable room document
+
+**Status**: ⚠️ **MEDIUM — confirmed; exploit reproduced end-to-end against the emulator (6 probes, 6/6 authors recovered, full answer key for all three cards during vote round 1).** Discovery rated this HIGH; downgraded on re-verification because the asset is transient game state rather than user data.
+
+```ts
+// functions/src/index.ts:611-613, 629, 642-645
+const answerAuthors: Record<string,string> = sealedData.answerAuthors || {};
+const resolvedAuthorId = answerAuthors[votedForId];
+const newVotes = { ...card.votes, [voterId]: resolvedAuthorId };   // author, not option id
+transaction.update(roomRef, { cards: newCards, readyPlayers: newReadyMap });
+```
+
+The project built a real confidentiality boundary — `sealed` is default-deny, option ids are opaque v4 UUIDs, `getMyOptionId` returns only the caller's own — and `castVote`, the one function privileged to read that document, republishes its contents into a world-readable one. This directly violates the invariant stated at `docs/design_database_and_security.md:35`.
+
+**Three guards are absent**, all verified: no phase check, no check that `targetCardId === room.currentReaderId`, and no already-voted guard (`:629` overwrites). Nothing compensates — `advancePhaseInternal` fires only when every active player is ready, so a lone prober loops freely. `docs/implementation_plan_selected_fixes.md:248` specifies a one-vote-per-card rule that was never implemented.
+
+**Approved fix:** store the **opaque option id** in `votes`; resolve to authors server-side at the reveal transition and at scoring.
+
+⚠️ **This redefines what `votes` holds — for the third time.** It has broken its readers twice before (Issues 62/63, then 71 → 78). **There are 13 read sites**, enumerated in `agent_execution_guide.md` §4; every one compares against a player id. Walk all of them.
+
+---
+
+### Issue 99: The reveal merge publishes every card, not the one being revealed
+
+**Status**: ⚠️ **MEDIUM — confirmed by probe** (after the first reveal, two unread cards were fully exposed in the public room document).
+
+```ts
+// functions/src/index.ts:1153-1164
+for (const card of currentCards) {            // ← ALL cards, not just currentReaderId's
+  const sealedData = sealedDataMap[card.targetPlayerId] || {};
+  mergedCards.push({ ...card, truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
+                     sabotageAnswers: sealedData.sabotageAnswers || {} });
+}
+```
+
+`advanceToNextResolution` never re-strips them, so from the first reveal onward the whole round's authorship is public passively. This is arguably a larger leak than Issue 98, and it narrows that oracle's exclusive window to vote round 1 — but does not excuse it.
+
+**Approved fix:** merge sealed content only for `room.currentReaderId`'s card; leave the others blank as `startGame` (`:401-402`) and the vote transition (`:1127-1130`) already do. **`advanceToNextResolution` must then merge the next card as it advances** — that half is the one most likely to be missed, and skipping it makes reveals 2 and 3 render blank.
+
+---
+
+### Issue 96: `/rooms` is world-listable, enabling untargeted discovery
+
+**Status**: ⚠️ **MEDIUM — confirmed** (empirically: a room document read with **no Authorization header at all** succeeds). Discovery rated this HIGH; downgraded on re-verification because its weight is almost entirely as an amplifier of Issue 97.
+
+`firestore.rules:11` and `:18` are `allow read: if true`. In Firestore `read` grants **`get` + `list`**, and because the condition is the literal `true` and never dereferences `resource`, an unconstrained query against `/rooms` is permitted — returning every live room. The client never needs it: `game_service.dart:232`, `:359` only address rooms by exact document ID.
+
+**Two claims from the discovery pass did not survive verification and are excluded:** sealed answers are **not** exposed pre-reveal (the public cards are explicitly re-blanked at `index.ts:1127-1130`, and `answerAuthors` is written only to the sealed doc), and the exposed `authUid` is an opaque anonymous identifier that confers no capability — the ownership check compares it against the caller's server-verified token.
+
+**Approved fix:** `allow get: if true; allow list: if false;` on `/rooms/{roomCode}`. **Leave the `players` rule alone** — that `list` is genuinely used by the lobby roster (`game_service.dart:201`, `:371`). Adding `isAuthenticated()` to reads would be near-worthless under anonymous auth; denying `list` is the change that carries the weight.
+
+---
+
+### Issue 100: Forgery authorship is in client state while unmask guesses are open
+
+**Status**: ⚠️ **LOW-MEDIUM — confirmed in source.**
+
+`lib/screens/phase4_reveal.dart:295` and `:699` read `currentCard.votes[me.id]` as `actualForgerId` while `unmaskDeadline` is still in the future, and `card.sabotageAnswers` is public during that window. The UI merely hides it. This contradicts `docs/design_scoring_and_ui.md:29` — *"forgery authorship must never be visible while guesses are still accepted."*
+
+**Approved fix:** withhold the resolved authorship server-side until the deadline passes. **A client-side-only mitigation is not a fix** — this project's own invariant is that a client-only bound is not a bound. Depends on Issues 98 and 99; if it does not fit in one commit, **file it with options rather than half-doing it.**
+
+---
+
+### Issue 101: Debug callables require neither room membership nor host role
+
+**Status**: ⚠️ **LOW — confirmed.** Discovery rated this MEDIUM; downgraded on re-verification because the reachable victim set is narrow.
+
+`debugAddBots` (`index.ts:1485-1502`) and `debugSimulateBotResponses` (`:1538-1557`) authorize on `request.auth` plus `room.debugEnabled` and nothing else — **no `authUid` match, no `isHost` check** — unlike every sibling privileged callable (`:253`, `:720`, `:1234`, `:1304`). It contradicts the invariant at `docs/design_database_and_security.md:18`, and `debugAddBots` writes 9 player documents that `firestore.rules` forbids clients to create, so it does cross a real trust boundary.
+
+`debugEnabled` is client-supplied (`:67`) and set only under `kDebugMode` (`lobby_screen.dart:188`), with **no server path to enable it on an existing room** (`updateLobbySettings` never touches it; room writes are denied by rules). So release builds are unaffected and the realistic victim set is developer/QA rooms on the production project — which is why this is LOW rather than MEDIUM. It is nonetheless findable: `debugEnabled` lives in the world-readable room document, so Issue 96 lets an attacker filter for it.
+
+**Approved fix:** add the standard host check to both, **and** keep them out of production (gate on `process.env.FUNCTIONS_EMULATOR`). If the deployed function count changes, **update `EXPECTED_FUNCTION_COUNT` and `EXPECTED_FUNCTIONS` in `scripts/check_deploy_fresh.sh` in the same commit**, or the gate fails on a correct deploy and the next agent learns to ignore it.
+
+**Incidental, not a vulnerability:** the debug UI buttons are not `kDebugMode`-gated and ship in release builds (`lobby_screen.dart:744`, `phase2_craft.dart:330,367,568`, `phase3_vote.dart:256,413,571`). In release they fail with `permission-denied`, so this is a cosmetic defect worth fixing alongside.
+
+---
+
+### Assessed and rejected — do NOT re-propose
+
+- **Room codes from `Math.random()` (`index.ts:40-47`) — false positive, confidence 9.** Factually accurate but the wrong diagnosis: because `/rooms` is world-listable, an attacker **lists** live codes rather than guessing them, so code entropy protects nothing — replacing `Math.random()` with `crypto.randomInt` would change attacker capability by exactly zero. Once Issue 96 lands, the remaining narrative is "issue ~450k `joinRoom` calls until one lands", which is brute-force enumeration. The PRNG-state-recovery variant is speculative in Cloud Functions (multiple instances, up to 80 concurrent requests per isolate, ≥5 interleaved `Math.random()` consumers), and the truth option id is `crypto.randomUUID()` regardless. **A fine style change with no security delta — do not spend a cycle on it.**
+- **`authUid` in world-readable player documents** — assessed, not a finding. Opaque anonymous identifier; not PII, not a credential, confers no capability.
+- **Prototype pollution via `selectedDeckId`** — `DECKS['__proto__']` reaches a truthy prototype object, but the immediate spread throws a `TypeError`. An error, not a write or a leak.
+- **`sealed` and `embeddings` subcollections** — verified genuinely default-deny (no `match` block; confirmed by probe and by `functions/test/rules.spec.ts`). **Never add an explicit `allow read: if false`**, and never add a `match` block that accidentally grants access.
+- **`getMyOptionId`** — verified it cannot be coerced into returning another player's option id (`:556-559` authenticates the supplied `playerId`; `:570-574` returns only that player's own).
+- Not reported per the review's exclusions: `.env` and the Firebase web API keys in `lib/firebase_options.dart` — public identifiers, not secrets.
 
 ---
 
@@ -442,6 +565,14 @@ Clients read Firestore streams and write nothing to rooms; `firestore.rules` den
 
 ### 2.8 Widget tests on animated screens hang without `accessibleNavigation: true`
 Nine widgets in the lobby tree drive `AnimationController.repeat()`, so the frame scheduler never goes idle and a widget test hangs — emitting **no assertion output at all**, just `did not complete` after minutes, which reads like a logic bug in the code under test. Wrap the screen under test in `MediaQuery(data: const MediaQueryData(accessibleNavigation: true), …)`: `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`), so the flag puts every animation on its static path. Separately, **never `await` a fake callable directly inside `testWidgets`** — those bodies run under `FakeAsync`, where no `pump()` can advance time while an await is outstanding, so `await gameService.createRoom(...)` deadlocks; wrap it in `tester.runAsync`. **`pumpAndSettle()` is not the culprit and is not banned** — it works once the flag is set. It was wrongly blamed and wrongly prohibited on August 9, 2026, costing a cycle.
+
+### 2.18 A documented invariant with no test behind it is a wish
+
+`design_database_and_security.md:35` states "never send other players' authorship to the client." Issue 98 is that exact invariant being violated by `castVote` — the one function privileged to read the default-deny `sealed` document — which republished its contents into a world-readable one. The invariant was written down, believed, and never asserted anywhere. **Every invariant in the design docs should have an assertion behind it, in the suite that can actually observe it**: rules go in `functions/test/rules.spec.ts`, callable authorization in `functions/test/game_e2e.spec.ts`. A Dart widget test can never prove either — `test/fake_functions.dart` does not enforce `firestore.rules`.
+
+### 2.17 When a design doc calls something a secret, grep for where it is published
+
+`design_database_and_security.md:69` treats `playerId` as the credential that makes seat recovery safe. The player document ID **is** that `playerId`, and `firestore.rules:18` makes the collection world-readable — so the secret is listed next to the lock (Issue 97). The "UUIDs are unguessable" precedent gave false comfort: **the UUID was never guessed, it was published.** Whenever a document ID doubles as an authorization credential, that is the bug.
 
 ### 2.16 A counter placed after an early return counts only some paths
 
