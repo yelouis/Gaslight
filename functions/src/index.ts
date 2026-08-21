@@ -1191,17 +1191,10 @@ async function advancePhaseInternal(
     }
   } else if (room.currentPhase === "vote") {
     // Merge sealed data into public cards ONLY for the card being revealed
-    const mergedCards: CardModel[] = [];
-    for (const card of currentCards) {
-      if (card.targetPlayerId !== room.currentReaderId) {
-        mergedCards.push({
-          ...card,
-          truthAnswer: "",
-          sabotageAnswers: {}
-        });
-        continue;
-      }
-
+    const currentCardIdx = currentCards.findIndex(c => c.targetPlayerId === room.currentReaderId);
+    let hasFooled = false;
+    if (currentCardIdx !== -1) {
+      const card = currentCards[currentCardIdx];
       const sealedData = sealedDataMap[card.targetPlayerId] || {};
       const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
 
@@ -1212,27 +1205,20 @@ async function advancePhaseInternal(
         resolvedVotes[voterId] = answerAuthors[votedOptionId] || votedOptionId;
       }
 
-      mergedCards.push({
+      const cardWithAnswers: CardModel = {
         ...card,
-        votes: resolvedVotes,
         truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
         sabotageAnswers: sealedData.sabotageAnswers || {}
-      });
-    }
+      };
 
-    // Tally scores and advance to Reveal
-    const currentCard = mergedCards.find(c => c.targetPlayerId === room.currentReaderId);
-    let hasFooled = false;
-    if (currentCard) {
-      const votes = currentCard.votes || {};
-      hasFooled = Object.values(votes).some(v => v !== currentCard.targetPlayerId);
-      const deltas = ScoringLogic.calculateScores(room, currentCard, votes);
+      hasFooled = Object.values(resolvedVotes).some(v => v !== card.targetPlayerId);
+      const deltas = ScoringLogic.calculateScores(room, cardWithAnswers, resolvedVotes);
 
       const timesFooledDeltas: Record<string, number> = {};
       const playersDeceivedDeltas: Record<string, number> = {};
 
-      for (const [voterId, votedForId] of Object.entries(votes)) {
-        if (votedForId !== currentCard.targetPlayerId && votedForId !== voterId) {
+      for (const [voterId, votedForId] of Object.entries(resolvedVotes)) {
+        if (votedForId !== card.targetPlayerId && votedForId !== voterId) {
           timesFooledDeltas[voterId] = (timesFooledDeltas[voterId] || 0) + 1;
           playersDeceivedDeltas[votedForId] = (playersDeceivedDeltas[votedForId] || 0) + 1;
         }
@@ -1256,6 +1242,50 @@ async function advancePhaseInternal(
 
     const unmaskDeadline = hasFooled ? Date.now() + 20000 : null;
 
+    const mergedCards: CardModel[] = [];
+    for (const card of currentCards) {
+      if (card.targetPlayerId !== room.currentReaderId) {
+        mergedCards.push({
+          ...card,
+          truthAnswer: "",
+          sabotageAnswers: {}
+        });
+        continue;
+      }
+
+      const sealedData = sealedDataMap[card.targetPlayerId] || {};
+      const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+
+      if (unmaskDeadline !== null) {
+        // While unmask window is open, withhold sabotage answers and forgery author mapping
+        const publicVotes: Record<string, string> = {};
+        for (const [voterId, votedOptionId] of Object.entries(card.votes || {})) {
+          const author = answerAuthors[votedOptionId] || votedOptionId;
+          publicVotes[voterId] = author === card.targetPlayerId ? card.targetPlayerId : votedOptionId;
+        }
+
+        mergedCards.push({
+          ...card,
+          votes: publicVotes,
+          truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
+          sabotageAnswers: {}
+        });
+      } else {
+        // Nobody was fooled: publish full answers and resolved votes immediately
+        const resolvedVotes: Record<string, string> = {};
+        for (const [voterId, votedOptionId] of Object.entries(card.votes || {})) {
+          resolvedVotes[voterId] = answerAuthors[votedOptionId] || votedOptionId;
+        }
+
+        mergedCards.push({
+          ...card,
+          votes: resolvedVotes,
+          truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
+          sabotageAnswers: sealedData.sabotageAnswers || {}
+        });
+      }
+    }
+
     transaction.update(roomRef, {
       currentPhase: "reveal",
       cards: mergedCards,
@@ -1264,6 +1294,31 @@ async function advancePhaseInternal(
       unmaskDeadline,
       expiresAt: ttlFrom(Date.now())
     });
+  } else if (room.currentPhase === "reveal") {
+    // When advancing from reveal, if unmask window was open, publish the revealed sabotage answers and resolve votes
+    const currentCardIdx = currentCards.findIndex(c => c.targetPlayerId === room.currentReaderId);
+    if (currentCardIdx !== -1) {
+      const currentCard = currentCards[currentCardIdx];
+      const sealedData = sealedDataMap[currentCard.targetPlayerId] || {};
+      const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+
+      const resolvedVotes: Record<string, string> = {};
+      for (const [vId, optId] of Object.entries(currentCard.votes || {})) {
+        resolvedVotes[vId] = answerAuthors[optId] || optId;
+      }
+
+      const updatedCards = [...currentCards];
+      updatedCards[currentCardIdx] = {
+        ...currentCard,
+        votes: resolvedVotes,
+        sabotageAnswers: sealedData.sabotageAnswers || {}
+      };
+
+      transaction.update(roomRef, {
+        cards: updatedCards,
+        unmaskDeadline: 0
+      });
+    }
   }
 }
 
@@ -1481,12 +1536,21 @@ export const submitUnmaskGuess = onCall(async (request) => {
     }
     const currentCard = room.cards[currentCardIdx];
 
+    const sealedRef = roomRef.collection("sealed").doc(currentCard.targetPlayerId);
+    const sealedSnap = await transaction.get(sealedRef);
+    if (!sealedSnap.exists) {
+      throw new HttpsError("not-found", "Sealed card not found.");
+    }
+    const sealedData = sealedSnap.data() as any;
+    const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+
     const voterId = guesserId;
-    const votedForId = currentCard.votes?.[voterId];
-    if (!votedForId) {
+    const votedOptionId = currentCard.votes?.[voterId];
+    if (!votedOptionId) {
       throw new HttpsError("failed-precondition", "Player did not cast a vote for this card.");
     }
 
+    const votedForId = answerAuthors[votedOptionId] || votedOptionId;
     if (votedForId === currentCard.targetPlayerId) {
       throw new HttpsError("failed-precondition", "Only players who fell for a forgery can make an unmask guess.");
     }
@@ -1513,13 +1577,40 @@ export const submitUnmaskGuess = onCall(async (request) => {
     const unmaskGuesses = currentCard.unmaskGuesses ? { ...currentCard.unmaskGuesses } : {};
     unmaskGuesses[voterId] = guessedAuthorId;
 
-    const newCards = [...room.cards];
-    newCards[currentCardIdx] = {
-      ...currentCard,
-      unmaskGuesses
-    };
+    const fooledVoterIds = Object.entries(currentCard.votes || {})
+      .filter(([vId, optId]) => (answerAuthors[optId] || optId) !== currentCard.targetPlayerId)
+      .map(([vId]) => vId);
+    const allFooledGuessed = fooledVoterIds.length > 0 && fooledVoterIds.every(vId => unmaskGuesses[vId] !== undefined);
 
-    transaction.update(roomRef, { cards: newCards });
+    let updatedCard: CardModel;
+    let nextUnmaskDeadline = room.unmaskDeadline;
+
+    if (allFooledGuessed) {
+      const resolvedVotes: Record<string, string> = {};
+      for (const [vId, optId] of Object.entries(currentCard.votes || {})) {
+        resolvedVotes[vId] = answerAuthors[optId] || optId;
+      }
+      updatedCard = {
+        ...currentCard,
+        votes: resolvedVotes,
+        sabotageAnswers: sealedData.sabotageAnswers || {},
+        unmaskGuesses
+      };
+      nextUnmaskDeadline = 0;
+    } else {
+      updatedCard = {
+        ...currentCard,
+        unmaskGuesses
+      };
+    }
+
+    const newCards = [...room.cards];
+    newCards[currentCardIdx] = updatedCard;
+
+    transaction.update(roomRef, {
+      cards: newCards,
+      unmaskDeadline: nextUnmaskDeadline
+    });
 
     const isCorrect = guessedAuthorId === votedForId;
     if (isCorrect) {

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/game_service.dart';
 import '../services/audio_service.dart';
@@ -15,15 +14,10 @@ import '../widgets/flipping_card.dart';
 import '../widgets/gaslight_route.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_motion.dart';
-import 'dart:ui';
-import 'dart:math';
 import 'dart:async';
-import 'package:uuid/uuid.dart';
 import 'package:clock/clock.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
-import '../widgets/waiting_indicator.dart';
 import '../widgets/lamp_loading.dart';
 
 class Phase4RevealScreen extends StatefulWidget {
@@ -44,6 +38,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
   String? _previousTargetId;
   String? _playedRevealForTargetId;
   String? _playedUnmaskForTargetId;
+  bool _hasClosedUnmaskWindow = false;
   Timer? _countdownTimer;
 
   int _computeStage(int now, GameState? state) {
@@ -62,13 +57,13 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     if (state == null) return 2;
 
     final unmaskDeadline = state.unmaskDeadline;
-    if (unmaskDeadline != null && now < unmaskDeadline) {
+    if (unmaskDeadline != null && unmaskDeadline > 0 && now < unmaskDeadline) {
       // Beat 3: unmask window
       return 3;
     }
 
     // Beat 4 starts either at 3.6s elapsed, or when unmaskDeadline passes.
-    final int beat4Start = unmaskDeadline == null
+    final int beat4Start = (unmaskDeadline == null || unmaskDeadline == 0)
         ? _revealStartTime + 3600
         : (unmaskDeadline > _revealStartTime + 3600 ? unmaskDeadline : _revealStartTime + 3600);
 
@@ -87,6 +82,15 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     _revealStartTime = _mountTime;
     _countdownTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
       if (mounted) {
+        final gs = Provider.of<GameService>(context, listen: false);
+        final state = gs.gameState;
+        final now = clock.now().millisecondsSinceEpoch;
+        if (state != null && state.unmaskDeadline != null && state.unmaskDeadline! > 0 && now >= state.unmaskDeadline!) {
+          if (gs.currentPlayer?.isHost == true && !_hasClosedUnmaskWindow) {
+            _hasClosedUnmaskWindow = true;
+            gs.forceAdvance();
+          }
+        }
         setState(() {});
       }
     });
@@ -263,6 +267,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
 
     if (currentTargetId != _previousTargetId) {
       _previousTargetId = currentTargetId;
+      _hasClosedUnmaskWindow = false;
       _revealStartTime = clock.now().millisecondsSinceEpoch;
     }
 
@@ -394,9 +399,16 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                               ),
                             ),
                             _buildOptionRow(currentCard.targetPlayerId, currentCard.truthAnswer, currentCard, gs, theme, revealStage, isTruth: true),
-                            ...currentCard.sabotageAnswers.entries.map((e) => 
-                              _buildOptionRow(e.key, e.value, currentCard!, gs, theme, revealStage)
-                            ),
+                            if (currentCard.sabotageAnswers.isNotEmpty)
+                              ...currentCard.sabotageAnswers.entries.map((e) => 
+                                _buildOptionRow(e.key, e.value, currentCard!, gs, theme, revealStage)
+                              )
+                            else
+                              ...currentCard.options
+                                .where((opt) => opt.text != currentCard!.truthAnswer)
+                                .map((opt) =>
+                                  _buildOptionRow('', opt.text, currentCard!, gs, theme, revealStage, optionId: opt.id)
+                                ),
                           ],
 
                           // Revenge Guess Tray (only shown in unmask window stage 3)
@@ -845,9 +857,9 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     );
   }
 
-  Widget _buildOptionRow(String authorId, String text, CardModel card, GameService gs, ThemeData theme, int revealStage, {bool isTruth = false}) {
+  Widget _buildOptionRow(String authorId, String text, CardModel card, GameService gs, ThemeData theme, int revealStage, {bool isTruth = false, String? optionId}) {
     final voters = revealStage >= 1
-        ? gs.players.where((p) => card.votes[p.id] == authorId).toList()
+        ? gs.players.where((p) => authorId.isNotEmpty ? card.votes[p.id] == authorId : (optionId != null && card.votes[p.id] == optionId)).toList()
         : <PlayerState>[];
     final cardColor = AppColors.groundRaised;
     final truthBorderColor = theme.colorScheme.tertiary;

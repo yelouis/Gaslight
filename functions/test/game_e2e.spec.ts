@@ -445,7 +445,17 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     const roomSnapReveal = await db.collection('rooms').doc(roomCode).get();
     expect(roomSnapReveal.data()?.currentPhase).to.equal('reveal');
     const cardInReveal = roomSnapReveal.data()!.cards.find((c: any) => c.targetPlayerId === currentReaderId);
-    expect(cardInReveal.votes[activeVoterId]).to.equal(forgerId);
+    // With SEC5, while unmaskDeadline is active, votes holds the opaque option id; after unmask closes, it resolves
+    expect(cardInReveal.votes[activeVoterId]).to.equal(forgeryOptId);
+
+    await callFn('submitUnmaskGuess', voterToken, {
+      roomCode,
+      guesserId: activeVoterId,
+      guessedAuthorId: forgerId
+    });
+    const roomSnapClosed = await db.collection('rooms').doc(roomCode).get();
+    const cardClosed = roomSnapClosed.data()!.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+    expect(cardClosed.votes[activeVoterId]).to.equal(forgerId);
   });
 
   it('SEC4: should merge sealed answers only for the card currently being revealed and leave unread cards blank', async () => {
@@ -582,6 +592,134 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     const card3 = cardsInReveal2.find(c => c.targetPlayerId === card3ReaderId);
     expect(card3.truthAnswer).to.equal('');
     expect(Object.keys(card3.sabotageAnswers || {})).to.have.lengthOf(0);
+  });
+
+  it('SEC5: should withhold forgery authorship and sabotageAnswers while unmask window is open, and publish them when closed', async () => {
+    /*
+     * Falsification run against current code (where sabotageAnswers and resolved votes are published during unmask window):
+     * Expected: with unmaskDeadline in the future, currentCard.sabotageAnswers is empty and votes contains no forger player IDs.
+     * Observed failure on current code:
+     *   AssertionError: expected { p_bob: 'Bob Forgery' } to have a length of 0 but got 1
+     */
+    const hostUser = await createAnonUser();
+    const bobUser = await createAnonUser();
+    const charlieUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_alice',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', bobUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_bob'
+    });
+
+    await callFn('joinRoom', charlieUser.idToken, {
+      roomCode,
+      playerName: 'Charlie',
+      playerId: 'p_charlie'
+    });
+
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_bob').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_charlie').update({ lobbyReady: true });
+
+    await callFn('startGame', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'the_daily_grind'
+    });
+
+    // Truth phase
+    await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_alice', authorId: 'p_alice', text: 'Alice Truth', isTruth: true });
+    await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: 'p_bob', authorId: 'p_bob', text: 'Bob Truth', isTruth: true });
+    await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: 'p_charlie', authorId: 'p_charlie', text: 'Charlie Truth', isTruth: true });
+
+    // Forgery phase
+    const roomSnapForgeries = await db.collection('rooms').doc(roomCode).get();
+    const assignments = roomSnapForgeries.data()?.currentCardAssignments || {};
+
+    await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_alice'], authorId: 'p_alice', text: 'Alice Forgery', isTruth: false });
+    await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: assignments['p_bob'], authorId: 'p_bob', text: 'Bob Forgery', isTruth: false });
+    await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: assignments['p_charlie'], authorId: 'p_charlie', text: 'Charlie Forgery', isTruth: false });
+
+    // Room is in vote phase for card 1
+    let roomSnap = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnap.data()?.currentPhase).to.equal('vote');
+    const currentReaderId = roomSnap.data()?.currentReaderId;
+
+    // Read sealed for current reader card
+    const sealedSnap = await db.collection('rooms').doc(roomCode).collection('sealed').doc(currentReaderId).get();
+    const answerAuthors = sealedSnap.data()?.answerAuthors || {};
+
+    // Find forgery option and its author
+    const forgeryEntry = Object.entries(answerAuthors).find(([optId, author]) => author !== currentReaderId);
+    expect(forgeryEntry).to.not.be.undefined;
+    const [forgeryOptId, forgerId] = forgeryEntry!;
+
+    // Find a voter who is not the forger and not the reader
+    const fooledVoterId = ['p_alice', 'p_bob', 'p_charlie'].find(id => id !== forgerId && id !== currentReaderId)!;
+    const fooledVoterToken = fooledVoterId === 'p_alice' ? hostUser.idToken : (fooledVoterId === 'p_bob' ? bobUser.idToken : charlieUser.idToken);
+
+    // Cast vote for forgery option
+    await callFn('castVote', fooledVoterToken, {
+      roomCode,
+      targetCardId: currentReaderId,
+      voterId: fooledVoterId,
+      votedForId: forgeryOptId
+    });
+
+    // Cast other vote for truth and reader sets ready
+    const otherPlayers = ['p_alice', 'p_bob', 'p_charlie'].filter(id => id !== fooledVoterId);
+    for (const pid of otherPlayers) {
+      const pToken = pid === 'p_alice' ? hostUser.idToken : (pid === 'p_bob' ? bobUser.idToken : charlieUser.idToken);
+      if (pid === currentReaderId) {
+        await callFn('setReady', pToken, { roomCode, playerId: pid, ready: true });
+      } else {
+        const truthEntry = Object.entries(answerAuthors).find(([optId, author]) => author === currentReaderId)!;
+        await callFn('castVote', pToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: pid,
+          votedForId: truthEntry[0]
+        });
+      }
+    }
+
+    // Room is in reveal phase with unmask window open
+    roomSnap = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+    const unmaskDeadline = roomSnap.data()?.unmaskDeadline;
+    expect(unmaskDeadline).to.be.a('number').and.be.greaterThan(Date.now());
+
+    // Falsification assertion: While unmaskDeadline is active, currentCard has NO forgery authorship
+    const currentCardInUnmask = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReaderId);
+    expect(Object.keys(currentCardInUnmask.sabotageAnswers || {})).to.have.lengthOf(0);
+    expect(currentCardInUnmask.votes[fooledVoterId]).to.not.equal(forgerId);
+    expect(currentCardInUnmask.votes[fooledVoterId]).to.equal(forgeryOptId);
+
+    // Over-reach guard: Submit unmask guess while unmask window is open
+    await callFn('submitUnmaskGuess', fooledVoterToken, {
+      roomCode,
+      guesserId: fooledVoterId,
+      guessedAuthorId: forgerId
+    });
+
+    // After all fooled players guessed, the server closes unmask window and publishes revealed forgeries
+    const roomSnapClosed = await db.collection('rooms').doc(roomCode).get();
+    const currentCardClosed = (roomSnapClosed.data()?.cards as any[]).find(c => c.targetPlayerId === currentReaderId);
+    expect(currentCardClosed.sabotageAnswers[forgerId]).to.be.a('string').and.not.equal('');
+    expect(currentCardClosed.votes[fooledVoterId]).to.equal(forgerId);
+    expect(currentCardClosed.unmaskGuesses[fooledVoterId]).to.equal(forgerId);
+
+    // Verify scoring delta applied from unmask guess
+    const guesserDoc = await db.collection('rooms').doc(roomCode).collection('players').doc(fooledVoterId).get();
+    const forgerDoc = await db.collection('rooms').doc(roomCode).collection('players').doc(forgerId).get();
+    expect(guesserDoc.data()?.totalScore).to.be.a('number');
+    expect(forgerDoc.data()?.totalScore).to.be.a('number');
   });
 
   it('SEC2: should reject seat takeover without token or ownership, and allow rebind with token, ownership, or staleness', async () => {
