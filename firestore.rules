@@ -7,8 +7,11 @@ service cloud.firestore {
     }
 
     match /rooms/{roomCode} {
-      // Anyone can read rooms to fetch game state
-      allow read: if true;
+      // Clients read a room by its exact code. Collection enumeration is denied:
+      // `allow read` would grant `list`, letting anyone download every live room
+      // and every player id in it (Issue 96). The app only ever does document gets.
+      allow get: if true;
+      allow list: if false;
       
       // All writes to rooms must be done via Admin SDK (Cloud Functions)
       allow write: if false;

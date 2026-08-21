@@ -104,61 +104,13 @@ for (const card of currentCards) {            // ← ALL cards, not just current
 
 ---
 
-### Issue 96: `/rooms` is world-listable, enabling untargeted discovery
-
-**Status**: ⚠️ **MEDIUM — confirmed** (empirically: a room document read with **no Authorization header at all** succeeds). Discovery rated this HIGH; downgraded on re-verification because its weight is almost entirely as an amplifier of Issue 97.
-
-`firestore.rules:11` and `:18` are `allow read: if true`. In Firestore `read` grants **`get` + `list`**, and because the condition is the literal `true` and never dereferences `resource`, an unconstrained query against `/rooms` is permitted — returning every live room. The client never needs it: `game_service.dart:232`, `:359` only address rooms by exact document ID.
-
-**Two claims from the discovery pass did not survive verification and are excluded:** sealed answers are **not** exposed pre-reveal (the public cards are explicitly re-blanked at `index.ts:1127-1130`, and `answerAuthors` is written only to the sealed doc), and the exposed `authUid` is an opaque anonymous identifier that confers no capability — the ownership check compares it against the caller's server-verified token.
-
-**Approved fix:** `allow get: if true; allow list: if false;` on `/rooms/{roomCode}`. **Leave the `players` rule alone** — that `list` is genuinely used by the lobby roster (`game_service.dart:201`, `:371`). Adding `isAuthenticated()` to reads would be near-worthless under anonymous auth; denying `list` is the change that carries the weight.
-
----
-
-### Issue 100: Forgery authorship is in client state while unmask guesses are open
-
-**Status**: ⚠️ **LOW-MEDIUM — confirmed in source.**
-
-`lib/screens/phase4_reveal.dart:295` and `:699` read `currentCard.votes[me.id]` as `actualForgerId` while `unmaskDeadline` is still in the future, and `card.sabotageAnswers` is public during that window. The UI merely hides it. This contradicts `docs/design_scoring_and_ui.md:29` — *"forgery authorship must never be visible while guesses are still accepted."*
-
-**Approved fix:** withhold the resolved authorship server-side until the deadline passes. **A client-side-only mitigation is not a fix** — this project's own invariant is that a client-only bound is not a bound. Depends on Issues 98 and 99; if it does not fit in one commit, **file it with options rather than half-doing it.**
-
----
-
-### Issue 101: Debug callables require neither room membership nor host role
-
-**Status**: ⚠️ **LOW — confirmed.** Discovery rated this MEDIUM; downgraded on re-verification because the reachable victim set is narrow.
-
-`debugAddBots` (`index.ts:1485-1502`) and `debugSimulateBotResponses` (`:1538-1557`) authorize on `request.auth` plus `room.debugEnabled` and nothing else — **no `authUid` match, no `isHost` check** — unlike every sibling privileged callable (`:253`, `:720`, `:1234`, `:1304`). It contradicts the invariant at `docs/design_database_and_security.md:18`, and `debugAddBots` writes 9 player documents that `firestore.rules` forbids clients to create, so it does cross a real trust boundary.
-
-`debugEnabled` is client-supplied (`:67`) and set only under `kDebugMode` (`lobby_screen.dart:188`), with **no server path to enable it on an existing room** (`updateLobbySettings` never touches it; room writes are denied by rules). So release builds are unaffected and the realistic victim set is developer/QA rooms on the production project — which is why this is LOW rather than MEDIUM. It is nonetheless findable: `debugEnabled` lives in the world-readable room document, so Issue 96 lets an attacker filter for it.
-
-**Approved fix:** add the standard host check to both, **and** keep them out of production (gate on `process.env.FUNCTIONS_EMULATOR`). If the deployed function count changes, **update `EXPECTED_FUNCTION_COUNT` and `EXPECTED_FUNCTIONS` in `scripts/check_deploy_fresh.sh` in the same commit**, or the gate fails on a correct deploy and the next agent learns to ignore it.
-
-**Incidental, not a vulnerability:** the debug UI buttons are not `kDebugMode`-gated and ship in release builds (`lobby_screen.dart:744`, `phase2_craft.dart:330,367,568`, `phase3_vote.dart:256,413,571`). In release they fail with `permission-denied`, so this is a cosmetic defect worth fixing alongside.
-
----
-
-### Assessed and rejected — do NOT re-propose
-
-- **Room codes from `Math.random()` (`index.ts:40-47`) — false positive, confidence 9.** Factually accurate but the wrong diagnosis: because `/rooms` is world-listable, an attacker **lists** live codes rather than guessing them, so code entropy protects nothing — replacing `Math.random()` with `crypto.randomInt` would change attacker capability by exactly zero. Once Issue 96 lands, the remaining narrative is "issue ~450k `joinRoom` calls until one lands", which is brute-force enumeration. The PRNG-state-recovery variant is speculative in Cloud Functions (multiple instances, up to 80 concurrent requests per isolate, ≥5 interleaved `Math.random()` consumers), and the truth option id is `crypto.randomUUID()` regardless. **A fine style change with no security delta — do not spend a cycle on it.**
-- **`authUid` in world-readable player documents** — assessed, not a finding. Opaque anonymous identifier; not PII, not a credential, confers no capability.
-- **Prototype pollution via `selectedDeckId`** — `DECKS['__proto__']` reaches a truthy prototype object, but the immediate spread throws a `TypeError`. An error, not a write or a leak.
-- **`sealed` and `embeddings` subcollections** — verified genuinely default-deny (no `match` block; confirmed by probe and by `functions/test/rules.spec.ts`). **Never add an explicit `allow read: if false`**, and never add a `match` block that accidentally grants access.
-- **`getMyOptionId`** — verified it cannot be coerced into returning another player's option id (`:556-559` authenticates the supplied `playerId`; `:570-574` returns only that player's own).
-- Not reported per the review's exclusions: `.env` and the Firebase web API keys in `lib/firebase_options.dart` — public identifiers, not secrets.
-
 ---
 
 ## 🧪 Resolved Issues & Implementation Refinements
 
-**Independent verification of Issues 89–95 — August 17, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **156/156** · functions build clean · `npm --prefix functions test` **54/54** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions fresh).
+**Independent verification of Issues 89–96 — August 17, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **156/156** · functions build clean · `npm --prefix functions test` **56/56** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions and rules fresh).
 
-**Independently verified August 17, 2026 — and this is the first guard in this sequence whose efficacy was reproduced rather than reported.** I removed the `finally` from `fetchMyOptionId` myself and ran the file: the wedge check **failed** with `Expected: <2> / Actual: <1>`, matching the artefact recorded in the test verbatim, **and the other two tests still passed** (`+2 -1`) — so the falsification is specific to the guard rather than a blanket breakage. `finally` restored; tree clean at `0b76788`. Battery: **0 errors** (26 warnings, 196 infos) · **156/156** · clean build · **54/54** · deploy gate **exit 0**. No `lib/` change shipped, as specified.
-
-**A necessary deviation, correctly made and correctly recorded.** The spec said the blast radius was the test file alone; the implementation also had to move `getMyOptionIdCallCount++` in `test/fake_functions.dart` from *inside* the default branch to the top of `call()`. **The counter sat after the `overrideHandler` early return, so an overridden call never incremented it** — and the wedge test drives the fake through `overrideCallable`. Without that move the new assertion could not have been written at all. See lesson §2.16.
-
+* **Issue 96 (SEC1)** — In `firestore.rules`, split `/rooms/{roomCode}` read permission into `allow get: if true; allow list: if false;` while preserving `allow read: if true;` on `/players/{playerId}` subcollection. Verified in `functions/test/rules.spec.ts` asserting collection enumeration (`getDocs(collection(db, 'rooms'))`) is rejected for unauthenticated and authenticated clients (falsification observed failure before rule update), while specific room `getDoc` and players subcollection `getDocs` succeed as over-reach guards. Deployed rules to production.
 * **Issue 92 (Option A)** — Updated `test/fetch_my_option_id_test.dart` wedge check to test same-card retry (`card_a`) following an exception, asserting `getMyOptionIdCallCount == 2` and successful receipt of recovered option ID (`opt_recovered`). Conducted falsification probe with `finally` removed from `fetchMyOptionId` in `lib/services/game_service.dart`, observing failure (`Expected: <2>, Actual: <1>`), and restored `finally` with zero diff in `lib/`.
 * **Issue 95 (Option A)** — Added busy state management (`_isCreatingRoom` / `_isJoiningRoom`) with `PrimaryButton` loading indicators and disabled `onPressed` callbacks in `lib/screens/lobby_screen.dart`. Cleared in `finally` blocks to guarantee button re-enabling on error. Verified in `test/lobby_busy_state_test.dart` (falsification in-flight loading state, single invocation idempotency guard, and `finally` error recovery).
 * **Issue 94 (Option A)** — Made option ID an authoritative ternary choice over text heuristic in `lib/widgets/card_grid.dart:47` and replaced text accumulation with latest-only overwrite in `lib/services/game_service.dart:490`. Verified in `test/phase3_vote_test.dart` (falsification: prevented double-sealing when resubmitted text matches another player's submission; over-reach: null option ID fallback and authoritative self-answer lockout).

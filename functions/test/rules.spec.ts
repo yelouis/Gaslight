@@ -4,7 +4,7 @@ import {
   assertFails,
   assertSucceeds,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 describe('Firestore Security Rules', () => {
   let testEnv: any;
@@ -26,6 +26,42 @@ describe('Firestore Security Rules', () => {
 
   after(async () => {
     await testEnv.cleanup();
+  });
+
+  it('SEC1: should deny collection enumeration (list) on /rooms for authenticated client', async () => {
+    /*
+     * Falsification run with allow read: if true (granting list):
+     * Expected: assertFails on getDocs(collection(db, 'rooms'))
+     * Observed failure on current rules:
+     *   Error: Expected request to fail, but it succeeded.
+     *   at pr.then._a (functions/node_modules/@firebase/rules-unit-testing/src/util.ts:138:9)
+     *   at async Context.<anonymous> (functions/test/rules.spec.ts:43:5)
+     */
+    const authContext = testEnv.authenticatedContext('alice');
+    const db = authContext.firestore();
+
+    // 1. Falsification: collection enumeration on /rooms must be denied
+    await assertFails(getDocs(collection(db, 'rooms')));
+
+    // 2. Over-reach guard 1: getDoc on a specific room document must still succeed
+    await assertSucceeds(getDoc(doc(db, 'rooms/TEST')));
+
+    // 3. Over-reach guard 2: getDocs on /rooms/{code}/players must still succeed
+    await assertSucceeds(getDocs(collection(db, 'rooms/TEST/players')));
+  });
+
+  it('SEC1: should deny collection enumeration (list) on /rooms for unauthenticated client', async () => {
+    const unauthContext = testEnv.unauthenticatedContext();
+    const db = unauthContext.firestore();
+
+    // 1. Falsification: collection enumeration on /rooms must be denied
+    await assertFails(getDocs(collection(db, 'rooms')));
+
+    // 2. Over-reach guard 1: getDoc on a specific room document must still succeed
+    await assertSucceeds(getDoc(doc(db, 'rooms/TEST')));
+
+    // 3. Over-reach guard 2: getDocs on /rooms/{code}/players must still succeed
+    await assertSucceeds(getDocs(collection(db, 'rooms/TEST/players')));
   });
 
   it('should deny room document writes by clients', async () => {
