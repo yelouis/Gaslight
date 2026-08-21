@@ -8,7 +8,7 @@
 
 ## 1. Open & in-flight
 
-**Nothing is open. Issues 1–101 are delivered, deployed and independently verified — August 21, 2026.**
+**Issues 1–101 are delivered, deployed and independently verified — August 21, 2026. Three pre-demo items are now open: Issues 102–104.**
 
 | Gate | Result |
 |---|---|
@@ -26,7 +26,106 @@ The last wave was a whole-repository security review that found six defects (Iss
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-*(No open issues. Security Issues 96–101 shipped, deployed and independently verified — see below.)*
+**Three items stand between the current build and handing a demo to friends.** Issue 102 is the acceptance gate; 103 is what a friend would see and think "this isn't finished"; 104 is how they install it at all. Only 103 and 104 need a selection.
+
+---
+
+### Issue 102: Final pre-demo E2E playthrough (Marionette, three simulators)
+
+**Status**: 🔵 Task, approved on filing — no selection needed. **Run this before the Apple Developer licence arrives**, so the full-device test suite starts from a known-good build.
+
+**Why now, and why it is not optional.** The security wave (Issues 96–101) changed **four load-bearing gameplay paths** and nothing has played the game since:
+
+* `votes` now stores an opaque option UUID and is resolved server-side at the reveal transition (Issue 98) — the third redefinition of that field, and the first two both broke the reveal.
+* The reveal merge is scoped to a single card (Issue 99), so cards 2 and 3 of a round take a different code path than they did before.
+* Forgery authorship is withheld until `unmaskDeadline` closes (Issue 100), which changes **when** data appears, not just what.
+* `joinRoom` now requires ownership, a seat token, or staleness (Issue 97). **The seat-token rejoin path has never been exercised on a device.**
+
+The emulator suite (61 passing) proves the server. It cannot prove the reveal renders, the standings are right, or that a player who backgrounds the app can get back into their seat. **Every defect in the last six waves came from a human or a driven client playing the game; none came from a gate.**
+
+**Setup.** Marionette MCP is installed and working — `marionette_flutter` in `pubspec.yaml`, the binding in `lib/main.dart`, three servers in `.agents/mcp_config.json`, stable keys from `f3a5a1d`. Verify rather than redo. `.env` must have `USE_EMULATOR=false`; rebuild first (`lib/` changed across the security wave); uninstall on all three simulators so no stale room is restored; `Disable Game Timers` **on**, `Family-Friendly Decks Only` **off**; three real clients, **never `DEBUG: ADD 9 BOTS`**. Full procedure and traps: `agent_execution_guide.md`.
+
+**Assertions — a full 3-player, 3-round match, plus the paths the security wave touched:**
+
+| # | Assertion | Verdict comes from |
+|---|---|---|
+| E1 | A 3-round match plays to `THE NIGHT'S HONORS` without stalling | The round counter advancing twice, then Game Over |
+| E2 | **Every reveal shows the right truth and forgeries** — cards 2 and 3 included | The card text on all three devices. Issue 99 changed this path |
+| E3 | **Unread cards stay blank before their turn** | No answers visible for a card that has not been revealed |
+| E4 | **The unmask window shows no authorship**, and results are correct once it closes | `REVENGE UNMASKING RESULTS`. Issue 100 changed *when* this appears |
+| E5 | **Scoring is right** — truth-finder gains `ceil((P−1)/(S+1))`, truth-teller `+1` per finder, forger `+1` per fooled voter | `STANDINGS` before and after, as numbers. Issue 98 changed what `votes` holds |
+| E6 | **Attribution is correct** — the named author actually wrote it | Prefix each device's answers `AAA`/`BBB`/`CCC` |
+| E7 | **Seat recovery works.** Force-quit a player mid-match and relaunch: they return to their own seat with their score | **Never tested live. Issue 97's seat token is the mechanism** |
+| E8 | Host kick removes a lobby player; the removed player sees the notice | Both devices |
+| E9 | A player leaves mid-match from a 4-player game; the match continues | The remaining three |
+| E10 | A 3-player match dropping to 2 ends for everyone at the final score | All devices reach Game Over with scores intact |
+| E11 | **No `DEBUG:` control is visible anywhere** | Every screen. Fails today — see Issue 103 |
+
+**Do not fix anything inline.** Record findings in `docs/playthrough_findings_marionette.md`, one block per assertion, verbatim, with `grep -F` traceability for every quoted string. A failure becomes a tracked issue here with options — a fix applied during the run destroys the evidence that it was needed.
+
+---
+
+### Issue 103: The release build ships developer artefacts
+
+**Status**: ⚠️ Confirmed in source, August 21, 2026. **This is what a friend sees in the first ten seconds.**
+
+**103.1 — Seven `DEBUG:` buttons ship in release, and they are completely unguarded.**
+
+```dart
+// lib/screens/lobby_screen.dart:741-747 — the ONLY condition is a player count
+if (players.length < 10)
+  TextButton(onPressed: () => gs.debugAddBots(),
+    child: const Text('DEBUG: ADD 9 BOTS', ...))
+```
+
+Seven sites: `lobby_screen.dart:745`, `phase2_craft.dart:331,368,569`, `phase3_vote.dart:257,414,572`. The single `kDebugMode` in `lobby_screen.dart` is `debugEnabled: kDebugMode` at `:188` — the room flag, **not a guard on any button**. Since Issue 101 gated the callables on `FUNCTIONS_EMULATOR`, these buttons are now **visible, tappable, and guaranteed to fail** with `permission-denied` in production. A tester will press one.
+
+**Approved fix:** wrap every one in `if (kDebugMode)`. Client-only, no deploy.
+
+**103.2 — The app icon is the stock Flutter logo.** `ios/Runner/Assets.xcassets/AppIcon.appiconset/` holds 15 PNGs and all of them are the default blue Flutter chevron — verified by opening `Icon-App-1024x1024@1x.png`. On a friend's home screen the app is indistinguishable from any other Flutter demo.
+
+**103.3 — The launch screen is a 1×1 placeholder.** `LaunchImage.png`, `@2x` and `@3x` are all **1 × 1 pixel** greyscale stubs, so the app opens on a blank white flash before the first frame — jarring against a dark, candlelit game.
+
+**Option A (recommended): fix all three, using art the repo already has**
+- Gate the buttons; build the icon from the existing raven mascot (`assets/images/raven/`) on the oxblood/parchment palette; make the launch screen a solid `AppColors.ground` (`#14110E`) field, optionally with the wordmark, so the cold start reads as the game rather than as a blank page. Add `flutter_launcher_icons` and `flutter_native_splash` to `dev_dependencies` and generate both from source art — **hand-placing 15 PNGs is how they drift.**
+- Pros: one commit, no backend, and the raven is already the app's identity. **A 1024×1024 icon with no alpha channel is an App Store requirement**, so doing it now avoids a rejected upload later.
+- Cons: the icon is a design decision, and a generated one from an existing sprite may not be what you want at 60×60.
+
+**Option B: gate the buttons now; icon and splash later**
+- Pros: the embarrassing half is one commit and needs no art direction.
+- Cons: friends still install a blue Flutter chevron called "Gaslight".
+
+**Option C: buttons and splash now, keep the placeholder icon deliberately**
+- Pros: honest for a pre-licence demo where you may want it to look unfinished.
+- Cons: an icon is the cheapest signal that a build is real, and you will need one regardless.
+
+Your selection: _____
+
+**Validation:** a release build (`flutter build ipa` or `--release` to a simulator) with **zero** `DEBUG:` strings on any screen — grep the widget tree, do not eyeball it. `AppIcon` 1024×1024 present, **no alpha channel**. Launch screen renders the dark ground, not white.
+
+---
+
+### Issue 104: How friends install it while the Apple licence is pending
+
+**Status**: 🔵 Open question, needs a decision. Not a defect — a distribution choice that changes what work is worth doing now.
+
+Confirmed release plumbing: bundle ID `com.whylabs.gaslight`, `CFBundleDisplayName` **`Gaslight`** ✅, `ITSAppUsesNonExemptEncryption` **`false`** ✅ (so TestFlight will not stall on an export-compliance prompt), version `1.0.0+2`. **There is no `PrivacyInfo.xcprivacy`** anywhere in `ios/` — Apple requires a privacy manifest for App Store submission, and this app uses `SharedPreferences` (a required-reason `UserDefaults` API), so it will need one before an upload is accepted.
+
+**Option A: wait for the licence, then TestFlight**
+- Pros: the real thing on real devices, and internal testers (up to 100) need no Beta App Review. Everything in Issue 103 is worth doing regardless.
+- Cons: blocked on Apple. Also needs the privacy manifest, and **external** testers (friends who are not on your team) require Beta App Review, which adds a round trip.
+
+**Option B: ship a Flutter web build on Firebase Hosting now**
+- The backend is already deployed and the client is Firebase-based. `web/` scaffolding exists, but **Hosting is not configured** — `firebase.json` declares only `firestore`, `functions` and `emulators`, so this needs `firebase init hosting` plus a `flutter build web`.
+- Pros: friends test **today**, on any device, by opening a link — no licence, no install, no TestFlight. Best possible feedback loop for a party game people play in the same room.
+- Cons: untested surface. The app has only ever run on iOS simulators; web needs its own pass for layout, fonts (`CormorantGaramond`/`Lora`/vendored Phosphor), `audioplayers`, and `SharedPreferences` persistence. **`firestore.rules` and the callables are unchanged, so the security work carries over** — but Issue 97's seat token lives in browser storage, which a friend clearing site data will lose.
+- ⚠️ **A public web URL means anonymous auth open to the internet**, and there is still **no App Check** anywhere in the repo. For a link shared with friends that is likely fine; before anything wider, App Check should be filed as its own issue.
+
+**Option C: both — web now for feedback, TestFlight when the licence lands**
+- Pros: unblocks testing immediately and keeps the iOS path on track. Issue 103's work applies to both.
+- Cons: two surfaces to keep working, and the web pass is real effort you may not want before the game design is settled.
+
+Your selection: _____
 
 ---
 
