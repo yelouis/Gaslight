@@ -99,7 +99,7 @@ Seven sites: `lobby_screen.dart:745`, `phase2_craft.dart:331,368,569`, `phase3_v
 - Pros: honest for a pre-licence demo where you may want it to look unfinished.
 - Cons: an icon is the cheapest signal that a build is real, and you will need one regardless.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Validation:** a release build (`flutter build ipa` or `--release` to a simulator) with **zero** `DEBUG:` strings on any screen — grep the widget tree, do not eyeball it. `AppIcon` 1024×1024 present, **no alpha channel**. Launch screen renders the dark ground, not white.
 
@@ -125,7 +125,32 @@ Confirmed release plumbing: bundle ID `com.whylabs.gaslight`, `CFBundleDisplayNa
 - Pros: unblocks testing immediately and keeps the iOS path on track. Issue 103's work applies to both.
 - Cons: two surfaces to keep working, and the web pass is real effort you may not want before the game design is settled.
 
-Your selection: _____
+Your selection: I will test on some version of a beta app that I still need to get a license from Apple. However, is there anything we can do about the PrivacyInfo issue right now? What is it and what do we have to do about it?
+
+**Answer — August 21, 2026. Yes, all of it can be done now, and it is small.**
+
+**What a privacy manifest is.** `PrivacyInfo.xcprivacy` is a property list inside the app bundle. Apple requires it for App Store submission and it does two separate jobs:
+
+1. **Declares what data the app collects**, which feeds the App Store privacy "nutrition label" shown on your product page.
+2. **Declares any "required reason API" the code calls** — a fixed list of APIs Apple considers fingerprinting-adjacent (`UserDefaults`, file timestamps, disk space, system boot time, active keyboards). Each entry carries a reason code from Apple's approved list. Calling one without declaring it gets the upload rejected.
+
+**What this project actually needs — verified, not assumed:**
+
+* **The app target has no custom native code.** `ios/Runner/AppDelegate.swift` is Flutter boilerplate and the only other file is the generated plugin registrant. **Nothing in our own code calls a required-reason API**, so the app's `NSPrivacyAccessedAPITypes` can be an **empty array**. `SharedPreferences` does touch `UserDefaults`, but that call lives in `shared_preferences_foundation` and is that plugin's manifest to declare, not ours.
+* **Plugin-side manifests ship with the pods.** Every relevant plugin is recent enough to include one — `shared_preferences_foundation` 2.5.6, `path_provider_foundation` 2.6.0, `firebase_core` 4.12.1, `cloud_firestore` 6.7.1, `audioplayers_darwin` 6.5.0, `share_plus` 13.2.1. **This could not be confirmed locally**: `ios/Pods` currently holds only scaffolding (`Headers`, `Local Podspecs`, `Manifest.lock`, `Pods.xcodeproj`, `Target Support Files`) with no pod sources, so `find ios/Pods -name "*.xcprivacy"` returns nothing. **Re-check after a clean `pod install`** rather than trusting the version numbers.
+* **What we must write is the data-collection half**, and there is no `.xcprivacy` anywhere in the repo today.
+
+**What Gaslight collects**, traced through the code rather than guessed:
+
+| Data | Where it comes from | Apple type |
+|---|---|---|
+| Display name | `player_name_field` → `PlayerState.name` | `NSPrivacyCollectedDataTypeName` |
+| Truths and forgeries the player writes | `submitAnswer` → `sealed/{cardId}` | `NSPrivacyCollectedDataTypeOtherUserContent` |
+| Anonymous Firebase UID | `signInAnonymously()` → `PlayerState.authUid` | `NSPrivacyCollectedDataTypeUserID` |
+
+All three are **used only for app functionality**, **not linked to identity** (the account is anonymous — there is no email, phone or sign-in), and **not used for tracking**. There is no analytics SDK, no ad SDK, and no Gemini call left in the client, so `NSPrivacyTracking` is `false` and `NSPrivacyTrackingDomains` is empty.
+
+**Approved: write the manifest now.** It is one file, needs no licence, and blocks nothing else. Specced as **F3** in `agent_execution_guide.md`, including the exact plist, where it must sit in the Xcode target, and how to verify it is actually inside the built `.app` — **a manifest that exists in the repo but is not a member of the Runner target ships nothing**, which is the single most common way this is gotten wrong.
 
 ---
 
