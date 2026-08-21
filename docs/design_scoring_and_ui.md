@@ -28,6 +28,8 @@ The reveal must run as five beats, gated on the **server-written** `GameState.un
 5. Points awarded + standings + host CONTINUE (which is locked until the window ends).
 > **Regression guard:** forgery authorship must never be visible while guesses are still accepted — the deadline, not local animation timers, is the beat clock.
 
+**Single-Card Reveal Scoping (Issue 99, August 2026)**: During each reveal transition in `advancePhaseInternal`, sealed data (`truthAnswer`, `sabotageAnswers`) and resolved votes are merged **only into the card currently being revealed (`card.targetPlayerId === room.currentReaderId`)**. Every other card in `room.cards` remains blank (`truthAnswer: ""`, `sabotageAnswers: {}`), ensuring remaining cards in the round are never exposed in public room snapshots prior to their own resolution.
+
 **Who may accuse, and who may be accused** (two separate bounds — do not merge them):
 * **May accuse:** only voters who fell for a forgery. Enforced server-side by `submitUnmaskGuess` rejecting `votes[voterId] === card.targetPlayerId`.
 * **May be accused:** anyone except the guesser **and except `card.targetPlayerId`**, who authored the truth and by definition forged nothing (Issue 79). Enforced in two places by design — `phase4_reveal.dart`'s candidate list keeps the impossible choice off screen, and `submitUnmaskGuess` rejects it with `invalid-argument` because a client-only bound is not a bound. **Change both or neither**; each site carries a comment naming the other.

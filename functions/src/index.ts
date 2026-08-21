@@ -1190,9 +1190,18 @@ async function advancePhaseInternal(
       });
     }
   } else if (room.currentPhase === "vote") {
-    // Merge sealed data into public cards for scoring and reveal screen
+    // Merge sealed data into public cards ONLY for the card being revealed
     const mergedCards: CardModel[] = [];
     for (const card of currentCards) {
+      if (card.targetPlayerId !== room.currentReaderId) {
+        mergedCards.push({
+          ...card,
+          truthAnswer: "",
+          sabotageAnswers: {}
+        });
+        continue;
+      }
+
       const sealedData = sealedDataMap[card.targetPlayerId] || {};
       const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
 

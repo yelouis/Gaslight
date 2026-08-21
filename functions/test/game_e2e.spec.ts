@@ -448,6 +448,142 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(cardInReveal.votes[activeVoterId]).to.equal(forgerId);
   });
 
+  it('SEC4: should merge sealed answers only for the card currently being revealed and leave unread cards blank', async () => {
+    /*
+     * Falsification run against current code (where all cards are merged at first reveal):
+     * Expected: every card except currentReaderId has truthAnswer === "" and empty sabotageAnswers.
+     * Observed failure on current code:
+     *   AssertionError: expected 'Bob Truth' to equal ''
+     */
+    const hostUser = await createAnonUser();
+    const bobUser = await createAnonUser();
+    const charlieUser = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_alice',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', bobUser.idToken, {
+      roomCode,
+      playerName: 'Bob',
+      playerId: 'p_bob'
+    });
+
+    await callFn('joinRoom', charlieUser.idToken, {
+      roomCode,
+      playerName: 'Charlie',
+      playerId: 'p_charlie'
+    });
+
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_bob').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_charlie').update({ lobbyReady: true });
+
+    await callFn('startGame', hostUser.idToken, {
+      roomCode,
+      selectedDeckId: 'the_daily_grind'
+    });
+
+    // Truth phase
+    await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_alice', authorId: 'p_alice', text: 'Alice Truth', isTruth: true });
+    await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: 'p_bob', authorId: 'p_bob', text: 'Bob Truth', isTruth: true });
+    await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: 'p_charlie', authorId: 'p_charlie', text: 'Charlie Truth', isTruth: true });
+
+    // Forgery phase
+    const roomSnapForgeries = await db.collection('rooms').doc(roomCode).get();
+    const assignments = roomSnapForgeries.data()?.currentCardAssignments || {};
+
+    await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_alice'], authorId: 'p_alice', text: 'Alice Forgery', isTruth: false });
+    await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: assignments['p_bob'], authorId: 'p_bob', text: 'Bob Forgery', isTruth: false });
+    await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: assignments['p_charlie'], authorId: 'p_charlie', text: 'Charlie Forgery', isTruth: false });
+
+    // Room is in vote phase for card 1
+    let roomSnap = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnap.data()?.currentPhase).to.equal('vote');
+    const card1ReaderId = roomSnap.data()?.currentReaderId;
+    const resolutionOrder = roomSnap.data()?.resolutionOrder as string[];
+    expect(resolutionOrder).to.have.lengthOf(3);
+    expect(card1ReaderId).to.equal(resolutionOrder[0]);
+
+    // Read sealed for card 1 to get truth option id
+    const sealed1Snap = await db.collection('rooms').doc(roomCode).collection('sealed').doc(card1ReaderId).get();
+    const answerAuthors1 = sealed1Snap.data()?.answerAuthors || {};
+    const truthOpt1 = Object.entries(answerAuthors1).find(([optId, author]) => author === card1ReaderId)![0];
+
+    // Non-readers vote on card 1 and reader readies up -> advances to reveal
+    const players = ['p_alice', 'p_bob', 'p_charlie'];
+    for (const pid of players) {
+      const pToken = pid === 'p_alice' ? hostUser.idToken : (pid === 'p_bob' ? bobUser.idToken : charlieUser.idToken);
+      if (pid === card1ReaderId) {
+        await callFn('setReady', pToken, { roomCode, playerId: pid, ready: true });
+      } else {
+        await callFn('castVote', pToken, {
+          roomCode,
+          targetCardId: card1ReaderId,
+          voterId: pid,
+          votedForId: truthOpt1
+        });
+      }
+    }
+
+    // Assert room is in reveal phase
+    roomSnap = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+
+    // Falsification assertion: Only card 1 is populated; cards 2 & 3 have truthAnswer === "" and empty sabotageAnswers
+    const cardsInReveal1 = roomSnap.data()?.cards as any[];
+    const card1 = cardsInReveal1.find(c => c.targetPlayerId === card1ReaderId);
+    expect(card1.truthAnswer).to.be.a('string').and.not.equal('');
+    expect(Object.keys(card1.sabotageAnswers || {})).to.have.lengthOf.at.least(1);
+
+    for (const unreadCard of cardsInReveal1.filter(c => c.targetPlayerId !== card1ReaderId)) {
+      expect(unreadCard.truthAnswer).to.equal('');
+      expect(Object.keys(unreadCard.sabotageAnswers || {})).to.have.lengthOf(0);
+    }
+
+    // Over-reach guard: Advance to card 2 and walk full round
+    await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+    roomSnap = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnap.data()?.currentPhase).to.equal('vote');
+    const card2ReaderId = roomSnap.data()?.currentReaderId;
+    expect(card2ReaderId).to.equal(resolutionOrder[1]);
+
+    const sealed2Snap = await db.collection('rooms').doc(roomCode).collection('sealed').doc(card2ReaderId).get();
+    const answerAuthors2 = sealed2Snap.data()?.answerAuthors || {};
+    const truthOpt2 = Object.entries(answerAuthors2).find(([optId, author]) => author === card2ReaderId)![0];
+
+    for (const pid of players) {
+      const pToken = pid === 'p_alice' ? hostUser.idToken : (pid === 'p_bob' ? bobUser.idToken : charlieUser.idToken);
+      if (pid === card2ReaderId) {
+        await callFn('setReady', pToken, { roomCode, playerId: pid, ready: true });
+      } else {
+        await callFn('castVote', pToken, {
+          roomCode,
+          targetCardId: card2ReaderId,
+          voterId: pid,
+          votedForId: truthOpt2
+        });
+      }
+    }
+
+    roomSnap = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+
+    const cardsInReveal2 = roomSnap.data()?.cards as any[];
+    const card2 = cardsInReveal2.find(c => c.targetPlayerId === card2ReaderId);
+    expect(card2.truthAnswer).to.be.a('string').and.not.equal('');
+    expect(Object.keys(card2.sabotageAnswers || {})).to.have.lengthOf.at.least(1);
+
+    // Card 3 is still unread and must be blank
+    const card3ReaderId = resolutionOrder[2];
+    const card3 = cardsInReveal2.find(c => c.targetPlayerId === card3ReaderId);
+    expect(card3.truthAnswer).to.equal('');
+    expect(Object.keys(card3.sabotageAnswers || {})).to.have.lengthOf(0);
+  });
+
   it('SEC2: should reject seat takeover without token or ownership, and allow rebind with token, ownership, or staleness', async () => {
     /*
      * Falsification run against current code (where anyone can rebind any seat):
