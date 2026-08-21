@@ -183,11 +183,15 @@ class GameService extends ChangeNotifier {
     });
 
     final roomCode = result.data['roomCode'] as String;
+    final seatToken = result.data['seatToken'] as String?;
     _currentPlayerId = resolvedPlayerId;
     
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('room_code', roomCode);
     await prefs.setString('player_id', resolvedPlayerId);
+    if (seatToken != null) {
+      await prefs.setString('seat_token_$roomCode', seatToken);
+    }
 
     listenToRoom(roomCode);
   }
@@ -206,19 +210,26 @@ class GameService extends ChangeNotifier {
         ? available[Random().nextInt(available.length)] 
         : _playerColors[Random().nextInt(_playerColors.length)];
 
-    await _functions.httpsCallable('joinRoom').call({
+    final prefs = await SharedPreferences.getInstance();
+    final savedSeatToken = prefs.getString('seat_token_$roomCode');
+
+    final result = await _functions.httpsCallable('joinRoom').call({
       'roomCode': roomCode,
       'playerName': playerName,
       'playerId': resolvedPlayerId,
       'colorValue': selectedColor,
       'avatarIndex': avatarIndex ?? _getRandomAvatar(),
+      if (savedSeatToken != null) 'seatToken': savedSeatToken,
     });
 
+    final seatToken = result.data != null ? result.data['seatToken'] as String? : null;
     _currentPlayerId = resolvedPlayerId;
     
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setString('room_code', roomCode);
     await prefs.setString('player_id', resolvedPlayerId);
+    if (seatToken != null) {
+      await prefs.setString('seat_token_$roomCode', seatToken);
+    }
 
     listenToRoom(roomCode);
   }
@@ -239,20 +250,28 @@ class GameService extends ChangeNotifier {
 
           try {
             await ensureAuthenticated();
-            await _functions.httpsCallable('joinRoom').call({
+            final savedSeatToken = prefs.getString('seat_token_$savedRoom');
+            final result = await _functions.httpsCallable('joinRoom').call({
               'roomCode': savedRoom,
               'playerName': name,
               'playerId': savedPlayerId,
               'avatarIndex': avatarIndex,
               'colorValue': colorValue,
+              if (savedSeatToken != null) 'seatToken': savedSeatToken,
             });
             
+            final seatToken = result.data != null ? result.data['seatToken'] as String? : null;
+            if (seatToken != null) {
+              await prefs.setString('seat_token_$savedRoom', seatToken);
+            }
+
             _currentPlayerId = savedPlayerId;
             _gameState = GameState.fromMap(roomDoc.data()!, roomDoc.id);
             listenToRoom(savedRoom);
             return true;
           } catch (e) {
             debugPrint('Error re-binding session during rejoin: $e');
+            await prefs.remove('seat_token_$savedRoom');
             await prefs.remove('room_code');
             await prefs.remove('player_id');
           }
@@ -307,6 +326,10 @@ class GameService extends ChangeNotifier {
     _optionIdFetchesInFlight.clear();
 
     final prefs = await SharedPreferences.getInstance();
+    final currentSavedRoom = prefs.getString('room_code');
+    if (currentSavedRoom != null) {
+      await prefs.remove('seat_token_$currentSavedRoom');
+    }
     await prefs.remove('room_code');
     await prefs.remove('player_id');
   }

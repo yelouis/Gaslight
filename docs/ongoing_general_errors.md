@@ -34,82 +34,11 @@
 
 ---
 
-### Issue 97: `joinRoom` re-binds `authUid` with no ownership proof — seat and host takeover
-
-**Status**: ⚠️ **HIGH — confirmed in source and independently re-verified (confidence 9/10).** Also spot-checked directly against `functions/src/index.ts:165-190` and `firestore.rules:9-30`.
-
-```ts
-// functions/src/index.ts:171-184
-if (playerSnap.exists) {
-  const existing = playerSnap.data() as PlayerState;
-  transaction.update(playerRef, { authUid: callerUid, name: playerName, ... });
-  return { role: existing.role };
-}
-```
-
-The only gate is `if (!request.auth)` (`:143`) — satisfiable by anyone, since auth is anonymous and **no App Check exists anywhere in the repo**. There is no comparison against `existing.authUid`, no staleness requirement and no token.
-
-**The intended secret is published.** `docs/design_database_and_security.md:69` treats `playerId` as the recovery secret, but the player document ID **is** the client-supplied `playerId` (`index.ts:160`) and `firestore.rules:18` makes that subcollection world-readable. The "UUIDs are unguessable" precedent does not rescue this: **the UUID is not guessed, it is listed.**
-
-**Why it defeats everything else.** Every other callable authorizes by comparing the *stored* `authUid` to `request.auth.uid` — seats at `:459`, `:557`, `:595`, `:668`, `:760`, `:1402`; host checks at `:253`, `:720`, `:828`, `:1234`, `:1304`. Rewriting that one field passes all of them at once.
-
-**Attack path.** Anonymous token → read `/rooms/{CODE}/players` (allowed with no credentials) → collect every document ID and `isHost` → call `joinRoom` with the host's `playerId` → own the seat, and receive its secret `role` in the response. The attacker then holds `startGame`, `advancePhase`, `updateLobbySettings`, `advanceToNextResolution` and `handleDisconnect` against any player, including the lobby branch (`:838-845`) that deletes the room. The victim's heartbeat now fails `firestore.rules:28`, so they are locked out and eventually swept.
-
-**Approved fix:** permit the re-bind only when the caller **already owns the seat**, **presents a seat token**, or the seat is **provably stale (>30 s since `lastSeen`)**. The token is minted server-side, stored **hashed in the default-deny `sealed` subcollection** (never in the world-readable player document), and returned to the caller once.
-
-**Sub-decision, made deliberately:** staleness-only was considered and rejected as too weak (an attacker can simply wait), and token-only was rejected because a reinstall loses the token and would strand the player. The three-way rule keeps legitimate recovery working while closing the attack. **Do not simplify it to one condition.**
-
-**Validation:** `agent_execution_guide.md` §3 — falsifying assertion plus **four** over-reach guards, including that the token appears in no client-readable document.
-
----
-
-### Issue 98: `castVote` launders `sealed.answerAuthors` into the world-readable room document
-
-**Status**: ⚠️ **MEDIUM — confirmed; exploit reproduced end-to-end against the emulator (6 probes, 6/6 authors recovered, full answer key for all three cards during vote round 1).** Discovery rated this HIGH; downgraded on re-verification because the asset is transient game state rather than user data.
-
-```ts
-// functions/src/index.ts:611-613, 629, 642-645
-const answerAuthors: Record<string,string> = sealedData.answerAuthors || {};
-const resolvedAuthorId = answerAuthors[votedForId];
-const newVotes = { ...card.votes, [voterId]: resolvedAuthorId };   // author, not option id
-transaction.update(roomRef, { cards: newCards, readyPlayers: newReadyMap });
-```
-
-The project built a real confidentiality boundary — `sealed` is default-deny, option ids are opaque v4 UUIDs, `getMyOptionId` returns only the caller's own — and `castVote`, the one function privileged to read that document, republishes its contents into a world-readable one. This directly violates the invariant stated at `docs/design_database_and_security.md:35`.
-
-**Three guards are absent**, all verified: no phase check, no check that `targetCardId === room.currentReaderId`, and no already-voted guard (`:629` overwrites). Nothing compensates — `advancePhaseInternal` fires only when every active player is ready, so a lone prober loops freely. `docs/implementation_plan_selected_fixes.md:248` specifies a one-vote-per-card rule that was never implemented.
-
-**Approved fix:** store the **opaque option id** in `votes`; resolve to authors server-side at the reveal transition and at scoring.
-
-⚠️ **This redefines what `votes` holds — for the third time.** It has broken its readers twice before (Issues 62/63, then 71 → 78). **There are 13 read sites**, enumerated in `agent_execution_guide.md` §4; every one compares against a player id. Walk all of them.
-
----
-
-### Issue 99: The reveal merge publishes every card, not the one being revealed
-
-**Status**: ⚠️ **MEDIUM — confirmed by probe** (after the first reveal, two unread cards were fully exposed in the public room document).
-
-```ts
-// functions/src/index.ts:1153-1164
-for (const card of currentCards) {            // ← ALL cards, not just currentReaderId's
-  const sealedData = sealedDataMap[card.targetPlayerId] || {};
-  mergedCards.push({ ...card, truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
-                     sabotageAnswers: sealedData.sabotageAnswers || {} });
-}
-```
-
-`advanceToNextResolution` never re-strips them, so from the first reveal onward the whole round's authorship is public passively. This is arguably a larger leak than Issue 98, and it narrows that oracle's exclusive window to vote round 1 — but does not excuse it.
-
-**Approved fix:** merge sealed content only for `room.currentReaderId`'s card; leave the others blank as `startGame` (`:401-402`) and the vote transition (`:1127-1130`) already do. **`advanceToNextResolution` must then merge the next card as it advances** — that half is the one most likely to be missed, and skipping it makes reveals 2 and 3 render blank.
-
----
-
----
-
 ## 🧪 Resolved Issues & Implementation Refinements
 
-**Independent verification of Issues 89–96 — August 17, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **156/156** · functions build clean · `npm --prefix functions test` **56/56** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions and rules fresh).
+**Independent verification of Issues 89–97 — August 17, 2026.** Checked in source and against the live project, not from commit messages. Battery re-measured: `flutter analyze lib test` **0 errors** (222 issues) · `flutter test` **156/156** · functions build clean · `npm --prefix functions test` **57/57** · `./scripts/check_deploy_fresh.sh` **exit 0** (all 15 deployed functions and rules fresh).
 
+* **Issue 97 (SEC2)** — Added server-minted `seatToken` stored hashed in default-deny `sealed/seat_${playerId}` subcollection on room creation and new player join. Gated `joinRoom` seat re-bind on caller ownership (`existing.authUid === callerUid`), valid presented token hash match, or staleness (`Date.now() - (existing.lastSeen ?? 0) > 30000`). Persisted `seat_token_$roomCode` in client `SharedPreferences`. Verified in `functions/test/game_e2e.spec.ts` (falsification: stranger takeover without token rejected with `PERMISSION_DENIED`; over-reach: owner rejoining succeeds, token holder rejoining succeeds, stale seat reclaimed, token never leaks to player doc).
 * **Issue 96 (SEC1)** — In `firestore.rules`, split `/rooms/{roomCode}` read permission into `allow get: if true; allow list: if false;` while preserving `allow read: if true;` on `/players/{playerId}` subcollection. Verified in `functions/test/rules.spec.ts` asserting collection enumeration (`getDocs(collection(db, 'rooms'))`) is rejected for unauthenticated and authenticated clients (falsification observed failure before rule update), while specific room `getDoc` and players subcollection `getDocs` succeed as over-reach guards. Deployed rules to production.
 * **Issue 92 (Option A)** — Updated `test/fetch_my_option_id_test.dart` wedge check to test same-card retry (`card_a`) following an exception, asserting `getMyOptionIdCallCount == 2` and successful receipt of recovered option ID (`opt_recovered`). Conducted falsification probe with `finally` removed from `fetchMyOptionId` in `lib/services/game_service.dart`, observing failure (`Expected: <2>, Actual: <1>`), and restored `finally` with zero diff in `lib/`.
 * **Issue 95 (Option A)** — Added busy state management (`_isCreatingRoom` / `_isJoiningRoom`) with `PrimaryButton` loading indicators and disabled `onPressed` callbacks in `lib/screens/lobby_screen.dart`. Cleared in `finally` blocks to guarantee button re-enabling on error. Verified in `test/lobby_busy_state_test.dart` (falsification in-flight loading state, single invocation idempotency guard, and `finally` error recovery).

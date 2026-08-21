@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { RotationEngine } from "./rotation_engine";
 import { ScoringLogic, GameState, CardModel } from "./scoring_logic";
 import { PromptDecks } from "./prompt_decks";
@@ -130,12 +130,17 @@ export const createRoom = onCall(async (request) => {
     expiresAt: ttlFrom(nowMs)
   };
 
+  const seatToken = randomUUID();
   const batch = db.batch();
   batch.set(roomRef, gameState);
   batch.set(playerRef, playerState);
+  batch.set(
+    roomRef.collection("sealed").doc(`seat_${playerId}`),
+    { seatTokenHash: createHash("sha256").update(seatToken).digest("hex") }
+  );
   await batch.commit();
 
-  return { roomCode };
+  return { roomCode, seatToken };
 });
 
 // 2. Join Room
@@ -169,9 +174,27 @@ export const joinRoom = onCall(async (request) => {
     const playerSnap = await transaction.get(playerRef);
 
     if (playerSnap.exists) {
+      const existing = playerSnap.data() as PlayerState;
+      const isOwner = existing.authUid === callerUid;
+
+      const seatSnap = await transaction.get(roomRef.collection("sealed").doc(`seat_${playerId}`));
+      const storedHash = seatSnap.exists ? (seatSnap.data() as any).seatTokenHash : null;
+      const presentedHash = typeof data.seatToken === "string"
+        ? createHash("sha256").update(data.seatToken).digest("hex")
+        : null;
+      const hasToken = !!storedHash && !!presentedHash && storedHash === presentedHash;
+
+      // A seat nobody has heartbeated for 30s is abandoned and may be reclaimed.
+      // This preserves recovery after a reinstall (which loses the token) without
+      // letting anyone take a live seat. Mirrors handleDisconnect's isDead rule.
+      const isStale = Date.now() - (existing.lastSeen ?? 0) > 30000;
+
+      if (!isOwner && !hasToken && !isStale) {
+        throw new HttpsError("permission-denied", "This seat is held by another player.");
+      }
+
       // Rejoining player, update authUid and visual details
       const nowMs = Date.now();
-      const existing = playerSnap.data() as PlayerState;
       transaction.update(playerRef, {
         authUid: callerUid,
         name: playerName,
@@ -193,6 +216,7 @@ export const joinRoom = onCall(async (request) => {
       role = "spectator";
     }
 
+    const seatToken = randomUUID();
     const nowMs = Date.now();
     const playerState = {
       id: playerId,
@@ -214,6 +238,10 @@ export const joinRoom = onCall(async (request) => {
     };
 
     transaction.set(playerRef, playerState);
+    transaction.set(
+      roomRef.collection("sealed").doc(`seat_${playerId}`),
+      { seatTokenHash: createHash("sha256").update(seatToken).digest("hex") }
+    );
 
     if (role !== "spectator") {
       transaction.update(roomRef, {
@@ -221,7 +249,7 @@ export const joinRoom = onCall(async (request) => {
       });
     }
 
-    return { role };
+    return { role, seatToken };
   });
 });
 

@@ -284,6 +284,74 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     }
   });
 
+  it('SEC2: should reject seat takeover without token or ownership, and allow rebind with token, ownership, or staleness', async () => {
+    /*
+     * Falsification run against current code (where anyone can rebind any seat):
+     * Expected: stranger without token rejected with PERMISSION_DENIED.
+     * Observed failure on current code:
+     *   AssertionError: Stranger takeover succeeded with result: {"role":"unassigned"}
+     */
+    const hostUser = await createAnonUser();
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+    const hostSeatToken = createRes.seatToken;
+
+    // Falsification assertion: stranger attempts to take over live host seat without token
+    const strangerUser = await createAnonUser();
+    try {
+      const res = await callFn('joinRoom', strangerUser.idToken, {
+        roomCode,
+        playerName: 'Attacker',
+        playerId: 'p_host'
+      });
+      expect.fail(`Stranger takeover succeeded with result: ${JSON.stringify(res)}`);
+    } catch (err: any) {
+      if (err.name === 'AssertionError') throw err;
+      expect(err.status).to.equal('PERMISSION_DENIED');
+      expect((err as any).role).to.be.undefined;
+    }
+
+    // Over-reach Guard 1: Owner rejoining (same authUid, no token provided) succeeds
+    const ownerRejoin = await callFn('joinRoom', hostUser.idToken, {
+      roomCode,
+      playerName: 'Alice Updated',
+      playerId: 'p_host'
+    });
+    expect(ownerRejoin.role).to.equal('unassigned');
+
+    // Over-reach Guard 2: Token holder rejoining with new authUid and correct seatToken succeeds
+    const newDeviceUser = await createAnonUser();
+    const tokenRejoin = await callFn('joinRoom', newDeviceUser.idToken, {
+      roomCode,
+      playerName: 'Alice New Device',
+      playerId: 'p_host',
+      seatToken: hostSeatToken
+    });
+    expect(tokenRejoin.role).to.equal('unassigned');
+
+    // Over-reach Guard 3: Stale seat (> 30s) can be reclaimed without token by different user
+    const playerRef = db.collection('rooms').doc(roomCode).collection('players').doc('p_host');
+    await playerRef.update({ lastSeen: Date.now() - 35000 });
+    const staleReclaimUser = await createAnonUser();
+    const staleReclaim = await callFn('joinRoom', staleReclaimUser.idToken, {
+      roomCode,
+      playerName: 'Reclaimer',
+      playerId: 'p_host'
+    });
+    expect(staleReclaim.role).to.equal('unassigned');
+
+    // Over-reach Guard 4: Token never leaks into client-readable player document
+    const playerDoc = await playerRef.get();
+    const pData = playerDoc.data() || {};
+    expect(pData.seatToken).to.be.undefined;
+    expect(pData.seatTokenHash).to.be.undefined;
+  });
+
   it('should recover a player seat and re-bind authUid on credential reset', async () => {
     const hostUser = await createAnonUser();
     const guestUserOld = await createAnonUser();
@@ -298,7 +366,7 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     const roomCode = createRes.roomCode;
 
     // 2. Guest joins room with a stable playerId
-    await callFn('joinRoom', guestUserOld.idToken, {
+    const joinRes = await callFn('joinRoom', guestUserOld.idToken, {
       roomCode,
       playerName: 'Bob',
       playerId: 'p_guest'
@@ -313,11 +381,12 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     const guestUserNew = await createAnonUser();
     expect(guestUserNew.localId).to.not.equal(guestUserOld.localId);
 
-    // 4. Guest rejoins with the same stable playerId
+    // 4. Guest rejoins with the same stable playerId and presented seatToken
     const rejoinRes = await callFn('joinRoom', guestUserNew.idToken, {
       roomCode,
       playerName: 'Bob',
-      playerId: 'p_guest'
+      playerId: 'p_guest',
+      seatToken: joinRes.seatToken
     });
     expect(rejoinRes.role).to.equal('unassigned');
 
