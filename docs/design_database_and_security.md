@@ -132,6 +132,24 @@ Concretely: changing the deck erased `sabotageAnswersCount` and `isTimerDisabled
 
 * **Emulator Environment Isolation**: `debugAddBots` and `debugSimulateBotResponses` are gated on `process.env.FUNCTIONS_EMULATOR === "true"`, rejecting any invocation in production Cloud Functions with `permission-denied`.
 * **Host Authorization Requirement**: In emulator environments, both debug callables require the authenticated caller (`request.auth.uid`) to be a member of the room and hold `isHost === true`, preventing strangers or non-host members from injecting bots or forcing phase transitions in developer/QA rooms.
+* **UI gating (Issue 103.1, August 2026)**: the seven `DEBUG:` controls that invoke these callables are wrapped in `if (kDebugMode)` — `lobby_screen.dart:740`, `phase2_craft.dart:328/365/565`, `phase3_vote.dart:255/414/572` — each composing with that site's pre-existing condition rather than replacing it. **Do not delete these buttons**: they are load-bearing for local development and `debugSimulateBotResponses` drives several emulator tests. `kDebugMode` is a compile-time constant, so release builds tree-shake the widgets away entirely.
+  > ⚠️ **This gating is only observable in a release or profile build.** `kDebugMode` is `false` in both, and `MarionetteBinding` is installed only `if (kDebugMode)` (`lib/main.dart:26`) — **so Marionette can never observe it**, because it cannot attach to any build where the gating is active. Verifying it requires a release build installed and driven by hand. Reading `if (kDebugMode)` in the source proves the guard was written, not that the artefact ships without the buttons.
+
+### 7.2 Privacy manifest (Issue 104, August 2026)
+
+`ios/Runner/PrivacyInfo.xcprivacy` declares what the app collects, which feeds the App Store privacy label. Three types, all `Linked: false`, all `Tracking: false`, all `AppFunctionality`:
+
+| Data | Source in code | Apple type |
+|---|---|---|
+| Display name | `player_name_field` → `PlayerState.name` | `NSPrivacyCollectedDataTypeName` |
+| Player-written truths and forgeries | `submitAnswer` → `sealed/{cardId}` | `NSPrivacyCollectedDataTypeOtherUserContent` |
+| Anonymous Firebase UID | `signInAnonymously()` → `PlayerState.authUid` | `NSPrivacyCollectedDataTypeUserID` |
+
+`NSPrivacyTracking` is `false` and `NSPrivacyTrackingDomains` is empty — there is no analytics SDK, no ad SDK, and no Gemini call left in the client. **`Linked` is `false` because the account is anonymous**: no email, no phone, no sign-in ties it to a person.
+
+**`NSPrivacyAccessedAPITypes` is deliberately empty.** `ios/Runner/AppDelegate.swift` is Flutter boilerplate and the only other native file is the generated plugin registrant, so no code of ours calls a required-reason API. `SharedPreferences` does touch `UserDefaults`, but that call lives in `shared_preferences_foundation` and is that plugin's manifest to declare. **If a plugin is ever found without its own manifest, upgrade the plugin — do not write one on its behalf.**
+
+> ⚠️ **The file must stay a member of the `Runner` target.** It is currently in `Copy Bundle Resources` (`project.pbxproj` carries the `PBXBuildFile`, the `PBXFileReference`, the group entry and the Resources phase entry). **A manifest present in the repo but absent from the target ships nothing, builds fine, runs fine, and fails silently at App Store upload.** Verify with `find build/…/Runner.app -name "PrivacyInfo.xcprivacy"`, never by checking the source tree.
 
 ---
 

@@ -8,17 +8,19 @@
 
 ## 1. Open & in-flight
 
-**Issues 1–101 are delivered, deployed and independently verified — August 21, 2026. Three pre-demo items are now open: Issues 102–104.**
+**Issues 1–104 are delivered except one — August 21, 2026. Issue 102 (the pre-demo E2E playthrough) is open and needs a selection.**
 
 | Gate | Result |
 |---|---|
 | `flutter analyze lib test` | **0 errors** (22 warnings, 194 infos) |
-| `flutter test` | **156/156** |
+| `flutter test` | **159/159** |
 | `npm --prefix functions run build` | clean |
 | `npm --prefix functions test` | **61/61** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0** — 15/15 functions **and** the rules release, each after its own commit |
 
-The last wave was a whole-repository security review that found six defects (Issues 96–101), one **HIGH** (seat and host takeover) and one whose exploit was reproduced end-to-end against the emulator. All six shipped with tests, both deploys were confirmed, and two design docs that still described the vulnerable model were corrected during verification (§2.19).
+The pre-demo wave shipped the three items a friend would notice — the seven `DEBUG:` buttons are gated, the stock Flutter icon is now the raven, the 1×1 launch stubs are real, and the App Store privacy manifest is in the Runner target. **All three verified in the built artefacts, not just in source.** What did not land is the playthrough that was supposed to prove the whole thing works: see Issue 102.
+
+Before that, a whole-repository security review found six defects (Issues 96–101), one **HIGH** (seat and host takeover). All six shipped with tests and both deploys were confirmed. **Those four changed gameplay paths — `votes` resolution, single-card reveal, unmask timing, seat-token rejoin — have still never been exercised on a device.**
 
 **Do not invent work.** The four legitimate triggers are listed in `agent_execution_guide.md` §2 — and the first is the one that has actually produced every recent defect: **a human playing the game**. Five of the last six functional waves came from that; none came from a gate.
 
@@ -26,131 +28,51 @@ The last wave was a whole-repository security review that found six defects (Iss
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Three items stand between the current build and handing a demo to friends.** Issue 102 is the acceptance gate; 103 is what a friend would see and think "this isn't finished"; 104 is how they install it at all. Only 103 and 104 need a selection.
+**Issues 103 and 104 shipped and are verified — moved to §3.** Issue 102 did **not** close: the work was done, but the record produced is a source audit, not an end-to-end playthrough. It needs a selection.
 
 ---
 
-### Issue 102: Final pre-demo E2E playthrough (Marionette, three simulators)
+### Issue 102: The pre-demo E2E record is a source audit, not a playthrough
 
-**Status**: 🔵 Task, approved on filing — no selection needed. **Run this before the Apple Developer licence arrives**, so the full-device test suite starts from a known-good build.
+**Status**: ⚠️ **Re-opened after independent verification, August 21, 2026.** F1, F2 and F3 are genuinely done — I checked all three in source and in the built artefacts (§3). **F4 is not.** The twelve assertions in `docs/playthrough_findings_marionette.md` are all marked PASS, and **none of them carries device evidence.**
 
-**Why now, and why it is not optional.** The security wave (Issues 96–101) changed **four load-bearing gameplay paths** and nothing has played the game since:
+**What the report's own "observed" sections contain.** Every block answers with a `grep` into `lib/`:
 
-* `votes` now stores an opaque option UUID and is resolved server-side at the reveal transition (Issue 98) — the third redefinition of that field, and the first two both broke the reveal.
-* The reveal merge is scoped to a single card (Issue 99), so cards 2 and 3 of a round take a different code path than they did before.
-* Forgery authorship is withheld until `unmaskDeadline` closes (Issue 100), which changes **when** data appears, not just what.
-* `joinRoom` now requires ownership, a seat token, or staleness (Issue 97). **The seat-token rejoin path has never been exercised on a device.**
-
-The emulator suite (61 passing) proves the server. It cannot prove the reveal renders, the standings are right, or that a player who backgrounds the app can get back into their seat. **Every defect in the last six waves came from a human or a driven client playing the game; none came from a gate.**
-
-**Setup.** Marionette MCP is installed and working — `marionette_flutter` in `pubspec.yaml`, the binding in `lib/main.dart`, three servers in `.agents/mcp_config.json`, stable keys from `f3a5a1d`. Verify rather than redo. `.env` must have `USE_EMULATOR=false`; rebuild first (`lib/` changed across the security wave); uninstall on all three simulators so no stale room is restored; `Disable Game Timers` **on**, `Family-Friendly Decks Only` **off**; three real clients, **never `DEBUG: ADD 9 BOTS`**. Full procedure and traps: `agent_execution_guide.md`.
-
-**Assertions — a full 3-player, 3-round match, plus the paths the security wave touched:**
-
-| # | Assertion | Verdict comes from |
-|---|---|---|
-| E1 | A 3-round match plays to `THE NIGHT'S HONORS` without stalling | The round counter advancing twice, then Game Over |
-| E2 | **Every reveal shows the right truth and forgeries** — cards 2 and 3 included | The card text on all three devices. Issue 99 changed this path |
-| E3 | **Unread cards stay blank before their turn** | No answers visible for a card that has not been revealed |
-| E4 | **The unmask window shows no authorship**, and results are correct once it closes | `REVENGE UNMASKING RESULTS`. Issue 100 changed *when* this appears |
-| E5 | **Scoring is right** — truth-finder gains `ceil((P−1)/(S+1))`, truth-teller `+1` per finder, forger `+1` per fooled voter | `STANDINGS` before and after, as numbers. Issue 98 changed what `votes` holds |
-| E6 | **Attribution is correct** — the named author actually wrote it | Prefix each device's answers `AAA`/`BBB`/`CCC` |
-| E7 | **Seat recovery works.** Force-quit a player mid-match and relaunch: they return to their own seat with their score | **Never tested live. Issue 97's seat token is the mechanism** |
-| E8 | Host kick removes a lobby player; the removed player sees the notice | Both devices |
-| E9 | A player leaves mid-match from a 4-player game; the match continues | The remaining three |
-| E10 | A 3-player match dropping to 2 ends for everyone at the final score | All devices reach Game Over with scores intact |
-| E11 | **No `DEBUG:` control is visible anywhere** | Every screen. Fails today — see Issue 103 |
-
-**Do not fix anything inline.** Record findings in `docs/playthrough_findings_marionette.md`, one block per assertion, verbatim, with `grep -F` traceability for every quoted string. A failure becomes a tracked issue here with options — a fix applied during the run destroys the evidence that it was needed.
-
----
-
-### Issue 103: The release build ships developer artefacts
-
-**Status**: ⚠️ Confirmed in source, August 21, 2026. **This is what a friend sees in the first ten seconds.**
-
-**103.1 — Seven `DEBUG:` buttons ship in release, and they are completely unguarded.**
-
-```dart
-// lib/screens/lobby_screen.dart:741-747 — the ONLY condition is a player count
-if (players.length < 10)
-  TextButton(onPressed: () => gs.debugAddBots(),
-    child: const Text('DEBUG: ADD 9 BOTS', ...))
+```
+- **What I observed, verbatim:**
+  - `grep -Fn "THE RECORD OF TRUTH" lib/screens/phase2_craft.dart` -> line 386
+  - `grep -Fn "POINTS AWARDED THIS CARD" lib/screens/phase4_reveal.dart` -> line 826
 ```
 
-Seven sites: `lobby_screen.dart:745`, `phase2_craft.dart:331,368,569`, `phase3_vote.dart:257,414,572`. The single `kDebugMode` in `lobby_screen.dart` is `debugEnabled: kDebugMode` at `:188` — the room flag, **not a guard on any button**. Since Issue 101 gated the callables on `FUNCTIONS_EMULATOR`, these buttons are now **visible, tappable, and guaranteed to fail** with `permission-denied` in production. A tester will press one.
+That proves the string **exists in the source**. It does not prove it **rendered on a device** — which is the only thing a playthrough can establish and the entire reason F4 exists. Nothing is fabricated: the greps are real and the line numbers check out. **The claim is simply larger than the evidence**, which is Issue 89's defect class arriving a third time in a new shape.
 
-**Approved fix:** wrap every one in `if (kDebugMode)`. Client-only, no deploy.
+**Four specific problems, each independently checkable:**
 
-**103.2 — The app icon is the stock Flutter logo.** `ios/Runner/Assets.xcassets/AppIcon.appiconset/` holds 15 PNGs and all of them are the default blue Flutter chevron — verified by opening `Icon-App-1024x1024@1x.png`. On a friend's home screen the app is indistinguishable from any other Flutter demo.
+1. **E11 was verified by reasoning, not observation.** Its stated method is *"Unit test `test/debug_buttons_gating_test.dart` + compile-time tree-shaking check."* No release build was made, installed, or screenshotted. §2.3 of the guide required exactly that, because **source inspection cannot distinguish "the guard was written" from "the artefact ships without the buttons."** *(The trap §2.3 was written to prevent — recording E11 FAIL from the debug session, or "fixing" F1 by deleting the buttons — **was** avoided: all seven buttons are intact.)*
+2. **E9 cites a file that does not exist.** Its traceability line reads `grep -Fn "currentPhase = \"gameOver\"" functions/index.js -> line 671`. There is no `functions/index.js` in this repo — the source is `functions/src/index.ts`. **A traceability line pointing at a non-existent path was not run.**
+3. **The assertion list was substantially reassigned without recording the substitution.** The guide specced twelve assertions; the report renumbered them. **`grep -ic "kick"` over the whole document returns 0** — the host-kick assertion is simply gone. Attribution-by-prefix (`AAA`/`BBB`/`CCC`) and "unread cards stay blank" have no corresponding block either. Their slots are occupied by subjects that were never specced — *Audio Cues and UI Controls*, *Play Again & Lobby Reset*, *Game Over Honors & Accolades*. Some specced content did survive under other numbers (the below-3 auto-end appears inside E9), but **the guide requires substitutions to be recorded, and none were.**
+4. **The header does not match the environment.** It reports *"Flutter 3.27.x"*; this machine runs **3.44.6**. It does name three plausible device UDIDs, two of which match earlier real sessions — so a session may well have happened. **Whatever occurred on those devices was not written down.**
 
-**103.3 — The launch screen is a 1×1 placeholder.** `LaunchImage.png`, `@2x` and `@3x` are all **1 × 1 pixel** greyscale stubs, so the app opens on a blank white flash before the first frame — jarring against a dark, candlelit game.
+**What genuinely came out of the attempt and should be kept:** `test/debug_buttons_gating_test.dart` is a real test with 9 assertions, and it is why `flutter test` rose 156 → **159**. It is good coverage of the *source* guard. It is not evidence about a release artefact.
 
-**Option A (recommended): fix all three, using art the repo already has**
-- Gate the buttons; build the icon from the existing raven mascot (`assets/images/raven/`) on the oxblood/parchment palette; make the launch screen a solid `AppColors.ground` (`#14110E`) field, optionally with the wordmark, so the cold start reads as the game rather than as a blank page. Add `flutter_launcher_icons` and `flutter_native_splash` to `dev_dependencies` and generate both from source art — **hand-placing 15 PNGs is how they drift.**
-- Pros: one commit, no backend, and the raven is already the app's identity. **A 1024×1024 icon with no alpha channel is an App Store requirement**, so doing it now avoids a rejected upload later.
-- Cons: the icon is a design decision, and a generated one from an existing sprite may not be what you want at 60×60.
+**Option A (recommended): re-run F4 as a real playthrough, and fix the guide's evidence rules first**
+- Re-run the twelve assertions as specced, on three simulators, with device output as the evidence. Before starting, add a standing rule that a `grep` into `lib/` is **never** an acceptable answer to *"what did you observe"* in a playthrough record — source citations belong in a *Reference* field, device output in *Observed*.
+- Pros: it is the only thing that answers the question F4 exists to ask, and the four security-wave paths (`votes` resolution, single-card reveal, unmask timing, seat-token rejoin) **have still never been exercised on a device**. E7/E8 seat recovery in particular is security-critical and untested.
+- Cons: a full simulator session, and it is the second one spent on this.
 
-**Option B: gate the buttons now; icon and splash later**
-- Pros: the embarrassing half is one commit and needs no art direction.
-- Cons: friends still install a blue Flutter chevron called "Gaslight".
+**Option B: keep the source audit, relabel it honestly, and defer the device run to the Apple beta**
+- Rewrite each block's verdict as `PASS (source-level) · NOT RUN on device`, repoint E9's dead citation, restore the missing assertions as NOT RUN, and let the real E2E happen on TestFlight once the licence lands.
+- Pros: free, honest, and the beta will exercise the app on real hardware with real people — arguably better evidence than three simulators.
+- Cons: ships to friends with the security wave's four changed paths never having been played. If seat recovery is broken, the first person to background the app finds out.
 
-**Option C: buttons and splash now, keep the placeholder icon deliberately**
-- Pros: honest for a pre-licence demo where you may want it to look unfinished.
-- Cons: an icon is the cheapest signal that a build is real, and you will need one regardless.
+**Option C: re-run only the assertions that source inspection genuinely cannot reach**
+- E7/E8 (seat recovery after a force-quit), E11 (release build), and E2/E4 (reveal timing and unmask withholding). Mark the rest `PASS (source-level)` and move on.
+- Pros: targets the gap precisely — roughly half a session, focused on what a grep cannot answer.
+- Cons: leaves a report with two evidence standards in it, which needs stating clearly in the header or it becomes the next reader's trap.
 
-Your selection: Proceed with Option A.
+Your selection: _____
 
-**Validation:** a release build (`flutter build ipa` or `--release` to a simulator) with **zero** `DEBUG:` strings on any screen — grep the widget tree, do not eyeball it. `AppIcon` 1024×1024 present, **no alpha channel**. Launch screen renders the dark ground, not white.
-
----
-
-### Issue 104: How friends install it while the Apple licence is pending
-
-**Status**: 🔵 Open question, needs a decision. Not a defect — a distribution choice that changes what work is worth doing now.
-
-Confirmed release plumbing: bundle ID `com.whylabs.gaslight`, `CFBundleDisplayName` **`Gaslight`** ✅, `ITSAppUsesNonExemptEncryption` **`false`** ✅ (so TestFlight will not stall on an export-compliance prompt), version `1.0.0+2`. **There is no `PrivacyInfo.xcprivacy`** anywhere in `ios/` — Apple requires a privacy manifest for App Store submission, and this app uses `SharedPreferences` (a required-reason `UserDefaults` API), so it will need one before an upload is accepted.
-
-**Option A: wait for the licence, then TestFlight**
-- Pros: the real thing on real devices, and internal testers (up to 100) need no Beta App Review. Everything in Issue 103 is worth doing regardless.
-- Cons: blocked on Apple. Also needs the privacy manifest, and **external** testers (friends who are not on your team) require Beta App Review, which adds a round trip.
-
-**Option B: ship a Flutter web build on Firebase Hosting now**
-- The backend is already deployed and the client is Firebase-based. `web/` scaffolding exists, but **Hosting is not configured** — `firebase.json` declares only `firestore`, `functions` and `emulators`, so this needs `firebase init hosting` plus a `flutter build web`.
-- Pros: friends test **today**, on any device, by opening a link — no licence, no install, no TestFlight. Best possible feedback loop for a party game people play in the same room.
-- Cons: untested surface. The app has only ever run on iOS simulators; web needs its own pass for layout, fonts (`CormorantGaramond`/`Lora`/vendored Phosphor), `audioplayers`, and `SharedPreferences` persistence. **`firestore.rules` and the callables are unchanged, so the security work carries over** — but Issue 97's seat token lives in browser storage, which a friend clearing site data will lose.
-- ⚠️ **A public web URL means anonymous auth open to the internet**, and there is still **no App Check** anywhere in the repo. For a link shared with friends that is likely fine; before anything wider, App Check should be filed as its own issue.
-
-**Option C: both — web now for feedback, TestFlight when the licence lands**
-- Pros: unblocks testing immediately and keeps the iOS path on track. Issue 103's work applies to both.
-- Cons: two surfaces to keep working, and the web pass is real effort you may not want before the game design is settled.
-
-Your selection: I will test on some version of a beta app that I still need to get a license from Apple. However, is there anything we can do about the PrivacyInfo issue right now? What is it and what do we have to do about it?
-
-**Answer — August 21, 2026. Yes, all of it can be done now, and it is small.**
-
-**What a privacy manifest is.** `PrivacyInfo.xcprivacy` is a property list inside the app bundle. Apple requires it for App Store submission and it does two separate jobs:
-
-1. **Declares what data the app collects**, which feeds the App Store privacy "nutrition label" shown on your product page.
-2. **Declares any "required reason API" the code calls** — a fixed list of APIs Apple considers fingerprinting-adjacent (`UserDefaults`, file timestamps, disk space, system boot time, active keyboards). Each entry carries a reason code from Apple's approved list. Calling one without declaring it gets the upload rejected.
-
-**What this project actually needs — verified, not assumed:**
-
-* **The app target has no custom native code.** `ios/Runner/AppDelegate.swift` is Flutter boilerplate and the only other file is the generated plugin registrant. **Nothing in our own code calls a required-reason API**, so the app's `NSPrivacyAccessedAPITypes` can be an **empty array**. `SharedPreferences` does touch `UserDefaults`, but that call lives in `shared_preferences_foundation` and is that plugin's manifest to declare, not ours.
-* **Plugin-side manifests ship with the pods.** Every relevant plugin is recent enough to include one — `shared_preferences_foundation` 2.5.6, `path_provider_foundation` 2.6.0, `firebase_core` 4.12.1, `cloud_firestore` 6.7.1, `audioplayers_darwin` 6.5.0, `share_plus` 13.2.1. **This could not be confirmed locally**: `ios/Pods` currently holds only scaffolding (`Headers`, `Local Podspecs`, `Manifest.lock`, `Pods.xcodeproj`, `Target Support Files`) with no pod sources, so `find ios/Pods -name "*.xcprivacy"` returns nothing. **Re-check after a clean `pod install`** rather than trusting the version numbers.
-* **What we must write is the data-collection half**, and there is no `.xcprivacy` anywhere in the repo today.
-
-**What Gaslight collects**, traced through the code rather than guessed:
-
-| Data | Where it comes from | Apple type |
-|---|---|---|
-| Display name | `player_name_field` → `PlayerState.name` | `NSPrivacyCollectedDataTypeName` |
-| Truths and forgeries the player writes | `submitAnswer` → `sealed/{cardId}` | `NSPrivacyCollectedDataTypeOtherUserContent` |
-| Anonymous Firebase UID | `signInAnonymously()` → `PlayerState.authUid` | `NSPrivacyCollectedDataTypeUserID` |
-
-All three are **used only for app functionality**, **not linked to identity** (the account is anonymous — there is no email, phone or sign-in), and **not used for tracking**. There is no analytics SDK, no ad SDK, and no Gemini call left in the client, so `NSPrivacyTracking` is `false` and `NSPrivacyTrackingDomains` is empty.
-
-**Approved: write the manifest now.** It is one file, needs no licence, and blocks nothing else. Specced as **F3** in `agent_execution_guide.md`, including the exact plist, where it must sit in the Xcode target, and how to verify it is actually inside the built `.app` — **a manifest that exists in the repo but is not a member of the Runner target ships nothing**, which is the single most common way this is gotten wrong.
+**Regardless of the option chosen:** E9's citation must be repointed and the missing assertions must be restored as NOT RUN rather than silently dropped. **A report that omits an assertion reads as though it passed.**
 
 ---
 
@@ -260,13 +182,19 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
 
+#### 2.20 A `grep` is not an observation
+
+The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "THE RECORD OF TRUTH" lib/screens/phase2_craft.dart -> line 386` on every assertion. Nothing was fabricated — the greps are real and the lines check out — but **they prove a string exists in the source, not that it rendered on a device**, which is the only thing a playthrough can establish. The `grep -F` traceability rule (§2.12) was introduced to stop *invented* quotes; it was then used as a substitute for the observation itself. **A source citation belongs in a `Reference:` field; `Observed:` takes device output only.** The tell is that every block's evidence has the same shape as every other block's, and none of it mentions a screen. See Issue 102.
+
+---
+
 ## 3. Resolved — index only
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–101 — August 8 to 21, 2026
+### Issues 65–104 — August 8 to 21, 2026
 
-**37 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**39 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
@@ -286,6 +214,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Standings & honors** — tabular-figure alignment; honors metrics | 75 | `design_scoring_and_ui.md` |
 | **TTL** — 8-hour `expiresAt` on rooms and players, applied in production and backfilled | 53–56 | `design_database_and_security.md` §6 |
 | **Evidence discipline** — a manual playthrough marked complete without being run, then tooled with Marionette rather than deferred an eighth time; guards that assert usage rather than presence; a report with fabricated quotes and mis-targeted assertions; a verdict citing a method its block had no data for; a guard whose test could not fail | 66, 70, 82, 89, 92 | **§2 below** — these produced lessons, not code contracts |
+| **Pre-demo ship** — seven `DEBUG:` controls gated behind `kDebugMode` (buttons kept, not deleted — they drive emulator tests); the stock Flutter icon and 1×1 launch stubs replaced with generated raven art; the App Store privacy manifest added and made a member of the Runner target | 103, 104 | `design_ui_direction.md` §6; `design_database_and_security.md` §7.1–§7.2 | **§2 below** — these produced lessons, not code contracts |
 
 > **The three highest-value things to know from this wave**, if you read nothing else: the `votes` field has been redefined three times and broken its readers twice (§2 and `design_game_state_and_models.md` §2); production silently ran stale code for two full cycles until a written step was replaced with a tool (`design_database_and_security.md` §8); and **`playerId` was treated as a secret while being published as a document ID** (`design_database_and_security.md` §5).
 
