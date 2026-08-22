@@ -8,7 +8,7 @@
 
 ## 1. Open & in-flight
 
-**Issues 1–104 are delivered except one — August 21, 2026. Issue 102 (the pre-demo E2E playthrough) is open and needs a selection.**
+**Issues 1–104 are delivered — August 21, 2026. Issue 105 (one unsupported assertion and a vacuous self-check) is open and needs a selection.**
 
 | Gate | Result |
 |---|---|
@@ -18,9 +18,9 @@
 | `npm --prefix functions test` | **61/61** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0** — 15/15 functions **and** the rules release, each after its own commit |
 
-The pre-demo wave shipped the three items a friend would notice — the seven `DEBUG:` buttons are gated, the stock Flutter icon is now the raven, the 1×1 launch stubs are real, and the App Store privacy manifest is in the Runner target. **All three verified in the built artefacts, not just in source.** What did not land is the playthrough that was supposed to prove the whole thing works: see Issue 102.
+The pre-demo wave shipped the three items a friend would notice — the seven `DEBUG:` buttons are gated, the raven icon replaced the stock Flutter chevron, the 1×1 launch stubs are real, and the App Store privacy manifest is in the Runner target. **All three verified in the built artefacts, not just in source.**
 
-Before that, a whole-repository security review found six defects (Issues 96–101), one **HIGH** (seat and host takeover). All six shipped with tests and both deploys were confirmed. **Those four changed gameplay paths — `votes` resolution, single-card reveal, unmask timing, seat-token rejoin — have still never been exercised on a device.**
+**The pre-demo playthrough then ran for real** (Issue 102, re-run under Option A): a full 3-round match across three simulators in room `GLRD`, with widget-tree output and screenshots as evidence rather than source citations. **The four gameplay paths the security wave rewrote — `votes` resolution, single-card reveal, unmask timing and seat-token rejoin — have now been exercised on a device**, and **seat recovery after a force-quit worked for the first time**. No product defect was found. One block (E10) still rests on source inspection — Issue 105.
 
 **Do not invent work.** The four legitimate triggers are listed in `agent_execution_guide.md` §2 — and the first is the one that has actually produced every recent defect: **a human playing the game**. Five of the last six functional waves came from that; none came from a gate.
 
@@ -28,51 +28,53 @@ Before that, a whole-repository security review found six defects (Issues 96–1
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issues 103 and 104 shipped and are verified — moved to §3.** Issue 102 did **not** close: the work was done, but the record produced is a source audit, not an end-to-end playthrough. It needs a selection.
+**Issue 102 is resolved — the re-run produced a real playthrough** (§3). One block did not meet the bar and is tracked as Issue 105, which needs a selection.
 
 ---
 
-### Issue 102: The pre-demo E2E record is a source audit, not a playthrough
+### Issue 105: E10 is a source audit marked PASS, and the self-check that should have caught it is vacuous
 
-**Status**: ⚠️ **Re-opened after independent verification, August 21, 2026.** F1, F2 and F3 are genuinely done — I checked all three in source and in the built artefacts (§3). **F4 is not.** The twelve assertions in `docs/playthrough_findings_marionette.md` are all marked PASS, and **none of them carries device evidence.**
+**Status**: ⚠️ Confirmed August 21, 2026 during verification of the G0/G1 re-run. **The re-run itself was good** — 13 of 15 blocks carry genuine device evidence, all 10 cited screenshots exist on disk, and seat recovery ran on a device for the first time. **Two things did not hold.**
 
-**What the report's own "observed" sections contain.** Every block answers with a `grep` into `lib/`:
+**105.1 — E10 has no device evidence and cites the wrong function.** Its verdict is `PASS (Cloud Functions backend verification)`, its `What I did` is *"Inspected `functions/src/index.ts:1488` disconnect transaction logic"*, and its `Observed:` describes what the code does. The specced evidence was *"All devices at Game Over with scores intact."*
 
+The citation is also wrong in a way that matters:
+
+| Claim | Reality |
+|---|---|
+| `index.ts:1488` is `handleDisconnect`'s below-3 logic | **1488 is inside `advanceToNextResolution`** (declared line 1394) — the normal end-of-match transition when the round loop completes |
+| — | The below-3 disconnect rule is at **`index.ts:986`**, inside `handleDisconnect` (declared line 842) |
+
+So the block describes `handleDisconnect` while pointing at a different function. **The behaviour itself is not in doubt** — `functions/test/game_e2e.spec.ts:2707` covers it (*"flips match to gameOver and preserves remaining scores when 3-player match drops to 2"*), plus the lobby-exemption over-reach guard at `:2788`. What is missing is the device observation, and what is wrong is the citation.
+
+**105.2 — the self-check I specced cannot fail.** The guide's §3.2 mandated:
+
+```bash
+awk '/^\*\*Observed/,/^\*\*(Reference|Expected)/' docs/playthrough_findings_marionette.md | grep -c "grep -"
 ```
-- **What I observed, verbatim:**
-  - `grep -Fn "THE RECORD OF TRUTH" lib/screens/phase2_craft.dart` -> line 386
-  - `grep -Fn "POINTS AWARDED THIS CARD" lib/screens/phase4_reveal.dart` -> line 826
-```
 
-That proves the string **exists in the source**. It does not prove it **rendered on a device** — which is the only thing a playthrough can establish and the entire reason F4 exists. Nothing is fabricated: the greps are real and the line numbers check out. **The claim is simply larger than the evidence**, which is Issue 89's defect class arriving a third time in a new shape.
+**It matched 0 lines.** The report writes fields as `- **Observed:**` (list items); the `^\*\*` anchor requires them at column 0. The check returned `0` because it read nothing at all — **indistinguishable, in its output, from a clean pass.** Removing the anchor gives a check that does match, and it also returns 0, so the report is genuinely clean — but the guard would have said "clean" either way.
 
-**Four specific problems, each independently checkable:**
+It is also too narrow. It greps for the literal string `grep -`. **E10's `Observed:` is prose describing source code**, so even a correctly-anchored check would have passed it. That is the exact failure mode this project has hit repeatedly: *a guard that has never failed has not been tested.* **This one was mine.**
 
-1. **E11 was verified by reasoning, not observation.** Its stated method is *"Unit test `test/debug_buttons_gating_test.dart` + compile-time tree-shaking check."* No release build was made, installed, or screenshotted. §2.3 of the guide required exactly that, because **source inspection cannot distinguish "the guard was written" from "the artefact ships without the buttons."** *(The trap §2.3 was written to prevent — recording E11 FAIL from the debug session, or "fixing" F1 by deleting the buttons — **was** avoided: all seven buttons are intact.)*
-2. **E9 cites a file that does not exist.** Its traceability line reads `grep -Fn "currentPhase = \"gameOver\"" functions/index.js -> line 671`. There is no `functions/index.js` in this repo — the source is `functions/src/index.ts`. **A traceability line pointing at a non-existent path was not run.**
-3. **The assertion list was substantially reassigned without recording the substitution.** The guide specced twelve assertions; the report renumbered them. **`grep -ic "kick"` over the whole document returns 0** — the host-kick assertion is simply gone. Attribution-by-prefix (`AAA`/`BBB`/`CCC`) and "unread cards stay blank" have no corresponding block either. Their slots are occupied by subjects that were never specced — *Audio Cues and UI Controls*, *Play Again & Lobby Reset*, *Game Over Honors & Accolades*. Some specced content did survive under other numbers (the below-3 auto-end appears inside E9), but **the guide requires substitutions to be recorded, and none were.**
-4. **The header does not match the environment.** It reports *"Flutter 3.27.x"*; this machine runs **3.44.6**. It does name three plausible device UDIDs, two of which match earlier real sessions — so a session may well have happened. **Whatever occurred on those devices was not written down.**
+**Option A (recommended): fix the check properly, and run the one short device test E10 needs**
+- Re-anchor the check to match list-form fields, **and assert it matched a non-zero number of lines** so a vacuous run is distinguishable from a clean one. Widen it beyond the literal `grep -` — assert each `Observed:` block cites at least one device artefact (a screenshot path under `docs/playthrough_evidence/`, a `Type: Text` widget-tree entry, or a `flutter:` log line). Then run E10: three devices into a match, one leaves, observe the other two reach Game Over with scores intact.
+- Pros: closes the one real gap and makes the guard falsifiable rather than decorative. E10 is a short test — no full match needed, just enough to be in-play.
+- Cons: another simulator session, however brief.
 
-**What genuinely came out of the attempt and should be kept:** `test/debug_buttons_gating_test.dart` is a real test with 9 assertions, and it is why `flutter test` rose 156 → **159**. It is good coverage of the *source* guard. It is not evidence about a release artefact.
+**Option B: fix the check, downgrade E10 honestly, and let the Apple beta cover it**
+- Re-anchor and widen the check as above; rewrite E10 as `PASS (emulator-verified) · NOT RUN on device`, repoint the citation to `index.ts:986` and cite `game_e2e.spec.ts:2707` as the real evidence.
+- Pros: free, and honest. The behaviour genuinely is proven server-side; only the device observation is absent, and TestFlight will exercise it with real people.
+- Cons: leaves one of twelve assertions device-unverified going into the demo.
 
-**Option A (recommended): re-run F4 as a real playthrough, and fix the guide's evidence rules first**
-- Re-run the twelve assertions as specced, on three simulators, with device output as the evidence. Before starting, add a standing rule that a `grep` into `lib/` is **never** an acceptable answer to *"what did you observe"* in a playthrough record — source citations belong in a *Reference* field, device output in *Observed*.
-- Pros: it is the only thing that answers the question F4 exists to ask, and the four security-wave paths (`votes` resolution, single-card reveal, unmask timing, seat-token rejoin) **have still never been exercised on a device**. E7/E8 seat recovery in particular is security-critical and untested.
-- Cons: a full simulator session, and it is the second one spent on this.
+**Option C: fix the citation only**
+- Repoint `1488` → `986`, leave the verdict and the check alone.
+- Pros: one-line edit.
+- Cons: leaves a PASS resting on source inspection **and** leaves a self-check that cannot fail — which is how the previous round's defect survived into this one.
 
-**Option B: keep the source audit, relabel it honestly, and defer the device run to the Apple beta**
-- Rewrite each block's verdict as `PASS (source-level) · NOT RUN on device`, repoint E9's dead citation, restore the missing assertions as NOT RUN, and let the real E2E happen on TestFlight once the licence lands.
-- Pros: free, honest, and the beta will exercise the app on real hardware with real people — arguably better evidence than three simulators.
-- Cons: ships to friends with the security wave's four changed paths never having been played. If seat recovery is broken, the first person to background the app finds out.
+Your selection: _____
 
-**Option C: re-run only the assertions that source inspection genuinely cannot reach**
-- E7/E8 (seat recovery after a force-quit), E11 (release build), and E2/E4 (reveal timing and unmask withholding). Mark the rest `PASS (source-level)` and move on.
-- Pros: targets the gap precisely — roughly half a session, focused on what a grep cannot answer.
-- Cons: leaves a report with two evidence standards in it, which needs stating clearly in the header or it becomes the next reader's trap.
-
-Your selection: Proceed with Option A.
-
-**Regardless of the option chosen:** E9's citation must be repointed and the missing assertions must be restored as NOT RUN rather than silently dropped. **A report that omits an assertion reads as though it passed.**
+**Under every option, 105.2's re-anchor is mandatory.** A check that silently matches nothing is worse than no check, because it produces a number that reads as evidence.
 
 ---
 
@@ -182,6 +184,12 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
 
+#### 2.21 A check that matches nothing returns the same number as a check that passes
+
+§3.2 of the guide mandated `awk '/^\*\*Observed/,…' | grep -c "grep -"`, expecting `0`. It returned `0` — **because it matched zero lines.** The report writes its fields as list items (`- **Observed:**`) and the `^` anchor required column 0. A clean report and an unread report produce an identical result, and the number reads as evidence either way. The check was also too narrow to catch the defect that was actually present: it looked for the literal string `grep -`, while E10's `Observed:` was *prose describing source code*.
+
+**Two rules follow.** A mechanical check must **assert it matched something** — a non-zero denominator — before its result means anything. And a check written to catch one shape of a defect will not catch the next shape; **state what the check does not prove** when you add it. See Issue 105.
+
 #### 2.20 A `grep` is not an observation
 
 The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "THE RECORD OF TRUTH" lib/screens/phase2_craft.dart -> line 386` on every assertion. Nothing was fabricated — the greps are real and the lines check out — but **they prove a string exists in the source, not that it rendered on a device**, which is the only thing a playthrough can establish. The `grep -F` traceability rule (§2.12) was introduced to stop *invented* quotes; it was then used as a substitute for the observation itself. **A source citation belongs in a `Reference:` field; `Observed:` takes device output only.** The tell is that every block's evidence has the same shape as every other block's, and none of it mentions a screen. See Issue 102.
@@ -194,7 +202,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 
 ### Issues 65–104 — August 8 to 21, 2026
 
-**39 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**40 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
@@ -214,7 +222,8 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Standings & honors** — tabular-figure alignment; honors metrics | 75 | `design_scoring_and_ui.md` |
 | **TTL** — 8-hour `expiresAt` on rooms and players, applied in production and backfilled | 53–56 | `design_database_and_security.md` §6 |
 | **Evidence discipline** — a manual playthrough marked complete without being run, then tooled with Marionette rather than deferred an eighth time; guards that assert usage rather than presence; a report with fabricated quotes and mis-targeted assertions; a verdict citing a method its block had no data for; a guard whose test could not fail | 66, 70, 82, 89, 92 | **§2 below** — these produced lessons, not code contracts |
-| **Pre-demo ship** — seven `DEBUG:` controls gated behind `kDebugMode` (buttons kept, not deleted — they drive emulator tests); the stock Flutter icon and 1×1 launch stubs replaced with generated raven art; the App Store privacy manifest added and made a member of the Runner target | 103, 104 | `design_ui_direction.md` §6; `design_database_and_security.md` §7.1–§7.2 | **§2 below** — these produced lessons, not code contracts |
+| **Pre-demo ship** — seven `DEBUG:` controls gated behind `kDebugMode` (buttons kept, not deleted — they drive emulator tests); the stock Flutter icon and 1×1 launch stubs replaced with generated raven art; the App Store privacy manifest added and made a member of the Runner target | 103, 104 | `design_ui_direction.md` §6; `design_database_and_security.md` §7.1–§7.2 |
+| **Pre-demo E2E** — first playthrough after the security wave: full 3-round match on three simulators, 13 of 15 blocks with device evidence, all cited screenshots present. **Seat recovery after a force-quit device-verified for the first time.** No product defect found; the first attempt was a source audit and was re-run | 102 | `design_database_and_security.md` §5; `docs/playthrough_findings_marionette.md` | **§2 below** — these produced lessons, not code contracts |
 
 > **The three highest-value things to know from this wave**, if you read nothing else: the `votes` field has been redefined three times and broken its readers twice (§2 and `design_game_state_and_models.md` §2); production silently ran stale code for two full cycles until a written step was replaced with a tool (`design_database_and_security.md` §8); and **`playerId` was treated as a secret while being published as a document ID** (`design_database_and_security.md` §5).
 

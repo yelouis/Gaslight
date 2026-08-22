@@ -1,19 +1,8 @@
-# Agent Execution Guide — Active Build: G0 → G1 (re-run the pre-demo E2E) — August 21, 2026
+# Agent Execution Guide — Awaiting one selection (Issue 105) — August 21, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**F1, F2 and F3 shipped and are independently verified** (§6). The app a friend installs has its debug controls gated, the raven icon, a real launch screen, and an App Store privacy manifest inside the bundle.
-
-**F4 did not.** Twelve assertions were marked PASS and **none carried device evidence** — every block answered *"what I observed"* with a `grep` into `lib/`. Issue 102 was re-opened and the user selected **Option A: re-run it properly.**
-
-| # | Item | Issue | Blocked? |
-|---|---|---|---|
-| **G0** | Two mandatory corrections to the existing report | 102 | **No. Do first** — it makes the record honest even if G1 is interrupted. |
-| **G1** | Re-run all twelve assertions as a real playthrough | 102 | No. After G0. |
-
-**Nothing here needs a deploy.** The backend is current and verified. This is evidence work.
-
-## Verified baseline — the regression bar
+**The pre-demo build is done and the playthrough ran for real.** Issues 1–104 are delivered; the app a friend installs has gated debug controls, the raven icon, a real launch screen, and an App Store privacy manifest inside the bundle. A full 3-round match ran across three simulators in room `GLRD` with device evidence, and **seat recovery after a force-quit was verified on a device for the first time**. **No product defect was found.**
 
 | Gate | Result |
 |---|---|
@@ -23,213 +12,142 @@
 | `npm --prefix functions test` | **61/61** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0** — 15/15 functions and the rules release |
 
+**One item is open: Issue 105.** It needs a `Your selection:` line before anything proceeds (§2).
+
 ---
 
 ## 1. Standing constraints
 
-- **A `grep` into `lib/` is NEVER an answer to "what did you observe."** `Observed:` takes **device output only**. Source citations go in a separate `Reference:` field. **This is the rule the last attempt broke, and §3.2 makes it mechanically checkable.**
+- **A `grep` is not an observation.** `Observed:` takes device output — a widget-tree entry, screen text, a saved screenshot path, a `flutter:` log line. Source citations go in `Reference:`.
+- **A mechanical check must assert it matched something.** A check that reads zero lines returns the same number as a clean pass. **This is Issue 105.2 and it was my error, not the implementer's.**
 - **One item = one commit.**
-- **Record every substitution.** If you test something other than what was specced — a different screen, a different device count, a different order — say so **in the block**. **An omitted assertion reads as though it passed.**
-- **Do not renumber the assertion list.** E1–E12 are fixed (§4). The last attempt reassigned them and three specced assertions vanished without anyone noticing.
-- **Do not fix anything inline during G1.** Failures are described, not repaired, and filed with options.
+- **Record every substitution.** An omitted assertion reads as though it passed.
+- **Do not renumber the assertion list.** E1–E12 are the specced set; E13–E15 are extra coverage.
+- **Do not fix anything inline during a playthrough.** Failures are described, filed with options.
 - **`flutter analyze lib test`, never bare `flutter analyze`.**
 - **Never fill in a `Your selection: _____` line.**
-- **Do not touch anything in §6 or §7.**
+- **Do not touch anything in §5 or §6.**
 
 ---
 
-## 2. G0 — The two mandatory corrections
+## 2. Issue 105 *(blocked on selection)*
 
-**Do these first.** They are five minutes of editing, and they make `docs/playthrough_findings_marionette.md` honest immediately — so that if G1 is interrupted, the record is not left overstating.
+### 2.1 What is wrong
 
-### 2.1 Repoint E9's dead citation
+**105.1 — E10 has no device evidence and cites the wrong function.** Its verdict is `PASS (Cloud Functions backend verification)`; its method is *"Inspected `functions/src/index.ts:1488` disconnect transaction logic"*; its `Observed:` describes what the code does. The specced evidence was *"All devices at Game Over with scores intact."*
 
-E9's traceability line reads:
+The citation is wrong in a way that matters:
 
-```
-grep -Fn "currentPhase = \"gameOver\"" functions/index.js -> line 671
-```
-
-**`functions/index.js` does not exist.** The source is `functions/src/index.ts`; the compiled output lives in `functions/lib/`. Re-grep the real file, get the real line, and correct it — or, if G1 re-runs E9 anyway, delete the line rather than leaving a citation nobody ran.
-
-### 2.2 Restore the three missing assertions
-
-The specced list had twelve. Three were dropped and their slots filled with subjects that were never specced:
-
-| Missing assertion | What replaced it |
+| Claim | Reality |
 |---|---|
-| **Host kick** (`grep -ic "kick"` over the doc returns **0**) | *Play Again & Lobby Reset* |
-| **Attribution by `AAA`/`BBB`/`CCC` prefix** | *Game Over Honors & Accolades* |
-| **Unread cards stay blank before their turn** | *Audio Cues and UI Controls* |
+| `index.ts:1488` is `handleDisconnect`'s below-3 logic | **1488 is inside `advanceToNextResolution`** (declared line 1394) — the normal end-of-match transition |
+| — | The below-3 rule is at **`index.ts:986`**, inside `handleDisconnect` (declared line 842) |
 
-**Restore all three as explicit `NOT RUN` blocks** with a one-line reason, so the gap is visible. **Do not delete the replacement blocks** — *Play Again*, *Honors* and *Audio Cues* are real coverage somebody produced; keep them, renumbered as **E13, E14, E15** and marked with their evidence standard. **What must not survive is a twelve-item list that silently omits three of the twelve.**
+**The behaviour is not in doubt.** `functions/test/game_e2e.spec.ts:2707` covers it, with the lobby-exemption over-reach guard at `:2788`. What is missing is the device observation; what is wrong is the pointer.
 
-### Validation
-
-- `grep -c "functions/index.js" docs/playthrough_findings_marionette.md` → **0**.
-- The document contains blocks **E1 through E12** with the §4 subjects, plus any extras numbered E13+.
-- Every restored block reads `NOT RUN` with a reason, not PASS.
-
-Commit: `docs(playthrough): repoint a dead citation and restore the dropped assertions`.
-
----
-
-## 3. G1 — Re-run the twelve assertions
-
-### 3.1 Setup
-
-Marionette is installed and working — `marionette_flutter` in `pubspec.yaml`, the binding at `lib/main.dart:26`, three servers in `.agents/mcp_config.json`. **Verify rather than redo.**
-
-1. **`.env` must contain `USE_EMULATOR=false`.** It is a bundled asset — changing it after the build has no effect.
-2. **Uninstall on every booted simulator**, so no stale room is restored from `SharedPreferences`:
-   ```bash
-   for U in $(xcrun simctl list devices booted | grep -oE '[0-9A-F-]{36}'); do xcrun simctl uninstall "$U" com.whylabs.gaslight 2>/dev/null; done
-   ```
-3. **Build debug, then prove the binary is newer than the source.** If it is older, the build did not pick up F1–F3 and the whole run is worthless:
-   ```bash
-   flutter build ios --simulator --debug
-   ```
-   ```bash
-   stat -f '%Sm binary' build/ios/iphonesimulator/Runner.app/Runner; git log -1 --format='%cd source' -- lib ios
-   ```
-   **Paste both lines into the report header.**
-4. **Launch one device at a time** — concurrent builds against the same `build/` directory corrupt each other. Wait for P1 to come up before starting P2.
-5. **Gate on `THE GUEST LEDGER`** via `take_screenshots` on all three before any assertion. **Three devices, not two** — the 3-player minimum is enforced server-side.
-6. **House rules:** `Disable Game Timers` **on** (`lobby_screen.dart:623`) — record as a deviation. `Family-Friendly Decks Only` **off** (`:643`).
-7. **Three real clients. Never `DEBUG: ADD 9 BOTS`** — bots are server-seeded and never traverse the client write path or the security rules, which is exactly the surface this run exists to exercise.
-8. **Prefix every answer per device — `AAA` / `BBB` / `CCC`.** E5 and E6 are only checkable with that ground truth, and E6 was dropped last time for lack of it.
-
-### 3.2 The evidence contract — what counts, concretely
-
-**This is the section the last attempt needed and did not have.**
-
-| Field | Takes | Never takes |
-|---|---|---|
-| `Observed:` | Output from a Marionette call or `xcrun simctl` — a widget-tree dump, text read off a screen, a saved screenshot path, a log line | A `grep`. A source line number. A test name. An inference from code. |
-| `Reference:` | `file:line` in `lib/` or `functions/` — optional context for *why* the expected value is what it is | — |
-
-**The three calls that produce acceptable `Observed:` evidence:**
-
-- **`get_interactive_elements`** — returns the live widget tree with text and bounds. **This is the primary evidence for any assertion about what is on screen.** Paste the relevant entries verbatim.
-- **`take_screenshots`** — returns base64 PNGs. **Decode and save them** under `docs/playthrough_evidence/` with the assertion id in the filename (`e5_p1_standings.png`), and cite the path. A screenshot you did not look at is not evidence.
-- **`get_logs`** — for anything that surfaces as a client log rather than UI.
-
-**The self-check, and it is not optional.** Before committing the report, run:
+**105.2 — the self-check I specced cannot fail.** It mandated:
 
 ```bash
 awk '/^\*\*Observed/,/^\*\*(Reference|Expected)/' docs/playthrough_findings_marionette.md | grep -c "grep -"
 ```
 
-**That must return `0`.** If it does not, an `Observed:` field contains a source citation and the block is not evidence. **Paste the command and its output into the report header** — this is the check that would have caught the last attempt, and it is cheap enough that there is no excuse for skipping it.
+**It matched 0 lines** — the report writes `- **Observed:**` as list items and the `^\*\*` anchor requires column 0. It returned `0` because it read nothing, which is indistinguishable from a clean pass. It is also too narrow: it looks for the literal `grep -`, and **E10's `Observed:` is prose describing source**, so a correctly-anchored version would still have passed it.
 
-### 3.3 The block format
+### 2.2 The options
 
-```markdown
-### E5 — Scoring
+Full text in `docs/ongoing_general_errors.md`, Issue 105. In brief:
 
-**Verdict:** PASS | FAIL | NOT RUN
-**Devices:** P1 `iPhone 17 Pro` (Alpha, host), P2 `iPhone Air` (Bravo), P3 `iPhone 17` (Charlie)
-**What I did:** <the exact tool calls, in order>
-**Observed:** <widget-tree entries / screen text / screenshot path — device output ONLY>
-**Reference:** <optional file:line explaining the expected value>
-**Expected:** <what the assertion required>
-**Evidence:** docs/playthrough_evidence/e5_p1_standings.png
-```
+- **Option A (recommended)** — fix the check properly **and** run the one short device test E10 needs.
+- **Option B** — fix the check; downgrade E10 to `PASS (emulator-verified) · NOT RUN on device` and repoint the citation.
+- **Option C** — repoint the citation only.
 
-**Header must carry:** the date, the commit SHA, **`flutter --version` pasted rather than recalled** *(the last attempt claimed 3.27.x on a 3.44.6 machine)*, the three device names and UDIDs, build mode, `USE_EMULATOR`, the binary-vs-source timestamps from §3.1 step 3, the timers-disabled deviation, and the §3.2 self-check output.
+**Under every option, 105.2's re-anchor is mandatory.** A check that silently matches nothing is worse than no check, because it produces a number that reads as evidence.
 
-### 3.4 ⚠️ E11 still cannot be checked during the Marionette run
+### 2.3 How to fix the check (all options)
 
-```dart
-// lib/main.dart:26
-if (kDebugMode) {
-  MarionetteBinding.ensureInitialized();   // ← Marionette exists ONLY in debug
-}
-```
+The replacement must do three things the original did not:
 
-`kDebugMode` is `false` in **both** profile and release. Marionette attaches only in debug; F1's gating only takes effect where `kDebugMode` is false. **There is no build in which Marionette can observe the buttons being hidden.**
+1. **Match the real field shape.** Fields are list items: `- **Observed:**`. Drop the `^` anchor or match `^[-*] \*\*Observed`.
+2. **Assert a non-zero denominator.** Count the `Observed:` blocks found and **fail if that count is less than the number of assertion blocks in the document.** A check with no denominator cannot distinguish "clean" from "read nothing".
+3. **Assert positively, not just negatively.** Rather than only grepping for `grep -`, require each `Observed:` block to contain **at least one device artefact**: a path under `docs/playthrough_evidence/`, a `Type: Text` widget-tree entry, or a `flutter:` log line. That is what catches E10, whose `Observed:` is prose with no artefact in it.
 
-> **In the Marionette session the `DEBUG:` buttons WILL be visible, and that is CORRECT.**
-> **Do NOT record E11 as FAIL from that session.**
-> **Do NOT "fix" F1 by deleting the buttons** — `debugSimulateBotResponses` drives existing emulator tests; deleting them would pass a misread E11 *and* break the suite.
-> **Do NOT switch to a profile build** — `kDebugMode` is false there too, so the binding is not installed and Marionette cannot connect at all.
+**Validate the check by making it fail.** Temporarily replace one `Observed:` block's body with a source citation and confirm the check reports that block; restore it. **Record the observed failure output** — a check that has never failed has not been tested, which is the whole of 105.2.
 
-**E11's procedure — a separate release build, driven by hand:**
+### 2.4 If Option A is selected — running E10
 
-```bash
-flutter build ios --simulator --release
-```
+E10 does not need a full match. Get three devices into an active match, have one leave, and observe the other two.
 
-```bash
-xcrun simctl install <UDID> build/ios/iphonesimulator/Runner.app && xcrun simctl launch <UDID> com.whylabs.gaslight
-```
+- Setup as in §4: `.env` with `USE_EMULATOR=false`, uninstall first, build debug, **prove the binary is newer than the last `lib/`/`ios/` commit**, launch one device at a time, gate on `THE GUEST LEDGER`.
+- Reach any in-play phase with three players — `truth` is enough; a full 3-round match is not required.
+- On P3, use the in-game **`LEAVE GAME`** control (`leading` slot of the AppBar), **not** a force-quit — E7 already covers force-quit, and the below-3 rule fires on `handleDisconnect`.
+- **Observe on P1 and P2**: both reach Game Over, and their scores are intact. Capture `get_interactive_elements` output and a screenshot from **each** device.
 
-Walk the lobby, the truth/forgery screen and the vote screen; **screenshot each** with `xcrun simctl io <UDID> screenshot` and save under `docs/playthrough_evidence/`. Record E11 as its own block **stating it was verified on a release build outside the Marionette session, and why**. Reaching the vote screen needs three players — if you only cover lobby and truth/forgery, **say so in the block**.
-
-### 3.5 If something cannot be reached
-
-**Record it as `NOT RUN` with the reason, mark every downstream assertion `NOT RUN`, and continue with whatever remains reachable.** A blocked run reporting six honest NOT RUNs is worth more than one reporting six passes it did not observe — which is precisely how this item came back.
-
-**If an assertion fails, do not fix it.** File it in `ongoing_general_errors.md` with options and a blank `Your selection: _____`, and carry on. A fix applied during the run destroys the evidence that it was needed.
+**PASS requires evidence from both remaining devices**, not one. **If they do not both reach Game Over, that is a real defect** — record the room code, the phase each device is stuck in, and file it with options. Do not fix it during the run.
 
 ---
 
-## 4. The twelve assertions — do not renumber
+## 3. Do not invent work
 
-**E9 and E10 destroy the match. Run them last, E9 before E10.**
+Outside Issue 105 there is no queue. Legitimate triggers: a defect this work surfaces, a user-selected issue, `ROOM_TTL_MS` dropping below ~4 hours, or a sibling Phosphor glyph turning out wrong.
 
-| # | Assertion | Required `Observed:` evidence |
-|---|---|---|
-| **E1** | A 3-round match reaches `THE NIGHT'S HONORS` without stalling | The round indicator at each round, then the Game Over title, read from the widget tree on any device |
-| **E2** | Every reveal shows the right truth and forgeries — **cards 2 and 3 included** | The revealed card text from each device, per card. **Issue 99 changed this path; card 1 passing proves nothing about cards 2 and 3** |
-| **E3** | **Unread cards stay blank before their turn** | The absence of answer text on a not-yet-revealed card — quote what *is* there |
-| **E4** | The unmask window shows no authorship; results correct once it closes | `REVENGE UNMASKING RESULTS` text, plus what was visible *during* the window. **Issue 100 changed when this appears** |
-| **E5** | Scoring is right — truth-finder `ceil((P−1)/(S+1))`, truth-teller `+1` per finder, forger `+1` per fooled voter | `STANDINGS` numbers **before and after**, as numbers, with the arithmetic written out |
-| **E6** | **Attribution is correct** — the named author actually wrote it | The reveal's author labels against your `AAA`/`BBB`/`CCC` ground truth |
-| **E7** | **Seat recovery: force-quit a player mid-match and relaunch — same seat, same score** | The rejoining device's screen and score. **Never run on a device** |
-| **E8** | **Host kick** removes a lobby player; the removed player sees the notice | The roster on the host device **and** the notice on the removed device |
-| **E9** | A player leaves mid-match from a 4-player game; the match continues | The remaining three devices still in play |
-| **E10** | A 3-player match dropping to 2 ends for everyone at the final score | All devices at Game Over with scores intact |
-| **E11** | **No `DEBUG:` control on a RELEASE build** | ⚠️ Screenshots from a release build, **outside** the Marionette session — §3.4 |
-| **E12** | Icon and launch screen are the real ones | Home-screen screenshot at small size; a cold-start screenshot from a **full quit** |
-
-### The two that matter most
-
-**E7 — seat recovery.** Force-quit from the app switcher, **not** a background. The token lives in `SharedPreferences` as `seat_token_{roomCode}`; a relaunch should present it and land back in the same seat with the same score. **This path has never run on a device and it is security-critical** (Issue 97). **If it fails, capture the room code, the player id and the error code before doing anything else, then file it** — a fix here must not be improvised.
-
-**E2 and E4** — both sit on paths the security wave rewrote. `votes` now stores an opaque option UUID resolved server-side at the reveal transition, the reveal merges only the current card, and authorship is withheld until `unmaskDeadline` closes. **Nothing has played these on a device.** Card 1 rendering correctly says nothing about cards 2 and 3, because they take a different code path.
-
----
-
-## 5. Do not invent work
-
-Outside G0 and G1 there is no queue. Legitimate triggers: a defect this run surfaces, a user-selected issue, `ROOM_TTL_MS` dropping below ~4 hours, or a sibling Phosphor glyph turning out wrong.
+**The next real change should come from the Apple beta**, once the licence lands — friends on real devices is the strongest signal available, and every defect in the last six waves came from someone playing the game rather than from a gate.
 
 **If you find something worth doing, file it — do not do it.**
 
 ---
 
-## 6. Already delivered — do NOT rework
+## 4. Playthrough procedure — for whenever one is run again
 
-**Verified in source and in the built artefacts, August 21, 2026:**
+**Setup.** Marionette is installed and working (`marionette_flutter`, binding at `lib/main.dart:26`, three servers in `.agents/mcp_config.json`). Verify rather than redo.
 
-- **F1 / Issue 103.1** — all seven `DEBUG:` sites gated: `lobby_screen.dart:740`, `phase2_craft.dart:328/365/565`, `phase3_vote.dart:255/414/572`, each composing with that site's pre-existing condition. **All seven buttons still exist** — gated, not deleted; `debugSimulateBotResponses` depends on them.
-- **F2 / Issue 103.2–3** — the icon is the raven on `#14110E` with a brass outline; the 1024 master is **1024 × 1024, 8-bit/color RGB, no alpha**; launch images are 375×812 / 750×1624 / 1125×2436. `flutter_launcher_icons` and `flutter_native_splash` are configured — regenerate from the master, never edit a slot.
-- **F3 / Issue 104** — `PrivacyInfo.xcprivacy` passes `plutil -lint`, declares three collected types with `Linked: false` / `Tracking: false` / `AppFunctionality`, keeps `NSPrivacyAccessedAPITypes` empty by design, and **is a member of the Runner target**.
+1. `.env` must contain `USE_EMULATOR=false` — a bundled asset; changing it after the build has no effect.
+2. Uninstall on every booted simulator so no stale room is restored.
+3. Build debug, then **prove the binary is newer than the source**; paste both lines into the report header:
+   ```bash
+   stat -f '%Sm binary' build/ios/iphonesimulator/Runner.app/Runner; git log -1 --format='%cd source' -- lib ios
+   ```
+4. Launch **one device at a time**; gate all three on `THE GUEST LEDGER` before any assertion.
+5. `Disable Game Timers` **on**, recorded as a deviation. `Family-Friendly Decks Only` **off**.
+6. **Three real clients. Never `DEBUG: ADD 9 BOTS`** — bots never traverse the client write path or the rules.
+7. Prefix answers `AAA` / `BBB` / `CCC` — E5 and E6 depend on that ground truth.
+8. Paste `flutter --version` into the header rather than recalling it.
+
+**Evidence contract.**
+
+| Field | Takes | Never takes |
+|---|---|---|
+| `Observed:` | `get_interactive_elements` output, screen text, a saved screenshot path, a `flutter:` log line | A `grep`. A source line. A test name. Prose describing code. |
+| `Reference:` | `file:line` — optional context for the expected value | — |
+
+Save screenshots under `docs/playthrough_evidence/` named by assertion (`e5_p1_standings.png`) and cite the path. **A screenshot you did not look at is not evidence.**
+
+**⚠️ E11 can never be checked during a Marionette run.** `MarionetteBinding` is installed only `if (kDebugMode)` (`lib/main.dart:26`), and `kDebugMode` is `false` in both release and profile — the only builds where the `DEBUG:` gating takes effect. **In the session those buttons WILL be visible and that is CORRECT.** Do not record E11 as FAIL from it, do not delete the buttons (`debugSimulateBotResponses` drives emulator tests), and do not switch to profile — the binding is absent there too. E11 is a separate release build, installed and driven by hand, screenshotted, recorded as its own block **stating the different method and why**.
+
+**The twelve assertions** are fixed and must not be renumbered: E1 full match · E2 reveals correct **including cards 2 and 3** · E3 unread cards blank · E4 unmask withholding · E5 scoring · E6 attribution by prefix · E7 seat recovery (force-quit) · E8 host kick · E9 4-player departure · E10 below-3 auto-end · E11 release build · E12 icon and launch screen. E13+ are extra coverage.
+
+---
+
+## 5. Already delivered — do NOT rework
+
+**Verified in source, in the built artefacts, and on devices, August 21, 2026:**
+
+- **Issue 102** — the pre-demo playthrough ran in room `GLRD`: a full 3-round match, 13 of 15 blocks with device evidence, all 10 cited screenshots present on disk. **E7 seat recovery device-verified** — `xcrun simctl terminate` mid-match, relaunch, straight back to `/reveal` with seat, score and ballot history intact. **E8 host kick device-verified** on both the host and the evicted device. **No product defect found.**
+- **Issue 103** — all seven `DEBUG:` sites gated (`lobby_screen.dart:740`, `phase2_craft.dart:328/365/565`, `phase3_vote.dart:255/414/572`), each composing with its pre-existing condition; **all seven buttons still exist** — gated, not deleted. Icon is the raven, 1024×1024 **RGB with no alpha**; launch images are real sizes.
+- **Issue 104** — `PrivacyInfo.xcprivacy` passes `plutil -lint`, declares three collected types with `Linked: false` / `Tracking: false`, keeps `NSPrivacyAccessedAPITypes` empty by design, and **is a member of the Runner target**.
 - **Issues 96–101** — `/rooms` denies `list`; seat re-bind requires ownership, a `seatToken` hashed into default-deny `sealed`, or a stale seat; `votes` stores opaque option UUIDs with phase/reader/duplicate guards; the reveal merges only the current card; unmask authorship is withheld until the deadline; debug callables are emulator-only *and* host-only.
 - **Issues 50–95** as previously recorded. **Issue 31** — loose `!= null`. **Issues 28/29** — `phosphor_flutter` can never be used.
-- **`test/debug_buttons_gating_test.dart`** — 9 assertions, and why the suite is at 159. **Keep it.** It covers the source guard; it is not evidence about a release artefact.
+- **`test/debug_buttons_gating_test.dart`** — 9 assertions; keep it. It covers the source guard, not the release artefact.
 
 **Release plumbing:** bundle ID `com.whylabs.gaslight` · `CFBundleDisplayName` **`Gaslight`** · `ITSAppUsesNonExemptEncryption` **`false`** · version `1.0.0+2` · iOS target **15.0** · Node **22**.
 
 ---
 
-## 7. Invariants & intentional decisions — do NOT change
+## 6. Invariants & intentional decisions — do NOT change
 
-- **The seven `DEBUG:` buttons stay in the source, gated.** Deleting them breaks emulator tests. Their gating is only observable in a release or profile build.
-- **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty. If a plugin lacks its own manifest, **upgrade the plugin — do not write one on its behalf**.
-- **The 1024 icon must have no alpha and no pre-rounded corners.**
-- **`playerId` is NOT a credential.** A re-bind needs ownership, a `seatToken`, or a stale seat — do not simplify to one condition.
+- **The seven `DEBUG:` buttons stay in the source, gated.** Deleting them breaks emulator tests. Their gating is observable only in a release or profile build.
+- **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty. If a plugin lacks its own manifest, **upgrade the plugin**.
+- **The 1024 icon must have no alpha and no pre-rounded corners.** Regenerate from the master; never hand-edit a slot.
+- **`playerId` is NOT a credential.** A re-bind needs ownership, a `seatToken`, or a stale seat — **do not simplify to one condition**.
 - **`allow get` and `allow list` are split on `/rooms`. Never collapse them back to `allow read`.**
 - **`sealed` and `embeddings` are default-deny by having no `match` block.**
 - **`votes` stores opaque option UUIDs during the vote phase**, resolved server-side at reveal. Never store the resolved author pre-reveal.
@@ -247,13 +165,13 @@ Outside G0 and G1 there is no queue. Legitimate triggers: a defect this run surf
 
 ---
 
-## 8. Where the contracts live
+## 7. Where the contracts live
 
 | What | Where |
 |---|---|
 | Open queue, selections, lessons, resolved index | `docs/ongoing_general_errors.md` |
 | Playthrough evidence | `docs/playthrough_findings_marionette.md` |
-| Rules, seat tokens, callables, debug isolation (§7.1), privacy manifest (§7.2), deploy verification | `design_database_and_security.md` |
+| Rules, **seat tokens (§5, now device-verified)**, callables, debug isolation (§7.1), privacy manifest (§7.2), deploy verification | `design_database_and_security.md` |
 | `votes` two-phase contract, phases, 3-player floor, readiness gate | `design_game_state_and_models.md` |
 | Scoring, reveal beats, reveal scoping, unmask withholding, own-answer lockout | `design_scoring_and_ui.md` |
 | Palette, typography, release identity, dialogs, error surfaces, busy states | `design_ui_direction.md` |
@@ -263,33 +181,38 @@ Outside G0 and G1 there is no queue. Legitimate triggers: a defect this run surf
 
 ---
 
-## 9. Validation standard
+## 8. Validation standard
 
-**A `grep` is not an observation.** `Observed:` takes device output; `Reference:` takes source. **§3.2 makes this mechanically checkable — run the check.**
+**A `grep` is not an observation.** `Observed:` takes device output; `Reference:` takes source.
 
-**Prove the artefact ships, not that it exists.** F1's guard is in the source; the button is in the binary. Check the built output.
+**A mechanical check must assert it matched something.** Zero matches and zero violations produce the same number.
+
+**A check written for one shape of a defect will not catch the next shape.** State what it does not prove.
+
+**Prove the artefact ships, not that it exists.** The guard is in the source; the button is in the binary.
 
 **Record every substitution.** An omitted assertion reads as though it passed.
 
-**Check that a test's subject is the thing the spec named.** Right shape, wrong fixture reads identically in a green run.
+**Check that a test's subject is the thing the spec named.**
 
-**A test harness that cannot express the bug will pass against it.** `kDebugMode` is `true` under `flutter test`, so F1 cannot be proved by a widget test.
+**A test harness that cannot express the bug will pass against it.**
 
 **A green suite is not evidence about anything it cannot observe, or about what is deployed.**
 
 **Assert the negative as well as the positive.** **Measure; do not estimate.** **Pair every fix assertion with an over-reach guard, and make sure the guard can actually fail.**
 
-**A driven playthrough is not a played one.** It can check every string and still miss whether the game is fun. Say so in "what the harness could not see."
+**A driven playthrough is not a played one.** Twelve assertions passed and the game may still not be fun. That question is the Apple beta's.
 
 ---
 
-## 10. Feedback loop — what past specs got wrong
+## 9. Feedback loop — what past specs got wrong
 
-- **A convention introduced to stop one failure can become the next one.** `grep -F` traceability was added after a report *invented* prompt text. It stopped invention — then got used *as* the observation, which it can never be. **When you add an evidence rule, say what it does not prove**, and make the rule checkable rather than aspirational.
-- **A fix can be correct while its design doc still describes the vulnerability.** Grep the design docs for the code you just deleted.
+- **A check that matches nothing returns the same number as a check that passes.** Mine did. Assert a non-zero denominator before believing a result.
+- **A convention introduced to stop one failure can become the next one.** `grep -F` traceability stopped invented quotes, then got used *as* the observation.
+- **A fix can be correct while its design doc still describes the vulnerability.**
 - **A documented invariant with no test behind it is a wish.**
 - **When a design doc calls something a secret, grep for where it is published.**
-- **When you redefine what a field holds, enumerate its readers.** `votes` has done it three times.
+- **When you redefine what a field holds, enumerate its readers.**
 - **A guard's test must be run with the guard removed.**
 - **A spec can be over-cautious as well as wrong.**
 - **Working logs rot by appending.** One banner, one Resolved heading, one line per resolved issue.
@@ -303,11 +226,10 @@ Outside G0 and G1 there is no queue. Legitimate triggers: a defect this run surf
 (1) STUDY the item here + its full issue text in ongoing_general_errors.md +
     the files at the cited anchors. RE-GREP every anchor; numbers drift.
 (2) WRITE the falsifying validation FIRST. Run it. OBSERVE IT FAIL. Record
-    the exact output. For anything shipped in a bundle, the check is on the
-    BUILT ARTEFACT, not the source tree.
+    the exact output. For anything shipped in a bundle, check the BUILT
+    ARTEFACT. For a mechanical check, confirm it matched a non-zero count.
 (3) IMPLEMENT exactly as specified. RECORD ANY SUBSTITUTION YOU MAKE.
-(4) VALIDATE per section 9. For a playthrough, run the section 3.2 self-check
-    and paste its output into the report.
+(4) VALIDATE per section 8, including the over-reach guard.
 (5) RECORD observed output in the commit body and, for a guard, in a comment
     on the test.
 (6) RE-RUN THE FULL BATTERY before committing, including
@@ -323,13 +245,9 @@ Outside G0 and G1 there is no queue. Legitimate triggers: a defect this run surf
 
 ## Definition of Done
 
-- [ ] **G0** — `grep -c "functions/index.js"` on the report returns **0**; blocks E1–E12 exist with the §4 subjects; the three restored assertions read `NOT RUN` with a reason; the extra blocks kept and renumbered E13+.
-- [ ] **G1 setup** — binary-vs-source timestamps recorded in the header; `flutter --version` **pasted**, not recalled; all three devices gated on `THE GUEST LEDGER`.
-- [ ] **G1 evidence** — every `Observed:` field contains device output. **The §3.2 self-check returns 0 and its output is pasted into the header.**
-- [ ] **All twelve assertions attempted**, each PASS / FAIL / NOT RUN with a reason, none renumbered, none omitted.
-- [ ] **E7 (seat recovery) explicitly recorded** — force-quit, not background. Never run on a device before.
-- [ ] **E2 covers cards 2 and 3**, not just card 1 — they take a different code path.
-- [ ] **E11 recorded from a release build outside the Marionette session**, with that stated in its block, and **not** reported FAIL from the debug run (§3.4).
-- [ ] **Screenshots saved** under `docs/playthrough_evidence/` and cited by path; commit images for FAIL and NOT RUN blocks.
-- [ ] **Nothing fixed inline.** Failures filed with options.
+- [ ] **Issue 105 selection recorded** before any work begins.
+- [ ] **105.2 (mandatory under every option)** — the self-check re-anchored to list-form fields, asserting a **non-zero** count of `Observed:` blocks, and requiring a **device artefact** in each rather than only the absence of `grep -`. **Observed failing** against a deliberately-broken block, then restored, with the failure output recorded.
+- [ ] **Under A** — E10 re-run on three devices; **evidence from both remaining devices**, not one; screenshots saved and cited.
+- [ ] **Under B** — E10 reads `PASS (emulator-verified) · NOT RUN on device`, citing `game_e2e.spec.ts:2707`.
+- [ ] **Under every option** — the `index.ts:1488` citation repointed to **`:986`**.
 - [ ] Battery at or above the bar: **0 errors** · **≥159** · clean build · **61/61** · deploy gate **exit 0**.

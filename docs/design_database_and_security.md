@@ -96,6 +96,8 @@ A re-bind is now permitted only when **one of three** conditions holds:
 * **The rejection must precede the `return { role }`.** A failed re-bind must disclose nothing — the old code handed the seat's secret `role` back to the caller. A test asserts `role` is absent on the thrown error.
 * **`existing.lastSeen ?? 0`, not a bare comparison.** A legacy document with no `lastSeen` must count as *stale*, not as fresh-forever.
 
+**Device-verified August 21, 2026.** Seat recovery ran on a simulator for the first time: `xcrun simctl terminate` mid-match, then relaunch. The client presented its stored `seat_token_{roomCode}`, bypassed the Guest Ledger entirely, and landed back on `/reveal` with the seat, score and ballot history intact — boot log `DEBUG HEARTBEAT: started timer for room: GLRD, player: 2d72eff1-…`. **Before this the whole three-condition rule existed only behind emulator tests**; a force-quit is the exact motion a real player makes, and it is now known to work.
+
 **Do not simplify this to a single condition.** Staleness alone is too weak — an attacker just waits. Token alone strands any player who reinstalls. All three tested in `functions/test/game_e2e.spec.ts` ("SEC2"), with the stranger-takeover case as the falsifying assertion and four over-reach guards.
 
 ---
