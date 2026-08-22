@@ -1,4 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/game_service.dart';
@@ -324,7 +325,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
             ],
           ),
         ),
-        if (gs.currentPlayer!.isHost) ...[
+        if (kDebugMode && gs.currentPlayer!.isHost) ...[
           const SizedBox(height: 20),
           TextButton(
             onPressed: () => gs.debugSimulateBotResponses(),
@@ -361,7 +362,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
         const SizedBox(height: 16),
         WaitingOnRow(players: activeNonSpectators, readyMap: state.readyPlayers),
         
-        if (gs.currentPlayer!.isHost) ...[
+        if (kDebugMode && gs.currentPlayer!.isHost) ...[
           const SizedBox(height: 20),
           TextButton(
             onPressed: () => gs.debugSimulateBotResponses(),
@@ -561,7 +562,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                       );
                     }(),
                   ],
-                  if (gs.currentPlayer!.isHost)
+                  if (kDebugMode && gs.currentPlayer!.isHost)
                     Padding(
                       padding: const EdgeInsets.only(top: 16),
                       child: TextButton(

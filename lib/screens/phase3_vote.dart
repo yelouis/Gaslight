@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:ui' show FontFeature;
 import 'dart:async';
 import 'package:provider/provider.dart';
@@ -251,11 +252,13 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
               onPressed: () => _confirmAndProceed(context, gs),
             ),
           ),
-          const SizedBox(height: 10),
-          TextButton(
-            onPressed: () => gs.debugSimulateBotResponses(),
-            child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
-          ),
+          if (kDebugMode) ...[
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () => gs.debugSimulateBotResponses(),
+              child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+            ),
+          ],
         ],
       ],
     );
@@ -408,7 +411,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
               }
             },
           ),
-          if (context.read<GameService>().currentPlayer!.isHost)
+          if (kDebugMode && context.read<GameService>().currentPlayer!.isHost)
             TextButton(
               onPressed: () => context.read<GameService>().debugSimulateBotResponses(),
               child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
@@ -566,11 +569,13 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                 text: 'PROCEED TO REVEAL (HOST)',
                 onPressed: () => _confirmAndProceed(context, gs),
               ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => gs.debugSimulateBotResponses(),
-                child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
-              ),
+              if (kDebugMode) ...[
+                const SizedBox(height: 10),
+                TextButton(
+                  onPressed: () => gs.debugSimulateBotResponses(),
+                  child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                ),
+              ],
             ]
           ],
         ),

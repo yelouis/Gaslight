@@ -737,7 +737,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                     ],
                   ),
                 ),
-                    if (players.length < 10)
+                    if (kDebugMode && players.length < 10)
                       Padding(
                         padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
                         child: TextButton(
