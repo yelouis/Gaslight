@@ -70,7 +70,7 @@ That proves the string **exists in the source**. It does not prove it **rendered
 - Pros: targets the gap precisely — roughly half a session, focused on what a grep cannot answer.
 - Cons: leaves a report with two evidence standards in it, which needs stating clearly in the header or it becomes the next reader's trap.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 **Regardless of the option chosen:** E9's citation must be repointed and the missing assertions must be restored as NOT RUN rather than silently dropped. **A report that omits an assertion reads as though it passed.**
 
