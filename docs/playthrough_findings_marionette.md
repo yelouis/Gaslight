@@ -240,6 +240,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - Standalone release screen rendered only authentic game UI (`Type: Text, Text: "THE GUEST LEDGER"`, `Text: "CREATE ROOM"`, `Text: "JOIN ROOM"`, `Text: "READ MANUAL"`) with zero developer or `DEBUG:` controls.
   - Screenshot: `docs/playthrough_evidence/e11_release_lobby.png`.
   - Verified outside Marionette session because `MarionetteBinding` is installed strictly behind `if (kDebugMode)` (`lib/main.dart:26`), which is false in release mode.
+  - **Screen coverage, stated honestly:** the **lobby / Guest Ledger** was checked on the release build. The **truth/forgery** and **vote** screens were **not** reached on device — they require three players in an active match on a release build. The remaining six sites rest on the compile-time argument: `kDebugMode` is a single `const bool`, so if it tree-shakes one gated widget it tree-shakes all seven. **That is reasoning, not observation** — recorded so the limit is visible rather than implied.
 - **Reference:**
   - `lib/screens/lobby_screen.dart:745`
   - `lib/screens/phase2_craft.dart:327`

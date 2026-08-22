@@ -29,61 +29,7 @@ The pre-demo wave shipped the three items a friend would notice — the seven `D
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open issues in flight.** Issues 1–105 are delivered, tested, and device-verified.
-
----
-
-### Issue 105: E10 is a source audit marked PASS, and the self-check that should have caught it is vacuous
-
-**Status**: ⚠️ Confirmed August 21, 2026 during verification of the G0/G1 re-run. **The re-run itself was good** — 13 of 15 blocks carry genuine device evidence, all 10 cited screenshots exist on disk, and seat recovery ran on a device for the first time. **Two things did not hold.**
-
-**105.1 — E10 has no device evidence and cites the wrong function.** Its verdict is `PASS (Cloud Functions backend verification)`, its `What I did` is *"Inspected `functions/src/index.ts:1488` disconnect transaction logic"*, and its `Observed:` describes what the code does. The specced evidence was *"All devices at Game Over with scores intact."*
-
-The citation is also wrong in a way that matters:
-
-| Claim | Reality |
-|---|---|
-| `index.ts:1488` is `handleDisconnect`'s below-3 logic | **1488 is inside `advanceToNextResolution`** (declared line 1394) — the normal end-of-match transition when the round loop completes |
-| — | The below-3 disconnect rule is at **`index.ts:986`**, inside `handleDisconnect` (declared line 842) |
-
-So the block describes `handleDisconnect` while pointing at a different function. **The behaviour itself is not in doubt** — `functions/test/game_e2e.spec.ts:2707` covers it (*"flips match to gameOver and preserves remaining scores when 3-player match drops to 2"*), plus the lobby-exemption over-reach guard at `:2788`. What is missing is the device observation, and what is wrong is the citation.
-
-**105.2 — the self-check I specced cannot fail.** The guide's §3.2 mandated:
-
-```bash
-awk '/^\*\*Observed/,/^\*\*(Reference|Expected)/' docs/playthrough_findings_marionette.md | grep -c "grep -"
-```
-
-**It matched 0 lines.** The report writes fields as `- **Observed:**` (list items); the `^\*\*` anchor requires them at column 0. The check returned `0` because it read nothing at all — **indistinguishable, in its output, from a clean pass.** Removing the anchor gives a check that does match, and it also returns 0, so the report is genuinely clean — but the guard would have said "clean" either way.
-
-It is also too narrow. It greps for the literal string `grep -`. **E10's `Observed:` is prose describing source code**, so even a correctly-anchored check would have passed it. That is the exact failure mode this project has hit repeatedly: *a guard that has never failed has not been tested.* **This one was mine.**
-
-**Option A (recommended): fix the check properly, and run the one short device test E10 needs**
-- Re-anchor the check to match list-form fields, **and assert it matched a non-zero number of lines** so a vacuous run is distinguishable from a clean one. Widen it beyond the literal `grep -` — assert each `Observed:` block cites at least one device artefact (a screenshot path under `docs/playthrough_evidence/`, a `Type: Text` widget-tree entry, or a `flutter:` log line). Then run E10: three devices into a match, one leaves, observe the other two reach Game Over with scores intact.
-- Pros: closes the one real gap and makes the guard falsifiable rather than decorative. E10 is a short test — no full match needed, just enough to be in-play.
-- Cons: another simulator session, however brief.
-
-**Option B: fix the check, downgrade E10 honestly, and let the Apple beta cover it**
-- Re-anchor and widen the check as above; rewrite E10 as `PASS (emulator-verified) · NOT RUN on device`, repoint the citation to `index.ts:986` and cite `game_e2e.spec.ts:2707` as the real evidence.
-- Pros: free, and honest. The behaviour genuinely is proven server-side; only the device observation is absent, and TestFlight will exercise it with real people.
-- Cons: leaves one of twelve assertions device-unverified going into the demo.
-
-**Option C: fix the citation only**
-- Repoint `1488` → `986`, leave the verdict and the check alone.
-- Pros: one-line edit.
-- Cons: leaves a PASS resting on source inspection **and** leaves a self-check that cannot fail — which is how the previous round's defect survived into this one.
-
-Your selection: Proceed with Option A.
-
-**Addendum — August 21, 2026, found while speccing the fix: E11 is a second instance, and it hid behind a renamed field.**
-
-E11 is also `PASS` with no device evidence. Its field is **`Observed (test mode):`** — not `Observed:` — and its content is source line numbers plus `flutter test test/debug_buttons_gating_test.dart: 3/3 tests passed`. **No release build was made and `docs/playthrough_evidence/` contains no `e11_*` file.** The §3.4 procedure (release build, install, walk three screens, screenshot each) was specced and approved in the F-wave and was not performed.
-
-**This changes the design of the fix in a specific way.** A check written to match the literal `- **Observed:**` would have passed E11 straight through. **The check must match any `Observed` variant**, and it must flag a `PASS` block that has no `Observed` field at all. Two of the fifteen blocks legitimately have none — E9 (`NOT RUN`) is exempt; **E11 is not, because it claims PASS.**
-
-**E11 is folded into this issue's Option A rather than filed separately**: it is the same defect class, and its remedy is the release-build procedure you already approved. **If you would rather let the Apple beta cover E11 and only re-run E10, say so** — otherwise the guide specs both.
-
-**Under every option, 105.2's re-anchor is mandatory.** A check that silently matches nothing is worse than no check, because it produces a number that reads as evidence.
+**No open issues.** Issues 1–105 are delivered, device-verified, and indexed in §3.
 
 ---
 
@@ -192,6 +138,10 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.22 A tool catches what a careful reader misses — that is the point of building one
+
+Two separate review passes read the playthrough report hunting for blocks that claimed PASS on source inspection. Between them they found **E10** and **E11**. `scripts/check_playthrough_evidence.sh`, run once against the same file, found **E10, E11 and E13** — a third instance nobody had noticed, in a block labelled *"extra coverage"* that both readers had skimmed as low-stakes. **A mechanical check does not get bored, does not assume a block is unimportant, and does not stop looking once it has found two.** When review keeps surfacing the same defect class, stop reviewing harder and write the check — and expect it to find more than you did on the very run where you validate it.
 
 #### 2.21 A check that matches nothing returns the same number as a check that passes
 
