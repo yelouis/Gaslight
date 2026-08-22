@@ -36,11 +36,135 @@
 - **Never fill in a `Your selection: _____` line.**
 - **Do not weaken an assertion or delete a test to reach green.**
 - **Do not fix anything inline during F4.** Failures are described, not repaired.
-- **Do not touch anything in §7 or §8.**
+- **Do not touch anything in §7 or §8.** **Read §2 before starting any item.**
 
 ---
 
-## 2. F1 — Gate the `DEBUG:` buttons
+## 2. Execution order — how to sequence F1 → F4
+
+**Read this section before touching anything.** The order is not a preference; three of the four items change what is *inside the binary*, and F4 tests a binary. Getting the sequence wrong does not merely waste time — **it produces a confident, wrong verdict**, and one of the traps below would lead an agent to "fix" F1 by deleting code that must stay.
+
+### 2.1 Why the order exists
+
+| Dependency | Reason |
+|---|---|
+| **F1 before F4** | F4's assertion **E11** is *"no `DEBUG:` control is visible anywhere."* That assertion is a test **of F1's effect**. Run F4 first and E11 fails for a reason that has nothing to do with the build's quality. |
+| **F2 before F4** | F4's assertion **E12** checks the icon and launch screen — a test **of F2's output**. |
+| **F3 before F4** | Not required by any assertion, but F3 changes the app bundle. **F4 exists to test the artefact friends receive**, and that artefact includes the privacy manifest. Running F4 on a bundle missing it means re-running F4 later or shipping something never end-to-end tested. |
+| **F1, F2, F3 among themselves** | **Mutually independent.** Any order. They touch disjoint files — Dart screens, iOS asset catalogues, and one new plist. Do them in the numbered order for a clean history, but nothing breaks if you do not. |
+
+**The rule in one line: all of F1, F2 and F3 must be committed and green before F4 begins, and F4 must run on a binary built after all three.**
+
+### 2.2 The build matrix — which build mode proves which item
+
+**This is the part most likely to go wrong, because different items are provable only in different build modes, and one is provable in a mode Marionette cannot drive.**
+
+| Item / assertion | Proved on | Why that mode |
+|---|---|---|
+| **F1** — buttons gated | **release** | `kDebugMode` is `false` **only** in release and profile. In a debug build the buttons are *supposed* to be visible. |
+| **F2** — icon | any build | Icon assets are build-mode independent. Check on the home screen at small size. |
+| **F2** — launch screen | any build, **cold start** | Must be a full quit-and-relaunch; a warm resume never renders the launch screen. |
+| **F3** — manifest in bundle | any **built** `.app` | It is a file-presence check on the bundle, not a runtime behaviour. |
+| **F4 — E1–E10, E12** | **debug** | Marionette requires `MarionetteBinding`, and `lib/main.dart:26` installs it **only** `if (kDebugMode)`. |
+| **F4 — E11** | **release, and outside the Marionette session** | See §2.3. This is the trap. |
+
+### 2.3 ⚠️ The E11 trap — E11 cannot be checked during the Marionette run
+
+**The mechanism, verified in source:**
+
+```dart
+// lib/main.dart:26-30
+if (kDebugMode) {
+  MarionetteBinding.ensureInitialized();   // ← Marionette exists ONLY in debug
+} else {
+  WidgetsFlutterBinding.ensureInitialized();
+}
+```
+
+`kDebugMode` is `false` in **both** profile and release builds. So:
+
+- **Marionette can only attach to a debug build.**
+- **F1's gating only takes effect when `kDebugMode` is false** — i.e. in exactly the builds Marionette cannot attach to.
+- Therefore **there is no build in which Marionette can observe the buttons being correctly hidden.**
+
+**What this means in practice, and what must not happen:**
+
+> **In the F4 Marionette session the `DEBUG:` buttons WILL be visible, and that is CORRECT.** It is a debug build; `kDebugMode` is true; the buttons are supposed to render.
+>
+> **Do NOT record E11 as FAIL from the Marionette session.**
+> **Do NOT "fix" F1 by deleting the buttons** — they are load-bearing for local development, and `debugSimulateBotResponses` drives several existing emulator tests. Deleting them would pass a misread E11 and break the suite.
+> **Do NOT switch F4 to a profile build to work around it** — `kDebugMode` is false in profile too, so `MarionetteBinding` is not installed and Marionette simply cannot connect.
+
+**E11's correct procedure — a separate release build, driven by hand:**
+
+```bash
+flutter build ios --simulator --release
+```
+
+```bash
+xcrun simctl install <UDID> build/ios/iphonesimulator/Runner.app && xcrun simctl launch <UDID> com.whylabs.gaslight
+```
+
+Then walk the four screens that carry the seven sites — **lobby**, **truth/forgery** (`phase2_craft`), **vote** (`phase3_vote`), and confirm **zero** `DEBUG:` strings. Capture a screenshot of each with `xcrun simctl io <UDID> screenshot`.
+
+**Record E11 in the findings doc as its own block, stating explicitly that it was verified on a release build outside the Marionette session, and why** — otherwise the next reader sees an assertion verified by a different method than its neighbours and cannot tell whether that was rigour or a shortcut.
+
+*(A single device is enough for E11 — it is a per-screen rendering check, not a multiplayer one. Reaching the vote screen needs three players, so either run E11 on the release build during a three-device session, or accept lobby + truth/forgery coverage and record the vote screen as checked in a separate pass. State which you did.)*
+
+### 2.4 The gates — what must be true before moving on
+
+**Do not advance past a red gate.** If one fails, stop and fix that item; do not carry a known failure into the next.
+
+| Gate | After | Must be true |
+|---|---|---|
+| **G1** | F1 | All seven sites wrapped, composing with each site's existing condition. `flutter test` **≥156**, analyzer **0 errors**. Buttons still present under `flutter test` (proving gated, not deleted). Committed. |
+| **G2** | F2 | `file` reports the 1024 icon as **RGB, not RGBA**. Launch assets no longer 1×1. Icon eyeballed at 60 px, cold start checked from a full quit. Committed. |
+| **G3** | F3 | `plutil -lint` clean **and** `find build/…/Runner.app -name "PrivacyInfo.xcprivacy"` returns a path — **with the pre-fix run recorded returning nothing.** Committed. |
+| **G4** | before F4 | **The rebuild boundary — see §2.5.** |
+
+### 2.5 G4 — the rebuild boundary
+
+**The single most likely way to waste an F4 session is to run it against a binary built before F1–F3 landed.** Everything appears to work; E11 and E12 report the old behaviour; and the run has to be thrown away.
+
+Perform these in order, and record the result of step 4:
+
+1. **Confirm the tree is clean and all three commits are in.**
+   ```bash
+   git status --short && git log --oneline -4
+   ```
+   `git status` must print nothing, and F1, F2 and F3 must all appear.
+
+2. **Uninstall on every booted simulator** — a reinstall over the top can retain a stale launch image, and `SharedPreferences` can restore a stale room.
+   ```bash
+   for U in $(xcrun simctl list devices booted | grep -oE '[0-9A-F-]{36}'); do xcrun simctl uninstall "$U" com.whylabs.gaslight 2>/dev/null; done
+   ```
+
+3. **Confirm `.env` has `USE_EMULATOR=false`.** It is a bundled asset — editing it after the build has no effect.
+
+4. **Build fresh, and prove the binary is newer than the source.**
+   ```bash
+   flutter build ios --simulator --debug
+   ```
+   ```bash
+   stat -f '%Sm binary' build/ios/iphonesimulator/Runner.app/Runner; git log -1 --format='%cd source' -- lib ios
+   ```
+   **The binary's timestamp must be later than the last commit touching `lib/` or `ios/`.** If it is not, the build did not pick up your changes — stop and investigate rather than proceeding.
+
+5. **Launch one device at a time.** Concurrent builds against the same `build/` directory corrupt each other; start P1, wait for it to come up, then P2, then P3.
+
+6. **Gate on the Guest Ledger.** `take_screenshots` on all three must show `THE GUEST LEDGER` before any assertion runs. A device showing a stale lobby, a crash or a white screen is not ready — **do not proceed with two working devices**; three is the enforced minimum player count.
+
+### 2.6 If a gate fails
+
+**Stop at the failing gate.** Do not proceed to the next item, and do not start F4 with a known-red gate — a playthrough on a build you already know is wrong produces evidence about nothing.
+
+If the failure is a **design decision** rather than a defect — the icon does not read at 60 px and you are unsure what to draw; a plugin turns out to lack its privacy manifest — **file it in `docs/ongoing_general_errors.md` with options and a blank `Your selection: _____` line and stop.** Do not improvise brand or compliance decisions.
+
+If the failure is in **F4 itself**, record it, mark every downstream assertion **NOT RUN**, and continue with whatever remains reachable. **A blocked run reporting six honest NOT RUNs is worth more than one reporting six passes it did not observe.**
+
+---
+
+## 3. F1 — Gate the `DEBUG:` buttons
 
 **What this means for the user:** a friend opening the demo sees `DEBUG: ADD 9 BOTS` in the lobby and `DEBUG: BOTS SUBMIT` on three game screens. They will press one, and it will fail — since Issue 101 gated the callables on `FUNCTIONS_EMULATOR`, these buttons are **visible, tappable and guaranteed to error** in production.
 
@@ -93,7 +217,9 @@ For the six `phase2_craft` / `phase3_vote` sites, the buttons sit in `Column`/`R
 flutter build ios --simulator --release
 ```
 
-Install that build, walk the lobby and all three game screens, and confirm **zero** `DEBUG:` strings. Record it as F4's assertion E11 with a screenshot. **Grep the widget tree via Marionette's `get_interactive_elements` rather than eyeballing** — a small grey label at 10 px is exactly what an eyeball misses.
+Install that build and walk the lobby, the truth/forgery screen and the vote screen, confirming **zero** `DEBUG:` strings. Capture a screenshot of each with `xcrun simctl io <UDID> screenshot`.
+
+> ⚠️ **This check cannot use Marionette, and §2.3 explains why in full.** `MarionetteBinding` is installed only `if (kDebugMode)` (`lib/main.dart:26`), and `kDebugMode` is false in release — so Marionette cannot attach to the only build in which this fix is observable. **Drive the release build by hand.** A 10 px grey label is easy to miss, so screenshot every screen rather than trusting a glance, and zoom in on the region where the button used to sit.
 
 Battery: `flutter analyze lib test` 0 errors · `flutter test` **≥156**.
 
@@ -101,7 +227,7 @@ Commit: `fix(debug): gate developer controls behind kDebugMode`.
 
 ---
 
-## 3. F2 — Real app icon and launch screen
+## 4. F2 — Real app icon and launch screen
 
 **What this means for the user:** today the app installs as the **stock blue Flutter chevron** and cold-starts on a **white flash**. Both say "unfinished demo" before the game renders a single frame.
 
@@ -164,7 +290,7 @@ Commit: `feat(brand): add the app icon and launch screen`.
 
 ---
 
-## 4. F3 — `PrivacyInfo.xcprivacy`
+## 5. F3 — `PrivacyInfo.xcprivacy`
 
 **What this means for the user:** without it the App Store upload is rejected, and the privacy label on the product page is wrong. It costs one file and needs no Apple licence, so it is worth doing while you wait.
 
@@ -254,7 +380,7 @@ Commit: `feat(ios): add the app privacy manifest`.
 
 ---
 
-## 5. F4 — Final E2E playthrough
+## 6. F4 — Final E2E playthrough
 
 **What this means for the user:** this is the last gate before friends play it. It runs on the build they will get, after F1–F3.
 
@@ -294,7 +420,7 @@ Marionette is installed and working — `marionette_flutter` in `pubspec.yaml`, 
 | **E8** | Host kick removes a lobby player; the removed player sees the notice | Both devices |
 | **E9** | A player leaves mid-match from a 4-player game; the match continues | The remaining three |
 | **E10** | A 3-player match dropping to 2 ends for everyone at the final score | All devices reach Game Over, scores intact |
-| **E11** | **No `DEBUG:` control is visible anywhere**, on a release build | Every screen, via `get_interactive_elements` — not by eye |
+| **E11** | **No `DEBUG:` control is visible anywhere**, on a **release** build | ⚠️ **Not checkable in this session — see §2.3.** In the debug build Marionette drives, these buttons are *correctly* visible. Run E11 separately on a release build, by hand, and record it as its own block saying so |
 | **E12** | The app icon and launch screen are the real ones | Home screen at 60 px; a cold start from fully-quit |
 
 **E7 is the one to get right.** Force-quit from the app switcher — not a background — and relaunch. The seat token lives in `SharedPreferences` as `seat_token_{roomCode}`, so a relaunch should present it and land back in the same seat. **If it fails, capture the room code, the player id and the error code before doing anything else**, and file it: that is a security-critical path and a fix must not be improvised.
@@ -313,7 +439,7 @@ Commit: `docs(playthrough): record the pre-demo end-to-end verification`.
 
 ---
 
-## 6. Already delivered — do NOT rework
+## 7. Already delivered — do NOT rework
 
 **Security (Issues 96–101), verified in source and against the live project:** `/rooms` denies `list`; seat re-bind requires ownership, a `seatToken` (hashed in default-deny `sealed`), or a stale seat; `votes` stores opaque option UUIDs with phase/reader/duplicate guards; the reveal merges only the current card; unmask authorship is withheld until the deadline; debug callables are emulator-only *and* host-only.
 
@@ -325,7 +451,7 @@ Commit: `docs(playthrough): record the pre-demo end-to-end verification`.
 
 ---
 
-## 7. Invariants & intentional decisions — do NOT change
+## 8. Invariants & intentional decisions — do NOT change
 
 - **`playerId` is NOT a credential.** A re-bind needs ownership, a `seatToken`, or a stale seat — **do not simplify to one condition**. The token's hash lives only in the default-deny `sealed` subcollection.
 - **`allow get` and `allow list` are split on `/rooms`. Never collapse them back to `allow read`.**
@@ -346,7 +472,7 @@ Commit: `docs(playthrough): record the pre-demo end-to-end verification`.
 
 ---
 
-## 8. Where the contracts live
+## 9. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -362,7 +488,7 @@ Commit: `docs(playthrough): record the pre-demo end-to-end verification`.
 
 ---
 
-## 9. Validation standard
+## 10. Validation standard
 
 **Write validation that fails against the broken state, and observe it fail — and apply that to the test, not only the code.**
 
@@ -382,7 +508,7 @@ Commit: `docs(playthrough): record the pre-demo end-to-end verification`.
 
 ---
 
-## 10. Feedback loop — what past specs got wrong
+## 11. Feedback loop — what past specs got wrong
 
 - **A fix can be correct while its design doc still describes the vulnerability.** Grep the design docs for the code you just deleted.
 - **A documented invariant with no test behind it is a wish.**
@@ -405,7 +531,7 @@ Commit: `docs(playthrough): record the pre-demo end-to-end verification`.
     the exact output. For F2 and F3 the check is on the BUILT ARTEFACT, not
     the source tree.
 (3) IMPLEMENT exactly as specified. Record any substitution you make.
-(4) VALIDATE per section 9, including the over-reach guard, and remove the
+(4) VALIDATE per section 10, including the over-reach guard, and remove the
     guard to prove the test can still fail.
 (5) RECORD the observed failure text in a comment on the test AND in the
     commit body.
@@ -422,10 +548,12 @@ Commit: `docs(playthrough): record the pre-demo end-to-end verification`.
 
 ## Definition of Done
 
-- [ ] **F1** — all seven `DEBUG:` sites wrapped in `kDebugMode`, composing with each site's existing condition; buttons still present under `flutter test`; **a release build shows zero `DEBUG:` strings**, verified via `get_interactive_elements`.
+- [ ] **F1** — all seven `DEBUG:` sites wrapped in `kDebugMode`, composing with each site's existing condition; buttons still present under `flutter test` (proving gated, not deleted); **a release build shows zero `DEBUG:` strings**, driven by hand with a screenshot per screen (**not** via Marionette — §2.3).
 - [ ] **F2** — `flutter_launcher_icons` and `flutter_native_splash` configured and generated from a single 1024×1024 master; **the 1024 icon has no alpha** (`file` reports RGB, not RGBA); launch assets no longer 1×1; icon checked at 60 px and cold start checked from fully-quit.
 - [ ] **F3** — `ios/Runner/PrivacyInfo.xcprivacy` created, `plutil -lint` clean, **added to the Runner target**, and `find build/…/Runner.app -name "PrivacyInfo.xcprivacy"` returns a path — **with the pre-fix run recorded returning nothing**.
 - [ ] **F3** — plugin manifests re-checked after a clean `pod install`; any missing one filed as an upgrade, not written by hand.
+- [ ] **Gates G1–G4 each observed green before the next item began**, and the G4 rebuild boundary's timestamp check (§2.5 step 4) recorded — the binary newer than the last `lib/`/`ios/` commit.
 - [ ] **F4** — all twelve assertions attempted, each PASS / FAIL / NOT RUN with a reason and `grep -F` traceability; **E7 (seat recovery) explicitly recorded** — it has never run on a device.
+- [ ] **E11 recorded as verified outside the Marionette session, on a release build, with that stated in its block** — and **not** reported FAIL from the debug run (§2.3).
 - [ ] **F4** — nothing fixed inline; failures filed with options.
 - [ ] Battery at or above the bar: **0 errors** · **≥156** · clean build · **61/61** · deploy gate **exit 0**.
