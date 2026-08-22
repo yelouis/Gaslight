@@ -17,6 +17,7 @@
 | `npm --prefix functions run build` | clean |
 | `npm --prefix functions test` | **61/61** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0** — 15/15 functions **and** the rules release, each after its own commit |
+| `./scripts/check_playthrough_evidence.sh` | 6th gate added in H1 (enforces R1–R4) |
 
 The pre-demo wave shipped the three items a friend would notice — the seven `DEBUG:` buttons are gated, the raven icon replaced the stock Flutter chevron, the 1×1 launch stubs are real, and the App Store privacy manifest is in the Runner target. **All three verified in the built artefacts, not just in source.**
 
