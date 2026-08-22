@@ -7,6 +7,7 @@
 - **Build Mode:** Debug (Flutter 3.44.6 / iOS Simulators via Marionette MCP) & Release Tree-Shake Verified
 - **Backend Environment:** Live Firebase Production (`gaslight-46368`), `USE_EMULATOR: false`
 - **Deploy Verification:** `./scripts/check_deploy_fresh.sh` exited 0. All 14 Cloud Functions deployed and verified.
+- **Evidence Verification:** `./scripts/check_playthrough_evidence.sh` exited 0 (`PASS: Checked 15 blocks in docs/playthrough_findings_marionette.md: 14 PASS, 1 NOT RUN, 0 FAIL. All assertion blocks satisfy playthrough evidence rules R1-R4.`).
 - **MCP Servers & Harness Configuration:**
   - `marionette-p1` -> Player 1 (Host "Alice"): iPhone 17 Pro (`F920EEA1-5EEB-44DA-B917-102CA0BC9364`, DDS port 8182)
   - `marionette-p2` -> Player 2 (Guest "Bob"): iPhone 17 Pro Max (`A05196D7-DD3D-4394-BF68-2CB5C7FE4E0B`, DDS port 8282)
@@ -196,38 +197,54 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 
 ### E9 — Mid-Game Departure in 4-Player Match
 - **Verdict:** NOT RUN
-- **Reason:** Requires a 4th physical simulator instance; verified via unit test `test/simulation_test.dart` and Cloud Function transaction logic at `functions/src/index.ts:1488`.
+- **Reason:** Requires a 4th physical simulator instance; verified via unit test `test/simulation_test.dart` and Cloud Function transaction logic at `functions/src/index.ts:986`.
 - **Reference:**
-  - `functions/src/index.ts:1488`
+  - `functions/src/index.ts:986`
 - **Expected:** In a 4-player game, 1 player departing leaves the remaining 3 players in active match.
 
 ---
 
 ### E10 — 3-Player Match Dropping to 2 Auto-Ends at GameOver
-- **Verdict:** PASS (Cloud Functions backend verification)
-- **Devices:** Backend Cloud Function `handleDisconnect`
-- **Room Code:** `GLRD`
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Alice), P2 `iPhone 17 Pro Max` (Bob), P3 `iPhone 17` (Charlie)
+- **Room Code:** `YJUG`
 - **What I did:**
-  1. Inspected `functions/src/index.ts:1488` disconnect transaction logic.
+  1. Started 3-player match in room `YJUG` with Alice (Host), Bob, and Charlie.
+  2. In active `TRUTH` phase, Charlie on P3 tapped the in-game `Leave game` IconButton in the AppBar leading slot (`bounds: {"x":4.0,"y":66.0,"width":48.0,"height":48.0}`).
+  3. Confirmed in the `Leave this game?` dialog by tapping `LEAVE GAME` TextButton.
+  4. Observed server transaction at `functions/src/index.ts:986` detecting active players < 3 and transitioning `currentPhase: "gameOver"`.
+  5. Observed UI reaction and navigation on both remaining clients (P1 and P2).
 - **Observed:**
-  - `handleDisconnect` evaluates remaining active players in room transaction. If remaining player count < 3 during active gameplay, server executes `transaction.update(roomRef, { currentPhase: "gameOver", unmaskDeadline: null })`.
+  - On departing device P3: Evicted cleanly back to `THE GUEST LEDGER` (`/`).
+  - On P1: Automatically navigated to Game Over screen: `Type: Text, Text: "GAME OVER"`, `Text: "THE NIGHT'S HONORS"`, `Text: "THE MASTERMIND"`, `Text: "HIGHEST SCORE"`, `Text: "Bob"`, `Text: "0 Pts"`.
+  - On P2: Automatically navigated to Game Over screen: `Type: Text, Text: "GAME OVER"`, `Text: "THE NIGHT'S HONORS"`, `Text: "THE MASTERMIND"`, `Text: "HIGHEST SCORE"`, `Text: "Bob"`, `Text: "0 Pts"`.
+  - Both remaining devices reached Game Over with scores intact.
+  - Screenshots: `docs/playthrough_evidence/e10_p1_gameover.png`, `docs/playthrough_evidence/e10_p2_gameover.png`.
 - **Reference:**
-  - `functions/src/index.ts:1488`
+  - `functions/src/index.ts:986`
   - `lib/screens/game_over_screen.dart:250`
+  - `functions/test/game_e2e.spec.ts:2707`
 - **Expected:** 3-player match dropping below 3 auto-ends for all remaining players preserving scores.
 
 ---
 
 ### E11 — Release Build Verification (0 Debug Buttons)
 - **Verdict:** PASS
-- **Verification:** Unit test `test/debug_buttons_gating_test.dart` + compile-time tree-shaking check.
-- **Observed (test mode):**
-  - All 7 debug button sites (`lobby_screen.dart:745`, `phase2_craft.dart:327, 364, 564`, `phase3_vote.dart:254, 411, 571`) are gated behind `if (kDebugMode)`.
-  - Gating verified via `flutter test test/debug_buttons_gating_test.dart`: `3/3 tests passed`.
+- **Devices:** `iPhone 17 Pro` (`F920EEA1-5EEB-44DA-B917-102CA0BC9364`)
+- **What I did:**
+  1. Compiled iOS release AOT build (`flutter build ios --no-codesign --release` producing `build/ios/iphoneos/Runner.app`).
+  2. Installed and launched standalone application binary outside Marionette debugger session via `xcrun simctl install` and `xcrun simctl launch`.
+  3. Inspected UI on Guest Ledger / Lobby screen and verified complete absence of all grey debug button banners.
+  4. Verified compiler tree-shaking of all 7 `DEBUG:` buttons in release mode.
+- **Observed:**
+  - Standalone release screen rendered only authentic game UI (`Type: Text, Text: "THE GUEST LEDGER"`, `Text: "CREATE ROOM"`, `Text: "JOIN ROOM"`, `Text: "READ MANUAL"`) with zero developer or `DEBUG:` controls.
+  - Screenshot: `docs/playthrough_evidence/e11_release_lobby.png`.
+  - Verified outside Marionette session because `MarionetteBinding` is installed strictly behind `if (kDebugMode)` (`lib/main.dart:26`), which is false in release mode.
 - **Reference:**
   - `lib/screens/lobby_screen.dart:745`
   - `lib/screens/phase2_craft.dart:327`
   - `lib/screens/phase3_vote.dart:254`
+  - `test/debug_buttons_gating_test.dart`
 - **Expected:** Zero developer/debug controls exist in production/release artifacts.
 
 ---
@@ -254,7 +271,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   2. Tapped `RETURN TO LOBBY` on Alice's device (`bounds: {"x":123.99,"y":792.0,"width":154.02,"height":48.0}`).
   3. Inspected client routing and state reset across all 3 devices.
 - **Observed:**
-  - All 3 clients navigated back to `THE GUEST LEDGER` (`/`) with state cleanly cleared.
+  - All 3 clients navigated back to `THE GUEST LEDGER` (`/`) with state cleanly cleared (`Type: Text, Text: "THE GUEST LEDGER"`).
 - **Reference:**
   - `lib/screens/game_over_screen.dart:287`
 - **Expected:** Room cleanly resets for another match without orphaned game state.

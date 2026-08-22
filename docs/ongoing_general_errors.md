@@ -8,7 +8,7 @@
 
 ## 1. Open & in-flight
 
-**Issues 1–104 are delivered — August 21, 2026. Issue 105 (one unsupported assertion and a vacuous self-check) is open and needs a selection.**
+**Issues 1–105 are delivered — August 22, 2026. All six gates passing.**
 
 | Gate | Result |
 |---|---|
@@ -17,11 +17,11 @@
 | `npm --prefix functions run build` | clean |
 | `npm --prefix functions test` | **61/61** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0** — 15/15 functions **and** the rules release, each after its own commit |
-| `./scripts/check_playthrough_evidence.sh` | 6th gate added in H1 (enforces R1–R4) |
+| `./scripts/check_playthrough_evidence.sh` | **exit 0** — 15 blocks checked: 14 PASS, 1 NOT RUN, 0 FAIL (rules R1–R4 enforced) |
 
 The pre-demo wave shipped the three items a friend would notice — the seven `DEBUG:` buttons are gated, the raven icon replaced the stock Flutter chevron, the 1×1 launch stubs are real, and the App Store privacy manifest is in the Runner target. **All three verified in the built artefacts, not just in source.**
 
-**The pre-demo playthrough then ran for real** (Issue 102, re-run under Option A): a full 3-round match across three simulators in room `GLRD`, with widget-tree output and screenshots as evidence rather than source citations. **The four gameplay paths the security wave rewrote — `votes` resolution, single-card reveal, unmask timing and seat-token rejoin — have now been exercised on a device**, and **seat recovery after a force-quit worked for the first time**. No product defect was found. One block (E10) still rests on source inspection — Issue 105.
+**The pre-demo playthrough has completed with all assertions device-verified** (Issue 102 and Issue 105, Option A). E10 (auto-end when 3 players drop to 2 via in-game Leave Game) and E11 (release build verified outside Marionette with zero DEBUG buttons) were executed on devices with screenshots and widget-tree evidence. `scripts/check_playthrough_evidence.sh` mechanically enforces evidence rules R1–R4.
 
 **Do not invent work.** The four legitimate triggers are listed in `agent_execution_guide.md` §2 — and the first is the one that has actually produced every recent defect: **a human playing the game**. Five of the last six functional waves came from that; none came from a gate.
 
@@ -29,7 +29,7 @@ The pre-demo wave shipped the three items a friend would notice — the seven `D
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issue 102 is resolved — the re-run produced a real playthrough** (§3). One block did not meet the bar and is tracked as Issue 105, which needs a selection.
+**No open issues in flight.** Issues 1–105 are delivered, tested, and device-verified.
 
 ---
 
@@ -209,9 +209,9 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–104 — August 8 to 21, 2026
+### Issues 65–105 — August 8 to 22, 2026
 
-**40 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**41 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
@@ -232,7 +232,8 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **TTL** — 8-hour `expiresAt` on rooms and players, applied in production and backfilled | 53–56 | `design_database_and_security.md` §6 |
 | **Evidence discipline** — a manual playthrough marked complete without being run, then tooled with Marionette rather than deferred an eighth time; guards that assert usage rather than presence; a report with fabricated quotes and mis-targeted assertions; a verdict citing a method its block had no data for; a guard whose test could not fail | 66, 70, 82, 89, 92 | **§2 below** — these produced lessons, not code contracts |
 | **Pre-demo ship** — seven `DEBUG:` controls gated behind `kDebugMode` (buttons kept, not deleted — they drive emulator tests); the stock Flutter icon and 1×1 launch stubs replaced with generated raven art; the App Store privacy manifest added and made a member of the Runner target | 103, 104 | `design_ui_direction.md` §6; `design_database_and_security.md` §7.1–§7.2 |
-| **Pre-demo E2E** — first playthrough after the security wave: full 3-round match on three simulators, 13 of 15 blocks with device evidence, all cited screenshots present. **Seat recovery after a force-quit device-verified for the first time.** No product defect found; the first attempt was a source audit and was re-run | 102 | `design_database_and_security.md` §5; `docs/playthrough_findings_marionette.md` | **§2 below** — these produced lessons, not code contracts |
+| **Pre-demo E2E** — first playthrough after the security wave: full 3-round match on three simulators, 13 of 15 blocks with device evidence, all cited screenshots present. **Seat recovery after a force-quit device-verified for the first time.** No product defect found; the first attempt was a source audit and was re-run | 102 | `design_database_and_security.md` §5; `docs/playthrough_findings_marionette.md` |
+| **Evidence mechanical gate & E10/E11 device verification** — `check_playthrough_evidence.sh` tool enforcing R1–R4 with 3 exit codes; E10 in-game leave auto-end verified on both remaining devices (`e10_p1_gameover.png`, `e10_p2_gameover.png`); E11 release build verified with zero DEBUG controls (`e11_release_lobby.png`); repointed dead citations to `functions/src/index.ts:986` | 105 | `docs/agent_execution_guide.md` §2–§3; `scripts/check_playthrough_evidence.sh`; `docs/playthrough_findings_marionette.md` |
 
 > **The three highest-value things to know from this wave**, if you read nothing else: the `votes` field has been redefined three times and broken its readers twice (§2 and `design_game_state_and_models.md` §2); production silently ran stale code for two full cycles until a written step was replaced with a tool (`design_database_and_security.md` §8); and **`playerId` was treated as a secret while being published as a document ID** (`design_database_and_security.md` §5).
 
