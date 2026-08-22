@@ -72,7 +72,15 @@ It is also too narrow. It greps for the literal string `grep -`. **E10's `Observ
 - Pros: one-line edit.
 - Cons: leaves a PASS resting on source inspection **and** leaves a self-check that cannot fail — which is how the previous round's defect survived into this one.
 
-Your selection: _____
+Your selection: Proceed with Option A.
+
+**Addendum — August 21, 2026, found while speccing the fix: E11 is a second instance, and it hid behind a renamed field.**
+
+E11 is also `PASS` with no device evidence. Its field is **`Observed (test mode):`** — not `Observed:` — and its content is source line numbers plus `flutter test test/debug_buttons_gating_test.dart: 3/3 tests passed`. **No release build was made and `docs/playthrough_evidence/` contains no `e11_*` file.** The §3.4 procedure (release build, install, walk three screens, screenshot each) was specced and approved in the F-wave and was not performed.
+
+**This changes the design of the fix in a specific way.** A check written to match the literal `- **Observed:**` would have passed E11 straight through. **The check must match any `Observed` variant**, and it must flag a `PASS` block that has no `Observed` field at all. Two of the fifteen blocks legitimately have none — E9 (`NOT RUN`) is exempt; **E11 is not, because it claims PASS.**
+
+**E11 is folded into this issue's Option A rather than filed separately**: it is the same defect class, and its remedy is the release-build procedure you already approved. **If you would rather let the Apple beta cover E11 and only re-run E10, say so** — otherwise the guide specs both.
 
 **Under every option, 105.2's re-anchor is mandatory.** A check that silently matches nothing is worse than no check, because it produces a number that reads as evidence.
 
