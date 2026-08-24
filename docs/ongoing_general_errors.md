@@ -28,7 +28,53 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open product defects.** Issues 1–106 are delivered and indexed in §3. Issue 106 — the chosen deck being ignored — was found by **a human playing the game**, after all 19 web assertion blocks had passed clean. That remains the only source that has ever produced a functional defect here.
+### Issue 107 — Define what "random from the selected deck" means for the initial draw and for re-rolls
+
+**Asked for:** "the prompt reroll and the initial prompt to be random from the deck that is selected."
+
+**What is already true — do NOT rework it.** The **initial draw is already uniformly random from the selected deck**: `startGame` calls `PromptDecks.drawPrompts(deckId, activePlayers.length)`, which Fisher-Yates shuffles a copy and slices, and `deckId` is resolved from `room.selectedDeckId` (Issue 106). Each player's first prompt is seeded into `sealed/{playerId}.seenPrompts` at `functions/src/index.ts:476`. There is nothing to fix on that path, and an agent that "randomises" it will only churn working code.
+
+**What is genuinely not random: the re-roll.** `drawOneExcluding` deliberately draws **without replacement** — it prefers prompts outside `excluded`, which is everything the player has already seen plus everything live on a card. So successive re-rolls walk the deck rather than sampling it, and a player who re-rolls repeatedly sees each prompt exactly once until the deck runs out. That is a design choice, not an accident, and it is the opposite of "random from the deck." Which behaviour is wanted is the user's call.
+
+**Decision 1 — re-roll sampling:**
+- **Option A — Uniform random every time.** Each re-roll samples the selected deck uniformly, so a prompt may recur. Simplest to state and matches "random from the deck" literally. Cost: a re-roll can hand back something the player saw two re-rolls ago, which can read as broken.
+- **Option B — Uniform random, minus what is live on the table.** Sample uniformly but never return a prompt currently on another card or the caller's own current prompt. Repeats across a player's own history are allowed. Keeps "random" honest while guaranteeing a re-roll visibly changes the card. **`seenPrompts` stops being an exclusion and becomes history only.**
+- **Option C — Keep without-replacement (today's behaviour).** Every re-roll is a new prompt until the deck is exhausted, then it relaxes. Most useful to players, least literally "random."
+
+**Decision 2 — what a `custom` game re-rolls from.** There is no static `custom` deck, so `rerollPrompt` maps `custom` → `the_daily_grind` (`index.ts:856`), documented in `design_prompt_system.md` §3. On a custom game a re-roll therefore serves a prompt **nobody at the table wrote**.
+- **Option A — Keep the fallback.** Re-rolls on a custom game come from `the_daily_grind`.
+- **Option B — Re-roll from the custom pool.** Draw from the players' own contributed prompts, honouring the P10 rule that you never receive your own; fall back to `the_daily_grind` only when the pool cannot supply one.
+
+**Your selection (Decision 1): _____**
+
+**Your selection (Decision 2): _____**
+
+---
+
+### Issue 108 — A custom-deck game cannot advance past round 1
+
+**Status: CONFIRMED.** Not reported by a player; found while specifying Issue 107.
+
+`advanceToNextResolution` resolves the deck for the next round as `const deckId = room.selectedDeckId || "the_daily_grind";` (`functions/src/index.ts:1476`). For a custom game `room.selectedDeckId` is the sentinel `"custom"`, which is passed straight into a deck lookup that has no such key:
+
+```
+$ node -e "PromptDecks.drawOneExcluding('custom', new Set())"
+THROWS: not-found | Failed to load deck: custom. Ensure it is defined in PromptDecks.
+control (the_daily_grind): "The most inappropriate place I've taken ..."
+```
+
+So **any custom-deck room with `totalRounds > 1` throws when the last card of round 1 resolves**, and the match cannot advance. The re-roll path at `:856` maps `custom` → `the_daily_grind` correctly; this path does not. The two disagree, which is how it survived.
+
+**Blast radius:** P10 custom decks are a shipped feature and the lobby offers 1–5 rounds, so every multi-round custom game is affected. Single-round custom games are unaffected, which is likely why no playthrough caught it — and the web sweep (W1–W19) ran a single round.
+
+**Options:**
+- **Option A — Mirror the re-roll path.** Resolve `custom` → `the_daily_grind` at `:1476`, exactly as `:856` does. Smallest fix; round 2+ of a custom game plays built-in prompts, which contradicts what the host chose.
+- **Option B — Draw round 2+ from the custom pool.** Re-run the P10 assignment against the players' contributed prompts for each new round, topping up from `the_daily_grind` when the pool is short — the same rule `startGame` already implements at `index.ts:336`. Larger, and the correct behaviour for the feature.
+- **Option C — Resolve the deck once, at `startGame`.** Store the *effective* deck on the room and have every later draw read that, so no code path re-derives it and the two sites cannot disagree again.
+
+**Recommendation: B, with C's discipline** — whichever draw rule is chosen, having one resolution site is what stops this class of defect returning. Note Decision 2 of Issue 107 answers the same underlying question; **settle 107.2 first and make 108 agree with it.**
+
+**Your selection: _____**
 
 ---
 
