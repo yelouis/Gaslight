@@ -8,90 +8,29 @@
 
 ## 1. Open & in-flight
 
-**Wave J — prompt source & sampling — is specced and awaiting build (August 24, 2026).** Issues 107, 108 and 109 all have selections: **109 → Option C**, **108 → Option B**, **107 → Option B**. The implementation is in `agent_execution_guide.md` §3–§6. Build order is **J1 (109) → J2 (108) → J3 (107)** and it is a real dependency, not a preference.
+**Wave J — prompt source & sampling (J1 → J2 → J3) — is complete (August 24, 2026).** All three selected options delivered and tested: **109 → Option C** (`bf38434`), **108 → Option B** (`64daf11`), **107 → Option B** (`74489b0`).
 
-**Issues 1–106 are delivered.** Gate state, measured August 24, 2026:
+**Issues 1–109 are delivered.** Gate state, measured August 24, 2026:
 
 | Gate | Result |
 |---|---|
 | `flutter analyze lib test` | **0 errors** (21 warnings, 197 infos) |
-| `flutter test` | **178/178** |
+| `flutter test` | **179/179** |
 | `npm --prefix functions run build` | clean |
-| `npm --prefix functions test` | **63/63** |
-| `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** Server commits (`1c5d69b` and earlier) are undeployed; it goes green after `firebase deploy --only functions`, which is the user's call |
+| `npm --prefix functions test` | **68/68** |
+| `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** Server commits (`1c5d69b`, `bf38434`, `64daf11`, `74489b0`) are undeployed; it goes green after `firebase deploy --only functions`, which is the user's call |
 | `./scripts/check_playthrough_evidence.sh` | **exit 0** — 15 blocks (iOS): 14 PASS, 1 NOT RUN, 0 FAIL |
 | `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` | **exit 0** — 19 blocks (Web) |
 
 **Wave I — the web E2E playthrough (I1 → I2 → I3) — is complete**, with PNG evidence under `docs/playthrough_evidence/`. The release web build compiles and renders on CanvasKit, Firebase initialises clean, anonymous auth and callables work from browser contexts, session restore survives reload, and layouts hold at mobile, tablet and desktop.
 
-**Undeployed and therefore not yet true in production:** the curated deck contents (`3f570e6`), unlimited re-rolls (`1c5d69b`), and the Issue 106 deck guard's later refinements. Prompts are drawn once at `startGame`, so even after deploying, a room already in progress keeps the prompts it started with — manual verification needs a **new** game.
+**Undeployed and therefore not yet true in production:** the curated deck contents (`3f570e6`), unlimited re-rolls (`1c5d69b`), prompt source resolution & custom multi-round advance (`bf38434`), custom pool drawing & re-rolls (`64daf11`), uniform re-roll sampling (`74489b0`), and the Issue 106 deck guard's later refinements. Prompts are drawn once at `startGame`, so even after deploying, a room already in progress keeps the prompts it started with — manual verification needs a **new** game.
 
 **Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-### Issue 107: Re-rolls draw without replacement, not at random
-**Status**: ⚠️ Confirmed Unresolved — Verified in `functions/src/prompt_decks.ts` (`drawOneExcluding`) and `functions/src/index.ts` (`rerollPrompt`, ~line 850). The re-roll builds `excluded` as everything live on a card **plus the caller's entire `sealed.seenPrompts` history**, and prefers anything outside it. Successive re-rolls therefore *walk* the deck rather than sample it — each prompt appears exactly once until the deck is spent. That is a deliberate design choice, and it is the opposite of "random from the selected deck".
-
-**The initial draw is NOT affected and needs no change.** `startGame` calls `PromptDecks.drawPrompts(deckId, activePlayers.length)`, which Fisher-Yates shuffles a copy and slices; `deckId` comes from `room.selectedDeckId` (Issue 106) and each first prompt is seeded into `sealed.seenPrompts` at `index.ts:476`. Verified in source — do not rework it.
-
-**Option A**: **Uniform every time** — sample the selected deck uniformly on every re-roll, ignoring history entirely.
-  - *Pros*: Literally "random from the deck", and the simplest rule to state, test and reason about. `seenPrompts` stops mattering to sampling.
-  - *Cons*: A re-roll can hand back the prompt the player is already looking at, which reads as a broken button. Players will re-roll repeatedly to escape a prompt and get it again.
-
-**Option B (recommended)**: **Uniform, minus whatever is live on the table** — sample uniformly from the deck excluding every prompt currently on a card, including the caller's own.
-  - *Pros*: Genuinely random, and a re-roll always visibly changes the card. Two players can never be handed the same prompt. Smallest change from today — pass the in-play set as both arguments and stop unioning in `cardSeen`.
-  - *Cons*: The same prompt can return later in the game, so a player who re-rolls a lot will see repeats. `seenPrompts` becomes history-only and its name gets misleading.
-
-**Option C**: **Keep without-replacement (today's behaviour)** — every re-roll is a new prompt until the deck is spent, then it relaxes.
-  - *Pros*: Best felt experience — a re-roll is always genuinely new. Already built, tested and deployed; zero risk.
-  - *Cons*: Not what was asked for. Sampling is predictable rather than random, and this item then produces no code change at all.
-
-Your selection: Proceed with Option B is it is not too hard to do. Otherwise do Option A.
-
----
-
-### Issue 108: A custom game re-rolls prompts that nobody at the table wrote
-**Status**: ⚠️ Confirmed Unresolved — Verified at `functions/src/index.ts:856`: `const deckId = room.selectedDeckId === "custom" ? "the_daily_grind" : room.selectedDeckId;`. There is no static `custom` deck, so a re-roll on a custom game silently serves a built-in prompt. Documented in `design_prompt_system.md` §3, so it is intentional rather than an accident — but it defeats the point of P10 custom decks, where the whole appeal is playing on prompts the group wrote.
-
-**Option A**: **Keep the fallback** — re-rolls on a custom game continue to come from `the_daily_grind`.
-  - *Pros*: Zero work and zero risk; guarantees a re-roll can always be served even when the contributed pool is tiny.
-  - *Cons*: A host who set up a custom deck gets built-in prompts the moment anyone re-rolls, with nothing on screen explaining why.
-
-**Option B (recommended)**: **Re-roll from the custom pool** — draw from the players' contributed prompts, honouring the P10 rule that you never receive your own, and fall back to `the_daily_grind` only when the pool genuinely cannot supply one.
-  - *Pros*: The feature behaves as advertised. The assignment rule already exists in `startGame`'s custom branch (`index.ts:336`) and can be extracted and reused rather than re-derived.
-  - *Cons*: More code on a transactional path, and the fallback still has to exist for small pools — so both behaviours must be tested, not just the happy one.
-
-Your selection: Proceed with Option B.
-
----
-
-### Issue 109: A custom-deck game cannot advance past round 1
-**Status**: ⚠️ Confirmed Unresolved — Verified by direct call against the compiled deck module. `advanceToNextResolution` resolves the next round's deck as `const deckId = room.selectedDeckId || "the_daily_grind";` (`functions/src/index.ts:1476`), which passes the literal sentinel `"custom"` into a lookup that has no such key:
-
-```
-$ node -e "PromptDecks.drawOneExcluding('custom', new Set())"
-THROWS: not-found | Failed to load deck: custom. Ensure it is defined in PromptDecks.
-control (the_daily_grind): "The most inappropriate place I've taken ..."
-```
-
-Every custom-deck room with `totalRounds > 1` throws as the last card of round 1 resolves, and the match cannot advance. `rerollPrompt` at `:856` maps the sentinel correctly and `:1476` does not — **that disagreement is the whole bug**. Single-round custom games are unaffected, which is why no playthrough caught it: the web sweep (W1–W19) ran one round.
-
-**Option A**: **Mirror the re-roll path** — resolve `custom` → `the_daily_grind` at `:1476`, exactly as `:856` does.
-  - *Pros*: One-line fix, immediately unblocks multi-round custom games, and matches existing documented behaviour.
-  - *Cons*: Round 2 onward silently plays built-in prompts on a custom deck. Leaves two independent sites deciding what `custom` means, so they can drift apart again.
-
-**Option B**: **Draw later rounds from the custom pool** — re-run the P10 assignment against contributed prompts each round, topping up from `the_daily_grind` when short.
-  - *Pros*: Correct behaviour for the feature, and consistent with Issue 108 Option B.
-  - *Cons*: Still leaves the deck being re-derived at each draw site; fixes this instance without preventing the next one.
-
-**Option C (recommended)**: **Resolve the effective deck once, at `startGame`** — store the resolved deck (or the resolved prompt source) on the room, and have every later draw read that single field instead of re-deriving it from the sentinel. Pair it with whichever draw rule Issue 108 selects.
-  - *Pros*: Fixes the crash *and* removes the class of defect — no two sites can disagree about what `custom` means, because only one site decides. Makes the sentinel a lobby-only concept.
-  - *Cons*: Touches the room schema and the start path, so it needs a migration thought for rooms already in flight (an 8-hour TTL bounds that). Largest of the three.
-
-> **Sequencing**: Issue 108 and this issue answer the same underlying question. **Settle 108 first**, then make 109 agree with it.
-
-Your selection: Proceed with Option C.
+*No unresolved issues at this time.*
 
 ---
 
@@ -235,9 +174,9 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–105 — August 8 to 22, 2026
+### Issues 65–109 — August 8 to 24, 2026
 
-**41 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**44 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
@@ -262,6 +201,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Chosen deck ignored — every game played The Daily Grind** (`_selectedDeck` initialised once, read once, never assigned; `startGame` trusted the caller's deck over the room's). Fixed **A+C**: server resolves from `room.selectedDeckId` *and* rejects a mismatched claim with `invalid-argument`; dead field deleted; family-friendly toggle now writes through so it cannot desync the lobby from the room | 106 | `design_prompt_system.md` §2; `functions/src/index.ts:293`; `test/deck_selection_test.dart` |
 | **Evidence mechanical gate & E10/E11 device verification** — `check_playthrough_evidence.sh` tool enforcing R1–R4 with 3 exit codes; E10 in-game leave auto-end verified on both remaining devices (`e10_p1_gameover.png`, `e10_p2_gameover.png`); E11 release build verified with zero DEBUG controls (`e11_release_lobby.png`); repointed dead citations to `functions/src/index.ts:986` | 105 | `docs/agent_execution_guide.md` §2–§3; `scripts/check_playthrough_evidence.sh`; `docs/playthrough_findings_marionette.md` |
 | **Web E2E Playthrough (Wave I)** — Playwright automated harness (`test/web_e2e/`); I1 evidence gate widened with strict PNG requirement for W blocks; W1–W16 3-player match with falsification, truth, forgeries, voting lockout, unmasking, standings, GameOver, mid-match refresh restoral, case file share, console hygiene, and below-3 auto-end; W17–W19 responsive sweeps across mobile (375x812), tablet (768x1024), and desktop (1280x800) with 15 screenshots | 106 (Wave I) | `docs/playthrough_findings_web.md`; `test/web_e2e/`; `scripts/check_playthrough_evidence.sh` |
+| **Prompt Source & Sampling (Wave J)** — resolved effective prompt source on `GameState` killing `"custom"` sentinel crash (109 / J1); custom game prompt drawing and re-rolls from players' contributed pool with self-author lockout (108 / J2); uniform re-roll sampling minus live in-play table cards (107 / J3) | 107, 108, 109 | `design_prompt_system.md` §3, §5; `functions/src/index.ts` |
 
 > **The three highest-value things to know from this wave**, if you read nothing else: the `votes` field has been redefined three times and broken its readers twice (§2 and `design_game_state_and_models.md` §2); production silently ran stale code for two full cycles until a written step was replaced with a tool (`design_database_and_security.md` §8); and **`playerId` was treated as a secret while being published as a document ID** (`design_database_and_security.md` §5).
 
