@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
 # scripts/check_playthrough_evidence.sh
 #
-# Validates playthrough findings evidence rules for Gaslight E2E reports.
+# Validates playthrough findings evidence rules for Gaslight E2E reports (iOS E blocks and Web W blocks).
 #
 # Exit codes:
 #   0: All blocks satisfy evidence rules. Prints block counts and breakdown.
 #   1: One or more blocks violate rules. Prints each offending block and rule.
 #   2: Could not verify (file missing, unreadable, or 0 blocks parsed).
 #
-# Falsification record against pre-H2 docs/playthrough_findings_marionette.md:
-#   $ ./scripts/check_playthrough_evidence.sh
-#   FAIL: 2 violation(s) found across 15 blocks:
-#     [E10] Rule R3 violation: PASS block's Observed field contains no device artefacts (screenshot path, Type: widget entry, or flutter: log line)
-#       Offending Observed content:
-#         `handleDisconnect` evaluates remaining active players in room transaction. If remaining player count < 3 during active gameplay, server executes `transaction.update(roomRef, { currentPhase: "gameOver", unmaskDeadline: null })`.
-#     [E11] Rule R3 violation: PASS block's Observed field contains no device artefacts (screenshot path, Type: widget entry, or flutter: log line)
-#       Offending Observed content:
-#         All 7 debug button sites (`lobby_screen.dart:745`, `phase2_craft.dart:327, 364, 564`, `phase3_vote.dart:254, 411, 571`) are gated behind `if (kDebugMode)`.
-#         Gating verified via `flutter test test/debug_buttons_gating_test.dart`: `3/3 tests passed`.
+# Falsification record for I1 (Web blocks R3 strict PNG enforcement):
+#   1. W1 PASS with only Type: Text and no PNG:
+#      $ ./scripts/check_playthrough_evidence.sh /tmp/test_w1.md -> exit 1
+#      FAIL: 1 violation(s) found across 1 blocks:
+#        [W1] Rule R3 violation: Web PASS/FAIL block's Observed field must contain a PNG screenshot path under docs/playthrough_evidence/
+#   2. W1 PASS with docs/playthrough_evidence/w1.png:
+#      $ ./scripts/check_playthrough_evidence.sh /tmp/test_w1.md -> exit 0 (1 PASS)
+#   3. E1 PASS with only Type: Text (iOS):
+#      $ ./scripts/check_playthrough_evidence.sh /tmp/test_e1.md -> exit 0 (1 PASS)
+#   4. W2 NOT RUN with Reason (over-reach guard):
+#      $ ./scripts/check_playthrough_evidence.sh /tmp/test_w2.md -> exit 0 (1 NOT RUN)
+#   5. Default iOS report regression:
+#      $ ./scripts/check_playthrough_evidence.sh -> exit 0 (14 PASS, 1 NOT RUN, 0 FAIL)
 
 set -euo pipefail
 
@@ -41,19 +44,19 @@ except Exception as e:
     print(f"ERROR: Could not verify — failed to read {report_path}: {e}", file=sys.stderr)
     sys.exit(2)
 
-# Split into blocks on '### E' headings
-heading_regex = re.compile(r'(?m)^###\s+(E\d+.*?)$')
+# Split into blocks on '### [EW]' headings
+heading_regex = re.compile(r'(?m)^###\s+([EW]\d+.*?)$')
 splits = heading_regex.split(content)
 
 if len(splits) < 3:
-    print(f"ERROR: Could not verify — zero assertion blocks (### E...) found in {report_path}", file=sys.stderr)
+    print(f"ERROR: Could not verify — zero assertion blocks (### [EW]...) found in {report_path}", file=sys.stderr)
     sys.exit(2)
 
 blocks = []
 for i in range(1, len(splits), 2):
     heading = splits[i].strip()
     body = splits[i + 1] if i + 1 < len(splits) else ""
-    id_match = re.match(r'^(E\d+)', heading)
+    id_match = re.match(r'^([EW]\d+)', heading)
     block_id = id_match.group(1) if id_match else heading
     blocks.append({
         "id": block_id,
@@ -86,6 +89,7 @@ grep_banned_regex = re.compile(r'grep\s+-')
 for block in blocks:
     bid = block["id"]
     body = block["body"]
+    is_w_block = bid.startswith("W")
     
     # 1. Extract Verdict
     vmatch = verdict_regex.search(body)
@@ -143,19 +147,30 @@ for block in blocks:
         violations.append(f"[{bid}] Rule R4 violation: Observed field contains banned 'grep -' command:\n    {obs_content}")
         continue
     
-    # 4. Rule R3: Positive check (must contain at least one device artefact)
+    # 4. Rule R3: Positive check
     has_png = bool(artefact_png_regex.search(obs_content))
     has_widget = bool(artefact_widget_regex.search(obs_content))
     has_log = bool(artefact_log_regex.search(obs_content))
     
-    if not (has_png or has_widget or has_log):
-        lines = [l.strip() for l in obs_content.splitlines() if l.strip()]
-        preview = "\n        ".join(lines[:4])
-        violations.append(
-            f"[{bid}] Rule R3 violation: PASS block's Observed field contains no device artefacts "
-            f"(screenshot path, Type: widget entry, or flutter: log line)\n"
-            f"      Offending Observed content:\n        {preview}"
-        )
+    lines = [l.strip() for l in obs_content.splitlines() if l.strip()]
+    preview = "\n        ".join(lines[:4])
+    
+    if is_w_block:
+        # On web, there is no widget tree and no flutter: log.
+        # Strict requirement: Must have a PNG under docs/playthrough_evidence/
+        if not has_png:
+            violations.append(
+                f"[{bid}] Rule R3 violation: Web PASS/FAIL block's Observed field must contain a PNG screenshot path under docs/playthrough_evidence/\n"
+                f"      Offending Observed content:\n        {preview}"
+            )
+    else:
+        # iOS (E) blocks accept screenshot path, Type: widget entry, or flutter: log line
+        if not (has_png or has_widget or has_log):
+            violations.append(
+                f"[{bid}] Rule R3 violation: PASS block's Observed field contains no device artefacts "
+                f"(screenshot path, Type: widget entry, or flutter: log line)\n"
+                f"      Offending Observed content:\n        {preview}"
+            )
 
 if violations:
     print(f"FAIL: {len(violations)} violation(s) found across {total_blocks} blocks:")
