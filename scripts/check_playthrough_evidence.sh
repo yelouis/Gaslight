@@ -21,21 +21,38 @@
 #      $ ./scripts/check_playthrough_evidence.sh /tmp/test_w2.md -> exit 0 (1 NOT RUN)
 #   5. Default iOS report regression:
 #      $ ./scripts/check_playthrough_evidence.sh -> exit 0 (14 PASS, 1 NOT RUN, 0 FAIL)
+#
+# Falsification record for L1 (Rule R5 - Cited PNG artefacts must exist on disk):
+#   1. Move cited PNG aside:
+#      $ git mv docs/playthrough_evidence/e10_p1_gameover.png docs/playthrough_evidence/e10_p1_gameover.png.bak
+#      $ ./scripts/check_playthrough_evidence.sh -> exit 1
+#      FAIL: 1 violation(s) found across 15 blocks:
+#        [E10] Rule R5 violation: Cited artefact does not exist on disk: docs/playthrough_evidence/e10_p1_gameover.png
+#   2. Restore cited PNG:
+#      $ git mv docs/playthrough_evidence/e10_p1_gameover.png.bak docs/playthrough_evidence/e10_p1_gameover.png
+#      $ ./scripts/check_playthrough_evidence.sh -> exit 0 (14 PASS, 1 NOT RUN, 0 FAIL; 14 artefact file paths verified on disk)
+#   3. Over-reach guard: E9 (NOT RUN with no PNG) is not flagged by R5.
+#   4. Non-zero match assertion: 14 artefacts verified on iOS, 37 on Web.
+
 
 set -euo pipefail
 
-REPORT_FILE="${1:-docs/playthrough_findings_marionette.md}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPORT_FILE="${1:-$REPO_ROOT/docs/playthrough_findings_marionette.md}"
 
 if [[ ! -f "$REPORT_FILE" ]]; then
   echo "ERROR: Could not verify — report file does not exist: $REPORT_FILE" >&2
   exit 2
 fi
 
-python3 - "$REPORT_FILE" << 'EOF'
+python3 - "$REPORT_FILE" "$REPO_ROOT" << 'EOF'
+import os
 import sys
 import re
 
 report_path = sys.argv[1]
+repo_root = sys.argv[2]
 
 try:
     with open(report_path, "r", encoding="utf-8") as f:
@@ -73,6 +90,7 @@ pass_count = 0
 not_run_count = 0
 fail_count = 0
 other_count = 0
+total_pngs_checked = 0
 
 violations = []
 
@@ -109,14 +127,14 @@ for block in blocks:
     else:
         other_count += 1
 
-    # Check NOT RUN rules
+    # Check NOT RUN rules (R5 over-reach guard: NOT RUN blocks carry no required artefact check)
     if is_not_run:
         rmatch = reason_regex.search(body)
         if not rmatch or not rmatch.group(1).strip():
             violations.append(f"[{bid}] NOT RUN block is missing a non-empty **Reason:** line")
         continue
 
-    # Rules R2 - R4 apply to PASS and FAIL blocks
+    # Rules R2 - R5 apply to PASS and FAIL blocks
     # 2. Extract Observed field matching any **Observed...:** header
     obs_matches = list(observed_header_regex.finditer(body))
     if not obs_matches:
@@ -172,13 +190,28 @@ for block in blocks:
                 f"      Offending Observed content:\n        {preview}"
             )
 
+    # 5. Rule R5: Existence check for every cited PNG artefact on disk
+    cited_pngs = artefact_png_regex.findall(obs_content)
+    for p in cited_pngs:
+        total_pngs_checked += 1
+        full_png_path = os.path.join(repo_root, p)
+        if not os.path.isfile(full_png_path):
+            violations.append(
+                f"[{bid}] Rule R5 violation: Cited artefact does not exist on disk: {p}\n"
+                f"      Expected absolute path: {full_png_path}"
+            )
+
+# Non-zero match assertion: ensure rule executed on actual data
+if total_blocks > 0 and (pass_count + fail_count) > 0 and total_pngs_checked == 0 and any(b["id"].startswith("W") for b in blocks):
+    violations.append(f"FATAL: Rule R5 evaluated 0 cited PNG artefacts across {total_blocks} blocks.")
+
 if violations:
     print(f"FAIL: {len(violations)} violation(s) found across {total_blocks} blocks:")
     for v in violations:
         print(f"  {v}")
     sys.exit(1)
 
-print(f"PASS: Checked {total_blocks} blocks in {report_path}: {pass_count} PASS, {not_run_count} NOT RUN, {fail_count} FAIL.")
-print("All assertion blocks satisfy playthrough evidence rules R1-R4.")
+print(f"PASS: Checked {total_blocks} blocks ({total_pngs_checked} artefact file paths verified on disk) in {report_path}: {pass_count} PASS, {not_run_count} NOT RUN, {fail_count} FAIL.")
+print("All assertion blocks satisfy playthrough evidence rules R1-R5.")
 sys.exit(0)
 EOF
