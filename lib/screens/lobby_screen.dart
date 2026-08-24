@@ -459,6 +459,88 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     return AnimatedLobbyBackground(child: _buildEntryForm(theme));
   }
 
+  List<String> _availableDecks() => [
+    ...PromptDecks.availableDecks.where((d) {
+      if (_familyFriendlyOnly) {
+        return d != 'rated_r_nsfw' && d != 'cah_dark_humor';
+      }
+      return true;
+    }),
+    'custom',
+  ];
+
+  /// The single reason the host cannot start right now, or null if they can.
+  ///
+  /// Derived entirely from [gs] so it can be evaluated a second time after a
+  /// failed `startGame`. The server refuses on exactly these conditions, and by
+  /// the time its error arrives the room stream has normally caught up with
+  /// whatever changed — which is what turns "Something went wrong" into the one
+  /// sentence the host can act on.
+  String? _startWarningFor(GameService gs) {
+    final players = gs.players;
+    final availableDecks = _availableDecks();
+    final selectedDeckId = availableDecks.contains(gs.gameState?.selectedDeckId)
+        ? gs.gameState!.selectedDeckId
+        : availableDecks.first;
+
+    final activeCount = players.where((p) => p.role != PlayerRole.spectator).length;
+    final forgeries = gs.gameState?.effectiveForgeriesPerCard(activeCount) ??
+        (activeCount > 1 ? (activeCount - 1).clamp(1, 5) : 1);
+    final totalRounds = gs.gameState?.totalRounds ?? 1;
+    final totalPromptsNeeded = activeCount * totalRounds;
+    final deckSize = selectedDeckId == 'custom'
+        ? totalPromptsNeeded
+        : PromptDecks.getDeckSize(selectedDeckId);
+
+    final nonHostPlayers =
+        players.where((p) => p.role != PlayerRole.spectator && !p.isHost).toList();
+    final readyNonHostsCount = nonHostPlayers.where((p) => p.lobbyReady).length;
+    final totalNonHostsCount = nonHostPlayers.length;
+    final allNonHostsReady =
+        totalNonHostsCount > 0 && readyNonHostsCount == totalNonHostsCount;
+
+    if (activeCount < 3) {
+      return "Need at least 3 active players to start.";
+    } else if (activeCount <= forgeries) {
+      return "Need more players than forgeries per card ($forgeries).";
+    } else if (deckSize < totalPromptsNeeded) {
+      return "Deck too small: selected deck has $deckSize prompts but you need $totalPromptsNeeded prompts ($activeCount players × $totalRounds rounds).";
+    } else if (!allNonHostsReady) {
+      return "Waiting on ${totalNonHostsCount - readyNonHostsCount} of $totalNonHostsCount players to ready up.";
+    }
+    return null;
+  }
+
+  /// Maps a failed `startGame` to something the host can act on.
+  ///
+  /// Matches on the error CODE, never the message: a raw `Error` thrown by a
+  /// callable flattens to `INTERNAL`, and server text is not user-facing copy.
+  /// Nothing from the exception is interpolated into what the player reads
+  /// (`design_ui_direction.md` §6).
+  ///
+  /// `failed-precondition` covers several distinct server refusals — too few
+  /// players, someone not ready, a deck too small — and the client evaluates
+  /// those same conditions, so it can name the one that actually applies
+  /// instead of shrugging.
+  String _startGameErrorMessage(Object e, GameService gs) {
+    final String? code = e is FirebaseFunctionsException ? e.code : null;
+    switch (code) {
+      case 'failed-precondition':
+        return _startWarningFor(gs) ??
+            'The lobby changed just as the game started. Check everyone is still here and ready, then try again.';
+      case 'permission-denied':
+        return 'Only the host can start the game.';
+      case 'invalid-argument':
+        return 'The lobby settings changed. Try starting again.';
+      case 'not-found':
+        return 'This room no longer exists.';
+      case 'unauthenticated':
+        return 'You have been signed out. Reload the page and rejoin.';
+      default:
+        return 'Something went wrong. Try again.';
+    }
+  }
+
   Widget _buildWaitingRoom(ThemeData theme, GameService gs) {
     final isHost = gs.currentPlayer!.isHost;
     final players = gs.players;
@@ -482,27 +564,15 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
       _knownPlayerIds = currentIds;
     }
 
-    final availableDecks = [
-      ...PromptDecks.availableDecks.where((d) {
-        if (_familyFriendlyOnly) {
-          return d != 'rated_r_nsfw' && d != 'cah_dark_humor';
-        }
-        return true;
-      }),
-      'custom',
-    ];
+    final availableDecks = _availableDecks();
     
     final selectedDeckId = availableDecks.contains(gs.gameState?.selectedDeckId)
-        ? gs.gameState!.selectedDeckId!
+        ? gs.gameState!.selectedDeckId
         : availableDecks.first;
 
     final activeCount = players.where((p) => p.role != PlayerRole.spectator).length;
     final forgeries = gs.gameState?.effectiveForgeriesPerCard(activeCount) ?? (activeCount > 1 ? (activeCount - 1).clamp(1, 5) : 1);
     final totalRounds = gs.gameState?.totalRounds ?? 1;
-    final totalPromptsNeeded = activeCount * totalRounds;
-    final deckSize = selectedDeckId == 'custom'
-        ? totalPromptsNeeded
-        : PromptDecks.getDeckSize(selectedDeckId);
     
     final playingPlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
     final nonHostPlayers = playingPlayers.where((p) => !p.isHost).toList();
@@ -510,16 +580,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     final totalNonHostsCount = nonHostPlayers.length;
     final allNonHostsReady = totalNonHostsCount > 0 && readyNonHostsCount == totalNonHostsCount;
 
-    String? startWarning;
-    if (activeCount < 3) {
-      startWarning = "Need at least 3 active players to start.";
-    } else if (activeCount <= forgeries) {
-      startWarning = "Need more players than forgeries per card ($forgeries).";
-    } else if (deckSize < totalPromptsNeeded) {
-      startWarning = "Deck too small: selected deck has $deckSize prompts but you need $totalPromptsNeeded prompts ($activeCount players × $totalRounds rounds).";
-    } else if (!allNonHostsReady) {
-      startWarning = "Waiting on ${totalNonHostsCount - readyNonHostsCount} of $totalNonHostsCount players to ready up.";
-    }
+    final String? startWarning = _startWarningFor(gs);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -1001,8 +1062,12 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                         } catch (e) {
                           debugPrint('startGame error: $e');
                           if (context.mounted) {
+                            ScaffoldMessenger.of(context).clearSnackBars();
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Something went wrong. Try again.')),
+                              SnackBar(
+                                content: Text(_startGameErrorMessage(e, gs)),
+                                backgroundColor: Theme.of(context).colorScheme.error,
+                              ),
                             );
                           }
                         } finally {
