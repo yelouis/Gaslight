@@ -10,7 +10,7 @@
 
 **Wave J — prompt source & sampling (J1 → J2 → J3) — is complete (August 24, 2026).** All three selected options delivered and tested: **109 → Option C** (`bf38434`), **108 → Option B** (`64daf11`), **107 → Option B** (`74489b0`).
 
-**Issues 1–109 are delivered. Issues 110 and 111 are open** — found while verifying the web playthrough, and it needs your selection. Gate state, measured August 24, 2026:
+**Issues 1–109 are delivered. Issues 110 and 111 have selections and are specced for build as Wave K** — see `agent_execution_guide.md` §2–§4. Build order is **K1 (111, Option C) → K2 (110, Option B)**: both edit the game over screen, and K1 changes what K2's Case File image captures. Gate state, measured August 24, 2026:
 
 | Gate | Result |
 |---|---|
@@ -56,7 +56,7 @@
 
 **Recommendation: C**, because it is the only option that delivers the answer-quoting idea, and because **B is a strict subset of C** — if C looks too large to land at once, build B first as a client-only commit and add the summary afterwards without rework. Option D is worth revisiting only once matches routinely run 3+ rounds.
 
-Your selection: _____
+Your selection: Proceed with Option C.
 
 ---
 
