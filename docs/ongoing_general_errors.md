@@ -8,21 +8,23 @@
 
 ## 1. Open & in-flight
 
-**No open items.** Wave I — Web E2E playthrough (I1 → I2 → I3) — is completed, verified, and committed (August 24, 2026). All 19 web assertion blocks (W1–W19) are verified with PNG evidence under `docs/playthrough_evidence/` and pass `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md`.
+**Wave J — prompt source & sampling — is specced and awaiting build (August 24, 2026).** Issues 107, 108 and 109 all have selections: **109 → Option C**, **108 → Option B**, **107 → Option B**. The implementation is in `agent_execution_guide.md` §3–§6. Build order is **J1 (109) → J2 (108) → J3 (107)** and it is a real dependency, not a preference.
 
-**Issues 1–106 are delivered.** All seven gates are passing:
+**Issues 1–106 are delivered.** Gate state, measured August 24, 2026:
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors** (22 warnings, 194 infos) |
-| `flutter test` | **159/159** |
+| `flutter analyze lib test` | **0 errors** (21 warnings, 197 infos) |
+| `flutter test` | **178/178** |
 | `npm --prefix functions run build` | clean |
-| `npm --prefix functions test` | **61/61** |
-| `./scripts/check_deploy_fresh.sh` | **exit 0** |
+| `npm --prefix functions test` | **63/63** |
+| `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** Server commits (`1c5d69b` and earlier) are undeployed; it goes green after `firebase deploy --only functions`, which is the user's call |
 | `./scripts/check_playthrough_evidence.sh` | **exit 0** — 15 blocks (iOS): 14 PASS, 1 NOT RUN, 0 FAIL |
-| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` | **exit 0** — 19 blocks (Web): 19 PASS, 0 NOT RUN, 0 FAIL |
+| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` | **exit 0** — 19 blocks (Web) |
 
-**Known about the web build** (verified August 24, 2026): the release build compiles and renders on CanvasKit, Firebase initialises clean, anonymous auth and callables work cleanly from browser contexts, session restoral across page reload and same-origin tabs functions correctly, and layouts adapt smoothly across mobile, tablet, and desktop viewports.
+**Wave I — the web E2E playthrough (I1 → I2 → I3) — is complete**, with PNG evidence under `docs/playthrough_evidence/`. The release web build compiles and renders on CanvasKit, Firebase initialises clean, anonymous auth and callables work from browser contexts, session restore survives reload, and layouts hold at mobile, tablet and desktop.
+
+**Undeployed and therefore not yet true in production:** the curated deck contents (`3f570e6`), unlimited re-rolls (`1c5d69b`), and the Issue 106 deck guard's later refinements. Prompts are drawn once at `startGame`, so even after deploying, a room already in progress keeps the prompts it started with — manual verification needs a **new** game.
 
 **Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it.
 
