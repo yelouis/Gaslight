@@ -33,10 +33,17 @@
 
 **No open issues and nothing to decide.** Issues 1–111 are delivered and Wave L is complete.
 
-**Two things remain outstanding. Neither needs a decision — both are observations someone still has to make:**
+**One thing remains outstanding, and it needs no decision — only an observation someone still has to make.**
 
-1. **Issue 111's match summary has never been seen running.** The client half is now device-verified — the FINAL STANDINGS table appears in `gaslight_case_file_xhpd.png` and `w14_case_file_download.png` — but the *server* half (Best Lie of the Night, Cleanest Truth, The Sting) is committed and **undeployed**, so no playthrough has ever rendered it. It needs `firebase deploy --only functions` first, **which is the user's call**, then one game-over screen to confirm the awards appear.
-2. **The `bestLie.fooled` assertion is weak.** `game_e2e.spec.ts:3530` asserts `> 0` rather than an expected value. The computation was verified correct by reading `index.ts:1521-1533`, so this is a weak test rather than a broken feature — but `> 0` would still pass on a double count or an off-by-one.
+**The match summary has never been seen on a screen.** Everything under it is now verified:
+
+- **The server half is deployed and live.** `check_deploy_fresh.sh` exits **0**, and the deployed `advanceToNextResolution` bundle contains `computeMatchSummary`, `matchSummary`, `_summary`, `bestLie` and `cleanestTruth` — confirmed by unpacking the source archive at the generation Cloud Functions currently serves.
+- **The server logic is tested with an equality assertion**, not a shape check. `game_e2e.spec.ts` now records every vote it casts, computes the expected best-lie count independently, and asserts equality. **Falsified**: skewing the expected count by one produced `AssertionError: expected 1 to equal 2` (69 passing / 1 failing), and 70/70 restored.
+- **The client renders the awards**, with widget tests covering both the populated case and the all-null case.
+
+What has never happened is a real game rendering real awards. The procedure is `agent_execution_guide.md` §2.
+
+> **Setup trap for whoever runs it.** If no forgery fools anybody, `bestLie` is null; and when every award is null the highlights section renders `SizedBox.shrink()` — **nothing at all**. A tidy scripted playthrough where every voter finds the truth will therefore show an empty section and look like the feature is broken. **At least one player must vote for a forgery**, and the match must run **more than one round** — a single round cannot produce a best-lie contest.
 
 ---
 

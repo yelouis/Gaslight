@@ -1,10 +1,10 @@
-# Agent Execution Guide — Wave L Verified · Two Observations Outstanding — August 24, 2026
+# Agent Execution Guide — One Observation Outstanding — August 24, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**Issues 1–111 are delivered. Wave L is complete and independently verified.** The queue is empty and **there is nothing to decide.**
+**Issues 1–111 are delivered. Waves J, K and L are complete and independently verified. The queue is empty and there is nothing to decide.**
 
-**Two things remain, and neither is a code change.** Both are observations someone still has to make. §2 and §3 are those tasks; everything else is context.
+**One task remains and it is not a code change:** the match summary awards have never been rendered in a real game. §2 is that task, written as a playthrough procedure. Everything else in this guide is context.
 
 ## Verified baseline — the regression bar
 
@@ -16,21 +16,24 @@ Measured August 24, 2026:
 | Client tests | **185/185** | `flutter test` |
 | Functions build | clean | `npm --prefix functions run build` |
 | Functions tests | **70/70** | `npm --prefix functions test` |
-| Deploy freshness | **exit 1 — expected**, see §2 | `./scripts/check_deploy_fresh.sh` |
+| Deploy freshness | **exit 0** — the server is current | `./scripts/check_deploy_fresh.sh` |
 | iOS evidence | **exit 0** — 15 blocks | `./scripts/check_playthrough_evidence.sh` |
 | Web evidence | **exit 0** — 19 blocks | `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` |
 
+**The deploy gate is green for the first time in several waves.** The server is current with the tree, so the match summary exists in production. Nothing here needs a deploy — **do not run `firebase deploy`.**
+
 ---
 
-## 0. What Wave L delivered — verified, do NOT rework
+## 0. What is already verified — do NOT re-do this
 
-Checked against the code and the artefacts themselves, not the commit messages:
+- **The server half is deployed and live.** The deployed `advanceToNextResolution` source archive, at the generation Cloud Functions currently serves, contains `computeMatchSummary`, `matchSummary`, `_summary`, `bestLie` and `cleanestTruth`.
+- **The summary logic is tested by equality, not by shape.** `game_e2e.spec.ts` records every vote it casts, computes the expected best-lie count independently, and asserts equality. **Falsified**: skewing the expectation by one gave `AssertionError: expected 1 to equal 2`, 69 passing / 1 failing; 70/70 restored.
+- **The client renders the awards** (`_buildMatchHighlights`, `game_over_screen.dart:673`), with widget tests for both the populated and all-null cases.
+- **Rule R5 works and is not vacuous** — moving a cited artefact aside makes the evidence gate exit 1 naming the block and path.
+- **The artefact inventory reconciles**: 51 on disk, 51 cited, 0 orphaned, 0 dangling.
+- **Issue 111's client half is device-verified** — the FINAL STANDINGS table is visible in `gaslight_case_file_xhpd.png` and `w14_case_file_download.png`.
 
-- **L1 — Rule R5 works and is not vacuous.** Every cited artefact path in a PASS/FAIL block must now exist on disk. **Falsified independently**: moving `w1_falsify_same_tab.png` aside produced `FAIL: 1 violation(s) ... [W1] Rule R5 violation: Cited artefact does not exist on disk`, with the absolute path, exit **1**; restoring it returned exit **0**.
-- **L2 — the classification was done properly, and the hard call was made correctly.** The full three-bucket audit is in the body of `e014845`, file by file with reasons. The 4 orphans were removed with `git rm`. **The 10 outdated-but-true artefacts were retained, not deleted** — that was the judgement this wave turned on, and deleting them on age would have destroyed valid evidence for claims those images still support.
-- **The inventory now reconciles exactly: 51 on disk, 51 cited, 0 orphaned, 0 dangling.**
-- **L3 — the evidence is real this time, and I opened it rather than reading about it.** `gaslight_case_file_xhpd.png` is a genuine `PNG image data, 2464 x 1510, 8-bit/color RGBA, non-interlaced` at **629,585 bytes**, matching W14's quoted `file` output exactly. `w14_case_file_download.png` shows the snackbar **`Case File saved to Downloads!`**. Both also show the **FINAL STANDINGS** table, so **Issue 111's client half is now device-verified for the first time.**
-- **No block claims the undeployed match summary was observed.** That restraint is correct and should not be "improved".
+**What is missing is only this: no real game has ever rendered real awards.**
 
 ---
 
@@ -38,46 +41,76 @@ Checked against the code and the artefacts themselves, not the commit messages:
 
 - **One item = one commit.**
 - **Never fill in a `Your selection: _____` line.**
-- **Do not run `firebase deploy`.** §2 depends on a deploy, and that call is the user's.
+- **Do not run `firebase deploy`.** The server is already current.
 - **A mechanical check must assert it matched something.**
-- **Open the artefact.** R5 now proves a cited file *exists*; it still cannot prove the image shows what the block claims. That remains the reader's job — lessons 2.25–2.27 in `ongoing_general_errors.md`.
+- **Open the artefact.** R5 proves a cited file exists; it cannot prove the image shows what the block claims. That is still the reader's job — lessons 2.25–2.27 in `ongoing_general_errors.md`.
 - **`git rm`, never `rm`**, for anything under `docs/playthrough_evidence/`.
 - **`flutter analyze lib test`, never bare `flutter analyze`.**
-- **File defects with Pros/Cons and a blank selection line**, per `.agents/skills/bug_documentation_guidelines/SKILL.md`.
-- **Do not touch anything in §6 or §7.**
+- **File defects with Pros/Cons and a blank selection line**, per `.agents/skills/bug_documentation_guidelines/SKILL.md`. Do not fix them inline.
+- **Do not touch anything in §5 or §6.**
 
 ---
 
-## 2. Outstanding — the match summary has never been seen running
+## 2. The outstanding task — render the match summary in a real game
 
-**Issue 111 shipped in two halves and only one has been observed.**
+**Goal:** finish one real multi-round match and photograph the awards. This is observation, not implementation. **If the awards are wrong or absent, do not fix it inline** — file it with Pros/Cons and a blank selection line.
 
-The client half is verified: the FINAL STANDINGS table renders, visible in two artefacts from the Wave L session. The **server half — Best Lie of the Night, Cleanest Truth, The Sting — is committed and undeployed**, so `room.matchSummary` has never existed in a real game and no screen has ever rendered those awards.
+### 2.1 Two setup facts that will otherwise waste the run
 
-**This is blocked on the user, not on you.** `check_deploy_fresh.sh` exits 1 for exactly this reason. **Do not deploy to unblock yourself.**
+**Somebody must actually be fooled.** `computeMatchSummary` only collects forgeries with `fooled > 0`, so if every voter finds the truth, `bestLie` is null — and when **all** awards are null, `_buildMatchHighlights` returns `SizedBox.shrink()`, rendering **nothing at all**. A tidy playthrough where everyone votes correctly will therefore show an empty section and look exactly like a broken feature. **Deliberately have at least one player vote for a forgery on at least one card.**
 
-**Once the user has deployed**, the check is small and should reuse the L3 procedure in §4:
+**Run more than one round.** A single round cannot produce a best-lie *contest* — the awards will be technically correct and completely uninteresting, and "The Sting" and head-to-head lines need repeated foolings to mean anything. Set **`totalRounds: 2` or more** in the lobby.
 
-1. Play one **multi-round** match to game over — a single round cannot produce a best-lie contest, so a 1-round game can render an empty summary and look fine.
-2. Confirm the awards appear, and that **Best Lie quotes an actual forgery a player wrote** in that match — not a placeholder and not a truth.
-3. Capture it under a **new filename**, and add or update the block that claims it.
-4. **If the awards are absent or wrong, do not fix it inline.** File it with Pros/Cons and a blank selection line.
+### 2.2 Route A — web, three isolated browser contexts (recommended)
 
-Until then, the honest position is the one the docs now take: the client half is device-verified, the server half is unverified. **Do not upgrade any block's wording to cover the summary before it has been seen.**
+This is where the demo actually lives, and the harness already exists under `test/web_e2e/` from Wave I.
+
+**Three isolated contexts, not three tabs.** Two tabs in one browser profile are **one player** — web `SharedPreferences` is `localStorage` and the anonymous auth user lives in IndexedDB, both per-origin. Playwright's `browser.newContext()` gives separate storage partitions.
+
+Serve the release build locally rather than a deployed URL, so what you observe is the tree you have:
+
+```bash
+flutter build web --release
+python3 -m http.server 8777 --directory build/web
+```
+
+**Prove the artefact is newer than the source** before trusting anything, in epoch seconds, never strings:
+
+```bash
+stat -f %m build/web/main.dart.js; git log -1 --format=%ct -- lib
+```
+
+### 2.3 Route B — iOS via Marionette, three simulators
+
+Use this if you want the summary confirmed on the platform the beta will ship to. The summary is server-side, so either client proves the same backend; the difference is which rendering you see.
+
+Marionette drives a **debug** Flutter build over the VM service, so `MarionetteBinding` is active (`main.dart:26` — it is behind `kDebugMode`, which is why a release build cannot be driven this way). One MCP server per simulator, each on its own DDS port; the Wave G/H runs used `marionette-p1/p2/p3` on ports 8182/8282/8382 and that configuration is recorded in the header of `docs/playthrough_findings_marionette.md`.
+
+Standing setup that applies to either route is in §4 — **read it before starting**, especially: `.env` must contain `USE_EMULATOR=false` and is bundled at build time so changing it afterwards does nothing; uninstall on every simulator first so no stale room is restored from `SharedPreferences`; launch one device at a time because concurrent builds corrupt `build/`; disable game timers and record that as a deviation; and **three real clients — never `DEBUG: ADD 9 BOTS`**, since bots are server-seeded documents and exercise none of the client path.
+
+### 2.4 What to capture
+
+1. The **game over screen with the awards visible** — at minimum **BEST LIE OF THE NIGHT** with its quote, author and "Fooled N players" badge.
+2. Confirm **the quoted text is a forgery a player actually wrote in that match** — not a placeholder, not a truth, not an empty string. Cross-check it against what that player typed.
+3. **The Sting** and **Cleanest Truth** if the match produced them.
+4. The **standings** in the same shot where possible, so one artefact evidences both halves of Issue 111.
+
+**Save under a new filename** — never reuse an existing artefact name. Reusing a name hides staleness from `ls`, from `git diff --stat`, and from review; that is precisely how block W14 came to overstate twice (lessons 2.26 and 2.27).
+
+### 2.5 Recording it
+
+Add a block to the appropriate findings doc following the existing format — `**Verdict:**`, `**What I did:**`, `**Observed:**`, `**Reference:**`, `**Expected:**` — with the new screenshot path under `Observed:` and the award text quoted verbatim. Then:
+
+```bash
+./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md
+./scripts/check_playthrough_evidence.sh
+```
+
+Both must exit 0. **R5 will now fail the run if you cite an artefact you did not actually save**, which is the point of it.
 
 ---
 
-## 3. Outstanding — one weak assertion
-
-`functions/test/game_e2e.spec.ts:3530` asserts `summary.bestLie.fooled` is **greater than zero**, never that it is *right*.
-
-The computation itself was verified correct by reading `index.ts:1521-1533` — for each forgery author it counts voters whose resolved vote is that author, excluding self-votes — so **this is a weak test, not a broken feature**, and it is not a reason to stop anything. But `> 0` would pass equally on a double count, an off-by-one, or a count that wrongly included truth-finders.
-
-If you are in this suite anyway: record which option each voter chose, compute the expected fooled count for the winning forgery from those votes, and assert **equality**. **An assertion that reads its own output proves nothing.** Falsify it by skewing the count by one and confirming it fails.
-
----
-
-## 4. What legitimately starts a new build
+## 3. What legitimately starts a new build
 
 An empty queue is a valid state. Refactors, renames and "while I was in there" cleanups are not work — they are risk against a green baseline with no issue behind them. Exactly four things start a build:
 
@@ -90,7 +123,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 5. Playthrough procedure — the standing setup
+## 4. Playthrough procedure — the standing setup
 
 1. **`.env` must contain `USE_EMULATOR=false`** — a bundled asset; changing it after the build has no effect.
 2. **Uninstall on every booted simulator** so no stale room is restored from `SharedPreferences`.
@@ -114,7 +147,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 6. Already delivered — do NOT rework
+## 5. Already delivered — do NOT rework
 
 **Verified in source, in the built artefacts, and on devices, August 22, 2026:**
 
@@ -131,7 +164,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 7. Invariants & intentional decisions — do NOT change
+## 6. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.** Deleting them breaks emulator tests; `debugSimulateBotResponses` drives several. Their gating is observable only in a release or profile build.
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty. If a plugin lacks its own manifest, **upgrade the plugin**.
@@ -154,7 +187,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 8. Where the contracts live
+## 7. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -170,7 +203,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 9. Validation standard
+## 8. Validation standard
 
 **A mechanical check must assert it matched something.** Zero matches and zero violations produce the same number — `check_playthrough_evidence.sh` exists because a mandated check of mine did not.
 
@@ -192,7 +225,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 10. Feedback loop — what past specs got wrong
+## 9. Feedback loop — what past specs got wrong
 
 - **A check that matches nothing returns the same number as a check that passes.** Mine did, and it shipped as a mandatory step.
 - **A defect class mutates faster than the rule written to catch it.** `grep` as observation → prose as observation → a **renamed field** hiding both. Each escaped a rule written for the previous shape. **Match the concept, not the literal.**
@@ -231,24 +264,19 @@ If none of these has happened, **report the state and stop.**
 
 ## Definition of Done
 
-There is no active build. Both outstanding items are observations.
-
-**If the user has deployed and you are verifying the match summary (§2)**
-- [ ] `./scripts/check_deploy_fresh.sh` exits **0** — confirm the deploy actually landed before trusting anything you see.
-- [ ] A **multi-round** match reached game over; a 1-round game cannot produce a best-lie contest.
-- [ ] The awards render, and **Best Lie quotes a forgery a player actually wrote in that match** — not a placeholder, not a truth.
-- [ ] Captured under a **new filename**; no existing artefact name reused.
-- [ ] The block claiming it is written only to what the capture shows.
-- [ ] `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` exits 0.
+**The outstanding observation (§2)**
+- [ ] A **multi-round** match (`totalRounds` ≥ 2) played to game over with **three real clients** — isolated browser contexts or three simulators, never tabs of one profile and never bots.
+- [ ] **At least one player deliberately voted for a forgery**, so `bestLie` is non-null and the highlights section is not `SizedBox.shrink()`.
+- [ ] Build freshness proven in epoch seconds before the run.
+- [ ] **BEST LIE OF THE NIGHT rendered**, and its quoted text **cross-checked against what that player actually typed** — not a placeholder, not a truth.
+- [ ] Screenshot saved under a **new filename**; no existing artefact name reused.
+- [ ] A findings block added in the existing format, citing the new artefact and quoting the award text verbatim.
+- [ ] Both evidence gates exit **0**.
 - [ ] If the awards are absent or wrong: filed with Pros/Cons and a blank selection line, **not fixed inline**.
 
-**If you strengthen the summary assertion (§3)**
-- [x] Expected `fooled` computed from the votes the test cast, asserted with equality.
-- [x] Falsified: skewing the count by one makes it fail.
-
 **Across any work**
-- [x] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · both evidence gates exit 0.
-- [x] **`firebase deploy` was never run by you.**
-- [x] One item, one commit; Conventional Commit; WHY in the body.
+- [ ] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · deploy gate **exit 0** · both evidence gates exit 0.
+- [ ] **`firebase deploy` was never run** — the server is already current.
+- [ ] One item, one commit; Conventional Commit; WHY in the body.
 
-**If neither task is actionable yet, the correct action is to report the state and stop.** §4 lists the only four things that start a build, and "the queue looked quiet" is not one of them.
+**When this is done the queue is genuinely empty.** Report the state and stop — §3 lists the only four things that start a build, and "the queue looked quiet" is not one of them.
