@@ -17,7 +17,7 @@
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors** (20 warnings, 197 infos) |
+| `flutter analyze lib test` | **0 errors** (18 warnings, 204 infos) |
 | `flutter test` | **185/185** |
 | `npm --prefix functions run build` | clean |
 | `npm --prefix functions test` | **70/70** |
@@ -31,7 +31,12 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open issues and nothing to decide.** Issues 1–111 are delivered. **Wave L (artefact re-verification) is in flight** — it is evidence hygiene, not a defect; its spec lives in `agent_execution_guide.md` §2–§4.
+**No open issues and nothing to decide.** Issues 1–111 are delivered and Wave L is complete.
+
+**Two things remain outstanding. Neither needs a decision — both are observations someone still has to make:**
+
+1. **Issue 111's match summary has never been seen running.** The client half is now device-verified — the FINAL STANDINGS table appears in `gaslight_case_file_xhpd.png` and `w14_case_file_download.png` — but the *server* half (Best Lie of the Night, Cleanest Truth, The Sting) is committed and **undeployed**, so no playthrough has ever rendered it. It needs `firebase deploy --only functions` first, **which is the user's call**, then one game-over screen to confirm the awards appear.
+2. **The `bestLie.fooled` assertion is weak.** `game_e2e.spec.ts:3530` asserts `> 0` rather than an expected value. The computation was verified correct by reading `index.ts:1521-1533`, so this is a weak test rather than a broken feature — but `> 0` would still pass on a double count or an off-by-one.
 
 ---
 

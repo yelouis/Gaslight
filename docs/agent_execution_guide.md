@@ -1,49 +1,36 @@
-# Agent Execution Guide — Active Build: Wave L — Artefact Re-verification — August 24, 2026
+# Agent Execution Guide — Wave L Verified · Two Observations Outstanding — August 24, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**Issues 1–111 are delivered and verified in source.** Wave L is not a feature wave: it makes the playthrough evidence honest again, and closes the hole that let it drift.
+**Issues 1–111 are delivered. Wave L is complete and independently verified.** The queue is empty and **there is nothing to decide.**
 
-| # | Item | Touches | Deploy |
-|---|---|---|---|
-| **L1** | Teach the evidence gate that a cited artefact must **exist** | `scripts/check_playthrough_evidence.sh` | — |
-| **L2** | Classify all 54 artefacts; delete the dead, downgrade the falsified | `docs/playthrough_evidence/`, both findings docs | — |
-| **L3** | One browser session that re-shoots everything needing it | evidence | — |
-
-**Order is L1 → L2 → L3 and it is a real dependency.** L1 is what catches a block whose artefact you delete in L2. L3 is last because it is the only step needing a running app, and it produces the replacements L2 identifies.
-
-**Do not run `firebase deploy`.** Nothing here is a server change. `check_deploy_fresh.sh` will stay red because Wave K's server half is undeployed; that is the user's call, not yours.
+**Two things remain, and neither is a code change.** Both are observations someone still has to make. §2 and §3 are those tasks; everything else is context.
 
 ## Verified baseline — the regression bar
 
+Measured August 24, 2026:
+
 | Gate | Result | Command |
 |---|---|---|
-| Analyzer | **0 errors** (21 warnings, 201 infos) | `flutter analyze lib test` |
+| Analyzer | **0 errors** (18 warnings, 204 infos) | `flutter analyze lib test` |
 | Client tests | **185/185** | `flutter test` |
 | Functions build | clean | `npm --prefix functions run build` |
 | Functions tests | **70/70** | `npm --prefix functions test` |
-| Deploy freshness | **exit 1 — expected** | `./scripts/check_deploy_fresh.sh` |
+| Deploy freshness | **exit 1 — expected**, see §2 | `./scripts/check_deploy_fresh.sh` |
 | iOS evidence | **exit 0** — 15 blocks | `./scripts/check_playthrough_evidence.sh` |
 | Web evidence | **exit 0** — 19 blocks | `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` |
 
 ---
 
-## 0. The measured state of the evidence — do not re-derive this
+## 0. What Wave L delivered — verified, do NOT rework
 
-Counted on **August 24, 2026**:
+Checked against the code and the artefacts themselves, not the commit messages:
 
-| | |
-|---|---|
-| PNGs on disk | **54** |
-| Cited by a block | **50** |
-| **Orphaned** (on disk, cited by nothing) | **4** — `e8_p2_lobby.png`, `m3_gate_p1.png`, `m3_gate_p2.png`, `m3_gate_p3.png` |
-| Dangling citations (cited, absent) | **0** |
-
-**Two facts that decide how you do this:**
-
-**1. File dates alone cannot decide staleness.** All 54 artefacts predate the newest `lib/screens` commit, so an mtime test flags *everything* and tells you nothing. Staleness is per-screen: compare an artefact against the commits that changed **the screen it depicts**, not against the repo as a whole.
-
-**2. The gate cannot see a missing file.** `check_playthrough_evidence.sh` R3 matches the artefact **path string inside the block text** (`artefact_png_regex.search(obs_content)`) and **never stats the file**. So deleting a cited PNG leaves the gate **green** with the evidence gone. That is the hole L1 closes, and it is why L1 comes first.
+- **L1 — Rule R5 works and is not vacuous.** Every cited artefact path in a PASS/FAIL block must now exist on disk. **Falsified independently**: moving `w1_falsify_same_tab.png` aside produced `FAIL: 1 violation(s) ... [W1] Rule R5 violation: Cited artefact does not exist on disk`, with the absolute path, exit **1**; restoring it returned exit **0**.
+- **L2 — the classification was done properly, and the hard call was made correctly.** The full three-bucket audit is in the body of `e014845`, file by file with reasons. The 4 orphans were removed with `git rm`. **The 10 outdated-but-true artefacts were retained, not deleted** — that was the judgement this wave turned on, and deleting them on age would have destroyed valid evidence for claims those images still support.
+- **The inventory now reconciles exactly: 51 on disk, 51 cited, 0 orphaned, 0 dangling.**
+- **L3 — the evidence is real this time, and I opened it rather than reading about it.** `gaslight_case_file_xhpd.png` is a genuine `PNG image data, 2464 x 1510, 8-bit/color RGBA, non-interlaced` at **629,585 bytes**, matching W14's quoted `file` output exactly. `w14_case_file_download.png` shows the snackbar **`Case File saved to Downloads!`**. Both also show the **FINAL STANDINGS** table, so **Issue 111's client half is now device-verified for the first time.**
+- **No block claims the undeployed match summary was observed.** That restraint is correct and should not be "improved".
 
 ---
 
@@ -51,97 +38,55 @@ Counted on **August 24, 2026**:
 
 - **One item = one commit.**
 - **Never fill in a `Your selection: _____` line.**
-- **Do not run `firebase deploy`.**
+- **Do not run `firebase deploy`.** §2 depends on a deploy, and that call is the user's.
 - **A mechanical check must assert it matched something.**
-- **`git rm`, never `rm`.** Every artefact is tracked, so a git deletion is recoverable and reviewable; a filesystem deletion is neither.
-- **Never delete a cited artefact without updating the block that cites it** in the same commit.
+- **Open the artefact.** R5 now proves a cited file *exists*; it still cannot prove the image shows what the block claims. That remains the reader's job — lessons 2.25–2.27 in `ongoing_general_errors.md`.
+- **`git rm`, never `rm`**, for anything under `docs/playthrough_evidence/`.
 - **`flutter analyze lib test`, never bare `flutter analyze`.**
 - **File defects with Pros/Cons and a blank selection line**, per `.agents/skills/bug_documentation_guidelines/SKILL.md`.
 - **Do not touch anything in §6 or §7.**
 
 ---
 
-## 2. L1 — The gate must require the artefact to exist
+## 2. Outstanding — the match summary has never been seen running
 
-**The change:** add rule **R5** — for every `docs/playthrough_evidence/*.png` path appearing in a PASS or FAIL block, the file must exist on disk. Report the block id and the missing path. Keep it in the same exit-code scheme: a missing artefact is a **violation (exit 1)**, not a could-not-verify.
+**Issue 111 shipped in two halves and only one has been observed.**
 
-Resolve paths **relative to the repository root**, not the caller's working directory, or the rule will pass or fail depending on where it is run from.
+The client half is verified: the FINAL STANDINGS table renders, visible in two artefacts from the Wave L session. The **server half — Best Lie of the Night, Cleanest Truth, The Sting — is committed and undeployed**, so `room.matchSummary` has never existed in a real game and no screen has ever rendered those awards.
 
-**Falsification, mandatory, and recorded in a comment at the top of the script and in the commit body:**
+**This is blocked on the user, not on you.** `check_deploy_fresh.sh` exits 1 for exactly this reason. **Do not deploy to unblock yourself.**
 
-1. Temporarily `git mv` one cited PNG aside. The gate must **exit 1 naming that block and that path**. Restore it; the gate must return to exit 0.
-2. **Assert the rule matched something.** Print or assert the number of artefact paths checked — a run that found **zero** paths and a run where every path exists both report "no violations". This is lesson 2.21 and it has already shipped once in this repo.
-3. **Over-reach guard:** a `NOT RUN` block carrying no artefact at all must **not** be flagged by R5.
-4. **Regression:** both reports must still exit 0 with all files present — iOS 15 blocks, web 19 blocks.
+**Once the user has deployed**, the check is small and should reuse the L3 procedure in §4:
 
----
+1. Play one **multi-round** match to game over — a single round cannot produce a best-lie contest, so a 1-round game can render an empty summary and look fine.
+2. Confirm the awards appear, and that **Best Lie quotes an actual forgery a player wrote** in that match — not a placeholder and not a truth.
+3. Capture it under a **new filename**, and add or update the block that claims it.
+4. **If the awards are absent or wrong, do not fix it inline.** File it with Pros/Cons and a blank selection line.
 
-## 3. L2 — Classify every artefact, then act
-
-Sort all 54 into exactly three buckets. **The distinction between the second and third is the whole point of this wave** — "old" and "wrong" are not the same thing, and deleting on age alone destroys valid evidence.
-
-**Bucket A — Orphaned.** Cited by no block, referenced nowhere else in the repo (verified: zero references for all four). `git rm` them. No block changes needed because no block points at them.
-
-**Bucket B — Falsified: the artefact shows behaviour the app no longer has.** These are actively misleading and must not survive. The known member:
-
-- **`w14_case_file_share.png`** — shows the snackbar `Sharing is only supported on mobile devices.`, which Issue 110 replaced with a download. Its block has already been corrected twice for claiming more than this image shows.
-
-**Bucket C — Outdated in appearance, still true in substance.** The screen has changed since, but the artefact still supports the specific assertion its block makes. **These are not deletions.** Eleven artefacts depict the game over screen and predate `24a2398`, which added the FINAL STANDINGS table:
-
-```
-e10_p1_gameover.png   e10_p2_gameover.png   e14_honors.png
-e1_game_over_podium.png   w11_gameover.png   w14_case_file_share.png
-w16_p1_gameover.png   w16_p2_gameover.png   w17_gameover.png
-w18_gameover.png      w19_gameover.png
-```
-
-None of them shows the standings table, so none depicts today's screen. **But most of their blocks only assert "reached game over with scores intact", which those images still evidence.** Re-shoot them in L3 if the session is already open — it is nearly free once you are there — but **do not delete a Bucket C artefact and leave its block without evidence.** That trades a cosmetically-stale image for no image at all, which R5 will now correctly refuse.
-
-**Judgement rule, stated so it is not a matter of taste:** ask *"does this image still show what its block claims?"* — not *"is this image current?"* Delete only on a **no** to the first question. If a block's claim and its image have diverged, the honest fixes are re-shoot, or narrow the claim to what the image shows. Both are better than deletion.
-
-**Record the classification** in the commit body: every file, its bucket, and one line of why. That list is the audit trail for anything deleted.
+Until then, the honest position is the one the docs now take: the client half is device-verified, the server half is unverified. **Do not upgrade any block's wording to cover the summary before it has been seen.**
 
 ---
 
-## 4. L3 — One browser session, many artefacts
+## 3. Outstanding — one weak assertion
 
-Nearly everything outstanding lives on **one screen**. Reaching game over once and capturing carefully settles the web Case File download, replaces `w14`, and refreshes every Bucket C game-over shot in the same sitting. **Plan the session around that.**
+`functions/test/game_e2e.spec.ts:3530` asserts `summary.bestLie.fooled` is **greater than zero**, never that it is *right*.
 
-### 4.1 Reaching game over
+The computation itself was verified correct by reading `index.ts:1521-1533` — for each forgery author it counts voters whose resolved vote is that author, excluding self-votes — so **this is a weak test, not a broken feature**, and it is not a reason to stop anything. But `> 0` would pass equally on a double count, an off-by-one, or a count that wrongly included truth-finders.
 
-**Three isolated browser contexts, not three tabs.** Two tabs in one browser profile are **one player** — web `SharedPreferences` is `localStorage` and the anonymous auth user lives in IndexedDB, both per-origin. Playwright's `browser.newContext()` gives separate storage partitions; the Wave I harness under `test/web_e2e/` already does this.
+If you are in this suite anyway: record which option each voter chose, compute the expected fooled count for the winning forgery from those votes, and assert **equality**. **An assertion that reads its own output proves nothing.** Falsify it by skewing the count by one and confirming it fails.
 
-Serve the release build locally rather than a deployed URL, so what you observe is the tree you have:
+---
 
-```bash
-flutter build web --release
-python3 -m http.server 8777 --directory build/web
-```
+## 4. What legitimately starts a new build
 
-**Prove the artefact is newer than the source**, in epoch seconds, never strings:
+An empty queue is a valid state. Refactors, renames and "while I was in there" cleanups are not work — they are risk against a green baseline with no issue behind them. Exactly four things start a build:
 
-```bash
-stat -f %m build/web/main.dart.js; git log -1 --format=%ct -- lib
-```
+1. **A human plays the game and something is wrong.** Every functional defect this project has had came from here. **No gate has ever found one** — and Issue 110 surfaced only because a person opened a screenshot the gate had passed.
+2. **The user asks for something**, or fills in a selection line.
+3. **A gate that was green goes red.** Fix the cause, not the gate.
+4. **The beta returns real feedback.**
 
-**The match summary will be absent** — Wave K's server half is committed and undeployed. That is expected and correct; standings render without it by design. **Do not deploy to make it appear.** Capture the standings, which are client-side and do work.
-
-### 4.2 What to capture, and the trap in naming
-
-1. **The Case File download.** Click **Share Case File**. Confirm a file lands as `gaslight_case_file_<roomcode>.png`, then **open it** — it must be a valid PNG of the Case File, not 0 bytes and not an HTML error page, which is what a malformed blob URL produces. Record the `file <path>` output and the byte size.
-2. **The confirmation snackbar**, as its own screenshot.
-3. **The standings table** on the game over screen — Issue 111 has never been seen running anywhere.
-4. Fresh game-over shots for the Bucket C blocks you choose to refresh.
-
-**Save every replacement under a NEW filename.** Reusing `w14_case_file_share.png` hides the staleness from `ls`, from `git diff --stat`, and from review — the exact mechanism that let this block overstate twice. Use `w14_case_file_download.png` and equivalents.
-
-### 4.3 Updating the blocks
-
-Rewrite each `Observed:` to cite the new artefact and quote the concrete output. Restore full-strength `Expected:` wording **only where the run actually supports it**. Keep the note recording that W14 previously overstated — that history is why R5 exists.
-
-**If the download does not work, do not fix it inline.** File it with Pros/Cons and a blank selection line.
-
-Re-run both gates afterwards; both must exit 0.
+If none of these has happened, **report the state and stop.**
 
 ---
 
@@ -286,29 +231,24 @@ Re-run both gates afterwards; both must exit 0.
 
 ## Definition of Done
 
-**L1 — the gate requires artefacts to exist**
-- [x] R5 implemented: every artefact path in a PASS/FAIL block must exist on disk; violations exit **1** naming block and path; paths resolve from the **repo root**.
-- [x] **Falsified**: a cited PNG moved aside makes the gate exit 1 naming that block; restoring it returns exit 0. Output recorded in the script header and the commit body.
-- [x] **The rule asserts it matched something** — the count of artefact paths checked is non-zero before "no violations" is believed.
-- [x] **Over-reach guard**: a `NOT RUN` block with no artefact is not flagged.
-- [x] **Regression**: iOS report 15 blocks exit 0, web report 19 blocks exit 0.
+There is no active build. Both outstanding items are observations.
 
-**L2 — classification and cleanup**
-- [x] All 54 artefacts classified into Orphaned / Falsified / Outdated-but-true, with the full list and a one-line reason per file in the commit body.
-- [x] The 4 orphans removed with **`git rm`**: `e8_p2_lobby.png`, `m3_gate_p1.png`, `m3_gate_p2.png`, `m3_gate_p3.png`.
-- [x] **No cited artefact deleted without its block being updated in the same commit.** R5 must be green at the end.
-- [x] No Bucket C artefact deleted merely for being old — the test applied is "does it still show what its block claims", and that reasoning is written down.
+**If the user has deployed and you are verifying the match summary (§2)**
+- [ ] `./scripts/check_deploy_fresh.sh` exits **0** — confirm the deploy actually landed before trusting anything you see.
+- [ ] A **multi-round** match reached game over; a 1-round game cannot produce a best-lie contest.
+- [ ] The awards render, and **Best Lie quotes a forgery a player actually wrote in that match** — not a placeholder, not a truth.
+- [ ] Captured under a **new filename**; no existing artefact name reused.
+- [ ] The block claiming it is written only to what the capture shows.
+- [ ] `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` exits 0.
+- [ ] If the awards are absent or wrong: filed with Pros/Cons and a blank selection line, **not fixed inline**.
 
-**L3 — the browser session**
-- [x] Game over reached with **three isolated contexts**, not tabs.
-- [x] Build freshness proven in epoch seconds first.
-- [x] **A file actually landed and was opened** — valid PNG, `file` output and byte size recorded. Not 0 bytes, not HTML.
-- [x] Confirmation snackbar and the **standings table** both captured; Issue 111 has never been observed running.
-- [x] Every replacement saved under a **new filename**; no old name reused.
-- [x] Blocks rewritten to cite the new artefacts, with full-strength claims only where the run supports them.
-- [x] If the download failed: filed with Pros/Cons and a blank selection line, **not fixed inline**.
+**If you strengthen the summary assertion (§3)**
+- [ ] Expected `fooled` computed from the votes the test cast, asserted with equality.
+- [ ] Falsified: skewing the count by one makes it fail.
 
-**Across the wave**
-- [x] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · both evidence gates exit 0.
-- [x] `check_deploy_fresh.sh` still red, explained rather than left looking like a regression, and **`firebase deploy` was never run**.
-- [x] One item, one commit; Conventional Commit; WHY in the body.
+**Across any work**
+- [ ] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · both evidence gates exit 0.
+- [ ] **`firebase deploy` was never run by you.**
+- [ ] One item, one commit; Conventional Commit; WHY in the body.
+
+**If neither task is actionable yet, the correct action is to report the state and stop.** §4 lists the only four things that start a build, and "the queue looked quiet" is not one of them.
