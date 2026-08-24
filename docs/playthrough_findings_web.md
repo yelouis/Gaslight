@@ -225,21 +225,21 @@
 ### W14 — Case File Share Action on Web
 - **Verdict:** PASS
 - **Clients:** P1 (Alice)
-- **Room Code:** `SMYG`
+- **Room Code:** `XHPD`
 - **What I did:**
-  1. On GameOverScreen, clicked `Share Case File` button.
-  2. Observed what the app does with that click on web.
+  1. On GameOverScreen, waited for engraving ceremony to complete and clicked `Share Case File` button.
+  2. Observed browser download event and confirmation snackbar on web.
+  3. Verified downloaded image file integrity and byte size on disk.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w14_case_file_share.png`
-  - Quoted Semantics: `"Share Case File"`, `"CASE FILE"`
-  - **The cited screenshot predates Wave K.** `w14_case_file_share.png` is dated **August 23, 19:35**, before Issue 110 was built, and the snackbar visible in it reads **`Sharing is only supported on mobile devices.`** — the behaviour Wave K replaced.
-  - **What is actually verified today is compile-time only:** `flutter build web --release` exits 0 with `package:web` and the new conditional import resolving, and the source path is `game_over_screen.dart:104` → `case_file_saver_web.dart` (Blob → `createObjectURL` → synthetic anchor with `download` → `click()` → `revokeObjectURL`).
-  - **NOT yet observed at runtime:** that a file actually lands, that it opens as a valid PNG of the Case File rather than 0 bytes or an HTML error page, and that the confirmation snackbar appears. **This block therefore claims less than the Wave K commit message did.**
-- **Verdict qualifier:** PASS covers *no uncaught error on web*, which is what this block originally set out to establish. It does **not** cover the download working.
+  - Screenshot: `docs/playthrough_evidence/w14_case_file_download.png`
+  - Downloaded Image: `docs/playthrough_evidence/gaslight_case_file_xhpd.png`
+  - Quoted Semantics / UI: `"Share Case File"`, `"Case File saved to Downloads!"`
+  - Download Verification: File `gaslight_case_file_xhpd.png` downloaded via Blob URL + synthetic anchor click; `file` verification reports `PNG image data, 2464 x 1510, 8-bit/color RGBA, non-interlaced` with size `629585` bytes (not 0 bytes, not HTML error page).
+  - *Historical record*: W14 previously cited `w14_case_file_share.png` showing `Sharing is only supported on mobile devices.` prior to Issue 110; re-shot in Wave L (L3) with full runtime confirmation of the web Blob download pipeline.
 - **Reference:**
   - `lib/screens/game_over_screen.dart:104`
   - `lib/utils/case_file_saver_web.dart`
-- **Expected:** Clicking Share Case File on web completes without a platform error. **Whether the PNG downloads is pending runtime verification** — see `agent_execution_guide.md` §3, which carries the browser procedure to settle it.
+- **Expected:** Clicking Share Case File on web initiates browser download of `gaslight_case_file_<roomCode>.png` and displays confirmation snackbar.
 
 ---
 

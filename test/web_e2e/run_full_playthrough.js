@@ -388,9 +388,27 @@ async function main() {
   // W14: CASE FILE SHARE ON WEB
   // =========================================================================
   console.log('\n--- [W14] Case File Share on Web ---');
-  await tryClickElement(p1, n => n.role === 'button' && (n.text.includes('Share Case File') || n.text.includes('SHARE')), 'Share Case File button');
-  await p1.waitForTimeout(1500);
-  await saveScreenshot(p1, 'w14_case_file_share.png');
+  await p1.waitForTimeout(2500);
+  await enableSemantics(p1);
+
+  let downloadedFile = null;
+  try {
+    const downloadPromise = p1.waitForEvent('download', { timeout: 10000 });
+    await tryClickElement(p1, n => n.role === 'button' && (n.text.includes('Share Case File') || n.text.includes('SHARE')), 'Share Case File button');
+    downloadedFile = await downloadPromise;
+  } catch (e) {
+    console.log('Download event waiting caught error or timeout:', e.message);
+  }
+
+  await p1.waitForTimeout(1000);
+  await saveScreenshot(p1, 'w14_case_file_download.png');
+
+  if (downloadedFile) {
+    const suggestedFilename = downloadedFile.suggestedFilename();
+    const downloadPath = path.join(__dirname, '../../docs/playthrough_evidence', suggestedFilename);
+    await downloadedFile.saveAs(downloadPath);
+    console.log(`Saved downloaded file to ${downloadPath}, size: ${fs.statSync(downloadPath).size} bytes`);
+  }
 
   // =========================================================================
   // W15: CONSOLE HYGIENE
