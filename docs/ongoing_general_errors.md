@@ -8,7 +8,9 @@
 
 ## 1. Open & in-flight
 
-**Issues 1–105 are delivered — August 22, 2026. All six gates passing.**
+**Wave I — Web E2E playthrough — is in flight (August 24, 2026).** The Apple Developer licence has not arrived, so the demo ships to friends as a **Flutter web build** first. The full spec is in `agent_execution_guide.md` §3–§5: **I1** teaches `check_playthrough_evidence.sh` about `W` blocks, **I2** runs a 3-player web match through a Playwright harness, **I3** sweeps mobile / tablet / desktop.
+
+**Issues 1–105 are delivered.** All six gates were passing at the last full run:
 
 | Gate | Result |
 |---|---|
@@ -16,20 +18,18 @@
 | `flutter test` | **159/159** |
 | `npm --prefix functions run build` | clean |
 | `npm --prefix functions test` | **61/61** |
-| `./scripts/check_deploy_fresh.sh` | **exit 0** — 15/15 functions **and** the rules release, each after its own commit |
-| `./scripts/check_playthrough_evidence.sh` | **exit 0** — 15 blocks checked: 14 PASS, 1 NOT RUN, 0 FAIL (rules R1–R4 enforced) |
+| `./scripts/check_deploy_fresh.sh` | **exit 0** |
+| `./scripts/check_playthrough_evidence.sh` | **exit 0** — 15 blocks: 14 PASS, 1 NOT RUN, 0 FAIL |
 
-The pre-demo wave shipped the three items a friend would notice — the seven `DEBUG:` buttons are gated, the raven icon replaced the stock Flutter chevron, the 1×1 launch stubs are real, and the App Store privacy manifest is in the Runner target. **All three verified in the built artefacts, not just in source.**
-
-**The pre-demo playthrough has completed with all assertions device-verified** (Issue 102 and Issue 105, Option A). E10 (auto-end when 3 players drop to 2 via in-game Leave Game) and E11 (release build verified outside Marionette with zero DEBUG buttons) were executed on devices with screenshots and widget-tree evidence. `scripts/check_playthrough_evidence.sh` mechanically enforces evidence rules R1–R4.
+**Known about the web build before Wave I starts** (verified August 23, 2026, so do not rediscover it): the release build compiles and renders, Firebase initialises clean, anonymous auth and the `createRoom` callable both work from a browser. Three traps are written up in `agent_execution_guide.md` §0 — **there is no widget tree on a CanvasKit app**, **two tabs in one browser profile are one player**, and **clearing IndexedDB with another tab open wedges the app into a silent black screen** (self-inflicted, not a defect).
 
 **Do not invent work.** The four legitimate triggers are listed in `agent_execution_guide.md` §2 — and the first is the one that has actually produced every recent defect: **a human playing the game**. Five of the last six functional waves came from that; none came from a gate.
 
-**Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it. Six superseded banners had accumulated here by August 21, each announcing that the one below it was out of date.
+**Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open issues.** Issues 1–105 are delivered, device-verified, and indexed in §3.
+**No open product defects.** Issues 1–105 are delivered, device-verified, and indexed in §3. **Wave I (web E2E) is in flight** — it is verification work, not a defect; its spec lives in `agent_execution_guide.md` §3–§5. Anything Wave I finds gets filed here with options and a blank `Your selection: _____`.
 
 ---
 
