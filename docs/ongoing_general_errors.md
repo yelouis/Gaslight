@@ -10,7 +10,7 @@
 
 **Wave J — prompt source & sampling (J1 → J2 → J3) — is complete (August 24, 2026).** All three selected options delivered and tested: **109 → Option C** (`bf38434`), **108 → Option B** (`64daf11`), **107 → Option B** (`74489b0`).
 
-**Issues 1–109 are delivered.** Gate state, measured August 24, 2026:
+**Issues 1–109 are delivered. Issue 110 is open** — found while verifying the web playthrough, and it needs your selection. Gate state, measured August 24, 2026:
 
 | Gate | Result |
 |---|---|
@@ -30,7 +30,22 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-*No unresolved issues at this time.*
+### Issue 110: The Case File cannot be shared on web, which is how the demo is being played
+**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/game_over_screen.dart:105`: `_shareCaseFile()` renders the Case File to PNG bytes and then returns early under `kIsWeb` with the snackbar `Sharing is only supported on mobile devices.` The screenshot cited by web playthrough block **W14** (`docs/playthrough_evidence/w14_case_file_share.png`) shows exactly that message. The guard is correct — `Share.shareXFiles` needs a `dart:io` temp file, which throws on web — but P6 (the shareable Case File) is a shipped feature and **the demo is currently being played in a browser**, so in practice nobody can share it. The bytes are already rendered when the early return fires, so the artwork exists and only the delivery is missing.
+
+**Option A**: **Leave it disabled** — keep the message, treat sharing as mobile-only until TestFlight.
+  - *Pros*: Zero work and zero risk; honest to the player rather than silently failing; the wording is already clear.
+  - *Cons*: The end-of-game payoff is missing for every friend testing on web right now, which is the whole audience today.
+
+**Option B (recommended)**: **Download the PNG on web** — feed the already-rendered bytes to a browser download (blob URL + anchor click) behind the same `kIsWeb` branch, keeping `Share.shareXFiles` for mobile.
+  - *Pros*: Uses bytes the code already produces, so it is a delivery change, not a rendering one. Works in every browser without permissions and gives web players the artefact. Small and well-contained.
+  - *Cons*: A download is not a share — no share sheet, no prefilled text — and the file lands in Downloads where a phone browser may bury it. **Note the Artifact/CSP caveat does not apply here; this is the app's own page, not a published artifact.**
+
+**Option C**: **Use the Web Share API** — call `navigator.share` with the PNG when the browser supports file sharing, and fall back to Option B when it does not.
+  - *Pros*: A real share sheet on supporting browsers, closest to the mobile experience.
+  - *Cons*: Support for sharing *files* is uneven (notably absent or partial on desktop browsers), requires a secure context, and needs a JS interop path plus the Option B fallback anyway — so it is Option B plus more.
+
+Your selection: _____
 
 ---
 
@@ -139,6 +154,12 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.25 The evidence gate proves an artefact exists, not that it agrees with the prose beside it
+
+Web block **W14** claimed it had "verified share payload creation and clipboard/fallback handler execution on web", and its `Expected:` said the click "triggers share/clipboard action". Neither happens: `_shareCaseFile` returns early under `kIsWeb`, there is no clipboard path for the Case File at all, and **the very screenshot the block cited shows the snackbar `Sharing is only supported on mobile devices.`** The block passed `check_playthrough_evidence.sh` because R3 only asks whether a PNG path is present — it cannot read the PNG.
+
+**So the gate bounds the *form* of evidence, never its *content*.** When verifying a playthrough, **open the artefact and check it says what the block says it says**, at least for any block whose claim you have a prior expectation about. Here the prior was concrete — `Share.shareXFiles` needs a `dart:io` temp file that cannot work on web — and it is exactly the block that turned out to overstate. A named mechanism that does not exist in the source (`grep -rn "Clipboard" lib/` returned only the room-code plaque) is the cheapest tell.
 
 #### 2.24 A fake that models the CORRECT behaviour hides the bug better than a wrong one would
 

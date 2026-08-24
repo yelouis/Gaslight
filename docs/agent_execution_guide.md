@@ -1,199 +1,84 @@
-# Agent Execution Guide — Active Build: Wave J — Prompt Source & Sampling — August 24, 2026
+# Agent Execution Guide — Wave J Complete · Issue 110 Awaiting Selection — August 24, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**The user has made all three selections.** Build exactly these:
+**Wave J is delivered and independently verified. Issues 1–109 are done.** One issue is open — **Issue 110**, and it is **blocked on the user's selection**.
 
-| # | Item | Issue & choice | Touches | Deploy |
-|---|---|---|---|---|
-| **J1** | One prompt-source resolver; kill the `"custom"` sentinel crash | **109 → Option C** | `functions/src/index.ts`, `lib/models/game_state.dart` | functions |
-| **J2** | Custom games draw from the players' own pool | **108 → Option B** | `functions/src/index.ts` | functions |
-| **J3** | Re-roll samples uniformly, minus what is live | **107 → Option B** | `functions/src/index.ts` | functions |
+## ⛔ STOP — the one open item is blocked
 
-**Order is J1 → J2 → J3 and it is a real dependency.** J1 creates the single place that decides where prompts come from; J2 teaches that place about custom pools; J3 changes how a prompt is picked from it. Built in any other order you will write the sentinel check three times and delete it twice.
+**Issue 110 ends in a blank `Your selection: _____`.** It offers three options with pros, cons and a `(recommended)` label. **That label is advice for the user, not permission for you.** Do not guess, do not "pick the recommended one to unblock yourself", and never fill the line in on their behalf.
 
-**On Issue 107 the user wrote: "Option B if it is not too hard to do. Otherwise do Option A."** **It is not hard — Option B is *less* code than what is there now**, because it deletes the union with the player's history rather than adding anything. Implement B. The only thing that would justify falling back to A is discovering that some other caller depends on re-roll consulting `seenPrompts`; §3.3 tells you how to check that in one command, and the expected answer is that nothing does. **"It felt hard" is not the condition.**
-
-**Do not run `firebase deploy`.** All three items are server-side and inert until deployed; that call is the user's.
+If the line is filled when you arrive, build it. If not, **report the state and stop** — §2 lists the only four things that legitimately start a build, and "the queue looked quiet" is not one of them.
 
 ## Verified baseline — the regression bar
+
+Measured August 24, 2026:
 
 | Gate | Result | Command |
 |---|---|---|
 | Analyzer | **0 errors** (21 warnings, 197 infos) | `flutter analyze lib test` |
-| Client tests | **178/178** | `flutter test` |
+| Client tests | **179/179** | `flutter test` |
 | Functions build | clean | `npm --prefix functions run build` |
-| Functions tests | **63/63** | `npm --prefix functions test` |
-| Deploy freshness | **exit 1, and that is correct** — undeployed server commits already exist | `./scripts/check_deploy_fresh.sh` |
-| Playthrough evidence | **exit 0** | `./scripts/check_playthrough_evidence.sh` |
+| Functions tests | **68/68** | `npm --prefix functions test` |
+| Deploy freshness | **exit 1 — expected**, see below | `./scripts/check_deploy_fresh.sh` |
+| iOS playthrough evidence | **exit 0** — 15 blocks: 14 PASS, 1 NOT RUN, 0 FAIL | `./scripts/check_playthrough_evidence.sh` |
+| Web playthrough evidence | **exit 0** — 19 blocks | `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` |
+
+**`check_deploy_fresh.sh` exits 1 and that is correct, not a regression.** Server commits through `74489b0` are undeployed. It goes green after `firebase deploy --only functions` — **which is the user's call, not yours.** Until then, none of Wave J is live: the curated deck contents, unlimited re-rolls, the custom-deck fix and the uniform re-roll sampling all sit in the repo only.
 
 ---
 
-## 0. What is already correct — do NOT "fix" it
+## 0. What Wave J delivered — verified in source, do NOT rework
 
-- **The initial draw is already uniformly random from the selected deck.** `startGame` → `PromptDecks.drawPrompts(deckId, n)` Fisher-Yates shuffles a copy and slices. `deckId` is resolved from `room.selectedDeckId` (Issue 106) and each first prompt is seeded into `sealed/{playerId}.seenPrompts` at `index.ts:476`. **Wave J does not touch this.**
-- **The deck is resolved from the room and a mismatched caller is rejected** (Issue 106, `index.ts:293`). Never reintroduce a client-supplied deck.
-- **Re-rolls already never refuse.** `drawOneExcluding` degrades in three steps instead of throwing `resource-exhausted`; only a missing deck throws.
-- **The next-round draw already avoids collisions inside a round** via `assignedThisRound`.
-- **`startGame`'s custom assignment already works** — per-player cap of 3, trim, length 1–200, case-insensitive dedupe, top-up from `the_daily_grind`, shuffle, and a swap so nobody receives their own prompt. J2 **extracts** it; it does not rewrite it.
+Checked against the code on August 24, 2026, not against the commit messages:
+
+- **J1 / Issue 109 (Option C).** `startGame` writes `effectiveDeckId` (`index.ts:508`); `resolvePromptSource()` is the only code that decides where prompts come from; **the string `"custom"` appears zero times inside `rerollPrompt` and `advanceToNextResolution`**, each of which calls the resolver once. A legacy fallback lives inside the resolver, so a room started before the change still resolves. Verified by calling the resolver directly against three shapes — custom with `effectiveDeckId`, custom **without** it (the old crash path), and a built-in deck — all three return a usable source.
+- **J2 / Issue 108 (Option B).** `buildCustomPromptPool()` and `assignPromptsFromCustomPool()` are extracted and shared by `startGame`, the re-roll, and the round advance, so the three cannot drift. **Never-your-own-prompt is enforced in the assigner** (`authorId !== player.id`) and on the re-roll path.
+- **J3 / Issue 107 (Option B).** The re-roll calls `drawOneExcluding(deckId, inPlay, inPlay)` — uniform, excluding only what is live on a card. `cardSeen` survives **only** to append to `seenPrompts`. **The round-advance draw still consults `seenPrompts`**, exactly as specified; Option B was not over-applied there.
+- **The test swap was deliberate and correct.** Four assertions of the form `seenByHost.has(...) === false` were removed — they asserted Option C's without-replacement property, which the user did not choose — and replaced with Option B's two promises: the card visibly changes, and the new prompt was not live on the table. The commit names the change and why.
+- **Both mandated guards are present:** the distribution test asserts `sampleCount > 0` before believing its result, and the sentinel-containment check asserts it actually read the function bodies (`body.split('\n').length > 10`) before believing a zero-match.
 
 ---
 
 ## 1. Standing constraints
 
-- **One item = one commit.** Three items, three commits.
-- **Never fill in a `Your selection: _____` line.**
+- **One item = one commit.**
+- **Never fill in a `Your selection: _____` line.** A `(recommended)` label is advice for the user.
 - **Do not run `firebase deploy`.**
 - **A mechanical check must assert it matched something.** Zero matches and zero violations produce the same number.
-- **A `grep` is not an observation.** `Observed:` takes device or runtime output.
-- **Record every substitution.** An omitted assertion reads as though it passed.
+- **A `grep` is not an observation.** Neither is prose describing source.
+- **Open the artefact.** A screenshot path satisfies the evidence gate; it does not prove the screenshot shows what the block claims (§8, lesson 2.25).
 - **`flutter analyze lib test`, never bare `flutter analyze`.**
-- **Do not fix unrelated defects inline.** File them with Pros/Cons and a blank selection line, per `.agents/skills/bug_documentation_guidelines/SKILL.md`.
-- **Do not touch anything in §8 or §9.**
+- **File defects you find, with Pros/Cons and a blank selection line**, per `.agents/skills/bug_documentation_guidelines/SKILL.md`. Do not fix them inline.
+- **Do not touch anything in §5 or §6.**
 
 ---
 
 ## 2. What legitimately starts a new build
 
-1. **A human plays the game and something is wrong.** Every recent functional defect came from this. **No gate has ever found one.**
-2. **The user asks for something**, or selects an option. *(Wave J is this.)*
+1. **A human plays the game and something is wrong.** Every functional defect this project has had came from here. **No gate has ever found one** — and the playthrough that produced Issue 110 found it only because a human read the screenshot.
+2. **The user asks for something**, or fills in a selection line.
 3. **A gate that was green goes red.** Fix the cause, not the gate.
 4. **The beta returns real feedback.**
 
----
-
-## 3. J1 — One prompt-source resolver (Issue 109, Option C)
-
-### 3.1 The defect being fixed
-
-`advanceToNextResolution` resolves the next round's deck as `const deckId = room.selectedDeckId || "the_daily_grind";` (`index.ts:1476`). For a custom game that is the literal sentinel `"custom"`, which has no entry in `DECKS`:
-
-```
-$ node -e "PromptDecks.drawOneExcluding('custom', new Set())"
-THROWS: not-found | Failed to load deck: custom. Ensure it is defined in PromptDecks.
-```
-
-**Every custom room with `totalRounds > 1` throws as the last card of round 1 resolves.** `rerollPrompt` at `:856` maps the sentinel correctly and `:1476` does not. **The disagreement is the bug**, so the fix is not to add a third mapping — it is to leave exactly one.
-
-### 3.2 What to build
-
-**(a) `startGame` stores the resolved deck.** In the same `transaction.update` that sets `currentPhase: "truth"`, add:
-
-```ts
-effectiveDeckId: deckId === "custom" ? "the_daily_grind" : deckId,
-```
-
-`deckId` is the Issue-106 room-resolved value. Keep `selectedDeckId` exactly as it is — it is the host's *choice* and the lobby renders it. `effectiveDeckId` is the *built-in deck to draw from*, and after `startGame` the sentinel must never reach a draw again.
-
-**(b) Add one resolver, and let nothing else decide.** Put it beside the callables in `index.ts`:
-
-```ts
-type PromptSource =
-  | { kind: "deck"; deckId: string }
-  | { kind: "custom"; pool: PromptItem[]; fallbackDeckId: string };
-
-function resolvePromptSource(room: GameState, activePlayers: PlayerState[]): PromptSource
-```
-
-In **J1 it always returns `{ kind: "deck", … }`** — custom still resolves to the fallback, i.e. today's re-roll behaviour, extended to the round-advance path. J1 is therefore a refactor plus a crash fix and nothing else. J2 adds the `custom` arm.
-
-**(c) Tolerate rooms started before this change.** A room already in flight has no `effectiveDeckId`, and it must not crash:
-
-```ts
-const effective =
-  room.effectiveDeckId ||
-  (room.selectedDeckId === "custom" ? "the_daily_grind" : room.selectedDeckId) ||
-  "the_daily_grind";
-```
-
-Put that fallback **inside the resolver only.** The 8-hour room TTL bounds how long it matters, but a live game must not break on deploy.
-
-**(d) Both draw sites call the resolver.** `rerollPrompt` (`:856`) and `advanceToNextResolution` (`:1476`) stop deriving a deck id themselves. After J1, **the string `"custom"` must not appear in either function.**
-
-### 3.3 The trap that will bite you: the Dart model drops unknown fields
-
-`lib/models/game_state.dart`'s `toMap()` is an **explicit whitelist**, and `test/fake_functions.dart` round-trips room documents through `GameState.fromMap(...)` and `.toMap()`. A field the Dart model does not know is therefore **silently erased** on any round-trip — the harness would then not reproduce production, which is precisely the shape of Issue 31 and lesson 2.1.
-
-**So add `effectiveDeckId` to the Dart `GameState`**: the field, the constructor, `copyWith`, `toMap`, and `fromMap` (defaulting to `null`/absent, and **omit the key when null** — never write `null`, per lesson 2.1). Prove it survives a round-trip in a test.
-
-Also run this before you start, to confirm nothing else already depends on re-roll history — the expected count is zero outside the two draw sites and the sealed writes:
-
-```bash
-grep -rn "seenPrompts" functions/src lib test | grep -v "_test\|spec"
-```
-
-### 3.4 Validation for J1
-
-- **Reproduce first.** An emulator test that starts a **custom deck with `totalRounds: 2`**, plays round 1 to resolution, and asserts round 2 begins with a prompt on every card. **It must fail with `not-found` before your change** — paste that failure into the commit body. A single-round game hides this defect entirely, which is why W1–W19 missed it.
-- **Over-reach guard:** a single-round custom game, and a normal built-in-deck multi-round game, must both still pass unchanged.
-- **Round-trip test:** a `GameState` carrying `effectiveDeckId` survives `toMap()` → `fromMap()` with the value intact, and a `GameState` without it does not emit a `null` key.
-- **Sentinel containment.** Add a source assertion that `"custom"` does not appear inside `rerollPrompt` or `advanceToNextResolution`. **It must assert it actually read those function bodies — a non-zero line count — before believing a zero-match result** (§11, lesson 2.21). A check that matches nothing returns the same number as a check that passes.
+An empty queue is a valid state. **Report it and stop.**
 
 ---
 
-## 4. J2 — Custom games draw from the players' pool (Issue 108, Option B)
+## 3. If you are here to verify rather than build
 
-### 4.1 What to build
+Run all seven gates, then read the **source** at the cited anchors — not the commit messages, which describe intent rather than what landed. **Re-grep every line number before trusting it; they drift.**
 
-**(a) Extract, do not rewrite.** The pool builder is inside `startGame`'s custom branch at `index.ts:336`. Lift it verbatim into a helper:
+Two things this project has learned the hard way, both of which paid off again this pass:
 
-```ts
-interface PromptItem { text: string; authorId: string; }
-function buildCustomPromptPool(activePlayers: PlayerState[], targetSize: number): PromptItem[]
-```
+- **Spot-check the highest-severity claim independently.** For Wave J that meant calling `resolvePromptSource` directly against the shape that used to crash, rather than trusting a passing test named after the bug.
+- **Open the evidence.** Web block W14 claimed a "clipboard/fallback handler" that does not exist anywhere in `lib/`, and the screenshot it cited showed the feature declining to run. The evidence gate passed it, because R3 checks that a PNG path is present — it cannot read the PNG. That became Issue 110 and lesson 2.25.
 
-It must preserve every existing rule: a **per-player cap of 3**, `trim()`, length **1–200**, **case-insensitive** dedupe, top-up from `the_daily_grind` tagged `authorId: "fallback"`, and the shuffle. `startGame` then calls the helper and keeps its existing assignment loop, **including the swap that stops a player receiving their own prompt.**
-
-**(b) The resolver grows its `custom` arm.** When the room is a custom game, `resolvePromptSource` returns `{ kind: "custom", pool, fallbackDeckId: room.effectiveDeckId }`.
-
-**(c) Both draw sites honour the pool.**
-- **Re-roll:** choose from pool entries where `authorId !== callerPlayerId`. If the pool cannot supply one, draw from `fallbackDeckId`. **The P10 rule that you never receive your own prompt survives every path** — it is the core deduction guarantee, not a nicety.
-- **Round advance:** re-run the assignment for the new round against the pool, excluding prompts already used and each player's own authorship, topping up from `fallbackDeckId` when short.
-
-### 4.2 Validation for J2
-
-- **`startGame` behaviour is unchanged.** Every existing custom-deck test passes **without modification**. If one needs editing, you have changed behaviour that was not in scope — stop and re-read.
-- A custom game's re-roll returns a **contributed** prompt when the pool can supply one. Assert it is a prompt a player actually wrote, not merely that it is a string.
-- **Never your own:** a player whose contribution is in the pool never receives it, on the initial draw, on re-roll, or in round 2.
-- **The fallback path is tested too**, not just the happy one: a pool too small to serve everyone must still start and still re-roll.
+If verification turns up a gap, prefer correcting it in place over filing, and escalate only when the fix needs a decision that is the user's to make.
 
 ---
 
-## 5. J3 — Re-roll samples uniformly, minus what is live (Issue 107, Option B)
-
-### 5.1 What to build
-
-Today `rerollPrompt` builds `excluded = inPlay ∪ cardSeen` and prefers anything outside it, so successive re-rolls **walk** the deck instead of sampling it.
-
-Change it to sample **uniformly from the source, excluding only prompts currently on a card — including the caller's own current prompt.** Concretely, at the re-roll call site the soft and hard exclusion sets become the same `inPlay` set, and `cardSeen` is no longer unioned in.
-
-- **Keep writing `seenPrompts`.** It stops governing re-roll sampling but is still history, and the round-advance draw still uses it (see below). Do not delete the writes.
-- **Scope: `rerollPrompt` only.** The round-advance draw keeps excluding that player's `seenPrompts`. Getting the same prompt again in a later *round* is a worse experience than a repeat while re-rolling, and the user asked about re-rolls. **Do not "consistently" apply B to the round-advance path.**
-- Leave `drawOneExcluding`'s three-tier signature alone — the round-advance caller still needs the history-aware behaviour.
-
-### 5.2 Validation for J3
-
-- **Distribution, not one draw.** Re-roll many times against a fixed deck and assert **every** prompt in that deck is reachable. A sampler stuck on one element must fail this.
-- **Assert the sample size is non-zero before believing the result.** A loop that ran zero times and a uniform sampler produce identical "no violations" output.
-- **Assert what Option B promises, and only that:** a returned prompt is **never** one that was live on a card at the moment of the call. **Repeats across the player's own history are now legal — a test forbidding them would be asserting Option C** and must not be written.
-- **Make it non-flaky.** Repeat enough, or seed, that it does not fail one run in twenty. A flaky randomness test gets deleted by the next agent, and then nothing guards this.
-- **Existing tests encode the old contract.** Three emulator tests were already rewritten in `1c5d69b` when re-rolls became unlimited. If one fails now, decide deliberately whether it states a requirement that still holds, **update it to the new contract, and say in the commit which assertions changed and why.** Never weaken a guard to make a run pass.
-
----
-
-## 6. Validation for this wave
-
-**Write the failing test first and watch it fail.** For J1 that is the custom 2-round game; for J3 it is the distribution test. Record the observed failure output in the commit body.
-
-**Pair every fix assertion with an over-reach guard that can actually fail.** Built-in decks must keep working while custom changes; single-round games must keep working while multi-round is fixed; `startGame` must be untouched while re-roll changes.
-
-**A green suite says nothing about what is deployed.** All three items are inert until `firebase deploy --only functions`, which you must not run. Expect `check_deploy_fresh.sh` to stay red and **say so in the commit** rather than leaving it looking like a regression.
-
-**Prompts are drawn once, at `startGame`, and written into `room.cards`.** A room already in progress keeps its prompts after any deploy. Manual verification needs a **new** game.
-
----
-
-## 7. Playthrough procedure — the standing setup
+## 4. Playthrough procedure — the standing setup
 
 1. **`.env` must contain `USE_EMULATOR=false`** — a bundled asset; changing it after the build has no effect.
 2. **Uninstall on every booted simulator** so no stale room is restored from `SharedPreferences`.
@@ -217,7 +102,7 @@ Change it to sample **uniformly from the source, excluding only prompts currentl
 
 ---
 
-## 8. Already delivered — do NOT rework
+## 5. Already delivered — do NOT rework
 
 **Verified in source, in the built artefacts, and on devices, August 22, 2026:**
 
@@ -228,13 +113,13 @@ Change it to sample **uniformly from the source, excluding only prompts currentl
 - **Issues 96–101** — `/rooms` denies `list`; seat re-bind requires ownership, a `seatToken` hashed into default-deny `sealed`, or a stale seat; `votes` stores opaque option UUIDs with phase/reader/duplicate guards; the reveal merges only the current card; unmask authorship is withheld until the deadline; debug callables are emulator-only *and* host-only.
 - **Issues 50–95** as previously recorded. **Issue 31** — loose `!= null`. **Issues 28/29** — `phosphor_flutter` can never be used.
 
-**The battery is six gates:** analyze · `flutter test` · functions build · functions test · `check_deploy_fresh.sh` · `check_playthrough_evidence.sh`.
+**The battery is seven gates:** analyze · `flutter test` · functions build · functions test · `check_deploy_fresh.sh` · `check_playthrough_evidence.sh`.
 
 **Release plumbing:** bundle ID `com.whylabs.gaslight` · `CFBundleDisplayName` **`Gaslight`** · `ITSAppUsesNonExemptEncryption` **`false`** · version `1.0.0+2` · iOS target **15.0** · Node **22**.
 
 ---
 
-## 9. Invariants & intentional decisions — do NOT change
+## 6. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.** Deleting them breaks emulator tests; `debugSimulateBotResponses` drives several. Their gating is observable only in a release or profile build.
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty. If a plugin lacks its own manifest, **upgrade the plugin**.
@@ -257,7 +142,7 @@ Change it to sample **uniformly from the source, excluding only prompts currentl
 
 ---
 
-## 10. Where the contracts live
+## 7. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -273,7 +158,7 @@ Change it to sample **uniformly from the source, excluding only prompts currentl
 
 ---
 
-## 11. Validation standard
+## 8. Validation standard
 
 **A mechanical check must assert it matched something.** Zero matches and zero violations produce the same number — `check_playthrough_evidence.sh` exists because a mandated check of mine did not.
 
@@ -295,7 +180,7 @@ Change it to sample **uniformly from the source, excluding only prompts currentl
 
 ---
 
-## 12. Feedback loop — what past specs got wrong
+## 9. Feedback loop — what past specs got wrong
 
 - **A check that matches nothing returns the same number as a check that passes.** Mine did, and it shipped as a mandatory step.
 - **A defect class mutates faster than the rule written to catch it.** `grep` as observation → prose as observation → a **renamed field** hiding both. Each escaped a rule written for the previous shape. **Match the concept, not the literal.**
@@ -334,33 +219,14 @@ Change it to sample **uniformly from the source, excluding only prompts currentl
 
 ## Definition of Done
 
-**J1 — Issue 109, Option C**
-- [x] `startGame` writes `effectiveDeckId` in the same update that sets `currentPhase: "truth"`.
-- [x] `resolvePromptSource()` exists and is the **only** code that decides where prompts come from.
-- [x] `rerollPrompt` and `advanceToNextResolution` both call it; **the string `"custom"` appears in neither**.
-- [x] Legacy rooms without `effectiveDeckId` resolve through the fallback **inside the resolver** and do not crash.
-- [x] `effectiveDeckId` added to Dart `GameState` (field, constructor, `copyWith`, `toMap`, `fromMap`), **omitted when null**, with a round-trip test proving it is not erased.
-- [x] **Reproduced first:** a custom-deck `totalRounds: 2` emulator test fails with `not-found` before the fix; failure output in the commit body. Passes after.
-- [x] Over-reach guards: single-round custom, and multi-round built-in deck, both unchanged.
-- [x] Sentinel-containment check asserts a **non-zero** read of the two function bodies before reporting zero matches.
+There is no active build. Issue 110 is blocked on the user.
 
-**J2 — Issue 108, Option B**
-- [x] `buildCustomPromptPool()` extracted from `startGame` **verbatim** — cap of 3, trim, length 1–200, case-insensitive dedupe, `the_daily_grind` top-up tagged `"fallback"`, shuffle.
-- [x] **Every existing custom-deck test passes without modification.** Editing one means behaviour changed out of scope.
-- [x] A custom re-roll returns a prompt a player actually wrote when the pool can supply one.
-- [x] **Never your own prompt** — on initial draw, on re-roll, and in round 2.
-- [x] The too-small-pool fallback path is tested, not just the happy path.
+**If Issue 110 has been selected, it is done when:**
+- [ ] The selected option is implemented behind the existing `kIsWeb` branch in `game_over_screen.dart:105`, reusing the **already-rendered** PNG bytes rather than re-rendering.
+- [ ] Mobile is untouched — `Share.shareXFiles` still runs on iOS, proven by a test that fails if the branch is inverted.
+- [ ] The web path is **observed**, not asserted from source: a screenshot showing what the user actually gets, and the W14 block updated to match.
+- [ ] If Option C: the Option B fallback is implemented **and tested**, because file sharing via `navigator.share` is unevenly supported.
+- [ ] Battery at or above the baseline table: **0 errors** · **≥179** · clean functions build · **≥68** · both evidence gates exit 0.
+- [ ] Issue 110 moved into the **single** existing Resolved heading, and `design_scoring_and_ui.md` updated if P6's delivery changed.
 
-**J3 — Issue 107, Option B**
-- [x] Re-roll excludes only what is live on a card, including the caller's own current prompt; `cardSeen` is no longer unioned into the exclusion.
-- [x] `seenPrompts` is still written, and the **round-advance draw still consults it** — B was not applied there.
-- [x] Distribution test shows every prompt in a deck is reachable, **and asserts its own sample size is non-zero**.
-- [x] No test asserts "never repeats across history" — that is Option C, which the user did not choose.
-- [x] Not flaky across repeated runs.
-- [x] Any pre-existing test changed to the new contract is named in the commit, with why.
-
-**Across the wave**
-- [x] Battery at or above baseline: **0 errors** · **≥178** · clean functions build · **≥63** · evidence gate exit 0.
-- [x] `check_deploy_fresh.sh` still red, explained in the commit, and **`firebase deploy` was never run**.
-- [x] One item, one commit; Conventional Commit; WHY in the body.
-- [x] Issues 107, 108 and 109 moved into the **single** existing Resolved heading in `ongoing_general_errors.md`, and `design_prompt_system.md` §3 and §5 updated to describe the rules that now hold.
+**If it has not been selected, the only correct action is to report the state and stop.**

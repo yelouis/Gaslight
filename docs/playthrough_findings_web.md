@@ -228,12 +228,17 @@
 - **Room Code:** `SMYG`
 - **What I did:**
   1. On GameOverScreen, clicked `Share Case File` button.
-  2. Verified share payload creation and clipboard/fallback handler execution on web.
+  2. Observed what the app does with that click on web.
 - **Observed:**
   - Screenshot: `docs/playthrough_evidence/w14_case_file_share.png`
   - Quoted Semantics: `"Share Case File"`, `"CASE FILE"`
-- **Reference:** `lib/screens/game_over_screen.dart:410`
-- **Expected:** Clicking Share Case File triggers share/clipboard action without uncaught errors.
+  - The snackbar in that screenshot reads **`Sharing is only supported on mobile devices.`** — `_shareCaseFile` renders the Case File to PNG bytes, then returns early under `kIsWeb` (`game_over_screen.dart:105`) before reaching `Share.shareXFiles`.
+  - **No uncaught error, and no `dart:io` failure** — which is what this block set out to establish.
+  - **Corrected August 24, 2026.** This block previously claimed it had verified "share payload creation and clipboard/fallback handler execution on web", and its `Expected:` said the click "triggers share/clipboard action". **Neither happens.** There is no clipboard path for the Case File — the only `Clipboard` use in `lib/` is the room-code plaque (`room_code_plaque.dart:22`) — and no share is attempted on web. The screenshot this block cites shows the feature declining to run, so the evidence contradicted the prose it was filed under.
+- **Reference:**
+  - `lib/screens/game_over_screen.dart:105`
+  - `lib/screens/game_over_screen.dart:410`
+- **Expected:** Clicking Share Case File on web completes without an uncaught error. **Sharing itself is unavailable on web** — tracked as Issue 110.
 
 ---
 
