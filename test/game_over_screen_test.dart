@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,7 @@ import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/models/game_state.dart';
 import 'package:gaslight/models/player_state.dart';
 import 'package:gaslight/screens/game_over_screen.dart';
+import 'package:gaslight/utils/case_file_saver.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart';
 
@@ -440,6 +442,20 @@ void main() {
       // Highlights header should not appear if all awards are null
       expect(find.text('MATCH HIGHLIGHTS'), findsNothing);
 
+      await gameService.leaveRoom();
+    });
+
+    test('case_file_saver_io throws UnsupportedError on non-web platforms', () {
+      expect(
+        () => saveCaseFilePng(Uint8List.fromList([1, 2, 3]), 'test.png'),
+        throwsA(isA<UnsupportedError>()),
+      );
+    });
+
+    testWidgets('renders Share Case File action button after ceremony', (WidgetTester tester) async {
+      await setupAndPumpGameOverScreen(tester: tester, reduceMotion: true);
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(find.text('Share Case File'), findsOneWidget);
       await gameService.leaveRoom();
     });
   });

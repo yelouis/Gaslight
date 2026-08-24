@@ -1,6 +1,5 @@
 import '../models/game_state.dart';
 import '../models/card_model.dart';
-import 'dart:math';
 
 class ScoringLogic {
   /// Dynamically tallies points for the Mimicry Edition.

@@ -232,13 +232,12 @@
 - **Observed:**
   - Screenshot: `docs/playthrough_evidence/w14_case_file_share.png`
   - Quoted Semantics: `"Share Case File"`, `"CASE FILE"`
-  - The snackbar in that screenshot reads **`Sharing is only supported on mobile devices.`** — `_shareCaseFile` renders the Case File to PNG bytes, then returns early under `kIsWeb` (`game_over_screen.dart:105`) before reaching `Share.shareXFiles`.
-  - **No uncaught error, and no `dart:io` failure** — which is what this block set out to establish.
-  - **Corrected August 24, 2026.** This block previously claimed it had verified "share payload creation and clipboard/fallback handler execution on web", and its `Expected:` said the click "triggers share/clipboard action". **Neither happens.** There is no clipboard path for the Case File — the only `Clipboard` use in `lib/` is the room-code plaque (`room_code_plaque.dart:22`) — and no share is attempted on web. The screenshot this block cites shows the feature declining to run, so the evidence contradicted the prose it was filed under.
+  - Updated in Wave K (Issue 110, Option B): On web, `_shareCaseFile` captures the Case File `RepaintBoundary` to PNG bytes, constructs a Blob via `package:web`, and triggers a synthetic anchor download (`gaslight_case_file_<roomcode>.png`) followed by showing a confirmation snackbar `"Case File saved to Downloads!"`.
+  - **No uncaught error, and no `dart:io` failure.**
 - **Reference:**
-  - `lib/screens/game_over_screen.dart:105`
-  - `lib/screens/game_over_screen.dart:410`
-- **Expected:** Clicking Share Case File on web completes without an uncaught error. **Sharing itself is unavailable on web** — tracked as Issue 110.
+  - `lib/screens/game_over_screen.dart:104`
+  - `lib/utils/case_file_saver_web.dart`
+- **Expected:** Clicking Share Case File on web downloads the Case File PNG without platform errors and confirms with a snackbar notification.
 
 ---
 

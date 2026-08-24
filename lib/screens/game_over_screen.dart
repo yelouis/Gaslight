@@ -21,6 +21,7 @@ import '../widgets/lamp_loading.dart';
 import '../widgets/shared_ui.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
+import '../utils/case_file_saver.dart';
 
 class GameOverScreen extends StatefulWidget {
   const GameOverScreen({super.key});
@@ -83,6 +84,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
 
   Future<void> _shareCaseFile() async {
     if (_isSharing) return;
+    final gameService = Provider.of<GameService>(context, listen: false);
     setState(() => _isSharing = true);
 
     try {
@@ -102,9 +104,17 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
       final pngBytes = byteData.buffer.asUint8List();
 
       if (kIsWeb) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sharing is only supported on mobile devices.')),
-        );
+        final roomCode = gameService.gameState?.roomCode ?? 'match';
+        final fileName = 'gaslight_case_file_${roomCode.toLowerCase()}.png';
+        saveCaseFilePng(pngBytes, fileName);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Case File saved to Downloads!'),
+              backgroundColor: AppColors.groundRaised,
+            ),
+          );
+        }
         return;
       }
 
