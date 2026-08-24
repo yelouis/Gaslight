@@ -54,6 +54,9 @@ class GameState {
   // Unmask deadline for revenge guesses
   final int? unmaskDeadline;
 
+  // Published match summary for game over screen
+  final Map<String, dynamic>? matchSummary;
+
   GameState({
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
@@ -75,6 +78,7 @@ class GameState {
     this.resolutionOrder = const [],
     this.debugEnabled = false,
     this.unmaskDeadline,
+    this.matchSummary,
   }) : forgeriesPerCard = forgeriesPerCard ?? sabotageAnswersCount;
 
   GameState copyWith({
@@ -98,10 +102,12 @@ class GameState {
     List<String>? resolutionOrder,
     bool? debugEnabled,
     int? unmaskDeadline,
+    Map<String, dynamic>? matchSummary,
     bool clearReaderId = false,
     bool clearEndTime = false,
     bool clearUnmaskDeadline = false,
     bool clearEffectiveDeckId = false,
+    bool clearMatchSummary = false,
   }) {
     return GameState(
       roomCode: roomCode ?? this.roomCode,
@@ -123,6 +129,7 @@ class GameState {
       resolutionOrder: resolutionOrder ?? this.resolutionOrder,
       debugEnabled: debugEnabled ?? this.debugEnabled,
       unmaskDeadline: clearUnmaskDeadline ? null : (unmaskDeadline ?? this.unmaskDeadline),
+      matchSummary: clearMatchSummary ? null : (matchSummary ?? this.matchSummary),
     );
   }
 
@@ -148,6 +155,7 @@ class GameState {
       'resolutionOrder': resolutionOrder,
       'debugEnabled': debugEnabled,
       'unmaskDeadline': unmaskDeadline,
+      if (matchSummary != null) 'matchSummary': matchSummary,
     };
   }
 
@@ -185,6 +193,9 @@ class GameState {
       resolutionOrder: List<String>.from(map['resolutionOrder'] ?? []),
       debugEnabled: map['debugEnabled'] as bool? ?? false,
       unmaskDeadline: map['unmaskDeadline']?.toInt(),
+      matchSummary: map['matchSummary'] != null
+          ? Map<String, dynamic>.from(map['matchSummary'] as Map)
+          : null,
     );
   }
 

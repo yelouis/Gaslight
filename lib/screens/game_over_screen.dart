@@ -12,7 +12,6 @@ import '../services/game_service.dart';
 import '../services/audio_service.dart';
 import '../models/player_state.dart';
 import '../widgets/player_avatar.dart';
-import '../widgets/lobby_background.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/gaslight_route.dart';
@@ -240,6 +239,12 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                             ),
                             const SizedBox(height: 30),
                             _buildHonorCards(theme, mastermind, trickster, runnerUp, gullible),
+                            const SizedBox(height: 32),
+                            _buildStandings(theme, sortedByScore, gs.currentPlayer?.id),
+                            if (gs.gameState?.matchSummary != null) ...[
+                              const SizedBox(height: 32),
+                              _buildMatchHighlights(theme, gs.gameState!.matchSummary!),
+                            ],
                           ],
                         ),
                       ),
@@ -523,6 +528,310 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStandings(ThemeData theme, List<PlayerState> sortedByScore, String? currentPlayerId) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'FINAL STANDINGS',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.secondary,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'CormorantGaramond',
+            fontSize: 20,
+            letterSpacing: 2.5,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.groundRaised,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.brass.withOpacity(0.3), width: 1.5),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: sortedByScore.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 1,
+                color: AppColors.brass.withOpacity(0.15),
+              ),
+              itemBuilder: (context, index) {
+                final player = sortedByScore[index];
+                final isCurrent = player.id == currentPlayerId;
+                final rank = index + 1;
+
+                Color rankColor;
+                if (rank == 1) {
+                  rankColor = const Color(0xFFE8D4A0);
+                } else if (rank == 2) {
+                  rankColor = const Color(0xFFC0C0C0);
+                } else if (rank == 3) {
+                  rankColor = const Color(0xFFCD7F32);
+                } else {
+                  rankColor = AppColors.ivory.withOpacity(0.6);
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      // Rank
+                      Container(
+                        width: 32,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '#$rank',
+                          style: TextStyle(
+                            fontFamily: 'CormorantGaramond',
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: rankColor,
+                          ),
+                        ),
+                      ),
+                      // Avatar
+                      PlayerAvatar(
+                        player: player,
+                        size: 36,
+                        showName: false,
+                      ),
+                      const SizedBox(width: 12),
+                      // Name & Stats
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              isCurrent ? '${player.name} (You)' : player.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontFamily: 'Lora',
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.parchment,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Fooled ${player.playersDeceived} · Fooled by ${player.timesFooled}',
+                              style: TextStyle(
+                                fontFamily: 'Lora',
+                                fontSize: 11,
+                                color: AppColors.ivory.withOpacity(0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Score
+                      Text(
+                        '${player.totalScore} PTS',
+                        style: const TextStyle(
+                          fontFamily: 'CormorantGaramond',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.brass,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMatchHighlights(ThemeData theme, Map<String, dynamic> summary) {
+    final bestLie = summary['bestLie'] != null ? Map<String, dynamic>.from(summary['bestLie'] as Map) : null;
+    final cleanestTruth = summary['cleanestTruth'] != null ? Map<String, dynamic>.from(summary['cleanestTruth'] as Map) : null;
+    final theSting = summary['theSting'] != null ? Map<String, dynamic>.from(summary['theSting'] as Map) : null;
+    final headToHead = (summary['headToHead'] as List<dynamic>? ?? [])
+        .map((h) => Map<String, dynamic>.from(h as Map))
+        .toList();
+
+    if (bestLie == null && cleanestTruth == null && theSting == null && headToHead.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'MATCH HIGHLIGHTS',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.secondary,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'CormorantGaramond',
+            fontSize: 20,
+            letterSpacing: 2.5,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (bestLie != null) ...[
+          _highlightCard(
+            title: 'BEST LIE OF THE NIGHT',
+            sigilType: ThematicIconType.secret,
+            quote: bestLie['text'] ?? '',
+            subtext: 'By ${bestLie['authorName'] ?? 'Unknown'} for prompt "${bestLie['promptText'] ?? ''}"',
+            badgeText: 'Fooled ${bestLie['fooled']} ${(bestLie['fooled'] == 1) ? 'player' : 'players'}',
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (cleanestTruth != null) ...[
+          _highlightCard(
+            title: 'CLEANEST TRUTH',
+            sigilType: ThematicIconType.observe,
+            quote: cleanestTruth['text'] ?? '',
+            subtext: '${cleanestTruth['targetPlayerName'] ?? 'Unknown'}\'s Truth for prompt "${cleanestTruth['promptText'] ?? ''}"',
+            badgeText: 'Found by only ${cleanestTruth['foundCount']} ${(cleanestTruth['foundCount'] == 1) ? 'player' : 'players'}',
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (theSting != null) ...[
+          _highlightCard(
+            title: 'THE STING',
+            sigilType: ThematicIconType.flame,
+            quote: theSting['promptText'] ?? '',
+            subtext: 'Deadliest prompt on the table',
+            badgeText: '${theSting['wrongVoteCount']} wrong votes',
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (headToHead.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.groundRaised,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.brass.withOpacity(0.3), width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    ThematicIcon(type: ThematicIconType.ledger, size: 18, color: AppColors.brass),
+                    SizedBox(width: 8),
+                    Text(
+                      'RIVALRIES',
+                      style: TextStyle(
+                        fontFamily: 'CormorantGaramond',
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brass,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                for (final pair in headToHead)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      '${pair['deceiverName']} fooled ${pair['victimName']} ${pair['count']} times',
+                      style: const TextStyle(
+                        fontFamily: 'Lora',
+                        fontSize: 12,
+                        color: AppColors.parchment,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _highlightCard({
+    required String title,
+    required ThematicIconType sigilType,
+    required String quote,
+    required String subtext,
+    required String badgeText,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.groundRaised,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.brass.withOpacity(0.3), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ThematicIcon(type: sigilType, size: 18, color: AppColors.brass),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontFamily: 'CormorantGaramond',
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.brass,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.ground,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: AppColors.brass.withOpacity(0.4)),
+                ),
+                child: Text(
+                  badgeText,
+                  style: const TextStyle(
+                    fontFamily: 'Lora',
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.ivory,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '"$quote"',
+            style: const TextStyle(
+              fontFamily: 'Lora',
+              fontSize: 13,
+              fontStyle: FontStyle.italic,
+              color: AppColors.ivory,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtext,
+            style: TextStyle(
+              fontFamily: 'Lora',
+              fontSize: 11,
+              color: AppColors.ivory.withOpacity(0.6),
             ),
           ),
         ],

@@ -3,12 +3,169 @@ import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomUUID, createHash } from "crypto";
 import { RotationEngine } from "./rotation_engine";
-import { ScoringLogic, GameState, CardModel } from "./scoring_logic";
+import { ScoringLogic, GameState, CardModel, CardSummary, MatchSummary } from "./scoring_logic";
 import { PromptDecks } from "./prompt_decks";
 import { isTooSimilar } from "./text_similarity";
 
 admin.initializeApp();
 const db = admin.firestore();
+
+export function computeMatchSummary(cards: CardSummary[], players: PlayerState[]): MatchSummary {
+  const playerNameMap: Record<string, string> = {};
+  for (const p of players) {
+    playerNameMap[p.id] = p.name;
+  }
+
+  // 1. Best Lie of the Night
+  interface FlatForgery {
+    authorId: string;
+    authorName: string;
+    text: string;
+    promptText: string;
+    fooled: number;
+    round: number;
+    targetPlayerId: string;
+  }
+  const allForgeries: FlatForgery[] = [];
+  for (const card of cards) {
+    for (const f of card.forgeries) {
+      if (f.fooled > 0) {
+        allForgeries.push({
+          authorId: f.authorId,
+          authorName: playerNameMap[f.authorId] || f.authorId,
+          text: f.text,
+          promptText: card.promptText,
+          fooled: f.fooled,
+          round: card.round,
+          targetPlayerId: card.targetPlayerId
+        });
+      }
+    }
+  }
+
+  allForgeries.sort((a, b) => {
+    if (b.fooled !== a.fooled) return b.fooled - a.fooled;
+    if (a.round !== b.round) return a.round - b.round;
+    if (a.targetPlayerId !== b.targetPlayerId) return a.targetPlayerId.localeCompare(b.targetPlayerId);
+    return a.authorId.localeCompare(b.authorId);
+  });
+
+  const bestLie = allForgeries.length > 0 ? {
+    authorId: allForgeries[0].authorId,
+    authorName: allForgeries[0].authorName,
+    text: allForgeries[0].text,
+    promptText: allForgeries[0].promptText,
+    fooled: allForgeries[0].fooled
+  } : null;
+
+  // 2. Cleanest Truth
+  interface FlatTruth {
+    targetPlayerId: string;
+    targetPlayerName: string;
+    text: string;
+    promptText: string;
+    foundCount: number;
+    round: number;
+  }
+  const allTruths: FlatTruth[] = [];
+  for (const card of cards) {
+    if (card.truthAnswer && card.truthAnswer.trim().length > 0 && card.truthAnswer !== kMissingAnswerPlaceholder) {
+      allTruths.push({
+        targetPlayerId: card.targetPlayerId,
+        targetPlayerName: playerNameMap[card.targetPlayerId] || card.targetPlayerId,
+        text: card.truthAnswer,
+        promptText: card.promptText,
+        foundCount: card.truthFinders.length,
+        round: card.round
+      });
+    }
+  }
+
+  allTruths.sort((a, b) => {
+    if (a.foundCount !== b.foundCount) return a.foundCount - b.foundCount;
+    if (a.round !== b.round) return a.round - b.round;
+    return a.targetPlayerId.localeCompare(b.targetPlayerId);
+  });
+
+  const cleanestTruth = allTruths.length > 0 ? {
+    targetPlayerId: allTruths[0].targetPlayerId,
+    targetPlayerName: allTruths[0].targetPlayerName,
+    text: allTruths[0].text,
+    promptText: allTruths[0].promptText,
+    foundCount: allTruths[0].foundCount
+  } : null;
+
+  // 3. The Sting
+  interface FlatSting {
+    targetPlayerId: string;
+    promptText: string;
+    wrongVoteCount: number;
+    round: number;
+  }
+  const allStings: FlatSting[] = [];
+  for (const card of cards) {
+    const wrongVoteCount = card.forgeries.reduce((sum, f) => sum + f.fooled, 0);
+    if (wrongVoteCount > 0) {
+      allStings.push({
+        targetPlayerId: card.targetPlayerId,
+        promptText: card.promptText,
+        wrongVoteCount,
+        round: card.round
+      });
+    }
+  }
+
+  allStings.sort((a, b) => {
+    if (b.wrongVoteCount !== a.wrongVoteCount) return b.wrongVoteCount - a.wrongVoteCount;
+    if (a.round !== b.round) return a.round - b.round;
+    return a.targetPlayerId.localeCompare(b.targetPlayerId);
+  });
+
+  const theSting = allStings.length > 0 ? {
+    targetPlayerId: allStings[0].targetPlayerId,
+    promptText: allStings[0].promptText,
+    wrongVoteCount: allStings[0].wrongVoteCount
+  } : null;
+
+  // 4. Head to Head
+  const pairCounts: Record<string, { deceiverId: string; victimId: string; count: number }> = {};
+  for (const card of cards) {
+    for (const f of card.forgeries) {
+      for (const victimId of f.fooledVoters || []) {
+        if (f.authorId !== victimId) {
+          const key = `${f.authorId}:::${victimId}`;
+          if (!pairCounts[key]) {
+            pairCounts[key] = { deceiverId: f.authorId, victimId, count: 0 };
+          }
+          pairCounts[key].count++;
+        }
+      }
+    }
+  }
+
+  const headToHeadPairs = Object.values(pairCounts)
+    .filter(p => p.count >= 2)
+    .map(p => ({
+      deceiverId: p.deceiverId,
+      deceiverName: playerNameMap[p.deceiverId] || p.deceiverId,
+      victimId: p.victimId,
+      victimName: playerNameMap[p.victimId] || p.victimId,
+      count: p.count
+    }));
+
+  headToHeadPairs.sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    if (a.deceiverId !== b.deceiverId) return a.deceiverId.localeCompare(b.deceiverId);
+    return a.victimId.localeCompare(b.victimId);
+  });
+
+  return {
+    bestLie,
+    cleanestTruth,
+    theSting,
+    headToHead: headToHeadPairs.slice(0, 3)
+  };
+}
 
 const kMissingAnswerPlaceholder = "THE SOUL IS SILENT";
 
@@ -525,6 +682,8 @@ export const startGame = onCall(async (request) => {
       transaction.set(sealedRef, { seenPrompts: [prompts[idx]] }, { merge: true });
     });
 
+    transaction.set(roomRef.collection("sealed").doc("_summary"), { cards: [] });
+
     // Reset player readiness
     playersSnap.docs.forEach(doc => {
       transaction.update(doc.ref, { lobbyReady: false });
@@ -964,6 +1123,10 @@ export const handleDisconnect = onCall(async (request) => {
     // Verify caller is either host, or the disconnected player themself
     const playersSnap = await transaction.get(roomRef.collection("players"));
     const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
+    const summarySnap = await transaction.get(roomRef.collection("sealed").doc("_summary"));
+    const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [] };
+    const accumulatedCards: CardSummary[] = Array.isArray(summaryDoc.cards) ? summaryDoc.cards : [];
+
     const callerPlayer = players.find(p => p.authUid === callerUid);
     const disconnectedPlayer = players.find(p => p.id === disconnectedPlayerId);
     const phase = room.currentPhase;
@@ -1083,12 +1246,14 @@ export const handleDisconnect = onCall(async (request) => {
       }
     }
 
-    if (phase !== "lobby" && activePlayerCount < 3) {
+    if (nextState.currentPhase === "gameOver" || (phase !== "lobby" && activePlayerCount < 3)) {
+      const matchSummary = computeMatchSummary(accumulatedCards, players);
       nextState = {
         ...nextState,
         currentPhase: "gameOver",
         unmaskDeadline: null,
         endTime: null,
+        matchSummary
       };
     }
 
@@ -1127,6 +1292,11 @@ async function advancePhaseInternal(
   const nextReadyPlayers: Record<string, boolean> = {};
 
   // Fetch all sealed documents up front (READS BEFORE WRITES)
+  const summaryRef = roomRef.collection("sealed").doc("_summary");
+  const summarySnap = await transaction.get(summaryRef);
+  const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [] };
+  const accumulatedCards: CardSummary[] = Array.isArray(summaryDoc.cards) ? summaryDoc.cards : [];
+
   const sealedDataMap: Record<string, any> = {};
   for (const card of currentCards) {
     const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
@@ -1338,6 +1508,50 @@ async function advancePhaseInternal(
           });
         }
       }
+
+      // Accumulate card summary for match highlights
+      const truthFinders: string[] = [];
+      const forgeriesSummary: Array<{
+        authorId: string;
+        text: string;
+        fooled: number;
+        fooledVoters: string[];
+      }> = [];
+
+      for (const [forgerId, fText] of Object.entries(cardWithAnswers.sabotageAnswers || {})) {
+        const fooledVoters: string[] = [];
+        for (const [voterId, votedAuthor] of Object.entries(resolvedVotes)) {
+          if (votedAuthor === forgerId && voterId !== forgerId) {
+            fooledVoters.push(voterId);
+          }
+        }
+        forgeriesSummary.push({
+          authorId: forgerId,
+          text: (fText || "").slice(0, 100),
+          fooled: fooledVoters.length,
+          fooledVoters
+        });
+      }
+
+      for (const [voterId, votedAuthor] of Object.entries(resolvedVotes)) {
+        if (votedAuthor === card.targetPlayerId && voterId !== card.targetPlayerId) {
+          truthFinders.push(voterId);
+        }
+      }
+
+      const newCardSummary: CardSummary = {
+        round: room.currentRound || 1,
+        targetPlayerId: card.targetPlayerId,
+        promptText: (card.promptText || "").slice(0, 100),
+        truthAnswer: (cardWithAnswers.truthAnswer || "").slice(0, 100),
+        forgeries: forgeriesSummary,
+        truthFinders
+      };
+
+      if (accumulatedCards.length < 60) {
+        accumulatedCards.push(newCardSummary);
+      }
+      transaction.set(summaryRef, { cards: accumulatedCards }, { merge: true });
     }
 
     const unmaskDeadline = hasFooled ? Date.now() + 20000 : null;
@@ -1513,6 +1727,10 @@ export const advanceToNextResolution = onCall(async (request) => {
 
     const playersSnap = await transaction.get(roomRef.collection("players"));
     const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
+    const summarySnap = await transaction.get(roomRef.collection("sealed").doc("_summary"));
+    const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [] };
+    const accumulatedCards: CardSummary[] = Array.isArray(summaryDoc.cards) ? summaryDoc.cards : [];
+
     const hostPlayer = players.find(p => p.authUid === callerUid);
 
     if (!hostPlayer || !hostPlayer.isHost) {
@@ -1566,14 +1784,10 @@ export const advanceToNextResolution = onCall(async (request) => {
           assignedPrompts = {};
           const assignedThisRound = new Set<string>();
           for (const p of activePlayers) {
-            const seen = playerSeenMap[p.id] || new Set();
-            const newPrompt = PromptDecks.drawOneExcluding(
-              promptSource.deckId,
-              new Set([...Array.from(seen), ...Array.from(assignedThisRound)]),
-              assignedThisRound
-            );
-            assignedThisRound.add(newPrompt);
-            assignedPrompts[p.id] = newPrompt;
+            const seen = playerSeenMap[p.id] || new Set<string>();
+            const chosen = PromptDecks.drawOneExcluding(promptSource.deckId, seen, assignedThisRound);
+            assignedPrompts[p.id] = chosen;
+            assignedThisRound.add(chosen);
           }
         }
 
@@ -1613,9 +1827,11 @@ export const advanceToNextResolution = onCall(async (request) => {
           expiresAt: ttlFrom(Date.now())
         });
       } else {
+        const matchSummary = computeMatchSummary(accumulatedCards, players);
         transaction.update(roomRef, {
           currentPhase: "gameOver",
-          unmaskDeadline: null
+          unmaskDeadline: null,
+          matchSummary
         });
       }
     }

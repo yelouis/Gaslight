@@ -3379,7 +3379,200 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         // All 10 prompts not held by the other two players must have been reached across 100 uniform samples
         expect(observedPrompts.size).to.equal(10);
       });
+
+      it('Issue 111 (K1): multi-round match accumulates card summaries into sealed/_summary and publishes matchSummary at game over with no mid-match leak', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        // Set totalRounds = 2
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, totalRounds: 2, selectedDeckId: 'the_daily_grind' });
+        await callFn('startGame', hostUser.idToken, { roomCode, totalRounds: 2, selectedDeckId: 'the_daily_grind' });
+
+        // --- ROUND 1: TRUTH PHASE ---
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice Truth R1', isTruth: true });
+        await callFn('submitAnswer', guest1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob Truth R1', isTruth: true });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie Truth R1', isTruth: true });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+
+        // --- ROUND 1: FORGERY PHASE ---
+        const cardAssignments = roomSnap.data()?.currentCardAssignments as Record<string, string>;
+        // Bob writes forgery on Alice's card
+        const bobTarget = cardAssignments['p_g1'];
+        await callFn('submitAnswer', guest1User.idToken, { roomCode, targetCardId: bobTarget, authorId: 'p_g1', text: 'Bob Lie R1', isTruth: false });
+        // Alice writes forgery on her assignment
+        const aliceTarget = cardAssignments['p_host'];
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: aliceTarget, authorId: 'p_host', text: 'Alice Lie R1', isTruth: false });
+        // Charlie writes forgery on his assignment
+        const charlieTarget = cardAssignments['p_g2'];
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: charlieTarget, authorId: 'p_g2', text: 'Charlie Lie R1', isTruth: false });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+
+        // --- ROUND 1: VOTE & REVEAL FOR ALL CARDS ---
+        const order = roomSnap.data()?.resolutionOrder as string[];
+        for (let i = 0; i < order.length; i++) {
+          const currentReader = order[i];
+          const curRoomSnap = await roomRef.get();
+          const curCard = (curRoomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+          const options = curCard.options as Array<{ id: string; text: string }>;
+          const sealedSnap = await roomRef.collection('sealed').doc(currentReader).get();
+          const answerAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+
+          // Each voter votes for an option not authored by themself
+          const voters = [
+            { id: 'p_host', token: hostUser.idToken },
+            { id: 'p_g1', token: guest1User.idToken },
+            { id: 'p_g2', token: guest2User.idToken }
+          ];
+
+          for (const voter of voters) {
+            if (voter.id !== currentReader) {
+              const optToVote = options.find(o => answerAuthors[o.id] !== voter.id);
+              if (optToVote) {
+                await callFn('castVote', voter.token, { roomCode, targetCardId: currentReader, voterId: voter.id, votedForId: optToVote.id });
+              }
+            }
+          }
+
+          // Advance to reveal
+          await callFn('advancePhase', hostUser.idToken, { roomCode });
+
+          // Mid-match leak guard: room.matchSummary must be ABSENT mid-match
+          const revealSnap = await roomRef.get();
+          expect(revealSnap.data()?.matchSummary).to.be.undefined;
+
+          // Advance to next resolution or next round
+          await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+        }
+
+        // Now in Round 2
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+        expect(roomSnap.data()?.currentRound).to.equal(2);
+        // Leak guard: still no matchSummary on room document
+        expect(roomSnap.data()?.matchSummary).to.be.undefined;
+
+        // --- ROUND 2: TRUTH PHASE ---
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice Truth R2', isTruth: true });
+        await callFn('submitAnswer', guest1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob Truth R2', isTruth: true });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie Truth R2', isTruth: true });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+
+        // --- ROUND 2: FORGERY PHASE ---
+        const cardAssignmentsR2 = roomSnap.data()?.currentCardAssignments as Record<string, string>;
+        for (const [holderId, targetId] of Object.entries(cardAssignmentsR2)) {
+          const user = holderId === 'p_host' ? hostUser : (holderId === 'p_g1' ? guest1User : guest2User);
+          await callFn('submitAnswer', user.idToken, { roomCode, targetCardId: targetId, authorId: holderId, text: `Lie by ${holderId} in R2`, isTruth: false });
+        }
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+
+        // --- ROUND 2: VOTE & REVEAL ---
+        const orderR2 = roomSnap.data()?.resolutionOrder as string[];
+        for (let i = 0; i < orderR2.length; i++) {
+          const currentReader = orderR2[i];
+          const curRoomSnap = await roomRef.get();
+          const curCard = (curRoomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+          const options = curCard.options as Array<{ id: string; text: string }>;
+          const sealedSnap = await roomRef.collection('sealed').doc(currentReader).get();
+          const answerAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+
+          const voters = [
+            { id: 'p_host', token: hostUser.idToken },
+            { id: 'p_g1', token: guest1User.idToken },
+            { id: 'p_g2', token: guest2User.idToken }
+          ];
+
+          for (const voter of voters) {
+            if (voter.id !== currentReader) {
+              const optToVote = options.find(o => answerAuthors[o.id] !== voter.id);
+              if (optToVote) {
+                await callFn('castVote', voter.token, { roomCode, targetCardId: currentReader, voterId: voter.id, votedForId: optToVote.id });
+              }
+            }
+          }
+
+          await callFn('advancePhase', hostUser.idToken, { roomCode });
+          await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+        }
+
+        // Match complete! Room is now gameOver
+        const finalRoomSnap = await roomRef.get();
+        const finalData = finalRoomSnap.data();
+        expect(finalData?.currentPhase).to.equal('gameOver');
+        expect(finalData?.matchSummary).to.be.an('object');
+
+        // Assert summary details
+        const summary = finalData?.matchSummary;
+        expect(summary.bestLie).to.be.an('object');
+        expect(summary.bestLie.fooled).to.be.greaterThan(0);
+        expect(summary.bestLie.authorName).to.be.a('string');
+        expect(summary.bestLie.text).to.be.a('string');
+
+        expect(summary.cleanestTruth).to.be.an('object');
+        expect(summary.theSting).to.be.an('object');
+
+        // Assert sealed/_summary accumulated 6 cards (3 players x 2 rounds)
+        const finalSummarySnap = await roomRef.collection('sealed').doc('_summary').get();
+        expect(finalSummarySnap.exists).to.be.true;
+        const recordedCards = finalSummarySnap.data()?.cards as any[];
+        expect(recordedCards).to.have.lengthOf(6);
+      });
+
+      it('Issue 111 (K1): disconnect mid-round publishes matchSummary on gameOver', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+
+        // Player Charlie disconnects, leaving only 2 players -> gameOver
+        await callFn('handleDisconnect', guest2User.idToken, { roomCode, disconnectedPlayerId: 'p_g2' });
+
+        const roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('gameOver');
+        expect(roomSnap.data()?.matchSummary).to.be.an('object');
+      });
     });
   });
 });
+
 

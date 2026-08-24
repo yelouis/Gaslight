@@ -124,5 +124,58 @@ void main() {
       final restoredWithout = GameState.fromMap(mapWithout, 'TEST');
       expect(restoredWithout.effectiveDeckId, isNull);
     });
+
+    test('Wave K1: matchSummary round-trips toMap() -> fromMap() and omits key when null', () {
+      final summaryPayload = {
+        'bestLie': {
+          'authorId': 'p1',
+          'authorName': 'Alice',
+          'text': 'The best lie ever told',
+          'promptText': 'What did you do?',
+          'fooled': 3,
+        },
+        'cleanestTruth': {
+          'targetPlayerId': 'p2',
+          'targetPlayerName': 'Bob',
+          'text': 'The absolute truth',
+          'promptText': 'Where were you?',
+          'foundCount': 0,
+        },
+        'theSting': {
+          'targetPlayerId': 'p3',
+          'promptText': 'What happened?',
+          'wrongVoteCount': 4,
+        },
+        'headToHead': [
+          {
+            'deceiverId': 'p1',
+            'deceiverName': 'Alice',
+            'victimId': 'p2',
+            'victimName': 'Bob',
+            'count': 3,
+          }
+        ],
+      };
+
+      final stateWithSummary = GameState(
+        roomCode: 'TEST',
+        matchSummary: summaryPayload,
+      );
+      final mapWith = stateWithSummary.toMap();
+      expect(mapWith.containsKey('matchSummary'), isTrue);
+      expect(mapWith['matchSummary'], summaryPayload);
+
+      final restoredWith = GameState.fromMap(mapWith, 'TEST');
+      expect(restoredWith.matchSummary, summaryPayload);
+
+      final stateWithoutSummary = GameState(
+        roomCode: 'TEST',
+      );
+      final mapWithout = stateWithoutSummary.toMap();
+      expect(mapWithout.containsKey('matchSummary'), isFalse, reason: 'matchSummary must be omitted when null');
+
+      final restoredWithout = GameState.fromMap(mapWithout, 'TEST');
+      expect(restoredWithout.matchSummary, isNull);
+    });
   });
 }

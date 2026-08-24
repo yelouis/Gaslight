@@ -30,6 +30,50 @@ export interface GameState {
   debugEnabled?: boolean;
   expiresAt?: any;
   unmaskDeadline?: number | null;
+  matchSummary?: MatchSummary;
+}
+
+export interface CardSummary {
+  round: number;
+  targetPlayerId: string;
+  promptText: string;
+  truthAnswer: string;
+  forgeries: Array<{
+    authorId: string;
+    text: string;
+    fooled: number;
+    fooledVoters?: string[];
+  }>;
+  truthFinders: string[];
+}
+
+export interface MatchSummary {
+  bestLie?: {
+    authorId: string;
+    authorName: string;
+    text: string;
+    promptText: string;
+    fooled: number;
+  } | null;
+  cleanestTruth?: {
+    targetPlayerId: string;
+    targetPlayerName: string;
+    text: string;
+    promptText: string;
+    foundCount: number;
+  } | null;
+  theSting?: {
+    targetPlayerId: string;
+    promptText: string;
+    wrongVoteCount: number;
+  } | null;
+  headToHead?: Array<{
+    deceiverId: string;
+    deceiverName: string;
+    victimId: string;
+    victimName: string;
+    count: number;
+  }>;
 }
 
 export class ScoringLogic {

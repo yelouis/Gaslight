@@ -189,11 +189,14 @@ describe('Firestore Security Rules', () => {
     await assertSucceeds(updateDoc(playerRef, { lastSeen: Date.now() }));
   });
 
-  it('should deny client reads and writes on sealed subcollection', async () => {
+  it('should deny client reads and writes on sealed subcollection, including sealed/_summary', async () => {
     const userContext = testEnv.authenticatedContext('alice');
     const sealedRef = doc(userContext.firestore(), 'rooms/TEST/sealed/card_1');
+    const summaryRef = doc(userContext.firestore(), 'rooms/TEST/sealed/_summary');
     const getDoc = (await import('firebase/firestore')).getDoc;
     await assertFails(getDoc(sealedRef));
+    await assertFails(getDoc(summaryRef));
     await assertFails(setDoc(sealedRef, { truthAnswer: 'secret' }));
+    await assertFails(setDoc(summaryRef, { cards: [] }));
   });
 });
