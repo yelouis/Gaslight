@@ -18,7 +18,8 @@
   ],
   "hosting": {
     "public": "build/web",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "_comment_ignore": "Do NOT add \"**/.*\" here. This app ships .env as a declared Flutter asset (pubspec.yaml), so it builds to build/web/assets/.env, and that glob excludes it from the upload. main.dart calls dotenv.load() before runApp(), so a missing .env kills the app before it paints.",
+    "ignore": ["firebase.json", "**/node_modules/**"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }]
   },
   "emulators": {
