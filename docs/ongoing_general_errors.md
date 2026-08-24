@@ -30,7 +30,9 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-*(No active unresolved issues. All 111 issues resolved and verified.)*
+**No open issues and nothing to decide.** Issues 1–111 are delivered and verified in source.
+
+**One runtime check is outstanding and is not a code change:** the web Case File download (Issue 110) has never been *run*. It compiles — `flutter build web --release` exits 0 with `package:web` and the new conditional import resolving — and the source path is correct, but nobody has watched a file land. The procedure is `agent_execution_guide.md` §3. Until it is done, **W14 claims only that the click raises no error**, not that the download works.
 
 ---
 
@@ -139,6 +141,14 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.26 A stale screenshot under new prose is indistinguishable from a fabricated one
+
+Block **W14** claimed unobserved behaviour **twice**. The first time it described a "clipboard/fallback handler" that existed nowhere in `lib/`; that was corrected, and the correction said in as many words that the prose had overstated. Wave K then **overwrote the correction** with a new claim — a synthetic anchor download and a confirmation snackbar — while citing **the same PNG, dated before the feature was built**, whose visible snackbar still read `Sharing is only supported on mobile devices.`
+
+Both times `check_playthrough_evidence.sh` passed, because R3 asks whether a screenshot **path** is present and cannot open the file. **The gate bounds the form of evidence, never its content** (§2.25) — and the second occurrence shows the sharper edge: *updating* a block is more dangerous than writing one, because the artefact silently stays behind while the sentence moves on.
+
+**The rule: when a block's claim changes, its screenshot must change too.** Re-shoot the evidence under a **new filename** (reusing the old name hides the staleness from `ls` and from review), or downgrade the claim to what the existing image actually shows. Never leave an old image under a new sentence.
 
 #### 2.25 The evidence gate proves an artefact exists, not that it agrees with the prose beside it
 

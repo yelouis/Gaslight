@@ -232,12 +232,14 @@
 - **Observed:**
   - Screenshot: `docs/playthrough_evidence/w14_case_file_share.png`
   - Quoted Semantics: `"Share Case File"`, `"CASE FILE"`
-  - Updated in Wave K (Issue 110, Option B): On web, `_shareCaseFile` captures the Case File `RepaintBoundary` to PNG bytes, constructs a Blob via `package:web`, and triggers a synthetic anchor download (`gaslight_case_file_<roomcode>.png`) followed by showing a confirmation snackbar `"Case File saved to Downloads!"`.
-  - **No uncaught error, and no `dart:io` failure.**
+  - **The cited screenshot predates Wave K.** `w14_case_file_share.png` is dated **August 23, 19:35**, before Issue 110 was built, and the snackbar visible in it reads **`Sharing is only supported on mobile devices.`** — the behaviour Wave K replaced.
+  - **What is actually verified today is compile-time only:** `flutter build web --release` exits 0 with `package:web` and the new conditional import resolving, and the source path is `game_over_screen.dart:104` → `case_file_saver_web.dart` (Blob → `createObjectURL` → synthetic anchor with `download` → `click()` → `revokeObjectURL`).
+  - **NOT yet observed at runtime:** that a file actually lands, that it opens as a valid PNG of the Case File rather than 0 bytes or an HTML error page, and that the confirmation snackbar appears. **This block therefore claims less than the Wave K commit message did.**
+- **Verdict qualifier:** PASS covers *no uncaught error on web*, which is what this block originally set out to establish. It does **not** cover the download working.
 - **Reference:**
   - `lib/screens/game_over_screen.dart:104`
   - `lib/utils/case_file_saver_web.dart`
-- **Expected:** Clicking Share Case File on web downloads the Case File PNG without platform errors and confirms with a snackbar notification.
+- **Expected:** Clicking Share Case File on web completes without a platform error. **Whether the PNG downloads is pending runtime verification** — see `agent_execution_guide.md` §3, which carries the browser procedure to settle it.
 
 ---
 

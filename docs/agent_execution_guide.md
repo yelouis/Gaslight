@@ -1,172 +1,128 @@
-# Agent Execution Guide — Active Build: Wave K — Game Over Payoff — August 24, 2026
+# Agent Execution Guide — Wave K Verified · One Runtime Check Outstanding — August 24, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**Both selections are made. Build exactly these:**
+**Wave K is built and independently verified in source. Issues 1–111 are delivered.** There is **no open issue and nothing to decide** — the queue is empty.
 
-| # | Item | Issue & choice | Touches | Deploy |
-|---|---|---|---|---|
-| **K1** | Final standings + a server-written match summary that quotes real answers | **111 → Option C** | `functions/src/index.ts`, `lib/models/game_state.dart`, `lib/screens/game_over_screen.dart` | **functions** |
-| **K2** | Case File downloads on web instead of refusing | **110 → Option B** | `lib/screens/game_over_screen.dart`, `lib/utils/`, `pubspec.yaml` | — |
-
-**Order is K1 → K2.** Both edit `game_over_screen.dart`, and K1 changes what is *on* that screen — which is exactly what K2's Case File image captures. Doing K2 first means re-shooting its evidence.
-
-**Do not run `firebase deploy`.** K1 is inert until deployed; that call is the user's.
+**One task remains, and it is not a code change:** the web Case File download (Issue 110) has never been *run*. It compiles and the source is right, but nobody has watched a file land. §3 is the procedure to settle that. Everything else in this guide is context.
 
 ## Verified baseline — the regression bar
 
+Measured August 24, 2026:
+
 | Gate | Result | Command |
 |---|---|---|
-| Analyzer | **0 errors** (21 warnings, 197 infos) | `flutter analyze lib test` |
-| Client tests | **179/179** | `flutter test` |
+| Analyzer | **0 errors** (21 warnings, 201 infos) | `flutter analyze lib test` |
+| Client tests | **185/185** | `flutter test` |
 | Functions build | clean | `npm --prefix functions run build` |
-| Functions tests | **68/68** | `npm --prefix functions test` |
-| Deploy freshness | **exit 1 — expected**, undeployed server commits already exist | `./scripts/check_deploy_fresh.sh` |
+| Functions tests | **70/70** | `npm --prefix functions test` |
+| Web release build | **exit 0** | `flutter build web --release` |
+| Deploy freshness | **exit 1 — expected**, see below | `./scripts/check_deploy_fresh.sh` |
 | iOS evidence | **exit 0** — 15 blocks | `./scripts/check_playthrough_evidence.sh` |
 | Web evidence | **exit 0** — 19 blocks | `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` |
 
+**`check_deploy_fresh.sh` exits 1 and that is correct.** Wave K's server half (Issue 111) is committed and **not deployed**, so the match summary does not exist in production yet. `firebase deploy --only functions` is **the user's call, not yours.**
+
 ---
 
-## 0. The two facts that decide this wave — verified in source, do not re-derive
+## 0. What Wave K delivered — verified in source, do NOT rework
 
-**Player counters survive the whole match.** `totalScore`, `timesFooled` and `playersDeceived` are applied as deltas inside the reveal transaction (`functions/src/index.ts:1317–1340`) and are zeroed only at player creation and game reset. **Standings and any counter-derived award need no backend at all.**
+Checked against the code, not the commit messages:
 
-**No answer text survives.** Single-card reveal scoping blanks every non-current card on the room document, and the round advance additionally resets each `sealed/{playerId}` doc plus `votes` and `unmaskGuesses` (`:1587`, `:1595`). **By game over the match's answers exist nowhere.** Do not try to read `room.cards` at game over to find a best lie — those cards are blank by then. This is the entire reason Option C exists.
+- **K1 / Issue 111 (Option C).** Standings render for **every** active player (`_buildStandings`, `game_over_screen.dart:548`, `itemCount: sortedByScore.length`). The summary accumulates inside the existing reveal transaction, reusing the pass that already walks `resolvedVotes`. `sealed/_summary` is initialised at `startGame` (`index.ts:685`), read in `advancePhaseInternal`'s **read phase** (reads at 1296/1303, first write at 1328 — verified in that order), and published to the room **only** inside `gameOver` branches. **All three** `gameOver` sites publish, including both disconnect paths (`:1244`, `:1253`, `:1832`).
+- **The security property holds, and its test is not vacuous.** A rules test denies client reads of `sealed/_summary`. **Falsified by injecting `allow read: if true` on a `match /sealed/{docId}` block: the suite went to 69 passing / 1 failing, and back to 70/70 with the rules restored.** The mid-match leak guard asserts `room.matchSummary` is `undefined` after round 1 resolves — this is what keeps Issues 99/100 shut.
+- **The `fooled` count is computed correctly** (`index.ts:1521-1533`): for each forgery author it counts voters whose resolved vote is that author **excluding self-votes**, and `truthFinders` counts voters who picked `targetPlayerId`. Answer text is truncated to 100 characters.
+- **The Dart whitelist trap was handled.** `matchSummary` is on `GameState` with `toMap` **omitting the key when null**, proven by a round-trip test (`test/deck_selection_test.dart:128`).
+- **K2 / Issue 110 (Option B).** Conditional-import shim (`lib/utils/case_file_saver.dart`), web implementation does Blob → `createObjectURL` → anchor with `download` → `click()` → **`revokeObjectURL`**, IO implementation throws `UnsupportedError` rather than pretending to succeed, `web: ^1.1.1` added. **`flutter build web --release` exits 0**, so the interop and the conditional import genuinely resolve.
 
 ---
 
 ## 1. Standing constraints
 
-- **One item = one commit.** Two items, two commits.
+- **One item = one commit.**
 - **Never fill in a `Your selection: _____` line.**
 - **Do not run `firebase deploy`.**
 - **A mechanical check must assert it matched something.**
 - **A `grep` is not an observation.** Neither is prose describing source.
-- **Open the artefact.** A screenshot path satisfies the evidence gate; it does not prove the screenshot shows what the block claims (lesson 2.25 — that is how Issue 110 was found).
+- **Open the artefact.** This is the rule that matters most right now — see §2.
 - **`flutter analyze lib test`, never bare `flutter analyze`.**
-- **File defects you find** with Pros/Cons and a blank selection line, per `.agents/skills/bug_documentation_guidelines/SKILL.md`. Do not fix them inline.
+- **File defects with Pros/Cons and a blank selection line**, per `.agents/skills/bug_documentation_guidelines/SKILL.md`. Do not fix them inline.
 - **Do not touch anything in §6 or §7.**
 
 ---
 
-## 2. K1 — Standings + match summary (Issue 111, Option C)
+## 2. The one gap, and how it happened twice
 
-### 2.1 The cheap half: the standings table
+**Web block W14 has now claimed unobserved behaviour twice.**
 
-`game_over_screen.dart:147` **already computes** `sortedByScore`, and then uses only `.first` and a runner-up. Render the whole thing: rank, player, score, and a per-row `fooled X · fooled by Y` from `playersDeceived` / `timesFooled`.
+The first time it described a "clipboard/fallback handler" that exists nowhere in `lib/`. That was corrected, and the correction explicitly recorded that the prose had overstated.
 
-**This is the actual complaint.** A change that adds glamorous awards but still hides the table has not fixed the issue. Do this part first, and make it work with **no** summary present — a match that ends before any card resolves must still show standings.
+Wave K then **overwrote that correction** with a fresh claim — that the button "triggers a synthetic anchor download ... followed by showing a confirmation snackbar" — while citing **the same screenshot file, dated August 23 19:35**, taken *before* Issue 110 was built. That image shows the old snackbar, `Sharing is only supported on mobile devices.` The evidence gate passed both times, because R3 checks that a PNG **path** is present; **it cannot open the PNG.**
 
-### 2.2 Where the summary is accumulated, and why exactly there
+W14 has been rewritten again to claim only what is evidenced: the web build compiles and the source path is correct; whether a file actually lands is **pending**. Do not restore the stronger wording until §3 has been done.
 
-Inside the reveal transaction, at roughly `index.ts:1305–1326`, three things are simultaneously in scope and exist **nowhere else, ever again**:
-
-- `cardWithAnswers.truthAnswer` and `cardWithAnswers.sabotageAnswers` (authorId → forgery text), rehydrated from `sealed`
-- `resolvedVotes` — voterId → the **authorId** they voted for, already resolved from opaque option ids
-- `card.targetPlayerId`, `card.promptText`
-
-Build one entry per resolved card there. For each forgery author, its `fooled` count is the number of `resolvedVotes` entries pointing at that author. Voters whose vote equals `targetPlayerId` found the truth.
-
-```ts
-interface CardSummary {
-  round: number;
-  targetPlayerId: string;
-  promptText: string;        // truncate, see 2.4
-  truthAnswer: string;       // truncate
-  forgeries: { authorId: string; text: string; fooled: number }[];
-  truthFinders: string[];    // voterIds who picked the truth
-}
-```
-
-**Do not add a second traversal.** The loop that computes `timesFooledDeltas` is already walking `resolvedVotes`; the counts you need come out of that same pass.
-
-### 2.3 Where it is stored — and the security constraint that is not optional
-
-Accumulate into **`sealed/_summary`**. The `sealed` subcollection has **no `match` block in `firestore.rules`** and is therefore default-deny: clients cannot read it at all. That is the property you are relying on.
-
-**It must not reach the world-readable room document before game over.** Publishing forgery authorship mid-match reopens Issues 99 and 100 — the reveal deliberately withholds who wrote which forgery until the unmask deadline passes. A summary leaked early hands players the answer to the game they are still playing.
-
-**Firestore transactions require every read before any write.** The reveal transaction already performs reads; add the `sealed/_summary` read **in that read phase**, not next to the write. Getting this wrong throws at runtime, not at compile time.
-
-### 2.4 Bounding the size
-
-The room document is world-readable and has a 1 MiB ceiling.
-
-- **Truncate** `promptText` and every answer to the existing 100-character answer bound (`kMaxAnswerLength`; prompts can be longer than answers, so truncate both).
-- **Cap** the accumulated entries — 60 cards is far beyond any real match (5 rounds × 10 players) and is a hard stop rather than a guess.
-- **Publish awards, not the raw log.** At game over, compute the awards server-side and write a compact `matchSummary` to the room. That keeps the published object a fixed size no matter how long the match ran, and means the client never receives per-card material it has no use for.
-
-Awards to compute: **Best Lie of the Night** (forgery text + author + fooled count), **Cleanest Truth** (the truth the fewest players found), **The Sting** (the card with the most wrong votes), and a small **head-to-head** list ("Alice fooled Bob three times"). Ties: pick deterministically — highest count, then earliest round, then lowest `targetPlayerId` — so two runs of the same match agree.
-
-### 2.5 Publish at ALL THREE game-over transitions
-
-`grep -n 'currentPhase: "gameOver"' functions/src/index.ts` returns **three** sites:
-
-- `:1081` and `:1089` — inside `handleDisconnect`, when the table drops below three players
-- `:1617` — inside `advanceToNextResolution`, the normal end of the final round
-
-**All three must publish the summary.** The disconnect path is the one that will be missed, and a match that ends because someone left is exactly when players most want to see where they finished. If a game ends before any card resolved, publish an explicit empty summary rather than leaving the field absent, so the client distinguishes "nothing happened" from "old room".
-
-### 2.6 The Dart model trap — this has already bitten this project
-
-`lib/models/game_state.dart`'s `toMap()` is an **explicit whitelist**, and `test/fake_functions.dart` round-trips room documents through `GameState.fromMap(...)` and `.toMap()`. A field the Dart model does not know is **silently erased on any round-trip**, so the harness stops reproducing production — the Issue 31 shape, and exactly what J1 had to handle for `effectiveDeckId`.
-
-Add `matchSummary` to the Dart `GameState`: field, constructor, `copyWith`, `toMap` (**omit the key when null — never write `null`**), and `fromMap`. Prove it survives a round-trip in a test. Follow how `effectiveDeckId` was done; it is the working example.
-
-### 2.7 Validation for K1
-
-- **Standings first, and independently.** A widget test renders the game over screen for a 4-player match with **no** `matchSummary` and asserts every player appears with their score. This must pass before any summary code exists.
-- **Emulator test, multi-round.** A 3-player, 2-round match played through both reveals. Assert `sealed/_summary` accumulated one entry per resolved card, and that at game over `room.matchSummary.bestLie.fooled` equals the number of voters who actually picked that forgery. **Compute the expected number from the votes the test cast**, not from the summary itself — an assertion that reads its own output proves nothing.
-- **Rules test — the security property.** A signed-in client attempting to read `sealed/_summary` is **denied**. Put it in `functions/test/rules.spec.ts` beside the existing sealed assertions. **Falsify it**: it must fail if a `match /sealed/{doc}` allow-read block is added.
-- **Mid-match leak guard.** After round 1 resolves but before game over, `room.matchSummary` is **absent**. This is the assertion that stops Issues 99/100 reopening.
-- **The disconnect path.** A 3-player match that drops to 2 mid-round reaches game over **with** a summary published. This is the site most likely to be forgotten; assert it explicitly.
-- **Degrade gracefully.** The screen renders standings without crashing when `matchSummary` is absent, and when it is present but every award is null (a match where nobody was ever fooled).
-- **Falsify the accumulator.** With the summary write removed, the emulator test must fail. If it still passes, it is asserting something else.
+**The general rule, which is lesson 2.25:** when a block's claim changes, its screenshot must change too. **A stale artefact under new prose is indistinguishable from a fabricated one.** If you update a finding, re-shoot its evidence or downgrade the claim — never leave the old image under the new sentence.
 
 ---
 
-## 3. K2 — Case File downloads on web (Issue 110, Option B)
+## 3. The outstanding task — observe the web Case File download
 
-### 3.1 What happens today
+**Goal:** watch a real PNG land in a browser, then update W14 to match. This is observation, not implementation. **If the download does not work, do not fix it inline** — file it with Pros/Cons and a blank selection line.
 
-`_shareCaseFile()` renders the Case File to PNG bytes, then at `game_over_screen.dart:105` returns early under `kIsWeb` with `Sharing is only supported on mobile devices.` **The bytes already exist at that point** — this is a delivery change, not a rendering one. Do not re-render.
+### 3.1 Why this needs a browser and not a test
 
-### 3.2 What to build
+The saver is `package:web` interop: `Blob`, `URL.createObjectURL`, an anchor click, `revokeObjectURL`. None of that exists under `flutter test`, which runs on the Dart VM with no DOM. A unit test can only prove the shim resolves — which `flutter build web --release` already proves. **The only thing that settles this is a browser.**
 
-Replace the early return with a save that hands the browser the file.
+### 3.2 Reaching the game over screen — the part that costs time
 
-**Use a conditional import.** There is **no conditional import anywhere in `lib/` yet**, so you are introducing the pattern — keep it small and obvious:
+The Case File button lives on the game over screen, which needs a **finished 3-player match**. Two routes:
 
-```dart
-// lib/utils/case_file_saver.dart
-export 'case_file_saver_io.dart'
-    if (dart.library.js_interop) 'case_file_saver_web.dart';
+**Route A — drive three isolated browser contexts (preferred, and how W1–W19 were produced).** Playwright with three `browser.newContext()` instances gives three separate storage partitions and therefore three distinct anonymous players; the harness from Wave I already exists under `test/web_e2e/`. Two tabs in ONE browser profile are **one player** — web `SharedPreferences` is `localStorage` and the anonymous auth user lives in IndexedDB, both per-origin — so tabs will not work.
+
+**Route B — shortcut the match over HTTP, then attach one browser.** The callables can be driven directly with `curl` (mint anonymous tokens against `identitytoolkit`, then `createRoom` / `joinRoom` / `setReady` / `startGame` / `submitAnswer` / `castVote` / `advancePhase` / `advanceToNextResolution`) to reach `gameOver` in seconds. **The catch: a browser cannot then *be* one of those players**, because you cannot inject their anonymous auth session into its IndexedDB. Route B is good for producing a finished room to inspect; it does **not** put you on the game over screen. **Prefer Route A.**
+
+Serve the release build locally rather than testing a deployed URL, so what you observe is the tree you have:
+
+```bash
+flutter build web --release
+python3 -m http.server 8777 --directory build/web
 ```
 
-Both files expose the same signature, `Future<void> saveCaseFilePng(Uint8List bytes, String filename)`. The web implementation builds a `Blob`, creates an object URL, clicks a synthetic anchor carrying `download`, and **revokes the object URL afterwards** — a leaked blob URL pins the whole PNG in memory for the life of the tab. The IO implementation is unreachable in practice (mobile takes the `Share.shareXFiles` path) but must compile; have it throw `UnsupportedError` rather than pretend to succeed.
+**Prove the artefact is newer than the source before trusting anything**, comparing epoch seconds, never strings:
 
-**Prefer `package:web` + `dart:js_interop` over `dart:html`.** `dart:html` still works on Flutter 3.44.6 but is deprecated and will be removed. `package:web` is **not currently a dependency** — adding it is a `pubspec.yaml` change, and it is the only new dependency this wave should introduce.
+```bash
+stat -f %m build/web/main.dart.js; git log -1 --format=%ct -- lib
+```
 
-Then show a confirmation snackbar naming what happened ("Case file saved to your downloads"), because a browser download can be silent and a button that appears to do nothing reads as broken.
+**Note the server half is undeployed.** The match summary will be **absent** until someone runs `firebase deploy --only functions`. That is fine for this task — Issue 110 is client-only, and the standings render without a summary by design. **Do not deploy to make the summary appear.**
 
-### 3.3 Validation for K2
+### 3.3 What to capture
 
-- **Mobile must not change.** A test asserting that on non-web the path still reaches `Share.shareXFiles`. **Falsify it by inverting the branch** — if it passes either way it is not testing the branch.
-- **The web path must be OBSERVED, not argued.** Build for web, open the game over screen, click the button, and confirm a real file lands. **Then open it** and confirm it is a valid PNG of the Case File — not a 0-byte file, and not an HTML error page, which is the failure mode a naive blob URL produces.
-- **Update block W14** in `docs/playthrough_findings_web.md` to describe the new behaviour, with a fresh screenshot. That block was corrected once already for claiming a mechanism that did not exist; **do not reintroduce a claim the evidence does not show.**
-- Confirm no analyzer regression from the new dependency and the conditional import.
+1. Reach game over with three real clients and click **Share Case File**.
+2. **Confirm a file actually arrives.** Check the browser's download list and the filesystem for `gaslight_case_file_<roomcode>.png`.
+3. **Open it.** It must be a valid PNG showing the Case File — not 0 bytes, and not an HTML error page, which is the failure mode a malformed blob URL produces. Record `file <path>` output and the byte size.
+4. Screenshot the confirmation snackbar, and save it as **a new file** — `w14_case_file_download.png`, not a re-use of the old name. Put it under `docs/playthrough_evidence/`.
+5. Also capture the **standings** on that same screen while you are there; `w14`'s neighbour blocks do not cover them, and Issue 111 has never been seen on a device either.
+
+### 3.4 Updating the report
+
+Rewrite W14's `Observed:` to cite the **new** screenshot and the `file` output, and restore a full-strength `Expected:` only if the download genuinely worked. Keep the note that the block previously overstated — that history is why the rule in §2 exists.
+
+Re-run the gate afterwards; it must still exit 0:
+
+```bash
+./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md
+```
 
 ---
 
-## 4. Validation standard for this wave
+## 4. A weaker assertion worth strengthening while you are in there
 
-**Write the failing test first and watch it fail.** Record the observed failure in the commit body.
+The Wave K emulator test asserts `summary.bestLie.fooled` is **greater than zero** and that the award fields are strings/objects. It never checks the count is *right*.
 
-**Pair every fix with an over-reach guard that can actually fail.** Standings must work without a summary; mobile sharing must survive the web change; the summary must be unreadable mid-match.
+The specification asked for the expected value to be derived **from the votes the test cast**. The computation itself is correct — verified by reading `index.ts:1521-1533` — so this is a weak test rather than a broken feature, and it is **not** a reason to stop. But `fooled > 0` would still pass if the count were double-counted, off by one, or included truth-finders.
 
-**A green suite says nothing about what is deployed.** K1 is inert until `firebase deploy --only functions`, which you must not run. Expect `check_deploy_fresh.sh` to stay red and **say so in the commit** rather than leaving it looking like a regression.
-
-**Verify K1 on a real multi-round match.** A single round cannot produce a best-lie contest, a comeback, or a repeat fooling — so a one-round test can pass while the feature is empty in practice.
+If you touch this suite: have the test record which option each voter chose, compute the expected fooled count for the winning forgery itself, and assert equality. **An assertion that reads its own output proves nothing.**
 
 ---
 
@@ -311,30 +267,24 @@ Then show a confirmation snackbar naming what happened ("Case file saved to your
 
 ## Definition of Done
 
-**K1 — Issue 111, Option C**
-- [x] **Full standings render for every active player** — rank, name, score, `fooled X · fooled by Y`. Works with **no** `matchSummary` present.
-- [x] Summary accumulated **inside the existing reveal transaction**, reusing the pass that already walks `resolvedVotes`. No second traversal.
-- [x] `sealed/_summary` is read in the transaction's **read phase**, before any write.
-- [x] Text truncated to `kMaxAnswerLength`; entries hard-capped; the **published** `matchSummary` is computed awards, not the raw per-card log.
-- [x] Tie-breaking is deterministic, so two runs of one match agree.
-- [x] **All three** `currentPhase: "gameOver"` sites publish — `:1081`, `:1089` (disconnect) and `:1617` (final round). The disconnect path is asserted explicitly.
-- [x] `matchSummary` added to Dart `GameState` (field, constructor, `copyWith`, `toMap` **omitting null**, `fromMap`) with a round-trip test proving it is not erased.
-- [x] **Rules test**: a client cannot read `sealed/_summary`, and the test **fails** if an allow-read block is added.
-- [x] **Leak guard**: `room.matchSummary` is absent after round 1 resolves and before game over.
-- [x] Emulator test computes the expected `fooled` count **from the votes it cast**, not from the summary.
-- [x] Degrades gracefully: no summary, and an all-null summary, both render without crashing.
-- [x] Accumulator falsified — removing the write fails the test.
+**The outstanding runtime check (§3)**
+- [ ] Game over reached with **three real browser contexts**, not tabs of one profile.
+- [ ] Build freshness proven in epoch seconds before trusting the run.
+- [ ] **A file actually landed**, named `gaslight_case_file_<roomcode>.png`.
+- [ ] **The file was opened** and is a valid PNG of the Case File — `file` output and byte size recorded. Not 0 bytes, not HTML.
+- [ ] The confirmation snackbar was captured in a **new** screenshot, `w14_case_file_download.png` — the old filename is not reused.
+- [ ] The **standings** were captured on the same screen; Issue 111 has never been seen on a device.
+- [ ] W14 rewritten to cite the new evidence, with full-strength wording **only if the download worked**.
+- [ ] `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` exits 0.
+- [ ] If the download failed: filed with Pros/Cons and a blank selection line. **Not fixed inline.**
 
-**K2 — Issue 110, Option B**
-- [x] Conditional import shim with one shared signature; web impl **revokes the object URL**; IO impl throws rather than silently succeeding.
-- [x] `package:web` added to `pubspec.yaml` — the only new dependency this wave.
-- [x] Mobile still reaches `Share.shareXFiles`, proven by a test that **fails when the branch is inverted**.
-- [x] Web download **observed**: a real file saved, opened, and confirmed to be a valid PNG of the Case File — not 0 bytes, not an HTML error page.
-- [x] A confirmation snackbar tells the player the file was saved.
-- [x] Block **W14** updated with a fresh screenshot that shows what the block claims.
+**If you strengthen the summary test (§4)**
+- [ ] The expected `fooled` count is computed from the votes the test cast, and asserted with equality rather than `> 0`.
+- [ ] Falsified: the assertion fails if the count is deliberately skewed by one.
 
-**Across the wave**
-- [x] Battery at or above baseline: **0 errors** · **≥179** · clean functions build · **≥68** · both evidence gates exit 0.
-- [x] `check_deploy_fresh.sh` still red, explained in the commit, and **`firebase deploy` was never run**.
-- [x] One item, one commit; Conventional Commit; WHY in the body.
-- [x] Issues 110 and 111 moved into the **single** existing Resolved heading, and `design_scoring_and_ui.md` updated — it currently documents the honors and P6 sharing, and both change here.
+**Across any work**
+- [ ] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · both evidence gates exit 0.
+- [ ] `check_deploy_fresh.sh` still red, explained rather than left looking like a regression, and **`firebase deploy` was never run**.
+- [ ] One item, one commit; Conventional Commit; WHY in the body.
+
+**When §3 is done and nothing failed, the queue is empty.** Report the state and stop — §2 of the standing sections lists the only four things that start a build, and "the queue looked quiet" is not one of them.
