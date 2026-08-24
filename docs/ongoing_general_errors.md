@@ -28,7 +28,46 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open product defects.** All 19 web assertion blocks (W1–W19) passed cleanly without layout overflows or product defects requiring new issue filing.
+All 19 web assertion blocks (W1–W19) passed cleanly — no layout overflows, no defects found by the sweep. **One defect found afterwards by a human playing the game**, which is where five of the last six functional waves came from.
+
+---
+
+### Issue 106 — The chosen deck is ignored; every game plays The Daily Grind
+
+**Reported:** user selected *Rated R NSFW* and received prompts from *The Daily Grind*.
+**Status: CONFIRMED at runtime**, and broader than reported.
+
+**Mechanism.** `lobby_screen.dart:42` declares `String _selectedDeck = PromptDecks.availableDecks.first;`. That field is **read once** (`:986`, `await gs.startGame(_selectedDeck)`) and **assigned nowhere** — a repo-wide search for `_selectedDeck =` returns only the initializer, and the file has no `part` directives, so nothing outside it can assign the private field either. `PromptDecks.availableDecks` is `_decks.keys.toList()` and `the_daily_grind` is the first key, so **`startGame` is always called with `the_daily_grind`.**
+
+The carousel's `onDeckSelected` (`:589`) calls `gs.updateLobbySettings(selectedDeckId: val)`, which correctly updates the **room document** — that path works and is tested (`house_rules_panel_test.dart:264`). It simply has nothing to do with the value `startGame` receives. The local `selectedDeckId` computed at `:496` drives display and deck-size checks but is never passed to `startGame`.
+
+The server compounds it: `startGame` (`functions/src/index.ts:263`) takes `selectedDeckId` from `request.data`, never reads `room.selectedDeckId`, draws prompts from the client value (`:422`), then **overwrites the room's field with it** (`:441`) — so the room document is rewritten to the wrong deck after start, destroying the evidence.
+
+**Observed, not reasoned.** A widget probe drove the real `LobbyScreen` with the room set to `rated_r_nsfw` and asserted the payload the callable received:
+```
+>>> PROBE: callable=startGame selectedDeckId=the_daily_grind
+Expected: 'rated_r_nsfw'
+  Actual: 'the_daily_grind'
+```
+Control: with the room set to `the_daily_grind` the same probe passes, so it measures the payload rather than failing unconditionally. The probe was temporary and is not committed.
+
+**Blast radius — larger than reported.** Every non-default deck is affected: Deep Fears, Unhinged Quirks, Romantic Disasters, CAH Dark Humor and Rated R NSFW all play The Daily Grind. **`custom` is also affected**, so P10 player-written prompts are silently never used.
+
+**Why the suite is green.** `test/fake_functions.dart:174` implements `startGame` by reading `roomState.selectedDeckId` from the room document, whereas the real server reads `request.data.selectedDeckId`. The fake models the *correct* behaviour, so no outcome-based test on the fake can reproduce this — only an assertion on the **payload** catches it. Another instance of §2.2.
+
+**Why W1–W19 missed it.** The web playthrough drove a full match, but no assertion compared the *chosen* deck against the *played* prompts. A match that silently plays the wrong deck looks completely normal from the outside. Worth an assertion in any future sweep.
+
+**Related defect found while verifying.** `Family-Friendly Decks Only` (`:718`) only calls `setState`; it never writes to the room. It filters the client's `availableDecks`, and `:496` then falls back to `availableDecks.first` for display. So a host who picks NSFW and later enables the toggle sees Daily Grind while the room still holds `rated_r_nsfw`. **Whichever option is chosen below must not let that toggle desync the UI from the room**, or the fix produces the mirror-image bug: UI shows Daily Grind, game starts NSFW.
+
+**Options:**
+
+- **Option A — Make the server authoritative.** Drop the `selectedDeckId` parameter from `startGame`; the server reads `room.selectedDeckId`, which `updateLobbySettings` already maintains. Matches this codebase's stated architecture (§2.6) and removes the whole class of client/room divergence. Requires the family-friendly toggle to write through to the room. Touches the callable signature, the client call, the fake, and tests.
+- **Option B — Send the right value.** Change `:986` to pass the `selectedDeckId` computed at `:496` and delete the dead `_selectedDeck` field. Smallest, lowest-risk change. Leaves the client as the authority for which deck is played, so a stale or hand-rolled client can still start a deck the room does not show.
+- **Option C — Both.** Client sends the computed value **and** the server validates it against `room.selectedDeckId`, rejecting a mismatch with `invalid-argument`. Keeps the existing API shape while closing the trust gap.
+
+**Recommendation: A**, or **C** if the callable signature should stay stable. Whichever is chosen, the regression test must assert the **payload or room state**, never the outcome — the fake cannot reproduce this defect through outcomes.
+
+**Your selection: _____**
 
 ---
 
