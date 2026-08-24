@@ -3427,6 +3427,13 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         roomSnap = await roomRef.get();
         expect(roomSnap.data()?.currentPhase).to.equal('vote');
 
+        const allVotesCast: Array<{
+          round: number;
+          targetPlayerId: string;
+          voterId: string;
+          votedForAuthorId: string;
+        }> = [];
+
         // --- ROUND 1: VOTE & REVEAL FOR ALL CARDS ---
         const order = roomSnap.data()?.resolutionOrder as string[];
         for (let i = 0; i < order.length; i++) {
@@ -3448,6 +3455,13 @@ describe('Gaslight E2E Game Emulator Tests', () => {
             if (voter.id !== currentReader) {
               const optToVote = options.find(o => answerAuthors[o.id] !== voter.id);
               if (optToVote) {
+                const votedAuthor = answerAuthors[optToVote.id];
+                allVotesCast.push({
+                  round: 1,
+                  targetPlayerId: currentReader,
+                  voterId: voter.id,
+                  votedForAuthorId: votedAuthor
+                });
                 await callFn('castVote', voter.token, { roomCode, targetCardId: currentReader, voterId: voter.id, votedForId: optToVote.id });
               }
             }
@@ -3509,6 +3523,13 @@ describe('Gaslight E2E Game Emulator Tests', () => {
             if (voter.id !== currentReader) {
               const optToVote = options.find(o => answerAuthors[o.id] !== voter.id);
               if (optToVote) {
+                const votedAuthor = answerAuthors[optToVote.id];
+                allVotesCast.push({
+                  round: 2,
+                  targetPlayerId: currentReader,
+                  voterId: voter.id,
+                  votedForAuthorId: votedAuthor
+                });
                 await callFn('castVote', voter.token, { roomCode, targetCardId: currentReader, voterId: voter.id, votedForId: optToVote.id });
               }
             }
@@ -3524,10 +3545,21 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(finalData?.currentPhase).to.equal('gameOver');
         expect(finalData?.matchSummary).to.be.an('object');
 
-        // Assert summary details
+        // Compute expected best lie fooled count independently from recorded votes:
+        const forgeryVoteCounts: Record<string, number> = {};
+        for (const v of allVotesCast) {
+          if (v.votedForAuthorId !== v.targetPlayerId && v.voterId !== v.votedForAuthorId) {
+            const key = `${v.round}:${v.targetPlayerId}:${v.votedForAuthorId}`;
+            forgeryVoteCounts[key] = (forgeryVoteCounts[key] || 0) + 1;
+          }
+        }
+        const expectedMaxFooled = Math.max(...Object.values(forgeryVoteCounts), 0);
+        expect(expectedMaxFooled).to.be.greaterThan(0);
+
+        // Assert summary details with exact equality computed from test actions
         const summary = finalData?.matchSummary;
         expect(summary.bestLie).to.be.an('object');
-        expect(summary.bestLie.fooled).to.be.greaterThan(0);
+        expect(summary.bestLie.fooled).to.equal(expectedMaxFooled);
         expect(summary.bestLie.authorName).to.be.a('string');
         expect(summary.bestLie.text).to.be.a('string');
 
