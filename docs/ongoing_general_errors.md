@@ -8,9 +8,13 @@
 
 ## 1. Open & in-flight
 
-**Wave K — Game Over Payoff & Web Download (K1 → K2) — is complete (August 24, 2026).** Both selected options delivered and tested:
-- **111 → Option C** (`24a2398`): Full standings table + server-written match summary quoting real answers accumulated into `sealed/_summary` across rounds and published at game over.
-- **110 → Option B** (`b420367`): Case File PNG direct downloads on web via Blob URL and synthetic anchor click behind `kIsWeb`, retaining `Share.shareXFiles` for mobile.
+**Wave L — artefact re-verification — is specced and awaiting build (August 24, 2026).** No open issues and nothing to decide; Wave L is evidence hygiene, not a feature. Spec in `agent_execution_guide.md` §2–§4, ordered **L1 → L2 → L3**.
+
+Measured on August 24: **54 PNGs on disk, 50 cited, 4 orphaned, 0 dangling citations.** Two findings drive the wave — **file dates cannot decide staleness** (all 54 predate the newest `lib/screens` commit, so an mtime test flags everything), and **the gate cannot see a missing file**: R3 matches the artefact *path string* inside the block text and never stats it, so deleting a cited PNG leaves the gate green with the evidence gone. L1 closes that.
+
+**Still outstanding and folded into Wave L:** the web Case File download (Issue 110) compiles but has never been *run*, and Issue 111's standings have never been seen on a device. Both live on the game over screen, so one browser session settles them together (L3).
+
+**Wave K (Issues 110, 111) is complete and verified in source** — standings + server-written match summary (`24a2398`), Case File web download (`b420367`).
 
 **Issues 1–111 are delivered. Zero active unresolved issues are open.** Gate state, measured August 24, 2026:
 
@@ -30,9 +34,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open issues and nothing to decide.** Issues 1–111 are delivered and verified in source.
-
-**One runtime check is outstanding and is not a code change:** the web Case File download (Issue 110) has never been *run*. It compiles — `flutter build web --release` exits 0 with `package:web` and the new conditional import resolving — and the source path is correct, but nobody has watched a file land. The procedure is `agent_execution_guide.md` §3. Until it is done, **W14 claims only that the click raises no error**, not that the download works.
+**No open issues and nothing to decide.** Issues 1–111 are delivered. **Wave L (artefact re-verification) is in flight** — it is evidence hygiene, not a defect; its spec lives in `agent_execution_guide.md` §2–§4.
 
 ---
 
@@ -141,6 +143,12 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.27 The gate never checked that the evidence file exists
+
+Completing the family: **2.25** found that `check_playthrough_evidence.sh` bounds the *form* of evidence and not its content; **2.26** found that *updating* a block leaves its artefact behind; and this one is the floor beneath both — R3 matches the artefact **path string inside the block text** and **never stats the file**. Deleting a cited PNG therefore leaves the gate **green** while the evidence is gone, and a block citing a path that never existed passes just as cleanly.
+
+So for most of this project's life the gate has been asserting that *a sentence mentions a filename*. That is worth remembering when reading any historical PASS: the artefact was required to be **named**, not to exist, not to be current, and not to agree with the claim. Rule **R5** (Wave L) adds the existence check; the other two remain the reader's job.
 
 #### 2.26 A stale screenshot under new prose is indistinguishable from a fabricated one
 
