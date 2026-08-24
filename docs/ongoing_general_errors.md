@@ -10,7 +10,7 @@
 
 **Wave J — prompt source & sampling (J1 → J2 → J3) — is complete (August 24, 2026).** All three selected options delivered and tested: **109 → Option C** (`bf38434`), **108 → Option B** (`64daf11`), **107 → Option B** (`74489b0`).
 
-**Issues 1–109 are delivered. Issue 110 is open** — found while verifying the web playthrough, and it needs your selection. Gate state, measured August 24, 2026:
+**Issues 1–109 are delivered. Issues 110 and 111 are open** — found while verifying the web playthrough, and it needs your selection. Gate state, measured August 24, 2026:
 
 | Gate | Result |
 |---|---|
@@ -30,6 +30,36 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
+### Issue 111: The game over screen shows only superlatives — no final scores, and nothing memorable from the match
+**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/game_over_screen.dart`. The screen renders `_buildHonorCards(...)` and nothing else: **The Mastermind**, **The Duplicitous**, **The Gullible**. `sortedByScore` is computed at `:147` but only `.first` and a runner-up are ever used, so **no player sees the full table** and everyone below third place learns nothing about how they did.
+
+**Two data facts decide what is cheap and what is not, and they were checked in source:**
+
+- **Player counters survive the whole match.** `totalScore`, `timesFooled` and `playersDeceived` are applied as deltas in the reveal transaction (`functions/src/index.ts:1317–1330`) and are zeroed only at player creation and game reset. Anything derivable from these needs **no backend change**.
+- **No answer text survives.** Single-card reveal scoping blanks every non-current card on the room document (`truthAnswer: ""`, `sabotageAnswers: {}`), and the round advance additionally resets each `sealed/{playerId}` doc plus `votes` and `unmaskGuesses` (`:1587`, `:1595`). By game over **the match's answers no longer exist anywhere.** So "the answer that fooled the most players" cannot be computed on the client at any price — it has to be captured server-side as each card resolves, before the wipe.
+
+**Option A**: **Final standings only** — add the full ranked table under the honors: rank, name, score.
+  - *Pros*: Pure client change, no deploy, no new state. Directly answers the complaint that the screen is only superlatives, and every player finally sees where they placed.
+  - *Cons*: Delivers none of the "best lie" idea. The screen is still the same three cards plus a list.
+
+**Option B**: **Standings + awards from counters already tracked** — the table, plus awards computed from `totalScore` / `timesFooled` / `playersDeceived`: *The Perfect Read* (`timesFooled == 0`), *Nobody Bit* (`playersDeceived == 0`, a booby prize), and a per-row "fooled X · fooled by Y" line so every player gets a fact about themselves.
+  - *Pros*: Still **zero server change and no deploy**. Gives everyone a line, not just the podium. Ships in one client commit.
+  - *Cons*: **Cannot quote a single actual answer** — the memorable part of the request is impossible at this tier. Awards read as statistics rather than moments.
+
+**Option C (recommended)**: **Standings + a server-written match summary that quotes real answers.** Accumulate a summary as each card resolves — in the same reveal transaction that already walks the votes at `:1317` — and expose it at game over. That unlocks: **Best Lie of the Night** (the forgery text, its author, and how many it fooled), **Cleanest Truth** (the truth nobody found), **The Sting** (the single card where the most players voted wrong), and head-to-head lines like "Alice fooled Bob three times" — plus everything in Option B.
+  - *Pros*: Delivers exactly what was asked, and quoting the actual sentence is what people will screenshot. **The accumulation point already exists** — the reveal transaction is already computing per-voter deltas, so the summary is written in a pass that is happening anyway, not a new traversal.
+  - *Cons*: Server change plus a functions deploy. New persisted state to place carefully: it must live in `sealed` (default-deny) while the match runs and only reach the world-readable room document at game over, or it leaks forgery authorship before the unmask window closes — the exact hazard Issues 99 and 100 exist to prevent. More tests, and the summary needs a size bound so a long match cannot bloat the room doc.
+
+**Option D**: **Round-by-round standings chart** — a sparkline of each player's score across rounds, showing comebacks and collapses.
+  - *Pros*: Shows the shape of the match rather than just its end state; genuinely fun with 3+ rounds.
+  - *Cons*: Requires per-round score snapshots that are **not stored today**, so it is new persisted state for a single visual. Gives nothing at all in a 1-round game, which is the current default. More work than C for less payoff.
+
+**Recommendation: C**, because it is the only option that delivers the answer-quoting idea, and because **B is a strict subset of C** — if C looks too large to land at once, build B first as a client-only commit and add the summary afterwards without rework. Option D is worth revisiting only once matches routinely run 3+ rounds.
+
+Your selection: _____
+
+---
+
 ### Issue 110: The Case File cannot be shared on web, which is how the demo is being played
 **Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/game_over_screen.dart:105`: `_shareCaseFile()` renders the Case File to PNG bytes and then returns early under `kIsWeb` with the snackbar `Sharing is only supported on mobile devices.` The screenshot cited by web playthrough block **W14** (`docs/playthrough_evidence/w14_case_file_share.png`) shows exactly that message. The guard is correct — `Share.shareXFiles` needs a `dart:io` temp file, which throws on web — but P6 (the shareable Case File) is a shipped feature and **the demo is currently being played in a browser**, so in practice nobody can share it. The bytes are already rendered when the early return fires, so the artwork exists and only the delivery is missing.
 
@@ -45,7 +75,7 @@
   - *Pros*: A real share sheet on supporting browsers, closest to the mobile experience.
   - *Cons*: Support for sharing *files* is uneven (notably absent or partial on desktop browsers), requires a secure context, and needs a JS interop path plus the Option B fallback anyway — so it is Option B plus more.
 
-Your selection: _____
+Your selection: Proceed with Option B.
 
 ---
 

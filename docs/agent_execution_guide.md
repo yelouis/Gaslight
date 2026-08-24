@@ -1,14 +1,14 @@
-# Agent Execution Guide — Wave J Complete · Issue 110 Awaiting Selection — August 24, 2026
+# Agent Execution Guide — Wave J Complete · Issues 110–111 Awaiting Selection — August 24, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**Wave J is delivered and independently verified. Issues 1–109 are done.** One issue is open — **Issue 110**, and it is **blocked on the user's selection**.
+**Wave J is delivered and independently verified. Issues 1–109 are done.** Two issues are open — **Issue 110** (Case File unshareable on web) and **Issue 111** (game over screen shows no scores) — and **both are blocked on the user's selection**.
 
-## ⛔ STOP — the one open item is blocked
+## ⛔ STOP — both open items are blocked
 
-**Issue 110 ends in a blank `Your selection: _____`.** It offers three options with pros, cons and a `(recommended)` label. **That label is advice for the user, not permission for you.** Do not guess, do not "pick the recommended one to unblock yourself", and never fill the line in on their behalf.
+**Issues 110 and 111 each end in a blank `Your selection: _____`.** Each offers options with pros, cons and a `(recommended)` label. **That label is advice for the user, not permission for you.** Do not guess, do not "pick the recommended one to unblock yourself", and never fill the line in on their behalf.
 
-If the line is filled when you arrive, build it. If not, **report the state and stop** — §2 lists the only four things that legitimately start a build, and "the queue looked quiet" is not one of them.
+If a line is filled when you arrive, build that one. If not, **report the state and stop** — §2 lists the only four things that legitimately start a build, and "the queue looked quiet" is not one of them.
 
 ## Verified baseline — the regression bar
 
@@ -229,4 +229,11 @@ There is no active build. Issue 110 is blocked on the user.
 - [ ] Battery at or above the baseline table: **0 errors** · **≥179** · clean functions build · **≥68** · both evidence gates exit 0.
 - [ ] Issue 110 moved into the **single** existing Resolved heading, and `design_scoring_and_ui.md` updated if P6's delivery changed.
 
-**If it has not been selected, the only correct action is to report the state and stop.**
+**If Issue 111 has been selected, it is done when:**
+- [ ] The **full ranked standings** are on screen — every active player, not just the podium. This is the actual complaint; an option that adds awards but still hides the table has not fixed it.
+- [ ] If Option C: the summary is accumulated inside the **existing** reveal transaction (`index.ts:1317`), not by a second traversal, and it is **size-bounded** so a long match cannot bloat the room document.
+- [ ] If Option C: the summary lives in `sealed` (default-deny) while the match runs and reaches the world-readable room document **only at game over** — publishing forgery authorship any earlier reopens Issues 99 and 100. A test must fail if it is readable mid-match.
+- [ ] Award text is derived from **data that actually survives**: `totalScore` / `timesFooled` / `playersDeceived` accumulate all match, but no answer text does. Anything quoting a sentence must come from the new summary, never from `room.cards` at game over — those are blanked.
+- [ ] Verified on a **real multi-round match**, not a unit test alone: a single round cannot show a comeback, a repeat fooling, or a best-lie contest.
+
+**If neither has been selected, the only correct action is to report the state and stop.**
