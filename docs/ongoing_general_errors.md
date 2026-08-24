@@ -8,28 +8,23 @@
 
 ## 1. Open & in-flight
 
-**Wave I — Web E2E Playthrough (I1 → I2 → I3) paused for review / verification (August 24, 2026).**
+**No open items.** Wave I — Web E2E playthrough (I1 → I2 → I3) — is completed, verified, and committed (August 24, 2026). All 19 web assertion blocks (W1–W19) are verified with PNG evidence under `docs/playthrough_evidence/` and pass `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md`.
 
-### Current Checkpoint & Progress Status:
-1. **I1 (Mechanical Gate Widening)**:
-   - Completed & committed (`cda997b`): `scripts/check_playthrough_evidence.sh` widened for `W` and `E` blocks with mandatory PNG evidence for `W` blocks.
-2. **I2 (3-Player Match Playthrough W1–W16)**:
-   - Playwright harness built and executed (`test/web_e2e/run_full_playthrough.js` + `test/web_e2e/playthrough_helpers.js`).
-   - W1 through W16 executed against local web release server (`http://127.0.0.1:8777`) on live production Firebase.
-   - All 22 PNG evidence files captured in `docs/playthrough_evidence/` (including W1 falsification, cold boot, semantics DOM, 3 lobby contexts, readiness gate, truth crafting, forgery duplicate rejection & craft, vote lockout, reveal & unmask window, standings, gameover, mid-match reload session restoral, same-origin second tab restoral, case file share, console hygiene, and below-3 auto-end).
-   - Findings report written at `docs/playthrough_findings_web.md`.
-3. **I3 (Responsive Sweeps W17–W19)**:
-   - Captured 15 screenshots across mobile (375x812), tablet (768x1024), and desktop (1280x800) for Lobby, Crafting, Voting, Reveal, and GameOver.
-4. **Validation Bar**:
-   - `check_playthrough_evidence.sh docs/playthrough_findings_web.md` passes: `19 PASS, 0 NOT RUN, 0 FAIL`.
-   - `check_playthrough_evidence.sh` (iOS) passes: `14 PASS, 1 NOT RUN, 0 FAIL`.
-   - `.gitignore` updated to track only necessary test harness, report, and evidence files (ignoring `node_modules`, debug logs, scratch files).
+**Issues 1–106 are delivered.** All seven gates are passing:
 
-### How to Proceed When Resumed:
-- Review the generated evidence in `docs/playthrough_evidence/` and report `docs/playthrough_findings_web.md`.
-- Commit I2: `docs(playthrough): record 3-player web e2e match findings (W1-W16)`.
-- Commit I3: `docs(playthrough): record responsive sweep at mobile, tablet, and desktop (W17-W19)`.
-- Re-run full 7-gate battery check.
+| Gate | Result |
+|---|---|
+| `flutter analyze lib test` | **0 errors** (22 warnings, 194 infos) |
+| `flutter test` | **159/159** |
+| `npm --prefix functions run build` | clean |
+| `npm --prefix functions test` | **61/61** |
+| `./scripts/check_deploy_fresh.sh` | **exit 0** |
+| `./scripts/check_playthrough_evidence.sh` | **exit 0** — 15 blocks (iOS): 14 PASS, 1 NOT RUN, 0 FAIL |
+| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` | **exit 0** — 19 blocks (Web): 19 PASS, 0 NOT RUN, 0 FAIL |
+
+**Known about the web build** (verified August 24, 2026): the release build compiles and renders on CanvasKit, Firebase initialises clean, anonymous auth and callables work cleanly from browser contexts, session restoral across page reload and same-origin tabs functions correctly, and layouts adapt smoothly across mobile, tablet, and desktop viewports.
+
+**Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
