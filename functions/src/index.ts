@@ -847,12 +847,14 @@ export const rerollPrompt = onCall(async (request) => {
       ? sealedData.seenPrompts
       : [targetCard.promptText];
 
-    const excluded = new Set([
-      ...room.cards.map(c => c.promptText),
-      ...cardSeen
-    ]);
+    // Prompts sitting on a card right now - including this player's current
+    // one. Never hand any of these back, even once the deck is exhausted for
+    // this player: a re-roll must visibly change something, and two players
+    // must never end up on the same prompt.
+    const inPlay = new Set(room.cards.map(c => c.promptText));
+    const excluded = new Set([...inPlay, ...cardSeen]);
     const deckId = room.selectedDeckId === "custom" ? "the_daily_grind" : room.selectedDeckId;
-    const newPrompt = PromptDecks.drawOneExcluding(deckId, excluded);
+    const newPrompt = PromptDecks.drawOneExcluding(deckId, excluded, inPlay);
 
     const updatedCard = {
       ...targetCard,
@@ -1478,13 +1480,22 @@ export const advanceToNextResolution = onCall(async (request) => {
         );
 
         const newCards: CardModel[] = [];
+        // Accumulates as we go so two players in the same round cannot be
+        // handed the same prompt - previously each draw only excluded that
+        // player's own history and knew nothing about its siblings.
+        const assignedThisRound = new Set<string>();
         for (let i = 0; i < activePlayers.length; i++) {
           const p = activePlayers[i];
           const sealedSnap = sealedDocs[i];
           const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
           const seenPrompts: string[] = Array.isArray(sealedData.seenPrompts) ? sealedData.seenPrompts : [];
 
-          const newPrompt = PromptDecks.drawOneExcluding(deckId, new Set(seenPrompts));
+          const newPrompt = PromptDecks.drawOneExcluding(
+            deckId,
+            new Set([...seenPrompts, ...assignedThisRound]),
+            assignedThisRound
+          );
+          assignedThisRound.add(newPrompt);
           const updatedSeen = [...seenPrompts, newPrompt];
           const sealedRef = roomRef.collection("sealed").doc(p.id);
           transaction.set(sealedRef, { seenPrompts: updatedSeen, truthAnswer: "", sabotageAnswers: {} }, { merge: true });

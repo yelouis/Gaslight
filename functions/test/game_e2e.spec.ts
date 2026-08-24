@@ -1449,7 +1449,7 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(threwPhaseGuard).to.be.true;
   });
 
-  it('Issue 67 Option B: should accumulate seenPrompts, never repeat prompts during re-rolls, and throw resource-exhausted HttpsError on deck exhaustion', async () => {
+  it('Issue 67 Option B: should accumulate seenPrompts, never repeat prompts during re-rolls, and keep re-rolling past deck exhaustion', async () => {
     const hostUser = await createAnonUser();
     const guestUser = await createAnonUser();
     const guest2User = await createAnonUser();
@@ -1510,18 +1510,24 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(sealedSnap.data()?.seenPrompts).to.be.an('array');
     expect(sealedSnap.data()?.seenPrompts).to.have.lengthOf(10);
 
-    // The host has now seen 11 prompts (1 initial + 10 re-rolled). The guest has 1 prompt.
-    // Total 12 prompts used. The 11th re-roll should fail with resource-exhausted HttpsError.
-    let threwExhaustion = false;
-    let errorMessage = '';
-    try {
+    // The host has now seen every prompt the deck holds. Re-rolls are
+    // unlimited: past that point the deck repeats rather than refusing, but a
+    // re-roll must still visibly change the card and must never collide with a
+    // prompt that is live on someone else's card.
+    for (let i = 0; i < 3; i++) {
+      const before = await db.collection('rooms').doc(roomCode).get();
+      const inPlayBefore = new Set((before.data()?.cards as any[]).map(c => c.promptText));
+
       await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
-    } catch (e: any) {
-      threwExhaustion = true;
-      errorMessage = e.message || e.toString() || '';
+
+      const after = await db.collection('rooms').doc(roomCode).get();
+      const hostCard = (after.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+      expect(hostCard.promptText, 're-roll past exhaustion must still return a prompt').to.be.a('string').and.not.empty;
+      expect(
+        inPlayBefore.has(hostCard.promptText),
+        're-roll must not return a prompt that was already on the table'
+      ).to.be.false;
     }
-    expect(threwExhaustion).to.be.true;
-    expect(errorMessage).to.include('No more prompts');
   });
 
   // The vote card renders an answer in full, which is only possible against a
@@ -2639,14 +2645,14 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       });
     });
 
-    describe('Issue 83 Option C: Deck exhaustion boundary and per-player isolation for two deck sizes', () => {
+    describe('Issue 83 Option C: re-rolls past the deck boundary, and per-player isolation for two deck sizes', () => {
       const testCases = [
         { deckId: 'cah_dark_humor', totalPrompts: 12 },
         { deckId: 'the_daily_grind', totalPrompts: 20 },
       ];
 
       for (const tc of testCases) {
-        it(`exhausts ${tc.deckId} (${tc.totalPrompts} prompts) at the boundary and permits second player to re-roll`, async () => {
+        it(`keeps re-rolling ${tc.deckId} (${tc.totalPrompts} prompts) past the boundary and permits second player to re-roll`, async () => {
           const hostUser = await createAnonUser();
           const guest1User = await createAnonUser();
           const guest2User = await createAnonUser();
@@ -2691,15 +2697,18 @@ describe('Gaslight E2E Game Emulator Tests', () => {
 
           expect(seenByHost.size).to.equal(expectedHostRerolls + 1);
 
-          // The next re-roll must throw RESOURCE_EXHAUSTED (match on code, trap 12)
-          let threwExhaustion = false;
-          try {
-            await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
-          } catch (err: any) {
-            threwExhaustion = true;
-            expect(err.status).to.equal('RESOURCE_EXHAUSTED');
-          }
-          expect(threwExhaustion).to.be.true;
+          // Past the boundary the re-roll keeps working - unlimited re-rolls -
+          // and still refuses to hand back anything currently on the table.
+          const beforeBoundary = await roomRef.get();
+          const inPlayAtBoundary = new Set((beforeBoundary.data()?.cards as any[]).map(c => c.promptText));
+          await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+          const afterBoundary = await roomRef.get();
+          const hostCardPastBoundary = (afterBoundary.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+          expect(hostCardPastBoundary.promptText).to.be.a('string').and.not.empty;
+          expect(
+            inPlayAtBoundary.has(hostCardPastBoundary.promptText),
+            'a repeat is allowed, but not one that is live on a card right now'
+          ).to.be.false;
 
           // Over-reach guard: Guest 1 in the same room must still be able to re-roll successfully
           const guest1InitialCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_g1');

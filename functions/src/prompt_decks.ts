@@ -90,30 +90,30 @@ const DECKS: Record<string, string[]> = {
     "A time I accidentally set up a date with the wrong person."
   ],
   rated_r_nsfw: [
-    "What’s your most embarassing moment?",
+    "What's your most embarassing moment?",
     "If you had to sleep with a president, who would it be?",
     "What would be the name of your biography?",
-    "What would you take to a dessert island? (can’t be a way off)",
+    "What would you take to a dessert island? (can't be a way off)",
     "What will you name your first kid?",
-    "Which celebrity do you think you’re most like?",
+    "Which celebrity do you think you're most like?",
     "What was the last dream you remember?",
     "When was the last time you shit your pants?",
     "Where was your most dangerous near-death experience?",
-    "What’s the strangest food you’ve eaten?",
+    "What's the strangest food you've eaten?",
     "Who are you most likely to assassinate?",
     "What did you want to be growing up?",
-    "What’s your favorite holiday destination?",
+    "What's your favorite holiday destination?",
     "Who was your first celebrity crush?",
-    "What’s the most NSFW thing you’ve done in public?",
+    "What's the most NSFW thing you've done in public?",
     "Which cartoon character would you want to date?",
-    "What’s the best thing you can cook?",
+    "What's the best thing you can cook?",
     "What would your dream house include?",
-    "What’s your most embarassing item of clothing?",
-    "The worst way I’ve lost money is…",
-    "The most embarassing thing I’ve spent money on",
-    "What’s the last thing you’ve broken?",
-    "What’s the closest to a serious crime you’ve ever been?",
-    "What’s been your greatest success in the last year?"
+    "What's your most embarassing item of clothing?",
+    "The worst way I've lost money is…",
+    "The most embarassing thing I've spent money on",
+    "What's the last thing you've broken?",
+    "What's the closest to a serious crime you've ever been?",
+    "What's been your greatest success in the last year?"
   ],
   cah_dark_humor: [
     "The absolute worst thing to say at a funeral.",
@@ -159,18 +159,35 @@ export class PromptDecks {
     return deckCopy.slice(0, count);
   }
 
-  static drawOneExcluding(deckId: string, excludedPrompts: Set<string>): string {
+  /// Draws one prompt, preferring anything not in [excludedPrompts].
+  ///
+  /// Re-rolls are unlimited: once a player has seen everything the deck holds,
+  /// this repeats a prompt rather than refusing. [mustAvoid] is the harder
+  /// bound that survives that fallback - pass the prompts that are live on
+  /// other cards right now plus the one already on this card, so a re-roll
+  /// always visibly changes something and two players never share a prompt.
+  ///
+  /// Only a missing deck throws. This used to throw `resource-exhausted` when
+  /// the deck ran dry, which surfaced to the player as a dead end mid-game.
+  static drawOneExcluding(
+    deckId: string,
+    excludedPrompts: Set<string>,
+    mustAvoid: Set<string> = new Set()
+  ): string {
     if (!DECKS[deckId]) {
       throw new HttpsError("not-found", `Failed to load deck: ${deckId}. Ensure it is defined in PromptDecks.`);
     }
 
     const deck = DECKS[deckId];
-    const available = deck.filter((p) => !excludedPrompts.has(p));
-    if (available.length === 0) {
-      throw new HttpsError("resource-exhausted", "No more prompts left in this deck.");
-    }
+    const pick = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
 
-    const randomIndex = Math.floor(Math.random() * available.length);
-    return available[randomIndex];
+    const preferred = deck.filter((p) => !excludedPrompts.has(p));
+    if (preferred.length > 0) return pick(preferred);
+
+    const relaxed = deck.filter((p) => !mustAvoid.has(p));
+    if (relaxed.length > 0) return pick(relaxed);
+
+    // Deck smaller than the table: nothing left to vary by.
+    return pick(deck);
   }
 }

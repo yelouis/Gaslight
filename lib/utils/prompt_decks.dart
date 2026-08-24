@@ -169,18 +169,29 @@ class PromptDecks {
 
   /// Draws a single prompt from [deckId], excluding a set of [excludedPrompts].
   /// Throws an exception if no unique prompts are left.
-  static String drawOneExcluding(String deckId, Set<String> excludedPrompts) {
+  /// Mirrors `PromptDecks.drawOneExcluding` in `functions/src/prompt_decks.ts`.
+  ///
+  /// Re-rolls are unlimited: once every prompt has been seen this repeats one
+  /// rather than refusing. [mustAvoid] survives that fallback so a re-roll
+  /// always visibly changes something. Only a missing deck throws.
+  static String drawOneExcluding(
+    String deckId,
+    Set<String> excludedPrompts, [
+    Set<String> mustAvoid = const {},
+  ]) {
     if (!_decks.containsKey(deckId)) {
       throw Exception('Failed to load deck: $deckId. Ensure it is defined in PromptDecks.');
     }
-    
+
     final deck = _decks[deckId]!;
-    final available = deck.where((p) => !excludedPrompts.contains(p)).toList();
-    if (available.isEmpty) {
-      throw Exception('No remaining unique prompts in deck "$deckId"');
-    }
-    
-    available.shuffle(Random());
-    return available.first;
+    String pick(List<String> xs) => (xs.toList()..shuffle(Random())).first;
+
+    final preferred = deck.where((p) => !excludedPrompts.contains(p)).toList();
+    if (preferred.isNotEmpty) return pick(preferred);
+
+    final relaxed = deck.where((p) => !mustAvoid.contains(p)).toList();
+    if (relaxed.isNotEmpty) return pick(relaxed);
+
+    return pick(deck);
   }
 }
