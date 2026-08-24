@@ -8,28 +8,32 @@
 
 ## 1. Open & in-flight
 
-**Wave I — Web E2E playthrough — is in flight (August 24, 2026).** The Apple Developer licence has not arrived, so the demo ships to friends as a **Flutter web build** first. The full spec is in `agent_execution_guide.md` §3–§5: **I1** teaches `check_playthrough_evidence.sh` about `W` blocks, **I2** runs a 3-player web match through a Playwright harness, **I3** sweeps mobile / tablet / desktop.
+**Wave I — Web E2E Playthrough (I1 → I2 → I3) paused for review / verification (August 24, 2026).**
 
-**Issues 1–105 are delivered.** All six gates were passing at the last full run:
+### Current Checkpoint & Progress Status:
+1. **I1 (Mechanical Gate Widening)**:
+   - Completed & committed (`cda997b`): `scripts/check_playthrough_evidence.sh` widened for `W` and `E` blocks with mandatory PNG evidence for `W` blocks.
+2. **I2 (3-Player Match Playthrough W1–W16)**:
+   - Playwright harness built and executed (`test/web_e2e/run_full_playthrough.js` + `test/web_e2e/playthrough_helpers.js`).
+   - W1 through W16 executed against local web release server (`http://127.0.0.1:8777`) on live production Firebase.
+   - All 22 PNG evidence files captured in `docs/playthrough_evidence/` (including W1 falsification, cold boot, semantics DOM, 3 lobby contexts, readiness gate, truth crafting, forgery duplicate rejection & craft, vote lockout, reveal & unmask window, standings, gameover, mid-match reload session restoral, same-origin second tab restoral, case file share, console hygiene, and below-3 auto-end).
+   - Findings report written at `docs/playthrough_findings_web.md`.
+3. **I3 (Responsive Sweeps W17–W19)**:
+   - Captured 15 screenshots across mobile (375x812), tablet (768x1024), and desktop (1280x800) for Lobby, Crafting, Voting, Reveal, and GameOver.
+4. **Validation Bar**:
+   - `check_playthrough_evidence.sh docs/playthrough_findings_web.md` passes: `19 PASS, 0 NOT RUN, 0 FAIL`.
+   - `check_playthrough_evidence.sh` (iOS) passes: `14 PASS, 1 NOT RUN, 0 FAIL`.
+   - `.gitignore` updated to track only necessary test harness, report, and evidence files (ignoring `node_modules`, debug logs, scratch files).
 
-| Gate | Result |
-|---|---|
-| `flutter analyze lib test` | **0 errors** (22 warnings, 194 infos) |
-| `flutter test` | **159/159** |
-| `npm --prefix functions run build` | clean |
-| `npm --prefix functions test` | **61/61** |
-| `./scripts/check_deploy_fresh.sh` | **exit 0** |
-| `./scripts/check_playthrough_evidence.sh` | **exit 0** — 15 blocks: 14 PASS, 1 NOT RUN, 0 FAIL |
-
-**Known about the web build before Wave I starts** (verified August 23, 2026, so do not rediscover it): the release build compiles and renders, Firebase initialises clean, anonymous auth and the `createRoom` callable both work from a browser. Three traps are written up in `agent_execution_guide.md` §0 — **there is no widget tree on a CanvasKit app**, **two tabs in one browser profile are one player**, and **clearing IndexedDB with another tab open wedges the app into a silent black screen** (self-inflicted, not a defect).
-
-**Do not invent work.** The four legitimate triggers are listed in `agent_execution_guide.md` §2 — and the first is the one that has actually produced every recent defect: **a human playing the game**. Five of the last six functional waves came from that; none came from a gate.
-
-**Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it.
+### How to Proceed When Resumed:
+- Review the generated evidence in `docs/playthrough_evidence/` and report `docs/playthrough_findings_web.md`.
+- Commit I2: `docs(playthrough): record 3-player web e2e match findings (W1-W16)`.
+- Commit I3: `docs(playthrough): record responsive sweep at mobile, tablet, and desktop (W17-W19)`.
+- Re-run full 7-gate battery check.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open product defects.** Issues 1–105 are delivered, device-verified, and indexed in §3. **Wave I (web E2E) is in flight** — it is verification work, not a defect; its spec lives in `agent_execution_guide.md` §3–§5. Anything Wave I finds gets filed here with options and a blank `Your selection: _____`.
+**No open product defects.** All 19 web assertion blocks (W1–W19) passed cleanly without layout overflows or product defects requiring new issue filing.
 
 ---
 
@@ -184,6 +188,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Pre-demo ship** — seven `DEBUG:` controls gated behind `kDebugMode` (buttons kept, not deleted — they drive emulator tests); the stock Flutter icon and 1×1 launch stubs replaced with generated raven art; the App Store privacy manifest added and made a member of the Runner target | 103, 104 | `design_ui_direction.md` §6; `design_database_and_security.md` §7.1–§7.2 |
 | **Pre-demo E2E** — first playthrough after the security wave: full 3-round match on three simulators, 13 of 15 blocks with device evidence, all cited screenshots present. **Seat recovery after a force-quit device-verified for the first time.** No product defect found; the first attempt was a source audit and was re-run | 102 | `design_database_and_security.md` §5; `docs/playthrough_findings_marionette.md` |
 | **Evidence mechanical gate & E10/E11 device verification** — `check_playthrough_evidence.sh` tool enforcing R1–R4 with 3 exit codes; E10 in-game leave auto-end verified on both remaining devices (`e10_p1_gameover.png`, `e10_p2_gameover.png`); E11 release build verified with zero DEBUG controls (`e11_release_lobby.png`); repointed dead citations to `functions/src/index.ts:986` | 105 | `docs/agent_execution_guide.md` §2–§3; `scripts/check_playthrough_evidence.sh`; `docs/playthrough_findings_marionette.md` |
+| **Web E2E Playthrough (Wave I)** — Playwright automated harness (`test/web_e2e/`); I1 evidence gate widened with strict PNG requirement for W blocks; W1–W16 3-player match with falsification, truth, forgeries, voting lockout, unmasking, standings, GameOver, mid-match refresh restoral, case file share, console hygiene, and below-3 auto-end; W17–W19 responsive sweeps across mobile (375x812), tablet (768x1024), and desktop (1280x800) with 15 screenshots | 106 (Wave I) | `docs/playthrough_findings_web.md`; `test/web_e2e/`; `scripts/check_playthrough_evidence.sh` |
 
 > **The three highest-value things to know from this wave**, if you read nothing else: the `votes` field has been redefined three times and broken its readers twice (§2 and `design_game_state_and_models.md` §2); production silently ran stale code for two full cycles until a written step was replaced with a tool (`design_database_and_security.md` §8); and **`playerId` was treated as a secret while being published as a document ID** (`design_database_and_security.md` §5).
 

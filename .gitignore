@@ -1,9 +1,15 @@
-# Miscellaneous
+# Miscellaneous & OS
 *.class
 *.log
 *.pyc
 *.swp
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 .atom/
 .build/
 .buildlog/
@@ -12,20 +18,15 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# IDE & Editors
 *.iml
 *.ipr
 *.iws
 .idea/
+.vscode/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
+# Flutter / Dart
 **/doc/api/
-**/ios/Flutter/.last_build_id
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -34,21 +35,42 @@ migrate_working_dir/
 .pub/
 /build/
 
-# Symbolication related
+# Symbolication & Obfuscation
 app.*.symbols
-
-# Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
+# Android Studio & Gradle
 /android/app/debug
 /android/app/profile
 /android/app/release
+.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
 
-# Dotenv
+# iOS & macOS
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Pods/
+**/ios/.symlinks/
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+macos/Flutter/ephemeral/
+
+# Node.js, Functions, & E2E Testing
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+functions/lib/
+test-results/
+playwright-report/
+
+# Secrets, Environment & Firebase Config
 .env
-
-# Firebase config & Admin SDK keys
+.env.*
 **/google-services.json
 **/GoogleService-Info.plist
 web_config.txt
@@ -56,31 +78,10 @@ web_config.txt
 *-adminsdk-*.json
 *.pem
 
-# Local ChromeDriver binaries
+# Local Drivers & Test Outputs
 chromedriver/
-
-# Desktop / Platform-specific build artifacts
-windows/flutter/ephemeral/
-linux/flutter/ephemeral/
-macos/Flutter/ephemeral/
-**/ios/Flutter/Generated.xcconfig
-**/ios/Flutter/flutter_export_environment.sh
-.env
-*.log
-.DS_Store
-
-# Cloud Functions build and dependencies
-functions/node_modules/
-functions/lib/
-
-# Local test outputs
 test_output.txt
 
-# Gemini IDE
+# Antigravity / Gemini IDE & Scratch
 .gemini/
-
-# Temporary scratch artifacts
 scratch/
-
-
-
