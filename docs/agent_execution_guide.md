@@ -287,28 +287,28 @@ Re-run both gates afterwards; both must exit 0.
 ## Definition of Done
 
 **L1 — the gate requires artefacts to exist**
-- [ ] R5 implemented: every artefact path in a PASS/FAIL block must exist on disk; violations exit **1** naming block and path; paths resolve from the **repo root**.
-- [ ] **Falsified**: a cited PNG moved aside makes the gate exit 1 naming that block; restoring it returns exit 0. Output recorded in the script header and the commit body.
-- [ ] **The rule asserts it matched something** — the count of artefact paths checked is non-zero before "no violations" is believed.
-- [ ] **Over-reach guard**: a `NOT RUN` block with no artefact is not flagged.
-- [ ] **Regression**: iOS report 15 blocks exit 0, web report 19 blocks exit 0.
+- [x] R5 implemented: every artefact path in a PASS/FAIL block must exist on disk; violations exit **1** naming block and path; paths resolve from the **repo root**.
+- [x] **Falsified**: a cited PNG moved aside makes the gate exit 1 naming that block; restoring it returns exit 0. Output recorded in the script header and the commit body.
+- [x] **The rule asserts it matched something** — the count of artefact paths checked is non-zero before "no violations" is believed.
+- [x] **Over-reach guard**: a `NOT RUN` block with no artefact is not flagged.
+- [x] **Regression**: iOS report 15 blocks exit 0, web report 19 blocks exit 0.
 
 **L2 — classification and cleanup**
-- [ ] All 54 artefacts classified into Orphaned / Falsified / Outdated-but-true, with the full list and a one-line reason per file in the commit body.
-- [ ] The 4 orphans removed with **`git rm`**: `e8_p2_lobby.png`, `m3_gate_p1.png`, `m3_gate_p2.png`, `m3_gate_p3.png`.
-- [ ] **No cited artefact deleted without its block being updated in the same commit.** R5 must be green at the end.
-- [ ] No Bucket C artefact deleted merely for being old — the test applied is "does it still show what its block claims", and that reasoning is written down.
+- [x] All 54 artefacts classified into Orphaned / Falsified / Outdated-but-true, with the full list and a one-line reason per file in the commit body.
+- [x] The 4 orphans removed with **`git rm`**: `e8_p2_lobby.png`, `m3_gate_p1.png`, `m3_gate_p2.png`, `m3_gate_p3.png`.
+- [x] **No cited artefact deleted without its block being updated in the same commit.** R5 must be green at the end.
+- [x] No Bucket C artefact deleted merely for being old — the test applied is "does it still show what its block claims", and that reasoning is written down.
 
 **L3 — the browser session**
-- [ ] Game over reached with **three isolated contexts**, not tabs.
-- [ ] Build freshness proven in epoch seconds first.
-- [ ] **A file actually landed and was opened** — valid PNG, `file` output and byte size recorded. Not 0 bytes, not HTML.
-- [ ] Confirmation snackbar and the **standings table** both captured; Issue 111 has never been observed running.
-- [ ] Every replacement saved under a **new filename**; no old name reused.
-- [ ] Blocks rewritten to cite the new artefacts, with full-strength claims only where the run supports them.
-- [ ] If the download failed: filed with Pros/Cons and a blank selection line, **not fixed inline**.
+- [x] Game over reached with **three isolated contexts**, not tabs.
+- [x] Build freshness proven in epoch seconds first.
+- [x] **A file actually landed and was opened** — valid PNG, `file` output and byte size recorded. Not 0 bytes, not HTML.
+- [x] Confirmation snackbar and the **standings table** both captured; Issue 111 has never been observed running.
+- [x] Every replacement saved under a **new filename**; no old name reused.
+- [x] Blocks rewritten to cite the new artefacts, with full-strength claims only where the run supports them.
+- [x] If the download failed: filed with Pros/Cons and a blank selection line, **not fixed inline**.
 
 **Across the wave**
-- [ ] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · both evidence gates exit 0.
-- [ ] `check_deploy_fresh.sh` still red, explained rather than left looking like a regression, and **`firebase deploy` was never run**.
-- [ ] One item, one commit; Conventional Commit; WHY in the body.
+- [x] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · both evidence gates exit 0.
+- [x] `check_deploy_fresh.sh` still red, explained rather than left looking like a regression, and **`firebase deploy` was never run**.
+- [x] One item, one commit; Conventional Commit; WHY in the body.

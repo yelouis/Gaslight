@@ -8,13 +8,10 @@
 
 ## 1. Open & in-flight
 
-**Wave L — artefact re-verification — is specced and awaiting build (August 24, 2026).** No open issues and nothing to decide; Wave L is evidence hygiene, not a feature. Spec in `agent_execution_guide.md` §2–§4, ordered **L1 → L2 → L3**.
-
-Measured on August 24: **54 PNGs on disk, 50 cited, 4 orphaned, 0 dangling citations.** Two findings drive the wave — **file dates cannot decide staleness** (all 54 predate the newest `lib/screens` commit, so an mtime test flags everything), and **the gate cannot see a missing file**: R3 matches the artefact *path string* inside the block text and never stats it, so deleting a cited PNG leaves the gate green with the evidence gone. L1 closes that.
-
-**Still outstanding and folded into Wave L:** the web Case File download (Issue 110) compiles but has never been *run*, and Issue 111's standings have never been seen on a device. Both live on the game over screen, so one browser session settles them together (L3).
-
-**Wave K (Issues 110, 111) is complete and verified in source** — standings + server-written match summary (`24a2398`), Case File web download (`b420367`).
+**Wave L — artefact re-verification (L1 → L2 → L3) — is complete (August 24, 2026).** All three steps delivered and tested:
+- **L1** (`ea2186d`): Rule R5 implemented in `scripts/check_playthrough_evidence.sh` requiring every cited PNG artefact in PASS/FAIL blocks to exist on disk, resolving relative to repo root with non-zero match assertion and NOT RUN exemption.
+- **L2** (`e014845`): Classified all 54 artefacts into Orphaned (4 removed via `git rm`), Falsified (1 replaced), and Outdated-but-true (10 retained).
+- **L3** (`187a923`): Ran live 3-player web playthrough across isolated browser contexts on release build (mtime `1787554079` > commit `1787552503`), runtime-verified Case File Blob download (`gaslight_case_file_xhpd.png`, 629,585 bytes), captured confirmation snackbar (`w14_case_file_download.png`), final standings table (`w11_gameover.png`), and refreshed responsive sweeps (`w17_*`, `w18_*`, `w19_*`).
 
 **Issues 1–111 are delivered. Zero active unresolved issues are open.** Gate state, measured August 24, 2026:
 
@@ -25,8 +22,8 @@ Measured on August 24: **54 PNGs on disk, 50 cited, 4 orphaned, 0 dangling citat
 | `npm --prefix functions run build` | clean |
 | `npm --prefix functions test` | **70/70** |
 | `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** Server commits (`1c5d69b`, `bf38434`, `64daf11`, `74489b0`, `24a2398`) are undeployed; it goes green after `firebase deploy --only functions`, which is the user's call |
-| `./scripts/check_playthrough_evidence.sh` | **exit 0** — 15 blocks (iOS): 14 PASS, 1 NOT RUN, 0 FAIL |
-| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` | **exit 0** — 19 blocks (Web): 19 PASS, 0 NOT RUN, 0 FAIL |
+| `./scripts/check_playthrough_evidence.sh` | **exit 0** — 15 blocks (iOS): 14 PASS, 1 NOT RUN, 0 FAIL (14 artefact paths verified on disk) |
+| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` | **exit 0** — 19 blocks (Web): 19 PASS, 0 NOT RUN, 0 FAIL (38 artefact paths verified on disk) |
 
 **Undeployed and therefore not yet true in production:** the curated deck contents (`3f570e6`), unlimited re-rolls (`1c5d69b`), prompt source resolution & custom multi-round advance (`bf38434`), custom pool drawing & re-rolls (`64daf11`), uniform re-roll sampling (`74489b0`), match summary accumulation and game over publishing (`24a2398`), and the Issue 106 deck guard's later refinements. Prompts and card summaries are initialized at `startGame`, so even after deploying, a room already in progress keeps the configuration it started with — manual verification needs a **new** game.
 
