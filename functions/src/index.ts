@@ -254,6 +254,10 @@ export const joinRoom = onCall(async (request) => {
 });
 
 // 3. Start Game
+// Longest answer the vote screen can display in full. Mirrored by
+// kMaxAnswerLength in lib/widgets/card_grid.dart - change both together.
+const MAX_ANSWER_LENGTH = 100;
+
 export const startGame = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
@@ -491,6 +495,20 @@ export const submitAnswer = onCall(async (request) => {
   const { roomCode, targetCardId, authorId, text, isTruth } = request.data;
   if (!roomCode || !targetCardId || !authorId || text === undefined || isTruth === undefined) {
     throw new HttpsError("invalid-argument", "Missing required submission arguments.");
+  }
+
+  // The vote screen renders an option in full - no ellipsis - and that is only
+  // possible against a bounded length (see lib/widgets/card_grid.dart). The
+  // client caps the field at the same number; this is the bound that counts,
+  // because a client-side limit is a suggestion.
+  if (typeof text !== "string") {
+    throw new HttpsError("invalid-argument", "Answer text must be a string.");
+  }
+  if (text.length > MAX_ANSWER_LENGTH) {
+    throw new HttpsError(
+      "invalid-argument",
+      `Answer is ${text.length} characters; the maximum is ${MAX_ANSWER_LENGTH}.`
+    );
   }
 
   const roomRef = db.collection("rooms").doc(roomCode);

@@ -176,6 +176,55 @@ void main() {
       }
     });
 
+    // The cap is checked at submit, not by capping the field: a player may
+    // write as much as they like and is told plainly when it will not fit.
+    // Falsified by removing the guard — submitAnswer was then invoked and no
+    // SnackBar appeared.
+    testWidgets('warns and blocks submission when the answer exceeds 100 characters', (WidgetTester tester) async {
+      final fakeFunctions = FakeFirebaseFunctions(mockDb);
+      gameService = GameService(db: mockDb, functions: fakeFunctions);
+
+      try {
+      await setupAndPumpCraftScreen(
+        tester: tester,
+        localPlayerId: 'local_player_id',
+        phase: GamePhase.forgery,
+        truthAnswer: 'sleeping in my bed all day',
+        sabotageAnswers: const {},
+      );
+
+      await tester.tap(find.text('INSPECT'));
+      await tester.pump();
+
+      final tooLong = 'z' * 120;
+      await tester.enterText(find.byType(TextField), tooLong);
+      await tester.pump();
+
+      await tester.tap(find.text('SUBMIT DOSSIER'));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(
+        find.text('That is 120 characters. Trim it to 100 or fewer so it fits on the card.'),
+        findsOneWidget,
+        reason: 'the player must be told why the card will not submit',
+      );
+      expect(
+        fakeFunctions.callableInvocations['submitAnswer'] ?? 0,
+        0,
+        reason: 'an over-length answer must never reach the server',
+      );
+
+      // Trimming to the bound lets it through.
+      await tester.enterText(find.byType(TextField), 'z' * 100);
+      await tester.pump();
+      await tester.tap(find.text('SUBMIT DOSSIER'));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(fakeFunctions.callableInvocations['submitAnswer'] ?? 0, 1);
+      } finally {
+        gameService.dispose();
+      }
+    });
+
     testWidgets('should render pinned target header and underline input fields correctly', (WidgetTester tester) async {
       try {
         await setupAndPumpCraftScreen(

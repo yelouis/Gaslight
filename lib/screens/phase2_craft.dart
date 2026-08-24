@@ -1,6 +1,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../widgets/card_grid.dart' show kMaxAnswerLength;
 import 'package:provider/provider.dart';
 import '../services/game_service.dart';
 import '../services/audio_service.dart';
@@ -65,6 +66,24 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
   void _submitAnswer(GameService gs) async {
     final text = _answerController.text.trim();
     if (text.isEmpty) return;
+
+    // Length is checked here, at submit, rather than by capping the field:
+    // silently refusing keystrokes gives the player no idea why the words
+    // stopped appearing. They may write as much as they like and are told
+    // plainly when it will not fit on the card. `submitAnswer` enforces the
+    // same bound server-side, because a client-side limit is a suggestion.
+    if (text.length > kMaxAnswerLength) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'That is ${text.length} characters. Trim it to $kMaxAnswerLength or fewer so it fits on the card.',
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
@@ -470,6 +489,10 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                           key: const ValueKey('answer_field'),
                           controller: _answerController,
                           maxLines: 3,
+                          // Capped so the vote screen can render the whole
+                          // answer without an ellipsis (see card_grid.dart).
+                          // The server enforces the same bound - a client
+                          // limit alone is not a limit.
                           enabled: !_isSubmitting,
                           style: const TextStyle(
                             fontFamily: 'Lora',

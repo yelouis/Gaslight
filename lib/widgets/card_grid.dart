@@ -11,6 +11,25 @@ class VotingAnswer {
   VotingAnswer({required this.authorId, required this.text, this.isSelfAnswer = false});
 }
 
+/// Answers are capped at [kMaxAnswerLength] characters on both the client
+/// (`phase2_craft.dart`) and the server (`submitAnswer`), and an option card
+/// must render the longest legal answer in full — no ellipsis. The font steps
+/// down with length so 100 characters still fit the smallest card: two columns
+/// at 375 px wide with `childAspectRatio` 1.1, which gives the text 136.5 x
+/// 121.6 logical pixels. At 12 px with height 1.3 that is 7 lines of headroom,
+/// and 100 characters need at most 7 even with pathological wrapping.
+///
+/// `test/vote_option_truncation_test.dart` asserts this mechanically via
+/// `RenderParagraph.didExceedMaxLines`; it fails if this table is loosened or
+/// the cap is raised without re-tuning.
+const int kMaxAnswerLength = 100;
+
+double answerFontSizeFor(int length) {
+  if (length <= 40) return 16;
+  if (length <= 70) return 14;
+  return 12;
+}
+
 class CardGrid extends StatelessWidget {
   final List<VotingAnswer> answers;
   final String? selectedAuthorId;
@@ -134,13 +153,13 @@ class CardGrid extends StatelessWidget {
                                   color: isSelfAnswer 
                                       ? theme.colorScheme.onSurface.withOpacity(0.4) 
                                       : theme.colorScheme.onSurface,
-                                  fontSize: 16,
+                                  fontSize: answerFontSizeFor(ans.text.length),
                                   fontWeight: FontWeight.bold,
                                   fontFamily: 'Lora',
                                   height: 1.3,
                                 ),
                                 textAlign: TextAlign.center,
-                                maxLines: 4,
+                                maxLines: 7,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),

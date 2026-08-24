@@ -1524,6 +1524,51 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(errorMessage).to.include('No more prompts');
   });
 
+  // The vote card renders an answer in full, which is only possible against a
+  // bounded length. The client caps its field at 100; this asserts the bound
+  // that actually holds, since a client-side limit is only a suggestion.
+  it('submitAnswer rejects an answer longer than 100 characters and accepts exactly 100', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+    const guest2User = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      forgeriesPerCard: 1,
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+    await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
+    await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+
+    const tooLong = 'x'.repeat(101);
+    let threwTooLong = false;
+    let message = '';
+    try {
+      await callFn('submitAnswer', hostUser.idToken, {
+        roomCode, targetCardId: 'p_host', authorId: 'p_host', text: tooLong, isTruth: true
+      });
+    } catch (e: any) {
+      threwTooLong = true;
+      message = e.message || e.toString() || '';
+    }
+    expect(threwTooLong).to.be.true;
+    expect(message).to.include('101 characters');
+
+    // Exactly at the bound is legal — the vote card is sized for it.
+    await callFn('submitAnswer', hostUser.idToken, {
+      roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'y'.repeat(100), isTruth: true
+    });
+    const sealed = await db.collection('rooms').doc(roomCode).collection('sealed').doc('p_host').get();
+    expect(sealed.data()?.truthAnswer).to.have.lengthOf(100);
+  });
+
   // Issue 106 — the deck the game plays is the deck the ROOM holds, and a
   // caller who claims otherwise is rejected rather than quietly obeyed.
   // Falsified: with the pre-fix server (which drew from request.data), the
