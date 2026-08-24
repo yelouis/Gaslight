@@ -39,7 +39,6 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
   bool _nameError = false;
   int _selectedAvatarIndex = 0;
   bool _isNavigating = false;
-  String _selectedDeck = PromptDecks.availableDecks.first;
   Set<String> _knownPlayerIds = {};
   bool _familyFriendlyOnly = false;
   String? _handledRoomClosedKey;
@@ -719,6 +718,21 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                               setState(() {
                                 _familyFriendlyOnly = val;
                               });
+                              // Issue 106: this toggle filters the LOCAL deck
+                              // list only. If it hides the deck the room has
+                              // selected, the carousel falls back to showing
+                              // availableDecks.first while the room still holds
+                              // the hidden one - and the server starts what the
+                              // room holds. Write the change through so what
+                              // the host sees is what starts.
+                              if (val) {
+                                final current = gs.gameState?.selectedDeckId;
+                                if (current == 'rated_r_nsfw' || current == 'cah_dark_humor') {
+                                  gs.updateLobbySettings(
+                                    selectedDeckId: PromptDecks.availableDecks.first,
+                                  );
+                                }
+                              }
                             },
                           ),
                         ),
@@ -983,7 +997,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                         setState(() => _isStartingGame = true);
                         playRavenPose(RavenState.caw, onceKey: 'startgame:${gs.gameState?.roomCode}');
                         try {
-                          await gs.startGame(_selectedDeck);
+                          await gs.startGame(selectedDeckId);
                         } catch (e) {
                           debugPrint('startGame error: $e');
                           if (context.mounted) {

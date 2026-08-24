@@ -284,6 +284,20 @@ export const startGame = onCall(async (request) => {
       throw new HttpsError("permission-denied", "Only the host can start the game.");
     }
 
+    // Issue 106 - the deck is resolved from the ROOM, never from the caller.
+    // updateLobbySettings already maintains room.selectedDeckId, so that field
+    // is the single source of truth; a client value is only ever a claim about
+    // it. The claim is still validated rather than ignored, so a client that
+    // disagrees fails loudly here instead of silently starting a deck the
+    // lobby is not showing.
+    const deckId: string = room.selectedDeckId || "the_daily_grind";
+    if (selectedDeckId !== deckId) {
+      throw new HttpsError(
+        "invalid-argument",
+        `Deck mismatch: caller asked for "${selectedDeckId}" but the room has "${deckId}" selected.`
+      );
+    }
+
     const activePlayers = players.filter(p => p.role !== "spectator");
     if (activePlayers.length < 3) {
       throw new HttpsError("failed-precondition", "At least 3 players are required to start the game.");
@@ -315,7 +329,7 @@ export const startGame = onCall(async (request) => {
     const totalRounds = room.totalRounds || 1;
 
     let prompts: string[] = [];
-    if (selectedDeckId === "custom") {
+    if (deckId === "custom") {
       interface PromptItem {
         text: string;
         authorId: string;
@@ -415,11 +429,11 @@ export const startGame = onCall(async (request) => {
       prompts = activePlayers.map(p => assigned[p.id]);
     } else {
       const totalPromptsNeeded = activePlayers.length * totalRounds;
-      const deckSize = PromptDecks.getDeckSize(selectedDeckId);
+      const deckSize = PromptDecks.getDeckSize(deckId);
       if (deckSize < totalPromptsNeeded) {
         throw new HttpsError("failed-precondition", `Deck size (${deckSize}) is insufficient for ${activePlayers.length} players over ${totalRounds} rounds (${totalPromptsNeeded} prompts required).`);
       }
-      prompts = PromptDecks.drawPrompts(selectedDeckId, activePlayers.length);
+      prompts = PromptDecks.drawPrompts(deckId, activePlayers.length);
     }
 
     const pIds = activePlayers.map(p => p.id);
@@ -438,7 +452,7 @@ export const startGame = onCall(async (request) => {
     transaction.update(roomRef, {
       currentPhase: "truth",
       totalPlayers: players.length,
-      selectedDeckId,
+      selectedDeckId: deckId,
       forgeriesPerCard,
       sabotageAnswersCount: forgeriesPerCard,
       totalRounds,

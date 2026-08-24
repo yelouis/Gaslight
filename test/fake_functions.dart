@@ -160,6 +160,21 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final roomDoc = await roomRef.get();
       final roomState = GameState.fromMap(roomDoc.data()!, roomDoc.id);
 
+      // Issue 106: mirror the real callable. The server resolves the deck from
+      // the room and rejects a caller whose claim disagrees. This fake used to
+      // read roomState.selectedDeckId while silently ignoring the payload -
+      // i.e. it modelled the CORRECT behaviour while production used the
+      // caller's value, so no outcome-based test could ever reproduce the bug.
+      // Keep these two in agreement or the blind spot comes straight back.
+      final claimedDeckId = params['selectedDeckId'];
+      if (claimedDeckId != null && claimedDeckId != roomState.selectedDeckId) {
+        throw FirebaseFunctionsException(
+          code: 'invalid-argument',
+          message:
+              'Deck mismatch: caller asked for "$claimedDeckId" but the room has "${roomState.selectedDeckId}" selected.',
+        );
+      }
+
       final playersSnap = await roomRef.collection('players').get();
       final players = playersSnap.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
       final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();

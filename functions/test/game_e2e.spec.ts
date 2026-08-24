@@ -1406,6 +1406,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
     await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
 
+    // Issue 106: the server resolves the deck from the room document, so the
+    // lobby must actually hold it before start - exactly as a real client does.
+    await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
     await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
 
     const roomRef = db.collection('rooms').doc(roomCode);
@@ -1475,6 +1478,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
 
     // cah_dark_humor has exactly 12 prompts. With 3 players, 3 are drawn initially.
+    // Issue 106: the server resolves the deck from the room document, so the
+    // lobby must actually hold it before start - exactly as a real client does.
+    await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
     await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
 
     const roomRef = db.collection('rooms').doc(roomCode);
@@ -1516,6 +1522,62 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     }
     expect(threwExhaustion).to.be.true;
     expect(errorMessage).to.include('No more prompts');
+  });
+
+  // Issue 106 — the deck the game plays is the deck the ROOM holds, and a
+  // caller who claims otherwise is rejected rather than quietly obeyed.
+  // Falsified: with the pre-fix server (which drew from request.data), the
+  // mismatch call below started cah_dark_humor and threwMismatch stayed false.
+  it('Issue 106: startGame resolves the deck from the room and rejects a mismatched claim', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+    const guest2User = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      forgeriesPerCard: 1,
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+    await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
+
+    // The lobby settles on one deck...
+    await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
+
+    // ...and a caller asking for a different one is refused, not obeyed.
+    let threwMismatch = false;
+    let mismatchMessage = '';
+    try {
+      await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'rated_r_nsfw' });
+    } catch (e: any) {
+      threwMismatch = true;
+      mismatchMessage = e.message || e.toString() || '';
+    }
+    expect(threwMismatch).to.be.true;
+    expect(mismatchMessage).to.include('Deck mismatch');
+
+    // The room is untouched by the refused call.
+    let roomSnap = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnap.data()?.currentPhase).to.equal('lobby');
+    expect(roomSnap.data()?.selectedDeckId).to.equal('cah_dark_humor');
+
+    // The honest call starts, and the prompts really come from that deck.
+    await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
+    roomSnap = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnap.data()?.currentPhase).to.equal('truth');
+    expect(roomSnap.data()?.selectedDeckId).to.equal('cah_dark_humor');
+
+    // Prompt-source coverage (that a deck id really governs which prompts are
+    // drawn) is already carried by the Issue 64/67/83 exhaustion tests, which
+    // depend on cah_dark_humor holding exactly 12 prompts. DECKS is module
+    // private, and a production accessor is not worth adding for one assertion.
+    expect((roomSnap.data()?.cards || []).length).to.equal(3);
   });
 
   it('should enforce the server-side cap of at most 3 custom prompts per player', async () => {
@@ -2558,6 +2620,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
           await db.collection('rooms').doc(roomCode).collection('players').doc('p_g1').update({ lobbyReady: true });
           await db.collection('rooms').doc(roomCode).collection('players').doc('p_g2').update({ lobbyReady: true });
 
+          // Issue 106: the server resolves the deck from the room document, so the
+          // lobby must actually hold it before start - exactly as a real client does.
+          await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: tc.deckId });
           await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: tc.deckId });
 
           let roomSnap = await roomRef.get();

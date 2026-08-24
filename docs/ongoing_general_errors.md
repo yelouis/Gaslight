@@ -28,46 +28,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-All 19 web assertion blocks (W1–W19) passed cleanly — no layout overflows, no defects found by the sweep. **One defect found afterwards by a human playing the game**, which is where five of the last six functional waves came from.
-
----
-
-### Issue 106 — The chosen deck is ignored; every game plays The Daily Grind
-
-**Reported:** user selected *Rated R NSFW* and received prompts from *The Daily Grind*.
-**Status: CONFIRMED at runtime**, and broader than reported.
-
-**Mechanism.** `lobby_screen.dart:42` declares `String _selectedDeck = PromptDecks.availableDecks.first;`. That field is **read once** (`:986`, `await gs.startGame(_selectedDeck)`) and **assigned nowhere** — a repo-wide search for `_selectedDeck =` returns only the initializer, and the file has no `part` directives, so nothing outside it can assign the private field either. `PromptDecks.availableDecks` is `_decks.keys.toList()` and `the_daily_grind` is the first key, so **`startGame` is always called with `the_daily_grind`.**
-
-The carousel's `onDeckSelected` (`:589`) calls `gs.updateLobbySettings(selectedDeckId: val)`, which correctly updates the **room document** — that path works and is tested (`house_rules_panel_test.dart:264`). It simply has nothing to do with the value `startGame` receives. The local `selectedDeckId` computed at `:496` drives display and deck-size checks but is never passed to `startGame`.
-
-The server compounds it: `startGame` (`functions/src/index.ts:263`) takes `selectedDeckId` from `request.data`, never reads `room.selectedDeckId`, draws prompts from the client value (`:422`), then **overwrites the room's field with it** (`:441`) — so the room document is rewritten to the wrong deck after start, destroying the evidence.
-
-**Observed, not reasoned.** A widget probe drove the real `LobbyScreen` with the room set to `rated_r_nsfw` and asserted the payload the callable received:
-```
->>> PROBE: callable=startGame selectedDeckId=the_daily_grind
-Expected: 'rated_r_nsfw'
-  Actual: 'the_daily_grind'
-```
-Control: with the room set to `the_daily_grind` the same probe passes, so it measures the payload rather than failing unconditionally. The probe was temporary and is not committed.
-
-**Blast radius — larger than reported.** Every non-default deck is affected: Deep Fears, Unhinged Quirks, Romantic Disasters, CAH Dark Humor and Rated R NSFW all play The Daily Grind. **`custom` is also affected**, so P10 player-written prompts are silently never used.
-
-**Why the suite is green.** `test/fake_functions.dart:174` implements `startGame` by reading `roomState.selectedDeckId` from the room document, whereas the real server reads `request.data.selectedDeckId`. The fake models the *correct* behaviour, so no outcome-based test on the fake can reproduce this — only an assertion on the **payload** catches it. Another instance of §2.2.
-
-**Why W1–W19 missed it.** The web playthrough drove a full match, but no assertion compared the *chosen* deck against the *played* prompts. A match that silently plays the wrong deck looks completely normal from the outside. Worth an assertion in any future sweep.
-
-**Related defect found while verifying.** `Family-Friendly Decks Only` (`:718`) only calls `setState`; it never writes to the room. It filters the client's `availableDecks`, and `:496` then falls back to `availableDecks.first` for display. So a host who picks NSFW and later enables the toggle sees Daily Grind while the room still holds `rated_r_nsfw`. **Whichever option is chosen below must not let that toggle desync the UI from the room**, or the fix produces the mirror-image bug: UI shows Daily Grind, game starts NSFW.
-
-**Options:**
-
-- **Option A — Make the server authoritative.** Drop the `selectedDeckId` parameter from `startGame`; the server reads `room.selectedDeckId`, which `updateLobbySettings` already maintains. Matches this codebase's stated architecture (§2.6) and removes the whole class of client/room divergence. Requires the family-friendly toggle to write through to the room. Touches the callable signature, the client call, the fake, and tests.
-- **Option B — Send the right value.** Change `:986` to pass the `selectedDeckId` computed at `:496` and delete the dead `_selectedDeck` field. Smallest, lowest-risk change. Leaves the client as the authority for which deck is played, so a stale or hand-rolled client can still start a deck the room does not show.
-- **Option C — Both.** Client sends the computed value **and** the server validates it against `room.selectedDeckId`, rejecting a mismatch with `invalid-argument`. Keeps the existing API shape while closing the trust gap.
-
-**Recommendation: A**, or **C** if the callable signature should stay stable. Whichever is chosen, the regression test must assert the **payload or room state**, never the outcome — the fake cannot reproduce this defect through outcomes.
-
-**Your selection: _____**
+**No open product defects.** Issues 1–106 are delivered and indexed in §3. Issue 106 — the chosen deck being ignored — was found by **a human playing the game**, after all 19 web assertion blocks had passed clean. That remains the only source that has ever produced a functional defect here.
 
 ---
 
@@ -177,6 +138,12 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
 
+#### 2.24 A fake that models the CORRECT behaviour hides the bug better than a wrong one would
+
+`test/fake_functions.dart` implemented `startGame` by reading `roomState.selectedDeckId` from the room document. That is the **right** design — it is what the server does *now*, after Issue 106. But the real server was reading `request.data.selectedDeckId`, so for as long as the two disagreed, **every outcome-based test drew from the correct deck and passed** while production drew from the wrong one. A fake that is subtly wrong gets noticed; a fake that is *better than production* is invisible, because everything it touches looks right.
+
+**Two rules.** When a fake and its real counterpart resolve the same value from different sources, **that divergence is a bug in the fake even when the fake is more correct** — pin them together and add the real one's validation to the fake, so a test that violates the contract fails in the suite instead of in a friend's game. And when a defect lives in **what the client sends** rather than in what comes back, **assert the payload**: `lastCallParams` catches it, an outcome assertion never will. See [[testing-blind-spot-nonhost-writes]] and §2.2.
+
 #### 2.23 A deploy filter can drop a required asset, and an SPA rewrite will hide that it did
 
 The first Firebase Hosting deploy served a blank page. Cause: the hosting block's `"ignore": ["**/.*"]` — copied from Firebase's own template — matches any path segment starting with a dot, and **this app ships `.env` as a declared Flutter asset** (`pubspec.yaml`), so it builds to `build/web/assets/.env` and was silently excluded from the upload. `main.dart:32` calls `await dotenv.load()` **before `runApp()`**, so `main()` threw and Flutter never painted a frame.
@@ -229,6 +196,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Evidence discipline** — a manual playthrough marked complete without being run, then tooled with Marionette rather than deferred an eighth time; guards that assert usage rather than presence; a report with fabricated quotes and mis-targeted assertions; a verdict citing a method its block had no data for; a guard whose test could not fail | 66, 70, 82, 89, 92 | **§2 below** — these produced lessons, not code contracts |
 | **Pre-demo ship** — seven `DEBUG:` controls gated behind `kDebugMode` (buttons kept, not deleted — they drive emulator tests); the stock Flutter icon and 1×1 launch stubs replaced with generated raven art; the App Store privacy manifest added and made a member of the Runner target | 103, 104 | `design_ui_direction.md` §6; `design_database_and_security.md` §7.1–§7.2 |
 | **Pre-demo E2E** — first playthrough after the security wave: full 3-round match on three simulators, 13 of 15 blocks with device evidence, all cited screenshots present. **Seat recovery after a force-quit device-verified for the first time.** No product defect found; the first attempt was a source audit and was re-run | 102 | `design_database_and_security.md` §5; `docs/playthrough_findings_marionette.md` |
+| **Chosen deck ignored — every game played The Daily Grind** (`_selectedDeck` initialised once, read once, never assigned; `startGame` trusted the caller's deck over the room's). Fixed **A+C**: server resolves from `room.selectedDeckId` *and* rejects a mismatched claim with `invalid-argument`; dead field deleted; family-friendly toggle now writes through so it cannot desync the lobby from the room | 106 | `design_prompt_system.md` §2; `functions/src/index.ts:293`; `test/deck_selection_test.dart` |
 | **Evidence mechanical gate & E10/E11 device verification** — `check_playthrough_evidence.sh` tool enforcing R1–R4 with 3 exit codes; E10 in-game leave auto-end verified on both remaining devices (`e10_p1_gameover.png`, `e10_p2_gameover.png`); E11 release build verified with zero DEBUG controls (`e11_release_lobby.png`); repointed dead citations to `functions/src/index.ts:986` | 105 | `docs/agent_execution_guide.md` §2–§3; `scripts/check_playthrough_evidence.sh`; `docs/playthrough_findings_marionette.md` |
 | **Web E2E Playthrough (Wave I)** — Playwright automated harness (`test/web_e2e/`); I1 evidence gate widened with strict PNG requirement for W blocks; W1–W16 3-player match with falsification, truth, forgeries, voting lockout, unmasking, standings, GameOver, mid-match refresh restoral, case file share, console hygiene, and below-3 auto-end; W17–W19 responsive sweeps across mobile (375x812), tablet (768x1024), and desktop (1280x800) with 15 screenshots | 106 (Wave I) | `docs/playthrough_findings_web.md`; `test/web_e2e/`; `scripts/check_playthrough_evidence.sh` |
 

@@ -39,6 +39,8 @@ static List<String> drawPrompts(String deckId, int count)
 * **Error Handling**: Throws an exception if the selected deck is missing or if the requested count of players exceeds the total number of prompts available in the deck.
 * **Synchronous Availability**: Because decks are loaded as compilation-time constants rather than async JSON files, prompt drawing occurs synchronously, avoiding `FutureBuilder` latency during match initialization.
 
+**Deck authority (Issue 106, August 2026).** `room.selectedDeckId`, maintained by `updateLobbySettings`, is the **single source of truth** for which deck a match plays. `startGame` resolves the deck from the room (`functions/src/index.ts:293`) and never from the caller; a caller whose `selectedDeckId` disagrees is rejected with `invalid-argument` rather than silently obeyed, so a stale client fails loudly instead of starting a deck the lobby is not showing. Two consequences bind future work: **any UI that filters the deck list must write its choice through to the room** — `Family-Friendly Decks Only` previously filtered only local state, which would leave the lobby showing one deck while the room held another — and **`test/fake_functions.dart` must keep the same resolution and the same mismatch rejection**, because a fake that resolves from the room while production resolves from the caller hides the defect completely (§2.24 in `ongoing_general_errors.md`).
+
 > **Server-authoritative note (July 2026):** deck drawing for live games now happens in Cloud Functions (`functions/src/prompt_decks.ts`, a TypeScript port of this utility); the Dart copy remains for client display and test fakes.
 
 ---
