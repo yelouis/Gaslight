@@ -96,6 +96,34 @@ void main() {
       await tester.pump();
     }
 
+    // The voter has to know whose card this is — the target wrote the truth,
+    // and without their name "which one is the truth?" is unanswerable. This
+    // header used to render the VIEWER's own avatar, which named the wrong
+    // person entirely. Falsified by restoring `PlayerAvatar(player: me)`:
+    // both assertions below fail.
+    testWidgets('the vote header names whose card is being voted on', (WidgetTester tester) async {
+      await setupAndPumpVoteScreen(
+        tester: tester,
+        isReader: false, // viewer is Bob; the card belongs to Alice
+        reduceMotion: true,
+        readyPlayers: const {},
+      );
+
+      expect(find.text('VOTING ON'), findsOneWidget);
+      expect(
+        find.text("One of these is Alice's truth."),
+        findsOneWidget,
+        reason: 'the card belongs to Alice, not to the viewer',
+      );
+      expect(
+        find.text("One of these is Bob's truth."),
+        findsNothing,
+        reason: "the header must not name the viewer",
+      );
+
+      await gameService.leaveRoom();
+    });
+
     testWidgets('Ballot Ticker shows correct expected voters and caption', (WidgetTester tester) async {
       await setupAndPumpVoteScreen(
         tester: tester,

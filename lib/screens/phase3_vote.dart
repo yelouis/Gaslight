@@ -427,6 +427,20 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
     }
     final myOptionId = cardId != null ? gs.getMyOptionIdForCard(cardId) : null;
 
+    // Whose card this is. The target wrote the truth and is locked out of
+    // voting, so naming them is what makes the question answerable. This header
+    // used to render `me` — the viewer's own avatar — which told the voter
+    // nothing about what they were deciding.
+    PlayerState? targetPlayer;
+    if (cardId != null) {
+      for (final p in gs.players) {
+        if (p.id == cardId) {
+          targetPlayer = p;
+          break;
+        }
+      }
+    }
+
     final gridAnswers = currentCard?.options.map((opt) {
       final isSelf = gs.isMySubmittedAnswer(currentCard.targetPlayerId, opt.text);
       return VotingAnswer(authorId: opt.id, text: opt.text, isSelfAnswer: isSelf);
@@ -436,7 +450,30 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
       constraints: const BoxConstraints(maxWidth: 500),
       child: Column(
         children: [
-           PlayerAvatar(player: me, size: 50),
+           if (targetPlayer != null) ...[
+             Text(
+               'VOTING ON',
+               style: TextStyle(
+                 color: theme.colorScheme.secondary.withOpacity(0.7),
+                 fontSize: 11,
+                 fontWeight: FontWeight.bold,
+                 letterSpacing: 3,
+               ),
+             ),
+             const SizedBox(height: 8),
+             PlayerAvatar(player: targetPlayer, size: 50),
+             const SizedBox(height: 10),
+             Text(
+               "One of these is ${targetPlayer.name}'s truth.",
+               style: TextStyle(
+                 color: theme.colorScheme.onSurface.withOpacity(0.75),
+                 fontSize: 13,
+                 fontStyle: FontStyle.italic,
+               ),
+               textAlign: TextAlign.center,
+             ),
+           ] else
+             PlayerAvatar(player: me, size: 50),
            const SizedBox(height: 16),
            Text(
              'WHICH ONE IS THE TRUTH?',
