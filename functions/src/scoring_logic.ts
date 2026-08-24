@@ -18,6 +18,7 @@ export interface GameState {
   currentRound?: number;
   isTimerDisabled: boolean;
   selectedDeckId: string;
+  effectiveDeckId?: string;
   currentRotationIndex: number;
   cards: CardModel[];
   currentCardAssignments: Record<string, string>;

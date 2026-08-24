@@ -46,7 +46,22 @@ function generateRoomCode(): string {
   return result;
 }
 
+export interface PromptItem {
+  text: string;
+  authorId: string;
+}
 
+export type PromptSource =
+  | { kind: "deck"; deckId: string }
+  | { kind: "custom"; pool: PromptItem[]; fallbackDeckId: string };
+
+export function resolvePromptSource(room: GameState, activePlayers: PlayerState[]): PromptSource {
+  const effective =
+    room.effectiveDeckId ||
+    (room.selectedDeckId === "custom" ? "the_daily_grind" : room.selectedDeckId) ||
+    "the_daily_grind";
+  return { kind: "deck", deckId: effective };
+}
 
 // 1. Create Room
 export const createRoom = onCall(async (request) => {
@@ -457,6 +472,7 @@ export const startGame = onCall(async (request) => {
       currentPhase: "truth",
       totalPlayers: players.length,
       selectedDeckId: deckId,
+      effectiveDeckId: deckId === "custom" ? "the_daily_grind" : deckId,
       forgeriesPerCard,
       sabotageAnswersCount: forgeriesPerCard,
       totalRounds,
@@ -853,7 +869,8 @@ export const rerollPrompt = onCall(async (request) => {
     // must never end up on the same prompt.
     const inPlay = new Set(room.cards.map(c => c.promptText));
     const excluded = new Set([...inPlay, ...cardSeen]);
-    const deckId = room.selectedDeckId === "custom" ? "the_daily_grind" : room.selectedDeckId;
+    const promptSource = resolvePromptSource(room, []);
+    const deckId = promptSource.kind === "deck" ? promptSource.deckId : promptSource.fallbackDeckId;
     const newPrompt = PromptDecks.drawOneExcluding(deckId, excluded, inPlay);
 
     const updatedCard = {
@@ -1473,7 +1490,8 @@ export const advanceToNextResolution = onCall(async (request) => {
       if (currentRound < totalRounds) {
         const nextRound = currentRound + 1;
         const activePlayers = players.filter(p => p.role !== "spectator");
-        const deckId = room.selectedDeckId || "the_daily_grind";
+        const promptSource = resolvePromptSource(room, activePlayers);
+        const deckId = promptSource.kind === "deck" ? promptSource.deckId : promptSource.fallbackDeckId;
 
         const sealedDocs = await Promise.all(
           activePlayers.map(p => transaction.get(roomRef.collection("sealed").doc(p.id)))

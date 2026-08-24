@@ -13,6 +13,7 @@ class GameState {
   final int currentRound;
   final bool isTimerDisabled;
   final String selectedDeckId;
+  final String? effectiveDeckId;
 
   // Legacy alias for compatibility
   int? get sabotageAnswersCount => forgeriesPerCard;
@@ -63,6 +64,7 @@ class GameState {
     this.currentRound = 1,
     this.isTimerDisabled = false,
     this.selectedDeckId = 'the_daily_grind',
+    this.effectiveDeckId,
     this.currentRotationIndex = 0,
     this.cards = const [],
     this.currentCardAssignments = const {},
@@ -85,6 +87,7 @@ class GameState {
     int? currentRound,
     bool? isTimerDisabled,
     String? selectedDeckId,
+    String? effectiveDeckId,
     int? currentRotationIndex,
     List<CardModel>? cards,
     Map<String, String>? currentCardAssignments,
@@ -98,6 +101,7 @@ class GameState {
     bool clearReaderId = false,
     bool clearEndTime = false,
     bool clearUnmaskDeadline = false,
+    bool clearEffectiveDeckId = false,
   }) {
     return GameState(
       roomCode: roomCode ?? this.roomCode,
@@ -108,6 +112,7 @@ class GameState {
       currentRound: currentRound ?? this.currentRound,
       isTimerDisabled: isTimerDisabled ?? this.isTimerDisabled,
       selectedDeckId: selectedDeckId ?? this.selectedDeckId,
+      effectiveDeckId: clearEffectiveDeckId ? null : (effectiveDeckId ?? this.effectiveDeckId),
       currentRotationIndex: currentRotationIndex ?? this.currentRotationIndex,
       cards: cards ?? this.cards,
       currentCardAssignments: currentCardAssignments ?? this.currentCardAssignments,
@@ -132,6 +137,7 @@ class GameState {
       'currentRound': currentRound,
       'isTimerDisabled': isTimerDisabled,
       'selectedDeckId': selectedDeckId,
+      if (effectiveDeckId != null) 'effectiveDeckId': effectiveDeckId,
       'currentRotationIndex': currentRotationIndex,
       'cards': cards.map((c) => c.toMap()).toList(),
       'currentCardAssignments': currentCardAssignments,
@@ -166,6 +172,7 @@ class GameState {
       currentRound: map['currentRound']?.toInt() ?? 1,
       isTimerDisabled: map['isTimerDisabled'] as bool? ?? false,
       selectedDeckId: map['selectedDeckId'] as String? ?? 'the_daily_grind',
+      effectiveDeckId: map['effectiveDeckId'] as String?,
       currentRotationIndex: map['currentRotationIndex']?.toInt() ?? 0,
       cards: (map['cards'] as List<dynamic>? ?? [])
           .map((c) => CardModel.fromMap(Map<String, dynamic>.from(c as Map)))

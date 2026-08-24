@@ -3027,6 +3027,167 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(permissionDeniedThrown).to.be.true;
       });
     });
+
+    describe('Wave J: Prompt Source & Sampling (J1 - Issue 109)', () => {
+      it('Issue 109: custom-deck game with totalRounds: 2 advances past round 1 to round 2 without throwing not-found', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          selectedDeckId: 'custom',
+          totalRounds: 2,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, {
+          roomCode,
+          playerName: 'Bob',
+          playerId: 'p_g1'
+        });
+        await callFn('joinRoom', guest2User.idToken, {
+          roomCode,
+          playerName: 'Charlie',
+          playerId: 'p_g2'
+        });
+
+        // Seed customPrompts on each player doc
+        await roomRef.collection('players').doc('p_host').update({
+          customPrompts: ['Alice prompt 1', 'Alice prompt 2'],
+          lobbyReady: true
+        });
+        await roomRef.collection('players').doc('p_g1').update({
+          customPrompts: ['Bob prompt 1', 'Bob prompt 2'],
+          lobbyReady: true
+        });
+        await roomRef.collection('players').doc('p_g2').update({
+          customPrompts: ['Charlie prompt 1', 'Charlie prompt 2'],
+          lobbyReady: true
+        });
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'custom' });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+        expect(roomSnap.data()?.currentRound).to.equal(1);
+
+        // Submit truth answers
+        await callFn('submitAnswer', hostUser.idToken, {
+          roomCode,
+          targetCardId: 'p_host',
+          authorId: 'p_host',
+          text: 'Alice Truth',
+          isTruth: true
+        });
+        await callFn('submitAnswer', guest1User.idToken, {
+          roomCode,
+          targetCardId: 'p_g1',
+          authorId: 'p_g1',
+          text: 'Bob Truth',
+          isTruth: true
+        });
+        await callFn('submitAnswer', guest2User.idToken, {
+          roomCode,
+          targetCardId: 'p_g2',
+          authorId: 'p_g2',
+          text: 'Charlie Truth',
+          isTruth: true
+        });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+        const assignments = roomSnap.data()?.currentCardAssignments || {};
+
+        // Submit forgeries
+        for (const [holderId, cardId] of Object.entries(assignments)) {
+          const pToken = holderId === 'p_host' ? hostUser.idToken : (holderId === 'p_g1' ? guest1User.idToken : guest2User.idToken);
+          await callFn('submitAnswer', pToken, {
+            roomCode,
+            targetCardId: cardId as string,
+            authorId: holderId,
+            text: `${holderId} forgery on ${cardId}`,
+            isTruth: false
+          });
+        }
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+        const resolutionOrder = roomSnap.data()?.resolutionOrder as string[];
+        expect(resolutionOrder).to.have.lengthOf(3);
+
+        const players = ['p_host', 'p_g1', 'p_g2'];
+
+        // Walk through each of the 3 cards in round 1
+        for (let i = 0; i < 3; i++) {
+          roomSnap = await roomRef.get();
+          expect(roomSnap.data()?.currentPhase).to.equal('vote');
+          const currentReader = roomSnap.data()?.currentReaderId;
+
+          const sealedSnap = await roomRef.collection('sealed').doc(currentReader).get();
+          const answerAuthors = (sealedSnap.data() as any)?.answerAuthors || {};
+          const truthOpt = Object.entries(answerAuthors).find(([optId, author]) => author === currentReader)![0];
+
+          for (const pid of players) {
+            const pToken = pid === 'p_host' ? hostUser.idToken : (pid === 'p_g1' ? guest1User.idToken : guest2User.idToken);
+            if (pid === currentReader) {
+              await callFn('setReady', pToken, { roomCode, playerId: pid, ready: true });
+            } else {
+              await callFn('castVote', pToken, {
+                roomCode,
+                targetCardId: currentReader,
+                voterId: pid,
+                votedForId: truthOpt
+              });
+            }
+          }
+
+          roomSnap = await roomRef.get();
+          expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+
+          // Advance resolution
+          await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+        }
+
+        // After the 3rd card resolution advances, it should advance to round 2 truth phase
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+        expect(roomSnap.data()?.currentRound).to.equal(2);
+        const r2Cards = roomSnap.data()?.cards as any[];
+        expect(r2Cards).to.have.lengthOf(3);
+        for (const card of r2Cards) {
+          expect(card.promptText).to.be.a('string').and.not.equal('');
+        }
+      });
+
+      it('Sentinel containment: custom string does not appear inside rerollPrompt or advanceToNextResolution bodies', async () => {
+        const fs = await import('fs');
+        const { fileURLToPath } = await import('url');
+        const indexPath = fileURLToPath(new URL('../src/index.ts', import.meta.url));
+        const source = fs.readFileSync(indexPath, 'utf-8');
+
+        // Extract rerollPrompt function body
+        const rerollMatch = source.match(/export const rerollPrompt = onCall\([^)]*\)\s*=>\s*\{([\s\S]*?)\n\}\);\n/);
+        expect(rerollMatch, 'rerollPrompt function body extracted').to.not.be.null;
+        const rerollBody = rerollMatch![1];
+        expect(rerollBody.split('\n').length).to.be.greaterThan(10);
+        expect(rerollBody).to.not.include('"custom"');
+        expect(rerollBody).to.not.include("'custom'");
+
+        // Extract advanceToNextResolution function body
+        const advanceMatch = source.match(/export const advanceToNextResolution = onCall\([^)]*\)\s*=>\s*\{([\s\S]*?)\n\}\);\n/);
+        expect(advanceMatch, 'advanceToNextResolution function body extracted').to.not.be.null;
+        const advanceBody = advanceMatch![1];
+        expect(advanceBody.split('\n').length).to.be.greaterThan(10);
+        expect(advanceBody).to.not.include('"custom"');
+        expect(advanceBody).to.not.include("'custom'");
+      });
+    });
   });
 });
 

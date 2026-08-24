@@ -100,5 +100,29 @@ void main() {
         );
       });
     }
+
+    test('Wave J1: effectiveDeckId round-trips toMap() -> fromMap() and omits key when null', () {
+      final stateWithEffective = GameState(
+        roomCode: 'TEST',
+        selectedDeckId: 'custom',
+        effectiveDeckId: 'the_daily_grind',
+      );
+      final mapWith = stateWithEffective.toMap();
+      expect(mapWith.containsKey('effectiveDeckId'), isTrue);
+      expect(mapWith['effectiveDeckId'], 'the_daily_grind');
+
+      final restoredWith = GameState.fromMap(mapWith, 'TEST');
+      expect(restoredWith.effectiveDeckId, 'the_daily_grind');
+
+      final stateWithoutEffective = GameState(
+        roomCode: 'TEST',
+        selectedDeckId: 'the_daily_grind',
+      );
+      final mapWithout = stateWithoutEffective.toMap();
+      expect(mapWithout.containsKey('effectiveDeckId'), isFalse, reason: 'effectiveDeckId must be omitted when null');
+
+      final restoredWithout = GameState.fromMap(mapWithout, 'TEST');
+      expect(restoredWithout.effectiveDeckId, isNull);
+    });
   });
 }
