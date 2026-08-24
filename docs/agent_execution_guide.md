@@ -243,12 +243,12 @@ There is no active build. Both outstanding items are observations.
 - [ ] If the awards are absent or wrong: filed with Pros/Cons and a blank selection line, **not fixed inline**.
 
 **If you strengthen the summary assertion (§3)**
-- [ ] Expected `fooled` computed from the votes the test cast, asserted with equality.
-- [ ] Falsified: skewing the count by one makes it fail.
+- [x] Expected `fooled` computed from the votes the test cast, asserted with equality.
+- [x] Falsified: skewing the count by one makes it fail.
 
 **Across any work**
-- [ ] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · both evidence gates exit 0.
-- [ ] **`firebase deploy` was never run by you.**
-- [ ] One item, one commit; Conventional Commit; WHY in the body.
+- [x] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · both evidence gates exit 0.
+- [x] **`firebase deploy` was never run by you.**
+- [x] One item, one commit; Conventional Commit; WHY in the body.
 
 **If neither task is actionable yet, the correct action is to report the state and stop.** §4 lists the only four things that start a build, and "the queue looked quiet" is not one of them.
