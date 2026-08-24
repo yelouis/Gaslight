@@ -16,18 +16,21 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Gaslight — a party game of forged truths. Write a lie, spot the truth, unmask the forger.">
 
   <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="gaslight">
+  <meta name="apple-mobile-web-app-title" content="Gaslight">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Tints mobile browser chrome to the app ground instead of white -->
+  <meta name="theme-color" content="#14110E">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png">
 
-  <title>gaslight</title>
+  <title>Gaslight</title>
   <link rel="manifest" href="manifest.json">
 
   <script>
@@ -93,17 +96,124 @@
       bottom: 0;
       right: 0;
     }
+
+    /* ---------------------------------------------------------------
+       Gaslight web loading splash — HAND-MAINTAINED, not generated.
+
+       `flutter_native_splash` is configured for iOS only (`ios: true,
+       android: false`), so it emits the styles above and the
+       removeSplashFromWeb() helper below but never generates a web
+       splash element or a call site. Everything from here down is ours.
+
+       If you ever run `flutter_native_splash:create`, re-check that this
+       block and the #splash markup in <body> survived.
+
+       Palette is lib/theme/app_colors.dart: ground #14110E, brass
+       #C9A24B, ivory #F5EEDB. Fonts are a system serif on purpose —
+       Cormorant Garamond is a Flutter asset and is not loaded yet at
+       splash time, so requesting it here would only add latency to the
+       exact moment we are trying to make feel faster.
+       --------------------------------------------------------------- */
+    #splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #14110E;
+      background-image: radial-gradient(circle at 50% 42%, rgba(201, 162, 75, 0.10) 0%, rgba(20, 17, 14, 0) 62%);
+      opacity: 1;
+      transition: opacity 450ms ease;
+    }
+
+    #splash.splash-hiding {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .splash-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 24px;
+    }
+
+    .splash-ring {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 2px solid rgba(201, 162, 75, 0.18);
+      border-top-color: #C9A24B;
+      box-shadow: 0 0 26px rgba(201, 162, 75, 0.16);
+      animation: splash-spin 1.1s linear infinite;
+    }
+
+    .splash-word {
+      margin-top: 26px;
+      font-family: Georgia, "Times New Roman", "Iowan Old Style", serif;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.38em;
+      /* letter-spacing adds trailing space after the last glyph; nudge
+         back by half so the wordmark reads optically centred */
+      text-indent: 0.38em;
+      color: #C9A24B;
+    }
+
+    .splash-sub {
+      margin-top: 10px;
+      font-family: Georgia, "Times New Roman", "Iowan Old Style", serif;
+      font-style: italic;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: #F5EEDB;
+      opacity: 0.45;
+    }
+
+    @keyframes splash-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes splash-breathe {
+      0%, 100% { opacity: 0.35; }
+      50%      { opacity: 1; }
+    }
+
+    /* Honour a reduced-motion preference: drop the rotation entirely and
+       signal activity with a slow opacity breathe instead. */
+    @media (prefers-reduced-motion: reduce) {
+      .splash-ring {
+        border-color: rgba(201, 162, 75, 0.55);
+        animation: splash-breathe 2s ease-in-out infinite;
+      }
+      #splash { transition: none; }
+    }
   </style>
   <script id="splash-screen-script">
     function removeSplashFromWeb() {
-      document.getElementById("splash")?.remove();
-      document.getElementById("splash-branding")?.remove();
-      document.body.style.background = "transparent";
+      var splash = document.getElementById("splash");
+      if (!splash || splash.dataset.hiding === "1") return;
+      splash.dataset.hiding = "1";
+      splash.classList.add("splash-hiding");
+      // Match the CSS transition, then drop the node so it can never
+      // intercept input. Body keeps the dark ground rather than going
+      // transparent, so a slow first paint cannot flash white.
+      window.setTimeout(function () {
+        if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
+      }, 500);
     }
   </script>
   <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
 </head>
 <body>
+  <div id="splash" role="status" aria-live="polite" aria-label="Loading Gaslight">
+    <div class="splash-inner">
+      <div class="splash-ring" aria-hidden="true"></div>
+      <div class="splash-word">GASLIGHT</div>
+      <div class="splash-sub">Lighting the lamps&hellip;</div>
+    </div>
+  </div>
   <script>
     window.addEventListener('load', function(ev) {
       // Download main.dart.js
@@ -114,11 +224,24 @@
         onEntrypointLoaded: function(engineInitializer) {
           engineInitializer.initializeEngine().then(function(appRunner) {
             appRunner.runApp();
+            // Give Flutter a couple of frames to paint its first frame
+            // before starting the crossfade. The splash sits on top and
+            // fades over 450ms, so any residual paint is covered.
+            window.requestAnimationFrame(function () {
+              window.requestAnimationFrame(function () {
+                window.setTimeout(removeSplashFromWeb, 120);
+              });
+            });
           });
         }
       });
     });
+
+    // Failsafe. Nothing else calls removeSplashFromWeb(), so if the
+    // loader above throws — a chunk 404s, CanvasKit fails to init — the
+    // splash would otherwise cover the app forever, which is strictly
+    // worse than the bare black screen it replaced. 20s is far longer
+    // than a slow cellular first load and far shorter than "broken".
+    window.setTimeout(removeSplashFromWeb, 20000);
   </script>
-
-
 </body></html>
