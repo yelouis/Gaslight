@@ -85,10 +85,18 @@ class GameService extends ChangeNotifier {
   final Map<String, String?> _myOptionIdByCard = {};
   final Set<String> _optionIdFetchesInFlight = {};
   
-  bool isMySubmittedAnswer(String cardId, String text) =>
-      _mySubmittedByCard[cardId]?.contains(text.trim()) ?? false;
+  /// Cards are identified by `targetPlayerId`, which **repeats every round** —
+  /// so a bare card id collides across rounds. Keyed only by card id, round 2
+  /// read round 1's answers, and the own-answer lockout silently stopped
+  /// working after the first round: the cached option id no longer matched any
+  /// live option, and the cached text was last round's. Every per-card cache is
+  /// scoped by the round it belongs to.
+  String _cardKey(String cardId) => '${_gameState?.currentRound ?? 0}:$cardId';
 
-  String? getMyOptionIdForCard(String cardId) => _myOptionIdByCard[cardId];
+  bool isMySubmittedAnswer(String cardId, String text) =>
+      _mySubmittedByCard[_cardKey(cardId)]?.contains(text.trim()) ?? false;
+
+  String? getMyOptionIdForCard(String cardId) => _myOptionIdByCard[_cardKey(cardId)];
 
   // Disconnect in-flight guards
   final Set<String> _disconnectsInFlight = {};
@@ -510,7 +518,7 @@ class GameService extends ChangeNotifier {
   Future<void> submitCardAnswer(String targetCardId, String authorId, String text, bool isTruth) async {
     if (_gameState == null) return;
     if (text.trim().isNotEmpty) {
-      _mySubmittedByCard[targetCardId] = {text.trim()};
+      _mySubmittedByCard[_cardKey(targetCardId)] = {text.trim()};
     }
     await _functions.httpsCallable('submitAnswer').call({
       'roomCode': _gameState!.roomCode,
@@ -533,11 +541,12 @@ class GameService extends ChangeNotifier {
 
   Future<String?> fetchMyOptionId(String cardId) async {
     if (_gameState == null || _currentPlayerId == null) return null;
-    if (_myOptionIdByCard.containsKey(cardId)) {
-      return _myOptionIdByCard[cardId];
+    final key = _cardKey(cardId);
+    if (_myOptionIdByCard.containsKey(key)) {
+      return _myOptionIdByCard[key];
     }
-    if (_optionIdFetchesInFlight.contains(cardId)) return null;
-    _optionIdFetchesInFlight.add(cardId);
+    if (_optionIdFetchesInFlight.contains(key)) return null;
+    _optionIdFetchesInFlight.add(key);
     try {
       final res = await _functions.httpsCallable('getMyOptionId').call({
         'roomCode': _gameState!.roomCode,
@@ -546,14 +555,14 @@ class GameService extends ChangeNotifier {
       });
       final data = res.data;
       final optionId = data is Map ? (data['optionId'] as String?) : null;
-      _myOptionIdByCard[cardId] = optionId;
+      _myOptionIdByCard[key] = optionId;
       notifyListeners();
       return optionId;
     } catch (e) {
       debugPrint('fetchMyOptionId error: $e');
       return null;
     } finally {
-      _optionIdFetchesInFlight.remove(cardId);
+      _optionIdFetchesInFlight.remove(key);
     }
   }
 
