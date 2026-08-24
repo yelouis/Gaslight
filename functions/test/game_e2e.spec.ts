@@ -1491,12 +1491,15 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     const hostCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
     seenByHost.add(hostCard.promptText);
 
-    // Re-roll 9 times to exhaust the remaining prompts in the 12-prompt deck (3 initially drawn, 9 remaining)
+    // Re-roll 9 times to observe that each re-roll changes the card and accumulates seenPrompts
     for (let i = 0; i < 9; i++) {
+      const cardBefore = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host').promptText;
+      const inPlayBefore = new Set((roomSnap.data()?.cards as any[]).map(c => c.promptText));
       await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
       roomSnap = await roomRef.get();
       const updatedHostCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
-      expect(seenByHost.has(updatedHostCard.promptText)).to.be.false;
+      expect(updatedHostCard.promptText).to.not.equal(cardBefore);
+      expect(inPlayBefore.has(updatedHostCard.promptText)).to.be.false;
       seenByHost.add(updatedHostCard.promptText);
     }
 
@@ -2688,14 +2691,17 @@ describe('Gaslight E2E Game Emulator Tests', () => {
           seenByHost.add(initialHostCard.promptText);
 
           for (let i = 0; i < expectedHostRerolls; i++) {
+            const cardBefore = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host').promptText;
+            const inPlayBefore = new Set((roomSnap.data()?.cards as any[]).map(c => c.promptText));
             await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
             roomSnap = await roomRef.get();
             const updatedCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
-            expect(seenByHost.has(updatedCard.promptText)).to.be.false;
+            expect(updatedCard.promptText).to.not.equal(cardBefore);
+            expect(inPlayBefore.has(updatedCard.promptText)).to.be.false;
             seenByHost.add(updatedCard.promptText);
           }
 
-          expect(seenByHost.size).to.equal(expectedHostRerolls + 1);
+          expect(seenByHost.size).to.be.greaterThan(0);
 
           // Past the boundary the re-roll keeps working - unlimited re-rolls -
           // and still refuses to hand back anything currently on the table.
@@ -3310,6 +3316,68 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         cards = roomSnap.data()?.cards as any[];
         const bobCard = cards.find(c => c.targetPlayerId === 'p_g1');
         expect(bobCard.promptText).to.be.a('string').and.not.equal('');
+      });
+
+      it('Issue 107 (J3): re-roll samples uniformly from deck excluding only in-play prompts and reaches every available prompt', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        // cah_dark_humor has 12 prompts. 3 players hold 3 cards initially.
+        // The available candidates for host at any given point are the 10 prompts not held by Bob and Charlie.
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'cah_dark_humor' });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+
+        const observedPrompts = new Set<string>();
+        const totalDraws = 100;
+        let sampleCount = 0;
+
+        for (let i = 0; i < totalDraws; i++) {
+          const before = await roomRef.get();
+          const cardsBefore = before.data()?.cards as any[];
+          const hostCardBefore = cardsBefore.find(c => c.targetPlayerId === 'p_host');
+          const otherCardsPrompts = new Set(
+            cardsBefore.filter(c => c.targetPlayerId !== 'p_host').map(c => c.promptText)
+          );
+
+          await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+
+          const after = await roomRef.get();
+          const hostCardAfter = (after.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+          const prompt = hostCardAfter.promptText;
+
+          // Assert Option B invariant: never hands back what is currently on the table
+          expect(prompt).to.not.equal(hostCardBefore.promptText, 're-roll must visibly change current card prompt');
+          expect(otherCardsPrompts.has(prompt), 're-roll must never match another player active card').to.be.false;
+
+          observedPrompts.add(prompt);
+          sampleCount++;
+        }
+
+        // Positive sample size assertion per §5.2
+        expect(sampleCount).to.equal(totalDraws);
+        expect(sampleCount).to.be.greaterThan(0);
+
+        // All 10 prompts not held by the other two players must have been reached across 100 uniform samples
+        expect(observedPrompts.size).to.equal(10);
       });
     });
   });

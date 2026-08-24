@@ -901,26 +901,25 @@ export const rerollPrompt = onCall(async (request) => {
     const activePlayers = players.filter(p => p.role !== "spectator");
 
     // Prompts sitting on a card right now - including this player's current
-    // one. Never hand any of these back, even once the deck is exhausted for
-    // this player: a re-roll must visibly change something, and two players
-    // must never end up on the same prompt.
+    // one. Never hand any of these back: a re-roll must visibly change something,
+    // and two players must never end up on the same prompt.
+    // Under Option B (Issue 107), sampling is uniform minus what is currently live on cards.
     const inPlay = new Set(room.cards.map(c => c.promptText));
-    const excluded = new Set([...inPlay, ...cardSeen]);
     const promptSource = resolvePromptSource(room, activePlayers);
     let newPrompt: string;
 
     if ("pool" in promptSource) {
       const candidates = promptSource.pool.filter(
-        item => item.authorId !== playerId && !excluded.has(item.text)
+        item => item.authorId !== playerId && !inPlay.has(item.text)
       );
       if (candidates.length > 0) {
         const chosen = candidates[Math.floor(Math.random() * candidates.length)];
         newPrompt = chosen.text;
       } else {
-        newPrompt = PromptDecks.drawOneExcluding(promptSource.fallbackDeckId, excluded, inPlay);
+        newPrompt = PromptDecks.drawOneExcluding(promptSource.fallbackDeckId, inPlay, inPlay);
       }
     } else {
-      newPrompt = PromptDecks.drawOneExcluding(promptSource.deckId, excluded, inPlay);
+      newPrompt = PromptDecks.drawOneExcluding(promptSource.deckId, inPlay, inPlay);
     }
 
     const updatedCard = {
