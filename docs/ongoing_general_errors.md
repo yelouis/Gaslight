@@ -45,7 +45,7 @@
   - *Pros*: Best felt experience — a re-roll is always genuinely new. Already built, tested and deployed; zero risk.
   - *Cons*: Not what was asked for. Sampling is predictable rather than random, and this item then produces no code change at all.
 
-Your selection: _____
+Your selection: Proceed with Option B is it is not too hard to do. Otherwise do Option A.
 
 ---
 
@@ -60,7 +60,7 @@ Your selection: _____
   - *Pros*: The feature behaves as advertised. The assignment rule already exists in `startGame`'s custom branch (`index.ts:336`) and can be extracted and reused rather than re-derived.
   - *Cons*: More code on a transactional path, and the fallback still has to exist for small pools — so both behaviours must be tested, not just the happy one.
 
-Your selection: _____
+Your selection: Proceed with Option B.
 
 ---
 
@@ -89,7 +89,7 @@ Every custom-deck room with `totalRounds > 1` throws as the last card of round 1
 
 > **Sequencing**: Issue 108 and this issue answer the same underlying question. **Settle 108 first**, then make 109 agree with it.
 
-Your selection: _____
+Your selection: Proceed with Option C.
 
 ---
 
