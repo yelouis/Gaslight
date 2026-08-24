@@ -6,14 +6,15 @@
 
 | # | Item | Touches | Deploy |
 |---|---|---|---|
-| **J1** | Issue 107 — re-roll sampling + what `custom` re-rolls from | `functions/src/prompt_decks.ts`, `lib/utils/prompt_decks.dart`, `functions/src/index.ts` | functions |
-| **J2** | Issue 108 — custom-deck game cannot advance past round 1 | `functions/src/index.ts` | functions |
+| **J1** | Issue 107 — re-roll sampling rule | `functions/src/prompt_decks.ts`, `lib/utils/prompt_decks.dart`, `functions/src/index.ts` | functions |
+| **J2** | Issue 108 — what a `custom` game re-rolls from | `functions/src/index.ts` | functions |
+| **J3** | Issue 109 — custom-deck game cannot advance past round 1 | `functions/src/index.ts` | functions |
 
 ## ⛔ STOP — this wave is blocked on the user
 
-**Issue 107 has two `Your selection: _____` lines and Issue 108 has one, and all three are blank.** Every option changes what you build, so **do not start.** Do not guess, do not "pick the recommended one to unblock yourself," and **never fill a selection line in on the user's behalf** — that line is theirs.
+**Issues 107, 108 and 109 each end in a blank `Your selection: _____`.** Every option changes what you build, so **do not start.** Each issue carries pros, cons and a marked `(recommended)` option — those are there to inform the user's choice, **not to authorise you to act on the recommendation.** Do not guess, do not "pick the recommended one to unblock yourself," and **never fill a selection line in on the user's behalf**.
 
-Read the full text of both issues in `ongoing_general_errors.md` before doing anything else. **Settle 107 Decision 2 before 108**, because both answer the same underlying question — what a custom game draws from — and 108's fix must agree with it.
+Read all three issues in `ongoing_general_errors.md` before doing anything else. **Settle 108 before 109** — both answer the same underlying question, what a custom game draws from, and 109's fix must agree with 108's.
 
 If the selections are filled in when you arrive, proceed. If not, say so and stop.
 
@@ -57,7 +58,7 @@ Verified in source on **August 24, 2026**. An agent that changes any of this is 
 - **A `grep` is not an observation.** Neither is prose describing source.
 - **Record every substitution.** An omitted assertion reads as though it passed.
 - **`flutter analyze lib test`, never bare `flutter analyze`.**
-- **Do not touch anything in §7 or §8.**
+- **Do not touch anything in §8 or §9.**
 
 ---
 
@@ -84,9 +85,9 @@ Refactors, renames and "while I was in there" cleanups are not work. Exactly fou
 
 `rerollPrompt` (`index.ts:~850`) builds `inPlay` = every prompt currently on a card, and `excluded` = `inPlay ∪ cardSeen`, where `cardSeen` is that player's `sealed.seenPrompts` history. It calls `drawOneExcluding(deckId, excluded, inPlay)`.
 
-**So step 1 is a draw without replacement across the player's whole history.** That is what Issue 107 Decision 1 is about.
+**So step 1 is a draw without replacement across the player's whole history.** That is what Issue 107 is about.
 
-### 3.2 Implementing Decision 1
+### 3.2 Implementing the selected rule
 
 **If Option A (uniform random every time):** sampling ignores history entirely — pick uniformly from the deck on every re-roll. `seenPrompts` must still be *written* (other code reads it) but stops being consulted for sampling. Expect the player-visible consequence that a re-roll can return the same prompt twice in a row; if the user picked A they have accepted that, so **do not quietly add a "not the same as last time" guard** — that is Option B.
 
@@ -96,7 +97,13 @@ Refactors, renames and "while I was in there" cleanups are not work. Exactly fou
 
 Whichever is chosen, the sampling rule must live in **one** place — `drawOneExcluding` — with `rerollPrompt` supplying sets. Do not branch on the option at the call site.
 
-### 3.3 Implementing Decision 2 (what `custom` re-rolls from)
+### 3.3 The mirror is not optional
+
+`lib/utils/prompt_decks.dart` mirrors `functions/src/prompt_decks.ts`. `design_prompt_system.md` requires the **prompt arrays byte-for-byte identical** and the drawing behaviour equivalent; the Dart copy backs client display and `test/fake_functions.dart`. **Any change to sampling must land in both.** A verification pass has already been burned once by a parser that only *appeared* to show divergence — if you check the mirror, bound your parse at the deck's closing bracket, because `cah_dark_humor` is the last entry and a naive slice runs into the class methods below it and reports phantom differences.
+
+---
+
+## 4. J2 — Issue 108, what a `custom` game re-rolls from
 
 `index.ts:856` maps `custom` → `the_daily_grind` today.
 
@@ -104,13 +111,9 @@ Whichever is chosen, the sampling rule must live in **one** place — `drawOneEx
 
 **Option B** draws from the players' contributed prompts. The assignment rule already exists in `startGame`'s custom branch (`index.ts:336`) — **reuse it, do not re-derive it.** It enforces the P10 constraint that a player never receives their own prompt, and tops up from `the_daily_grind` when the pool is short. Extract it into a helper both sites call rather than copying it, or the two will drift exactly the way `:856` and `:1476` did (Issue 108).
 
-### 3.4 The mirror is not optional
-
-`lib/utils/prompt_decks.dart` mirrors `functions/src/prompt_decks.ts`. `design_prompt_system.md` requires the **prompt arrays byte-for-byte identical** and the drawing behaviour equivalent; the Dart copy backs client display and `test/fake_functions.dart`. **Any change to sampling must land in both.** A verification pass has already been burned once by a parser that only *appeared* to show divergence — if you check the mirror, bound your parse at the deck's closing bracket, because `cah_dark_humor` is the last entry and a naive slice runs into the class methods below it and reports phantom differences.
-
 ---
 
-## 4. J2 — Issue 108, custom games cannot reach round 2
+## 5. J3 — Issue 109, custom games cannot reach round 2
 
 ### 4.1 The defect, confirmed
 
@@ -137,7 +140,7 @@ Follow the selected option, and note the recommendation attached to the issue: *
 
 ---
 
-## 5. Validation for this wave
+## 6. Validation for this wave
 
 **Write the failing test first and watch it fail.** For J2 that means an emulator test that starts a **custom-deck, 2-round** game, plays round 1 to resolution, and asserts round 2 begins with real prompts. It must throw `not-found` before your fix.
 
@@ -153,7 +156,7 @@ Follow the selected option, and note the recommendation attached to the issue: *
 
 ---
 
-## 6. Playthrough procedure — the standing setup
+## 7. Playthrough procedure — the standing setup
 
 1. **`.env` must contain `USE_EMULATOR=false`** — a bundled asset; changing it after the build has no effect.
 2. **Uninstall on every booted simulator** so no stale room is restored from `SharedPreferences`.
@@ -177,7 +180,7 @@ Follow the selected option, and note the recommendation attached to the issue: *
 
 ---
 
-## 7. Already delivered — do NOT rework
+## 8. Already delivered — do NOT rework
 
 **Verified in source, in the built artefacts, and on devices, August 22, 2026:**
 
@@ -194,7 +197,7 @@ Follow the selected option, and note the recommendation attached to the issue: *
 
 ---
 
-## 8. Invariants & intentional decisions — do NOT change
+## 9. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.** Deleting them breaks emulator tests; `debugSimulateBotResponses` drives several. Their gating is observable only in a release or profile build.
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty. If a plugin lacks its own manifest, **upgrade the plugin**.
@@ -217,7 +220,7 @@ Follow the selected option, and note the recommendation attached to the issue: *
 
 ---
 
-## 9. Where the contracts live
+## 10. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -233,7 +236,7 @@ Follow the selected option, and note the recommendation attached to the issue: *
 
 ---
 
-## 10. Validation standard
+## 11. Validation standard
 
 **A mechanical check must assert it matched something.** Zero matches and zero violations produce the same number — `check_playthrough_evidence.sh` exists because a mandated check of mine did not.
 
@@ -255,7 +258,7 @@ Follow the selected option, and note the recommendation attached to the issue: *
 
 ---
 
-## 11. Feedback loop — what past specs got wrong
+## 12. Feedback loop — what past specs got wrong
 
 - **A check that matches nothing returns the same number as a check that passes.** Mine did, and it shipped as a mandatory step.
 - **A defect class mutates faster than the rule written to catch it.** `grep` as observation → prose as observation → a **renamed field** hiding both. Each escaped a rule written for the previous shape. **Match the concept, not the literal.**
@@ -295,7 +298,7 @@ Follow the selected option, and note the recommendation attached to the issue: *
 ## Definition of Done
 
 **Before anything**
-- [ ] All three `Your selection: _____` lines (Issue 107 ×2, Issue 108 ×1) are **filled in by the user**. If not, stop and report.
+- [ ] All three `Your selection: _____` lines (Issues 107, 108, 109) are **filled in by the user**. A `(recommended)` label is advice for them, **not permission for you**. If any line is blank, stop and report.
 - [ ] Six gates run and recorded, so you know which failures are yours.
 
 **J1 — Issue 107**
@@ -306,12 +309,17 @@ Follow the selected option, and note the recommendation attached to the issue: *
 - [ ] If Option C was selected, the commit says plainly that no sampling code changed. **No invented work.**
 - [ ] `design_prompt_system.md` §5 updated to describe the rule that now holds.
 
-**J2 — Issue 108**
+**J2 — Issue 108** (what `custom` re-rolls from)
+- [ ] The chosen source is implemented, and the `the_daily_grind` fallback path is tested too — not just the happy path.
+- [ ] If Option B: the P10 assignment in `startGame` (`index.ts:336`) is **extracted and reused**, not copied. Two copies is how Issue 109 happened.
+
+**J3 — Issue 109**
 - [ ] **Reproduced first:** an emulator test with a **custom deck and `totalRounds` ≥ 2** fails with `not-found` before the fix, and the failure output is recorded in the commit body.
 - [ ] After the fix, that game reaches round 2 with a prompt on every card.
 - [ ] The deck is resolved in **one** place; `index.ts:856` and `:1476` can no longer disagree about what `custom` means.
 - [ ] Single-round custom games still work — over-reach guard.
 - [ ] `design_prompt_system.md` §3 updated if the custom draw rule changed.
+- [ ] If Option C: the single resolution site is named in the commit, and both former sites (`index.ts:856`, `:1476`) now read it.
 
 **Across the wave**
 - [ ] Battery at or above the baseline table: **0 errors** · **≥178** · clean functions build · **≥63** · evidence gate exit 0.
