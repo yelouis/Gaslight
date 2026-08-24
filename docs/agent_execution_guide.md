@@ -335,32 +335,32 @@ Change it to sample **uniformly from the source, excluding only prompts currentl
 ## Definition of Done
 
 **J1 — Issue 109, Option C**
-- [ ] `startGame` writes `effectiveDeckId` in the same update that sets `currentPhase: "truth"`.
-- [ ] `resolvePromptSource()` exists and is the **only** code that decides where prompts come from.
-- [ ] `rerollPrompt` and `advanceToNextResolution` both call it; **the string `"custom"` appears in neither**.
-- [ ] Legacy rooms without `effectiveDeckId` resolve through the fallback **inside the resolver** and do not crash.
-- [ ] `effectiveDeckId` added to Dart `GameState` (field, constructor, `copyWith`, `toMap`, `fromMap`), **omitted when null**, with a round-trip test proving it is not erased.
-- [ ] **Reproduced first:** a custom-deck `totalRounds: 2` emulator test fails with `not-found` before the fix; failure output in the commit body. Passes after.
-- [ ] Over-reach guards: single-round custom, and multi-round built-in deck, both unchanged.
-- [ ] Sentinel-containment check asserts a **non-zero** read of the two function bodies before reporting zero matches.
+- [x] `startGame` writes `effectiveDeckId` in the same update that sets `currentPhase: "truth"`.
+- [x] `resolvePromptSource()` exists and is the **only** code that decides where prompts come from.
+- [x] `rerollPrompt` and `advanceToNextResolution` both call it; **the string `"custom"` appears in neither**.
+- [x] Legacy rooms without `effectiveDeckId` resolve through the fallback **inside the resolver** and do not crash.
+- [x] `effectiveDeckId` added to Dart `GameState` (field, constructor, `copyWith`, `toMap`, `fromMap`), **omitted when null**, with a round-trip test proving it is not erased.
+- [x] **Reproduced first:** a custom-deck `totalRounds: 2` emulator test fails with `not-found` before the fix; failure output in the commit body. Passes after.
+- [x] Over-reach guards: single-round custom, and multi-round built-in deck, both unchanged.
+- [x] Sentinel-containment check asserts a **non-zero** read of the two function bodies before reporting zero matches.
 
 **J2 — Issue 108, Option B**
-- [ ] `buildCustomPromptPool()` extracted from `startGame` **verbatim** — cap of 3, trim, length 1–200, case-insensitive dedupe, `the_daily_grind` top-up tagged `"fallback"`, shuffle.
-- [ ] **Every existing custom-deck test passes without modification.** Editing one means behaviour changed out of scope.
-- [ ] A custom re-roll returns a prompt a player actually wrote when the pool can supply one.
-- [ ] **Never your own prompt** — on initial draw, on re-roll, and in round 2.
-- [ ] The too-small-pool fallback path is tested, not just the happy path.
+- [x] `buildCustomPromptPool()` extracted from `startGame` **verbatim** — cap of 3, trim, length 1–200, case-insensitive dedupe, `the_daily_grind` top-up tagged `"fallback"`, shuffle.
+- [x] **Every existing custom-deck test passes without modification.** Editing one means behaviour changed out of scope.
+- [x] A custom re-roll returns a prompt a player actually wrote when the pool can supply one.
+- [x] **Never your own prompt** — on initial draw, on re-roll, and in round 2.
+- [x] The too-small-pool fallback path is tested, not just the happy path.
 
 **J3 — Issue 107, Option B**
-- [ ] Re-roll excludes only what is live on a card, including the caller's own current prompt; `cardSeen` is no longer unioned into the exclusion.
-- [ ] `seenPrompts` is still written, and the **round-advance draw still consults it** — B was not applied there.
-- [ ] Distribution test shows every prompt in a deck is reachable, **and asserts its own sample size is non-zero**.
-- [ ] No test asserts "never repeats across history" — that is Option C, which the user did not choose.
-- [ ] Not flaky across repeated runs.
-- [ ] Any pre-existing test changed to the new contract is named in the commit, with why.
+- [x] Re-roll excludes only what is live on a card, including the caller's own current prompt; `cardSeen` is no longer unioned into the exclusion.
+- [x] `seenPrompts` is still written, and the **round-advance draw still consults it** — B was not applied there.
+- [x] Distribution test shows every prompt in a deck is reachable, **and asserts its own sample size is non-zero**.
+- [x] No test asserts "never repeats across history" — that is Option C, which the user did not choose.
+- [x] Not flaky across repeated runs.
+- [x] Any pre-existing test changed to the new contract is named in the commit, with why.
 
 **Across the wave**
-- [ ] Battery at or above baseline: **0 errors** · **≥178** · clean functions build · **≥63** · evidence gate exit 0.
-- [ ] `check_deploy_fresh.sh` still red, explained in the commit, and **`firebase deploy` was never run**.
-- [ ] One item, one commit; Conventional Commit; WHY in the body.
-- [ ] Issues 107, 108 and 109 moved into the **single** existing Resolved heading in `ongoing_general_errors.md`, and `design_prompt_system.md` §3 and §5 updated to describe the rules that now hold.
+- [x] Battery at or above baseline: **0 errors** · **≥178** · clean functions build · **≥63** · evidence gate exit 0.
+- [x] `check_deploy_fresh.sh` still red, explained in the commit, and **`firebase deploy` was never run**.
+- [x] One item, one commit; Conventional Commit; WHY in the body.
+- [x] Issues 107, 108 and 109 moved into the **single** existing Resolved heading in `ongoing_general_errors.md`, and `design_prompt_system.md` §3 and §5 updated to describe the rules that now hold.
