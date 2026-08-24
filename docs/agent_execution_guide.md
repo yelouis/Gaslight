@@ -312,29 +312,29 @@ Then show a confirmation snackbar naming what happened ("Case file saved to your
 ## Definition of Done
 
 **K1 — Issue 111, Option C**
-- [ ] **Full standings render for every active player** — rank, name, score, `fooled X · fooled by Y`. Works with **no** `matchSummary` present.
-- [ ] Summary accumulated **inside the existing reveal transaction**, reusing the pass that already walks `resolvedVotes`. No second traversal.
-- [ ] `sealed/_summary` is read in the transaction's **read phase**, before any write.
-- [ ] Text truncated to `kMaxAnswerLength`; entries hard-capped; the **published** `matchSummary` is computed awards, not the raw per-card log.
-- [ ] Tie-breaking is deterministic, so two runs of one match agree.
-- [ ] **All three** `currentPhase: "gameOver"` sites publish — `:1081`, `:1089` (disconnect) and `:1617` (final round). The disconnect path is asserted explicitly.
-- [ ] `matchSummary` added to Dart `GameState` (field, constructor, `copyWith`, `toMap` **omitting null**, `fromMap`) with a round-trip test proving it is not erased.
-- [ ] **Rules test**: a client cannot read `sealed/_summary`, and the test **fails** if an allow-read block is added.
-- [ ] **Leak guard**: `room.matchSummary` is absent after round 1 resolves and before game over.
-- [ ] Emulator test computes the expected `fooled` count **from the votes it cast**, not from the summary.
-- [ ] Degrades gracefully: no summary, and an all-null summary, both render without crashing.
-- [ ] Accumulator falsified — removing the write fails the test.
+- [x] **Full standings render for every active player** — rank, name, score, `fooled X · fooled by Y`. Works with **no** `matchSummary` present.
+- [x] Summary accumulated **inside the existing reveal transaction**, reusing the pass that already walks `resolvedVotes`. No second traversal.
+- [x] `sealed/_summary` is read in the transaction's **read phase**, before any write.
+- [x] Text truncated to `kMaxAnswerLength`; entries hard-capped; the **published** `matchSummary` is computed awards, not the raw per-card log.
+- [x] Tie-breaking is deterministic, so two runs of one match agree.
+- [x] **All three** `currentPhase: "gameOver"` sites publish — `:1081`, `:1089` (disconnect) and `:1617` (final round). The disconnect path is asserted explicitly.
+- [x] `matchSummary` added to Dart `GameState` (field, constructor, `copyWith`, `toMap` **omitting null**, `fromMap`) with a round-trip test proving it is not erased.
+- [x] **Rules test**: a client cannot read `sealed/_summary`, and the test **fails** if an allow-read block is added.
+- [x] **Leak guard**: `room.matchSummary` is absent after round 1 resolves and before game over.
+- [x] Emulator test computes the expected `fooled` count **from the votes it cast**, not from the summary.
+- [x] Degrades gracefully: no summary, and an all-null summary, both render without crashing.
+- [x] Accumulator falsified — removing the write fails the test.
 
 **K2 — Issue 110, Option B**
-- [ ] Conditional import shim with one shared signature; web impl **revokes the object URL**; IO impl throws rather than silently succeeding.
-- [ ] `package:web` added to `pubspec.yaml` — the only new dependency this wave.
-- [ ] Mobile still reaches `Share.shareXFiles`, proven by a test that **fails when the branch is inverted**.
-- [ ] Web download **observed**: a real file saved, opened, and confirmed to be a valid PNG of the Case File — not 0 bytes, not an HTML error page.
-- [ ] A confirmation snackbar tells the player the file was saved.
-- [ ] Block **W14** updated with a fresh screenshot that shows what the block claims.
+- [x] Conditional import shim with one shared signature; web impl **revokes the object URL**; IO impl throws rather than silently succeeding.
+- [x] `package:web` added to `pubspec.yaml` — the only new dependency this wave.
+- [x] Mobile still reaches `Share.shareXFiles`, proven by a test that **fails when the branch is inverted**.
+- [x] Web download **observed**: a real file saved, opened, and confirmed to be a valid PNG of the Case File — not 0 bytes, not an HTML error page.
+- [x] A confirmation snackbar tells the player the file was saved.
+- [x] Block **W14** updated with a fresh screenshot that shows what the block claims.
 
 **Across the wave**
-- [ ] Battery at or above baseline: **0 errors** · **≥179** · clean functions build · **≥68** · both evidence gates exit 0.
-- [ ] `check_deploy_fresh.sh` still red, explained in the commit, and **`firebase deploy` was never run**.
-- [ ] One item, one commit; Conventional Commit; WHY in the body.
-- [ ] Issues 110 and 111 moved into the **single** existing Resolved heading, and `design_scoring_and_ui.md` updated — it currently documents the honors and P6 sharing, and both change here.
+- [x] Battery at or above baseline: **0 errors** · **≥179** · clean functions build · **≥68** · both evidence gates exit 0.
+- [x] `check_deploy_fresh.sh` still red, explained in the commit, and **`firebase deploy` was never run**.
+- [x] One item, one commit; Conventional Commit; WHY in the body.
+- [x] Issues 110 and 111 moved into the **single** existing Resolved heading, and `design_scoring_and_ui.md` updated — it currently documents the honors and P6 sharing, and both change here.

@@ -101,6 +101,18 @@ To allow seamless recovery from app restarts, device sleep, or connection losses
 * **Points Delta**: Computes and overlays points awarded specifically during the current resolution using a localized scoring lookup.
 * **Cleanup**: Returning to the lobby triggers `leaveRoom()`, deleting active player records and shutting down subscriptions.
 
+### 4. Phase 5 (Game Over Screen) — Standings, Match Highlights & Case File Export (Wave K)
+* **Full Ranked Standings (`_buildStandings`)**: Renders all active players ranked 1st through Nth, with podium trophies/ribbons, avatar, name, and stat lines (`Fooled X · Fooled by Y`), ensuring every player sees their final placement and stats.
+* **Match Summary & Answer Quoting (`_buildMatchHighlights`)**: Displays server-computed awards quoting actual answers:
+  * **Best Lie of the Night**: Forgery with the highest number of fooled voters, quoting the exact lie text, author name, and prompt.
+  * **Cleanest Truth**: Truth answer that went unnoticed / had the fewest finder votes.
+  * **The Sting**: The single card that caused the highest total wrong votes.
+  * **Rivalries (Head to Head)**: Deceiver/victim pairs where player A fooled player B two or more times.
+* **Accumulation & Security Invariant (`sealed/_summary`)**: Because answer text is wiped across single-card reveals and round advances, resolved card summaries are accumulated into `room.collection("sealed").doc("_summary")` (default-deny to clients) during `advancePhaseInternal`. The summary is only computed and written to public `room.matchSummary` at game over (`advanceToNextResolution` and `handleDisconnect`), guaranteeing zero answer/author leakage mid-game.
+* **Case File Delivery (`_shareCaseFile`)**:
+  * **Web (`kIsWeb`)**: Converts the `RepaintBoundary` PNG bytes into a `Blob` via `package:web`, triggers a synthetic anchor download (`gaslight_case_file_<roomCode>.png`), and presents a confirmation snackbar.
+  * **Mobile / Native**: Writes PNG bytes to a temporary file and opens the native OS share sheet via `Share.shareXFiles`.
+
 ---
 
 ## 4. Delivered gameplay programme (P1–P11) — consolidated record

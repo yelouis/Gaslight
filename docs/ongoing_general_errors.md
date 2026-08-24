@@ -8,74 +8,29 @@
 
 ## 1. Open & in-flight
 
-**Wave J — prompt source & sampling (J1 → J2 → J3) — is complete (August 24, 2026).** All three selected options delivered and tested: **109 → Option C** (`bf38434`), **108 → Option B** (`64daf11`), **107 → Option B** (`74489b0`).
+**Wave K — Game Over Payoff & Web Download (K1 → K2) — is complete (August 24, 2026).** Both selected options delivered and tested:
+- **111 → Option C** (`24a2398`): Full standings table + server-written match summary quoting real answers accumulated into `sealed/_summary` across rounds and published at game over.
+- **110 → Option B** (`b420367`): Case File PNG direct downloads on web via Blob URL and synthetic anchor click behind `kIsWeb`, retaining `Share.shareXFiles` for mobile.
 
-**Issues 1–109 are delivered. Issues 110 and 111 have selections and are specced for build as Wave K** — see `agent_execution_guide.md` §2–§4. Build order is **K1 (111, Option C) → K2 (110, Option B)**: both edit the game over screen, and K1 changes what K2's Case File image captures. Gate state, measured August 24, 2026:
+**Issues 1–111 are delivered. Zero active unresolved issues are open.** Gate state, measured August 24, 2026:
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors** (21 warnings, 197 infos) |
-| `flutter test` | **179/179** |
+| `flutter analyze lib test` | **0 errors** (20 warnings, 197 infos) |
+| `flutter test` | **185/185** |
 | `npm --prefix functions run build` | clean |
-| `npm --prefix functions test` | **68/68** |
-| `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** Server commits (`1c5d69b`, `bf38434`, `64daf11`, `74489b0`) are undeployed; it goes green after `firebase deploy --only functions`, which is the user's call |
+| `npm --prefix functions test` | **70/70** |
+| `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** Server commits (`1c5d69b`, `bf38434`, `64daf11`, `74489b0`, `24a2398`) are undeployed; it goes green after `firebase deploy --only functions`, which is the user's call |
 | `./scripts/check_playthrough_evidence.sh` | **exit 0** — 15 blocks (iOS): 14 PASS, 1 NOT RUN, 0 FAIL |
-| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` | **exit 0** — 19 blocks (Web) |
+| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` | **exit 0** — 19 blocks (Web): 19 PASS, 0 NOT RUN, 0 FAIL |
 
-**Wave I — the web E2E playthrough (I1 → I2 → I3) — is complete**, with PNG evidence under `docs/playthrough_evidence/`. The release web build compiles and renders on CanvasKit, Firebase initialises clean, anonymous auth and callables work from browser contexts, session restore survives reload, and layouts hold at mobile, tablet and desktop.
-
-**Undeployed and therefore not yet true in production:** the curated deck contents (`3f570e6`), unlimited re-rolls (`1c5d69b`), prompt source resolution & custom multi-round advance (`bf38434`), custom pool drawing & re-rolls (`64daf11`), uniform re-roll sampling (`74489b0`), and the Issue 106 deck guard's later refinements. Prompts are drawn once at `startGame`, so even after deploying, a room already in progress keeps the prompts it started with — manual verification needs a **new** game.
+**Undeployed and therefore not yet true in production:** the curated deck contents (`3f570e6`), unlimited re-rolls (`1c5d69b`), prompt source resolution & custom multi-round advance (`bf38434`), custom pool drawing & re-rolls (`64daf11`), uniform re-roll sampling (`74489b0`), match summary accumulation and game over publishing (`24a2398`), and the Issue 106 deck guard's later refinements. Prompts and card summaries are initialized at `startGame`, so even after deploying, a room already in progress keeps the configuration it started with — manual verification needs a **new** game.
 
 **Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-### Issue 111: The game over screen shows only superlatives — no final scores, and nothing memorable from the match
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/game_over_screen.dart`. The screen renders `_buildHonorCards(...)` and nothing else: **The Mastermind**, **The Duplicitous**, **The Gullible**. `sortedByScore` is computed at `:147` but only `.first` and a runner-up are ever used, so **no player sees the full table** and everyone below third place learns nothing about how they did.
-
-**Two data facts decide what is cheap and what is not, and they were checked in source:**
-
-- **Player counters survive the whole match.** `totalScore`, `timesFooled` and `playersDeceived` are applied as deltas in the reveal transaction (`functions/src/index.ts:1317–1330`) and are zeroed only at player creation and game reset. Anything derivable from these needs **no backend change**.
-- **No answer text survives.** Single-card reveal scoping blanks every non-current card on the room document (`truthAnswer: ""`, `sabotageAnswers: {}`), and the round advance additionally resets each `sealed/{playerId}` doc plus `votes` and `unmaskGuesses` (`:1587`, `:1595`). By game over **the match's answers no longer exist anywhere.** So "the answer that fooled the most players" cannot be computed on the client at any price — it has to be captured server-side as each card resolves, before the wipe.
-
-**Option A**: **Final standings only** — add the full ranked table under the honors: rank, name, score.
-  - *Pros*: Pure client change, no deploy, no new state. Directly answers the complaint that the screen is only superlatives, and every player finally sees where they placed.
-  - *Cons*: Delivers none of the "best lie" idea. The screen is still the same three cards plus a list.
-
-**Option B**: **Standings + awards from counters already tracked** — the table, plus awards computed from `totalScore` / `timesFooled` / `playersDeceived`: *The Perfect Read* (`timesFooled == 0`), *Nobody Bit* (`playersDeceived == 0`, a booby prize), and a per-row "fooled X · fooled by Y" line so every player gets a fact about themselves.
-  - *Pros*: Still **zero server change and no deploy**. Gives everyone a line, not just the podium. Ships in one client commit.
-  - *Cons*: **Cannot quote a single actual answer** — the memorable part of the request is impossible at this tier. Awards read as statistics rather than moments.
-
-**Option C (recommended)**: **Standings + a server-written match summary that quotes real answers.** Accumulate a summary as each card resolves — in the same reveal transaction that already walks the votes at `:1317` — and expose it at game over. That unlocks: **Best Lie of the Night** (the forgery text, its author, and how many it fooled), **Cleanest Truth** (the truth nobody found), **The Sting** (the single card where the most players voted wrong), and head-to-head lines like "Alice fooled Bob three times" — plus everything in Option B.
-  - *Pros*: Delivers exactly what was asked, and quoting the actual sentence is what people will screenshot. **The accumulation point already exists** — the reveal transaction is already computing per-voter deltas, so the summary is written in a pass that is happening anyway, not a new traversal.
-  - *Cons*: Server change plus a functions deploy. New persisted state to place carefully: it must live in `sealed` (default-deny) while the match runs and only reach the world-readable room document at game over, or it leaks forgery authorship before the unmask window closes — the exact hazard Issues 99 and 100 exist to prevent. More tests, and the summary needs a size bound so a long match cannot bloat the room doc.
-
-**Option D**: **Round-by-round standings chart** — a sparkline of each player's score across rounds, showing comebacks and collapses.
-  - *Pros*: Shows the shape of the match rather than just its end state; genuinely fun with 3+ rounds.
-  - *Cons*: Requires per-round score snapshots that are **not stored today**, so it is new persisted state for a single visual. Gives nothing at all in a 1-round game, which is the current default. More work than C for less payoff.
-
-**Recommendation: C**, because it is the only option that delivers the answer-quoting idea, and because **B is a strict subset of C** — if C looks too large to land at once, build B first as a client-only commit and add the summary afterwards without rework. Option D is worth revisiting only once matches routinely run 3+ rounds.
-
-Your selection: Proceed with Option C.
-
----
-
-### Issue 110: The Case File cannot be shared on web, which is how the demo is being played
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/game_over_screen.dart:105`: `_shareCaseFile()` renders the Case File to PNG bytes and then returns early under `kIsWeb` with the snackbar `Sharing is only supported on mobile devices.` The screenshot cited by web playthrough block **W14** (`docs/playthrough_evidence/w14_case_file_share.png`) shows exactly that message. The guard is correct — `Share.shareXFiles` needs a `dart:io` temp file, which throws on web — but P6 (the shareable Case File) is a shipped feature and **the demo is currently being played in a browser**, so in practice nobody can share it. The bytes are already rendered when the early return fires, so the artwork exists and only the delivery is missing.
-
-**Option A**: **Leave it disabled** — keep the message, treat sharing as mobile-only until TestFlight.
-  - *Pros*: Zero work and zero risk; honest to the player rather than silently failing; the wording is already clear.
-  - *Cons*: The end-of-game payoff is missing for every friend testing on web right now, which is the whole audience today.
-
-**Option B (recommended)**: **Download the PNG on web** — feed the already-rendered bytes to a browser download (blob URL + anchor click) behind the same `kIsWeb` branch, keeping `Share.shareXFiles` for mobile.
-  - *Pros*: Uses bytes the code already produces, so it is a delivery change, not a rendering one. Works in every browser without permissions and gives web players the artefact. Small and well-contained.
-  - *Cons*: A download is not a share — no share sheet, no prefilled text — and the file lands in Downloads where a phone browser may bury it. **Note the Artifact/CSP caveat does not apply here; this is the app's own page, not a published artifact.**
-
-**Option C**: **Use the Web Share API** — call `navigator.share` with the PNG when the browser supports file sharing, and fall back to Option B when it does not.
-  - *Pros*: A real share sheet on supporting browsers, closest to the mobile experience.
-  - *Cons*: Support for sharing *files* is uneven (notably absent or partial on desktop browsers), requires a secure context, and needs a JS interop path plus the Option B fallback anyway — so it is Option B plus more.
-
-Your selection: Proceed with Option B.
+*(No active unresolved issues. All 111 issues resolved and verified.)*
 
 ---
 
@@ -225,9 +180,9 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–109 — August 8 to 24, 2026
+### Issues 65–111 — August 8 to 24, 2026
 
-**44 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**46 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
@@ -253,6 +208,9 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Evidence mechanical gate & E10/E11 device verification** — `check_playthrough_evidence.sh` tool enforcing R1–R4 with 3 exit codes; E10 in-game leave auto-end verified on both remaining devices (`e10_p1_gameover.png`, `e10_p2_gameover.png`); E11 release build verified with zero DEBUG controls (`e11_release_lobby.png`); repointed dead citations to `functions/src/index.ts:986` | 105 | `docs/agent_execution_guide.md` §2–§3; `scripts/check_playthrough_evidence.sh`; `docs/playthrough_findings_marionette.md` |
 | **Web E2E Playthrough (Wave I)** — Playwright automated harness (`test/web_e2e/`); I1 evidence gate widened with strict PNG requirement for W blocks; W1–W16 3-player match with falsification, truth, forgeries, voting lockout, unmasking, standings, GameOver, mid-match refresh restoral, case file share, console hygiene, and below-3 auto-end; W17–W19 responsive sweeps across mobile (375x812), tablet (768x1024), and desktop (1280x800) with 15 screenshots | 106 (Wave I) | `docs/playthrough_findings_web.md`; `test/web_e2e/`; `scripts/check_playthrough_evidence.sh` |
 | **Prompt Source & Sampling (Wave J)** — resolved effective prompt source on `GameState` killing `"custom"` sentinel crash (109 / J1); custom game prompt drawing and re-rolls from players' contributed pool with self-author lockout (108 / J2); uniform re-roll sampling minus live in-play table cards (107 / J3) | 107, 108, 109 | `design_prompt_system.md` §3, §5; `functions/src/index.ts` |
+| **Game Over Payoff & Web Download (Wave K)** — Standings + server-written match summary quoting real answers accumulated into `sealed/_summary` across rounds and published at game over (111 / K1); Case File PNG direct downloads on web via Blob URL and synthetic anchor click (110 / K2) | 110, 111 | `design_scoring_and_ui.md`; `lib/utils/case_file_saver_web.dart`; `functions/src/index.ts` |
+
+> **The three highest-value things to know from this wave**, if you read nothing else: the `votes` field has been redefined three times and broken its readers twice (§2 and `design_game_state_and_models.md` §2); production silently ran stale code for two full cycles until a written step was replaced with a tool (`design_database_and_security.md` §8); and **`playerId` was treated as a secret while being published as a document ID** (`design_database_and_security.md` §5).
 
 > **The three highest-value things to know from this wave**, if you read nothing else: the `votes` field has been redefined three times and broken its readers twice (§2 and `design_game_state_and_models.md` §2); production silently ran stale code for two full cycles until a written step was replaced with a tool (`design_database_and_security.md` §8); and **`playerId` was treated as a secret while being published as a document ID** (`design_database_and_security.md` §5).
 
