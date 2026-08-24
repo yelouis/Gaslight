@@ -3187,6 +3187,130 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(advanceBody).to.not.include('"custom"');
         expect(advanceBody).to.not.include("'custom'");
       });
+
+      it('Issue 108 (J2): custom game re-roll draws from players contributed pool and never hands back player own prompt', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          selectedDeckId: 'custom',
+          totalRounds: 2,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, {
+          roomCode,
+          playerName: 'Bob',
+          playerId: 'p_g1'
+        });
+        await callFn('joinRoom', guest2User.idToken, {
+          roomCode,
+          playerName: 'Charlie',
+          playerId: 'p_g2'
+        });
+
+        const alicePrompts = ['Alice Unique 1', 'Alice Unique 2'];
+        const bobPrompts = ['Bob Unique 1', 'Bob Unique 2'];
+        const charliePrompts = ['Charlie Unique 1', 'Charlie Unique 2'];
+
+        await roomRef.collection('players').doc('p_host').update({
+          customPrompts: alicePrompts,
+          lobbyReady: true
+        });
+        await roomRef.collection('players').doc('p_g1').update({
+          customPrompts: bobPrompts,
+          lobbyReady: true
+        });
+        await roomRef.collection('players').doc('p_g2').update({
+          customPrompts: charliePrompts,
+          lobbyReady: true
+        });
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'custom' });
+
+        let roomSnap = await roomRef.get();
+        let cards = roomSnap.data()?.cards as any[];
+        const aliceInitialCard = cards.find(c => c.targetPlayerId === 'p_host');
+        expect(aliceInitialCard.promptText).to.not.be.oneOf(alicePrompts, 'Alice should never receive her own prompt on initial draw');
+
+        // Alice re-rolls
+        await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+
+        roomSnap = await roomRef.get();
+        cards = roomSnap.data()?.cards as any[];
+        const aliceRerolledCard = cards.find(c => c.targetPlayerId === 'p_host');
+        expect(aliceRerolledCard.promptText).to.not.be.oneOf(alicePrompts, 'Alice should never receive her own prompt on re-roll');
+        expect(aliceRerolledCard.promptText).to.be.oneOf(
+          [...bobPrompts, ...charliePrompts],
+          'Alice re-roll should draw from other players contributed pool'
+        );
+      });
+
+      it('Issue 108 (J2): custom game with insufficient pool falls back to fallbackDeckId gracefully', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          selectedDeckId: 'custom',
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, {
+          roomCode,
+          playerName: 'Bob',
+          playerId: 'p_g1'
+        });
+        await callFn('joinRoom', guest2User.idToken, {
+          roomCode,
+          playerName: 'Charlie',
+          playerId: 'p_g2'
+        });
+
+        // Only Alice contributes 1 prompt; Bob and Charlie contribute none
+        await roomRef.collection('players').doc('p_host').update({
+          customPrompts: ['Alice Lone Prompt'],
+          lobbyReady: true
+        });
+        await roomRef.collection('players').doc('p_g1').update({
+          customPrompts: [],
+          lobbyReady: true
+        });
+        await roomRef.collection('players').doc('p_g2').update({
+          customPrompts: [],
+          lobbyReady: true
+        });
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'custom' });
+
+        let roomSnap = await roomRef.get();
+        let cards = roomSnap.data()?.cards as any[];
+        expect(cards).to.have.lengthOf(3);
+        const aliceCard = cards.find(c => c.targetPlayerId === 'p_host');
+        // Alice cannot have her own prompt, so Alice gets a fallback prompt
+        expect(aliceCard.promptText).to.not.equal('Alice Lone Prompt');
+
+        // Bob re-rolls: pool has no more available non-Bob prompts, so Bob gets fallback prompt
+        await callFn('rerollPrompt', guest1User.idToken, { roomCode, playerId: 'p_g1' });
+        roomSnap = await roomRef.get();
+        cards = roomSnap.data()?.cards as any[];
+        const bobCard = cards.find(c => c.targetPlayerId === 'p_g1');
+        expect(bobCard.promptText).to.be.a('string').and.not.equal('');
+      });
     });
   });
 });

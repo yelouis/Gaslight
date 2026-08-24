@@ -55,10 +55,129 @@ export type PromptSource =
   | { kind: "deck"; deckId: string }
   | { kind: "custom"; pool: PromptItem[]; fallbackDeckId: string };
 
+export function buildCustomPromptPool(activePlayers: PlayerState[], targetSize: number): PromptItem[] {
+  const pool: PromptItem[] = [];
+  const seen = new Set<string>();
+
+  for (const p of activePlayers) {
+    const pPrompts = (p as any).customPrompts || [];
+    let playerCollectedCount = 0;
+    for (const promptText of pPrompts) {
+      if (playerCollectedCount >= 3) break;
+      const trimmed = (promptText || "").trim();
+      if (trimmed.length > 0 && trimmed.length <= 200) {
+        const lower = trimmed.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          pool.push({ text: trimmed, authorId: p.id });
+          playerCollectedCount++;
+        }
+      }
+    }
+  }
+
+  const fallbackDeckId = "the_daily_grind";
+  let topUpNeeded = targetSize - pool.length;
+  if (topUpNeeded > 0) {
+    const fallbackPrompts = PromptDecks.drawPrompts(fallbackDeckId, Math.max(targetSize, activePlayers.length) * 2);
+    for (const fp of fallbackPrompts) {
+      if (topUpNeeded <= 0) break;
+      const fpLower = fp.toLowerCase();
+      if (!seen.has(fpLower)) {
+        seen.add(fpLower);
+        pool.push({ text: fp, authorId: "fallback" });
+        topUpNeeded--;
+      }
+    }
+  }
+
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  return pool;
+}
+
+export function assignPromptsFromCustomPool(
+  pool: PromptItem[],
+  activePlayers: PlayerState[],
+  fallbackDeckId: string,
+  playerSeenMap?: Record<string, Set<string>>
+): Record<string, string> {
+  const assigned: Record<string, string> = {};
+  const usedIndices = new Set<number>();
+
+  for (const player of activePlayers) {
+    const playerSeen = playerSeenMap?.[player.id];
+    let assignedIdx = -1;
+    for (let i = 0; i < pool.length; i++) {
+      if (usedIndices.has(i)) continue;
+      if (pool[i].authorId !== player.id && (!playerSeen || !playerSeen.has(pool[i].text))) {
+        assignedIdx = i;
+        break;
+      }
+    }
+
+    if (assignedIdx !== -1) {
+      assigned[player.id] = pool[assignedIdx].text;
+      usedIndices.add(assignedIdx);
+    } else {
+      let swapDone = false;
+      const stuckPromptIdx = pool.findIndex(
+        (p, idx) => !usedIndices.has(idx) && p.authorId === player.id && (!playerSeen || !playerSeen.has(p.text))
+      );
+      if (stuckPromptIdx !== -1) {
+        const stuckPrompt = pool[stuckPromptIdx];
+        for (const [otherPlayerId, otherPromptText] of Object.entries(assigned)) {
+          const otherPlayerSeen = playerSeenMap?.[otherPlayerId];
+          if (otherPlayerSeen && otherPlayerSeen.has(stuckPrompt.text)) continue;
+
+          const otherPromptIdx = pool.findIndex(p => p.text === otherPromptText);
+          if (otherPromptIdx !== -1) {
+            const otherPrompt = pool[otherPromptIdx];
+            if (
+              stuckPrompt.authorId !== otherPlayerId &&
+              otherPrompt.authorId !== player.id &&
+              (!playerSeen || !playerSeen.has(otherPrompt.text))
+            ) {
+              assigned[otherPlayerId] = stuckPrompt.text;
+              assigned[player.id] = otherPrompt.text;
+              usedIndices.add(stuckPromptIdx);
+              swapDone = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!swapDone) {
+        const assignedThisRound = new Set(Object.values(assigned));
+        const excluded = new Set([
+          ...Array.from(assignedThisRound),
+          ...(playerSeen ? Array.from(playerSeen) : [])
+        ]);
+        const freshFP = PromptDecks.drawOneExcluding(fallbackDeckId, excluded, assignedThisRound);
+        assigned[player.id] = freshFP;
+      }
+    }
+  }
+
+  return assigned;
+}
+
 export function resolvePromptSource(room: GameState, activePlayers: PlayerState[]): PromptSource {
+  const isCustom = room.selectedDeckId === "custom";
+  const fallbackDeckId = room.effectiveDeckId || "the_daily_grind";
+
+  if (isCustom && activePlayers && activePlayers.length > 0) {
+    const pool = buildCustomPromptPool(activePlayers, activePlayers.length);
+    return { kind: "custom", pool, fallbackDeckId };
+  }
+
   const effective =
     room.effectiveDeckId ||
-    (room.selectedDeckId === "custom" ? "the_daily_grind" : room.selectedDeckId) ||
+    (isCustom ? "the_daily_grind" : room.selectedDeckId) ||
     "the_daily_grind";
   return { kind: "deck", deckId: effective };
 }
@@ -349,103 +468,17 @@ export const startGame = onCall(async (request) => {
 
     let prompts: string[] = [];
     if (deckId === "custom") {
-      interface PromptItem {
-        text: string;
-        authorId: string;
+      const promptSource = resolvePromptSource(room, activePlayers);
+      if (promptSource.kind === "custom") {
+        const assigned = assignPromptsFromCustomPool(
+          promptSource.pool,
+          activePlayers,
+          promptSource.fallbackDeckId
+        );
+        prompts = activePlayers.map(p => assigned[p.id]);
+      } else {
+        prompts = PromptDecks.drawPrompts(promptSource.deckId, activePlayers.length);
       }
-      const pool: PromptItem[] = [];
-      const seen = new Set<string>();
-
-      for (const p of activePlayers) {
-        const pPrompts = (p as any).customPrompts || [];
-        let playerCollectedCount = 0;
-        for (const promptText of pPrompts) {
-          if (playerCollectedCount >= 3) break;
-          const trimmed = promptText.trim();
-          if (trimmed.length > 0 && trimmed.length <= 200) {
-            const lower = trimmed.toLowerCase();
-            if (!seen.has(lower)) {
-              seen.add(lower);
-              pool.push({ text: trimmed, authorId: p.id });
-              playerCollectedCount++;
-            }
-          }
-        }
-      }
-
-      const fallbackDeckId = "the_daily_grind";
-      let topUpNeeded = activePlayers.length - pool.length;
-      if (topUpNeeded > 0) {
-        const fallbackPrompts = PromptDecks.drawPrompts(fallbackDeckId, activePlayers.length * 2);
-        for (const fp of fallbackPrompts) {
-          if (topUpNeeded <= 0) break;
-          const fpLower = fp.toLowerCase();
-          if (!seen.has(fpLower)) {
-            seen.add(fpLower);
-            pool.push({ text: fp, authorId: "fallback" });
-            topUpNeeded--;
-          }
-        }
-      }
-
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
-      }
-
-      const assigned: Record<string, string> = {};
-      const usedIndices = new Set<number>();
-
-      for (const player of activePlayers) {
-        let assignedIdx = -1;
-        for (let i = 0; i < pool.length; i++) {
-          if (usedIndices.has(i)) continue;
-          if (pool[i].authorId !== player.id) {
-            assignedIdx = i;
-            break;
-          }
-        }
-
-        if (assignedIdx !== -1) {
-          assigned[player.id] = pool[assignedIdx].text;
-          usedIndices.add(assignedIdx);
-        } else {
-          let swapDone = false;
-          const stuckPromptIdx = pool.findIndex((p, idx) => !usedIndices.has(idx) && p.authorId === player.id);
-          if (stuckPromptIdx !== -1) {
-            const stuckPrompt = pool[stuckPromptIdx];
-            for (const [otherPlayerId, otherPromptText] of Object.entries(assigned)) {
-              const otherPromptIdx = pool.findIndex(p => p.text === otherPromptText);
-              if (otherPromptIdx !== -1) {
-                const otherPrompt = pool[otherPromptIdx];
-                if (stuckPrompt.authorId !== otherPlayerId && otherPrompt.authorId !== player.id) {
-                  assigned[otherPlayerId] = stuckPrompt.text;
-                  assigned[player.id] = otherPrompt.text;
-                  usedIndices.add(stuckPromptIdx);
-                  swapDone = true;
-                  break;
-                }
-              }
-            }
-          }
-
-          if (!swapDone) {
-            const fallbackPrompts = PromptDecks.drawPrompts(fallbackDeckId, activePlayers.length * 2);
-            let freshFP = "";
-            for (const fp of fallbackPrompts) {
-              const fpLower = fp.toLowerCase();
-              if (!seen.has(fpLower)) {
-                seen.add(fpLower);
-                freshFP = fp;
-                break;
-              }
-            }
-            assigned[player.id] = freshFP;
-          }
-        }
-      }
-
-      prompts = activePlayers.map(p => assigned[p.id]);
     } else {
       const totalPromptsNeeded = activePlayers.length * totalRounds;
       const deckSize = PromptDecks.getDeckSize(deckId);
@@ -863,15 +896,32 @@ export const rerollPrompt = onCall(async (request) => {
       ? sealedData.seenPrompts
       : [targetCard.promptText];
 
+    const playersSnap = await transaction.get(roomRef.collection("players"));
+    const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
+    const activePlayers = players.filter(p => p.role !== "spectator");
+
     // Prompts sitting on a card right now - including this player's current
     // one. Never hand any of these back, even once the deck is exhausted for
     // this player: a re-roll must visibly change something, and two players
     // must never end up on the same prompt.
     const inPlay = new Set(room.cards.map(c => c.promptText));
     const excluded = new Set([...inPlay, ...cardSeen]);
-    const promptSource = resolvePromptSource(room, []);
-    const deckId = promptSource.kind === "deck" ? promptSource.deckId : promptSource.fallbackDeckId;
-    const newPrompt = PromptDecks.drawOneExcluding(deckId, excluded, inPlay);
+    const promptSource = resolvePromptSource(room, activePlayers);
+    let newPrompt: string;
+
+    if ("pool" in promptSource) {
+      const candidates = promptSource.pool.filter(
+        item => item.authorId !== playerId && !excluded.has(item.text)
+      );
+      if (candidates.length > 0) {
+        const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+        newPrompt = chosen.text;
+      } else {
+        newPrompt = PromptDecks.drawOneExcluding(promptSource.fallbackDeckId, excluded, inPlay);
+      }
+    } else {
+      newPrompt = PromptDecks.drawOneExcluding(promptSource.deckId, excluded, inPlay);
+    }
 
     const updatedCard = {
       ...targetCard,
@@ -1491,29 +1541,48 @@ export const advanceToNextResolution = onCall(async (request) => {
         const nextRound = currentRound + 1;
         const activePlayers = players.filter(p => p.role !== "spectator");
         const promptSource = resolvePromptSource(room, activePlayers);
-        const deckId = promptSource.kind === "deck" ? promptSource.deckId : promptSource.fallbackDeckId;
 
         const sealedDocs = await Promise.all(
           activePlayers.map(p => transaction.get(roomRef.collection("sealed").doc(p.id)))
         );
 
-        const newCards: CardModel[] = [];
-        // Accumulates as we go so two players in the same round cannot be
-        // handed the same prompt - previously each draw only excluded that
-        // player's own history and knew nothing about its siblings.
-        const assignedThisRound = new Set<string>();
+        const playerSeenMap: Record<string, Set<string>> = {};
         for (let i = 0; i < activePlayers.length; i++) {
           const p = activePlayers[i];
           const sealedSnap = sealedDocs[i];
           const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
           const seenPrompts: string[] = Array.isArray(sealedData.seenPrompts) ? sealedData.seenPrompts : [];
+          playerSeenMap[p.id] = new Set(seenPrompts);
+        }
 
-          const newPrompt = PromptDecks.drawOneExcluding(
-            deckId,
-            new Set([...seenPrompts, ...assignedThisRound]),
-            assignedThisRound
+        let assignedPrompts: Record<string, string>;
+        if ("pool" in promptSource) {
+          assignedPrompts = assignPromptsFromCustomPool(
+            promptSource.pool,
+            activePlayers,
+            promptSource.fallbackDeckId,
+            playerSeenMap
           );
-          assignedThisRound.add(newPrompt);
+        } else {
+          assignedPrompts = {};
+          const assignedThisRound = new Set<string>();
+          for (const p of activePlayers) {
+            const seen = playerSeenMap[p.id] || new Set();
+            const newPrompt = PromptDecks.drawOneExcluding(
+              promptSource.deckId,
+              new Set([...Array.from(seen), ...Array.from(assignedThisRound)]),
+              assignedThisRound
+            );
+            assignedThisRound.add(newPrompt);
+            assignedPrompts[p.id] = newPrompt;
+          }
+        }
+
+        const newCards: CardModel[] = [];
+        for (let i = 0; i < activePlayers.length; i++) {
+          const p = activePlayers[i];
+          const newPrompt = assignedPrompts[p.id];
+          const seenPrompts = Array.from(playerSeenMap[p.id] || []);
           const updatedSeen = [...seenPrompts, newPrompt];
           const sealedRef = roomRef.collection("sealed").doc(p.id);
           transaction.set(sealedRef, { seenPrompts: updatedSeen, truthAnswer: "", sabotageAnswers: {} }, { merge: true });
