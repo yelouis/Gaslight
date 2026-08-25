@@ -33,17 +33,13 @@
 
 **No open issues and nothing to decide.** Issues 1–111 are delivered and Wave L is complete.
 
-**One thing remains outstanding, and it needs no decision — only an observation someone still has to make.**
+**Nothing is outstanding. The queue is empty.**
 
-**The match summary has never been seen on a screen.** Everything under it is now verified:
+**The match summary has now been observed rendering in a real game** (block **W20**, room `QZER`, 3 players, `totalRounds = 2`, three isolated browser contexts). Verified on August 24, 2026 by opening the artefact rather than reading the block: every quoted string in W20 appears verbatim in `w20_match_summary.png` — **BEST LIE OF THE NIGHT** `"Sapphire"` by Alice with `Fooled 1 player`, **CLEANEST TRUTH** `"Archimedes"` with `Found by only 0 players`, and **THE STING** with `2 wrong votes` — alongside the FINAL STANDINGS table. Best Lie quotes a genuine player-authored forgery, not a placeholder.
 
-- **The server half is deployed and live.** `check_deploy_fresh.sh` exits **0**, and the deployed `advanceToNextResolution` bundle contains `computeMatchSummary`, `matchSummary`, `_summary`, `bestLie` and `cleanestTruth` — confirmed by unpacking the source archive at the generation Cloud Functions currently serves.
-- **The server logic is tested with an equality assertion**, not a shape check. `game_e2e.spec.ts` now records every vote it casts, computes the expected best-lie count independently, and asserts equality. **Falsified**: skewing the expected count by one produced `AssertionError: expected 1 to equal 2` (69 passing / 1 failing), and 70/70 restored.
-- **The client renders the awards**, with widget tests covering both the populated case and the all-null case.
+An independent consistency check on the same frame: **`sum(playersDeceived)` must equal `sum(timesFooled)`**, because every fooling has exactly one deceiver and one deceived. The standings show Alice 2/1, Bob 1/1, Charlie 0/1 — **3 and 3.** The counters are coherent, not merely present.
 
-What has never happened is a real game rendering real awards. The procedure is `agent_execution_guide.md` §2.
-
-> **Setup trap for whoever runs it.** If no forgery fools anybody, `bestLie` is null; and when every award is null the highlights section renders `SizedBox.shrink()` — **nothing at all**. A tidy scripted playthrough where every voter finds the truth will therefore show an empty section and look like the feature is broken. **At least one player must vote for a forgery**, and the match must run **more than one round** — a single round cannot produce a best-lie contest.
+That closes Issue 111 end to end: server logic (equality-asserted and falsified), deployment (confirmed in the shipped bundle), client rendering (widget-tested), and now a real match on screen. The durable contract moved to **`design_scoring_and_ui.md`** — the match-highlights section, its `sealed/_summary` storage and publish-at-game-over rule, and the empty-is-legitimate caveat.
 
 ---
 
@@ -152,6 +148,14 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.28 A screenshot that looks wrong may be an undocumented design rule
+
+W20's evidence showed **THE DUPLICITOUS — "most players deceived" — awarded to Bob with 1 deception, while the standings in the same frame showed Alice on 2.** That reads as a plain scoring bug, and `design_scoring_and_ui.md` supported that reading: it defined the honor as "highest `playersDeceived`, ties broken by score" and said nothing more.
+
+The code disagrees. `game_over_screen.dart:156-190` seeds an `assignedIds` set with the Mastermind and picks every later honor **only from players not yet assigned**, so honors deliberately spread across the table instead of stacking on one strong player. Alice had already taken The Mastermind, so The Duplicitous went to the best of the rest. **Correct, deliberate, and undocumented** — a false bug report was one step away.
+
+**The rule: when evidence contradicts a design doc, read the code before filing.** The doc is a summary and can be *incomplete* rather than wrong, and an omitted constraint looks identical to a defect from the outside. When you find one, **fix the doc** — that omission is now written into `design_scoring_and_ui.md` Clarification 2 with the W20 numbers as the worked example, so the next reader does not re-run this.
 
 #### 2.27 The gate never checked that the evidence file exists
 

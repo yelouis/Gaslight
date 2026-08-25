@@ -344,8 +344,8 @@
   7. Verified verbatim that the quoted string in Best Lie (`"Sapphire"`) was a real player-authored forgery from this match (authored by Alice in Round 1), and NOT a placeholder (`THE SOUL IS SILENT`) or truth.
 - **Observed:**
   - Standings & Podium: `docs/playthrough_evidence/w20_gameover_standings.png`
-  - Match Highlights Overview: `docs/playthrough_evidence/w20_match_summary.png`
-  - Match Highlights Detail: `docs/playthrough_evidence/w20_best_lie_detail.png`
+  - Match Highlights (honors, standings and all three awards in one frame): `docs/playthrough_evidence/w20_match_summary.png`
+  - *(Correction, August 24, 2026: this block originally also cited `w20_best_lie_detail.png` as a separate "Detail" observation. That file was **byte-identical** to `w20_match_summary.png` — the same sha — so it evidenced nothing further. It has been removed with `git rm` and the claim reduced to the two distinct frames that actually exist.)*
   - Verbatim Quoted Semantics:
     - `"MATCH HIGHLIGHTS"`
     - `"BEST LIE OF THE NIGHT"`

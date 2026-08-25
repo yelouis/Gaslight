@@ -47,9 +47,19 @@ The reveal must run as five beats, gated on the **server-written** `GameState.un
 ### Clarification 2: What Should the Game-Over "Honors" Actually Measure?
 * **Decision**: Define honors by dedicated metrics (Option A).
   * **The Mastermind**: highest total score.
-  * **The Trickster**: highest `playersDeceived` (voters deceived across all cards, ties broken by score).
-  * **Most Gullible**: highest `timesFooled` (voted for forgeries, ties broken by fewest points).
-  * Enforced at scoring time and game over screen.
+  * **The Duplicitous** (labelled *The Trickster* in this decision's original wording): highest `playersDeceived`, ties broken by score.
+  * **The Gullible**: highest `timesFooled`, ties broken by **fewest** points.
+  * Enforced at scoring time and on the game over screen.
+
+> **Each honor goes to a different player — the rule the metrics above do not state.** `game_over_screen.dart:156-190` carries an `assignedIds` set seeded with the Mastermind, and every later honor is chosen only from players not yet assigned. **So an honor does NOT always go to the global leader on its own metric.** In the W20 playthrough Alice deceived 2 players and Bob deceived 1, yet **Bob** received The Duplicitous — because Alice had already taken The Mastermind. That is correct and deliberate: the honors spread recognition across the table rather than handing one strong player every card. Verified in source August 24, 2026 after the screenshot made it look like a defect. **Read the exclusion before filing a bug about an "wrong" honor.**
+
+### Match Highlights (Issue 111, August 2026)
+
+Below the honors and the **FINAL STANDINGS** table, the game over screen renders **MATCH HIGHLIGHTS** from `GameState.matchSummary`: **Best Lie of the Night** (the forgery text, its author, and how many it fooled), **Cleanest Truth** (the truth fewest players found), **The Sting** (the card with the most wrong votes), and head-to-head lines.
+
+The summary is **server-owned**. It is accumulated per resolved card inside the reveal transaction — the only moment `truthAnswer`, `sabotageAnswers` and the resolved votes all exist, since single-card reveal scoping blanks non-current cards and the round advance resets each `sealed/{playerId}` doc along with `votes` and `unmaskGuesses`. It lives in `sealed/_summary`, which is default-deny because it has no `match` block in `firestore.rules`, and reaches the world-readable room document **only at game over**. Publishing it earlier would expose forgery authorship while the unmask window is still open and reopen Issues 99 and 100.
+
+> **Empty is a legitimate state, and it renders as nothing.** `computeMatchSummary` only collects forgeries with `fooled > 0`, so a match where every voter found the truth yields a null `bestLie`; when **all** awards are null, `_buildMatchHighlights` returns `SizedBox.shrink()`. A scripted playthrough in which nobody is fooled therefore shows an empty section that looks exactly like a broken feature. Any test or playthrough exercising this must ensure **at least one player votes for a forgery** and that the match runs **more than one round** — a single round cannot produce a best-lie contest.
 
 ---
 
