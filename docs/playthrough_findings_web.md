@@ -324,3 +324,42 @@
   - GameOver: `docs/playthrough_evidence/w19_gameover.png`
 - **Reference:** `lib/screens/lobby_screen.dart:180`
 - **Expected:** Layout adapts responsively to desktop viewport without clipping or overflow.
+
+---
+
+### W20 — Multi-Round Match Highlights: Best Lie of the Night, Cleanest Truth, and The Sting
+- **Verdict:** PASS
+- **Clients:** P1 (Alice), P2 (Bob), P3 (Charlie) in 3 isolated browser contexts
+- **Room Code:** `QZER`
+- **What I did:**
+  1. Hosted a 3-player, 2-round (`totalRounds = 2`) match from Context 1 with game timers disabled.
+  2. Joined P2 (Bob) from Context 2 and P3 (Charlie) from Context 3.
+  3. Advanced through Round 1 (Truth, Forgery Rotation 1, Forgery Rotation 2, Voting on 3 cards, Reveal on 3 cards).
+  4. Advanced through Round 2 (Truth, Forgery Rotation 1, Forgery Rotation 2, Voting on 3 cards, Reveal on 3 cards) to GameOverScreen.
+  5. In voting phase, players deliberately voted for authored forgeries ensuring `fooled > 0` on candidate forgeries (Charlie voting for Alice's `"Sapphire"` forgery, Alice voting for Bob's `"Panther"` forgery, Bob voting for Alice's `"Diamond"` forgery).
+  6. Verified that `computeMatchSummary` computed non-null highlights:
+     - **BEST LIE OF THE NIGHT:** Quoting `"Sapphire"` by Alice for prompt `"The most embarrassing thing I've ever done on a Zoom call."` with `Fooled 1 player` badge.
+     - **CLEANEST TRUTH:** Quoting `"Archimedes"` Charlie's Truth for prompt `"A time I took credit for someone else's idea."` with `Found by only 0 players` badge.
+     - **THE STING:** Quoting `"A time I took credit for someone else's idea."` as Deadliest prompt on the table with `2 wrong votes` badge.
+  7. Verified verbatim that the quoted string in Best Lie (`"Sapphire"`) was a real player-authored forgery from this match (authored by Alice in Round 1), and NOT a placeholder (`THE SOUL IS SILENT`) or truth.
+- **Observed:**
+  - Standings & Podium: `docs/playthrough_evidence/w20_gameover_standings.png`
+  - Match Highlights Overview: `docs/playthrough_evidence/w20_match_summary.png`
+  - Match Highlights Detail: `docs/playthrough_evidence/w20_best_lie_detail.png`
+  - Verbatim Quoted Semantics:
+    - `"MATCH HIGHLIGHTS"`
+    - `"BEST LIE OF THE NIGHT"`
+    - `"Fooled 1 player"`
+    - `""Sapphire""`
+    - `"By Alice for prompt \"The most embarrassing thing I've ever done on a Zoom call.\""`
+    - `"CLEANEST TRUTH"`
+    - `"Found by only 0 players"`
+    - `""Archimedes""`
+    - `"Charlie's Truth for prompt \"A time I took credit for someone else's idea.\""`
+    - `"THE STING"`
+    - `"2 wrong votes"`
+    - `"\"A time I took credit for someone else's idea.\""`
+    - `"Deadliest prompt on the table"`
+- **Reference:** `lib/screens/game_over_screen.dart:670`
+- **Expected:** In multi-round matches with fooled players, `computeMatchSummary` populates `bestLie`, `cleanestTruth`, and `theSting` referencing actual player submissions, rendering the complete `MATCH HIGHLIGHTS` card.
+

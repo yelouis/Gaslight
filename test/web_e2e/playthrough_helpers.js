@@ -140,8 +140,11 @@ async function typeIntoInput(page, labelOrPlaceholder, textToType) {
   console.log(`[TYPE] "${textToType}" into ${labelOrPlaceholder} at (${cx.toFixed(1)}, ${cy.toFixed(1)})`);
   await page.mouse.click(Math.min(1270, Math.max(10, cx)), Math.min(790, Math.max(10, cy)));
   await page.waitForTimeout(200);
+  await page.keyboard.press('Control+A');
   await page.keyboard.press('Meta+A');
-  await page.keyboard.press('Backspace');
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press('Backspace');
+  }
   await page.keyboard.type(textToType, { delay: 30 });
   await page.waitForTimeout(300);
 }
