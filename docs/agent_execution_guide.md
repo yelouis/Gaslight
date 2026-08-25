@@ -265,18 +265,18 @@ If none of these has happened, **report the state and stop.**
 ## Definition of Done
 
 **The outstanding observation (§2)**
-- [ ] A **multi-round** match (`totalRounds` ≥ 2) played to game over with **three real clients** — isolated browser contexts or three simulators, never tabs of one profile and never bots.
-- [ ] **At least one player deliberately voted for a forgery**, so `bestLie` is non-null and the highlights section is not `SizedBox.shrink()`.
-- [ ] Build freshness proven in epoch seconds before the run.
-- [ ] **BEST LIE OF THE NIGHT rendered**, and its quoted text **cross-checked against what that player actually typed** — not a placeholder, not a truth.
-- [ ] Screenshot saved under a **new filename**; no existing artefact name reused.
-- [ ] A findings block added in the existing format, citing the new artefact and quoting the award text verbatim.
-- [ ] Both evidence gates exit **0**.
-- [ ] If the awards are absent or wrong: filed with Pros/Cons and a blank selection line, **not fixed inline**.
+- [x] A **multi-round** match (`totalRounds` ≥ 2) played to game over with **three real clients** — isolated browser contexts or three simulators, never tabs of one profile and never bots.
+- [x] **At least one player deliberately voted for a forgery**, so `bestLie` is non-null and the highlights section is not `SizedBox.shrink()`.
+- [x] Build freshness proven in epoch seconds before the run.
+- [x] **BEST LIE OF THE NIGHT rendered**, and its quoted text **cross-checked against what that player actually typed** — not a placeholder, not a truth.
+- [x] Screenshot saved under a **new filename**; no existing artefact name reused.
+- [x] A findings block added in the existing format, citing the new artefact and quoting the award text verbatim.
+- [x] Both evidence gates exit **0**.
+- [x] If the awards are absent or wrong: filed with Pros/Cons and a blank selection line, **not fixed inline**.
 
 **Across any work**
-- [ ] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · deploy gate **exit 0** · both evidence gates exit 0.
-- [ ] **`firebase deploy` was never run** — the server is already current.
-- [ ] One item, one commit; Conventional Commit; WHY in the body.
+- [x] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · deploy gate **exit 0** · both evidence gates exit 0.
+- [x] **`firebase deploy` was never run** — the server is already current.
+- [x] One item, one commit; Conventional Commit; WHY in the body.
 
 **When this is done the queue is genuinely empty.** Report the state and stop — §3 lists the only four things that start a build, and "the queue looked quiet" is not one of them.
