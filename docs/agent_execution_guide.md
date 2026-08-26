@@ -1,43 +1,37 @@
-# Agent Execution Guide — Active Build: Wave M — Presence Before the Beta — August 25, 2026
+# Agent Execution Guide — Wave M Verified · One Beta-Only Check Outstanding — August 25, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**Issues 1–111 are delivered.** The Apple Developer account has come through and an iOS TestFlight beta is next, so Wave M fixes the one thing most likely to sour it.
+**Issues 1–112 are delivered. Wave M is complete and independently verified.** The queue is empty and **there is nothing to decide.**
 
-| # | Item | Issue & choice | Touches | Deploy |
-|---|---|---|---|---|
-| **M1** | One shared presence threshold, raised | **112 → Option B** (server half) | `functions/src/index.ts` | **functions** |
-| **M2** | Refresh presence the moment the app resumes | **112 → Option B** (client half) | `lib/services/game_service.dart` | — |
-
-**Order is M1 → M2.** M1 defines the constant the whole feature is named around; M2 is the client behaviour that makes the raised threshold sufficient rather than merely longer.
-
-**Do not run `firebase deploy`.** M1 is inert until deployed and that call is the user's.
+**One check remains and it cannot be done here** — it needs a real phone, on the TestFlight build. §2 is that procedure.
 
 ## Verified baseline — the regression bar
 
-Measured August 25, 2026. All seven green before you start:
+Measured August 25, 2026:
 
 | Gate | Result | Command |
 |---|---|---|
-| Analyzer | **0 errors** (18 warnings, 204 infos) | `flutter analyze lib test` |
-| Client tests | **185/185** | `flutter test` |
+| Analyzer | **0 errors** | `flutter analyze lib test` |
+| Client tests | **189/189** | `flutter test` |
 | Functions build | clean | `npm --prefix functions run build` |
-| Functions tests | **70/70** | `npm --prefix functions test` |
-| Deploy freshness | **exit 0** | `./scripts/check_deploy_fresh.sh` |
+| Functions tests | **73/73** | `npm --prefix functions test` |
+| Deploy freshness | **exit 1 — expected**, see below | `./scripts/check_deploy_fresh.sh` |
 | iOS evidence | **exit 0** — 15 blocks | `./scripts/check_playthrough_evidence.sh` |
 | Web evidence | **exit 0** — 20 blocks | `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` |
+| iOS release build | **exit 0** — 49.9 MB `Runner.app` | `flutter build ios --release --no-codesign` |
 
-**iOS builds.** `flutter build ios --release --no-codesign` exits 0 (49.9 MB Runner.app), verified August 25 — the first iOS build since Wave K added `package:web` and the conditional `case_file_saver` imports.
+**`check_deploy_fresh.sh` exits 1 and that is correct.** Wave M raised the server presence threshold and it is **undeployed**, so production still drops players at 30 s. It goes green after `firebase deploy --only functions` — **the user's call, not yours.** **The beta must not ship before that deploy**, or the fix the beta is meant to validate will not be running.
 
 ---
 
-## 0. What is already known — do not re-derive it
+## 0. What Wave M delivered — verified, do NOT rework
 
-- **The client heartbeats every 10 s** by writing `lastSeen` **directly** to its own player document (`game_service.dart:300`), not through a callable. That direct write is permitted by the rules for non-protected player fields.
-- **The server has exactly two staleness sites, both hardcoded `30000`:** `index.ts:481` (`isStale`, the seat re-bind path in `joinRoom`) and `index.ts:1133` (`isDead`, in `handleDisconnect`). **Nothing else reads a staleness window.**
-- **No test encodes the 30-second contract.** `grep` for `30000`, `isStale` and `isDead` across `functions/test/` returns nothing, so raising the number breaks no test — and equally, **nothing currently guards it.** That is a gap M1 closes, not a licence to skip validation.
-- **`GameService` is a `ChangeNotifier` and NOT a `WidgetsBindingObserver`.** The lifecycle hook does not exist yet in any form.
-- **`marionette_flutter` is safe to ship.** It has no entry in `GeneratedPluginRegistrant` or `Podfile.lock`, and there are zero `marionette` strings in the release binary — pure Dart, fully tree-shaken. **Do not "clean it up" as part of beta prep.**
+Checked against the code and falsified in both halves:
+
+- **M1** — a single exported `PRESENCE_STALE_MS = 120_000` is read at both staleness sites; **the literal `30000` appears nowhere in `functions/src/index.ts`.** Boundary tests import the constant rather than hard-coding the number. **Falsified**: flipping the comparison at the `joinRoom` site took the suite to 71 passing / 2 failing; 73/73 restored.
+- **M2** — `GameService` is a `WidgetsBindingObserver`; on `resumed` it writes `lastSeen` immediately **and** restarts the heartbeat timer. The observer is registered inside `_startHeartbeat` (session-scoped, **not** the constructor), guarded by `_isObserverRegistered`, and removed via `_stopObserver()` at four sites including `dispose()` and `stopHeartbeat()`. **Falsified**: removing the resume hook fails the immediate-write test while **both over-reach guards still pass** — which is what makes them guards rather than mirrors.
+- **iOS builds clean at the committed state**, with `DEVELOPMENT_TEAM` now set in all three configurations.
 
 ---
 
@@ -46,83 +40,36 @@ Measured August 25, 2026. All seven green before you start:
 - **One item = one commit.**
 - **Never fill in a `Your selection: _____` line.**
 - **Do not run `firebase deploy`.**
+- **Never accept Xcode's "Update to recommended settings" dialog** — see §6 and lesson 2.29. It breaks the build.
 - **A mechanical check must assert it matched something.**
-- **Open the artefact.** A cited screenshot path satisfies the gate; it does not prove the image shows what a block claims (lessons 2.25–2.28).
-- **When evidence contradicts a design doc, read the code before filing** — the doc may be incomplete rather than wrong.
+- **Open the artefact.** A cited screenshot path satisfies the gate; it does not prove the image shows what the block claims (lessons 2.25–2.28).
 - **`flutter analyze lib test`, never bare `flutter analyze`.**
 - **File defects with Pros/Cons, a marked `(recommended)` option and a blank selection line**, per `.agents/skills/bug_documentation_guidelines/SKILL.md`.
-- **Do not touch anything in §6 or §7.**
+- **Do not touch anything in §5 or §6.**
 
 ---
 
-## 2. M1 — One shared presence threshold, raised
+## 2. The outstanding check — presence on a real locked phone
 
-### 2.1 The change
+**Why no test can do this.** Wave M is guarded everywhere a test can reach, and both guards were falsified. But `flutter test` uses fake timers and never suspends the isolate, so it **cannot reproduce iOS backgrounding** — the exact condition M1 and M2 exist to survive. A simulator is no better: it does not suspend timers the way a locked device does, so **a passing simulator run says nothing here.** This needs a physical phone.
 
-Replace both hardcoded `30000` literals with a **single exported constant**, and raise it:
+**Prerequisite: the server must be deployed.** `PRESENCE_STALE_MS` lives in Cloud Functions. Until the user deploys, production still uses 30 s and the check would fail for a reason unrelated to the client. **Confirm `./scripts/check_deploy_fresh.sh` exits 0 before starting**, and do not deploy yourself.
 
-```ts
-/** How long a player may go unheard from before the server treats them as gone. */
-export const PRESENCE_STALE_MS = 120_000;
-```
+**The procedure**, on the TestFlight build:
 
-Use it at `index.ts:481` and `index.ts:1133`. **Two independent copies of a timeout is exactly how the `"custom"` sentinel came to disagree with itself in Issue 109** — one definition, two readers.
+1. Join a room with at least three players, one of them on the physical device under test.
+2. **Lock that phone for 60 seconds.** Unlock. Confirm the player is **still in the room**, and that the host can still start — the failure this wave fixes was a host being refused for a player who was demonstrably present.
+3. **Lock it again for 3 minutes.** Confirm the player **is** dropped. This half matters as much as the first: if a long absence no longer removes anyone, M1 has not raised presence, it has disabled it — and the below-3 auto-end depends on removal still working.
+4. Capture both outcomes as screenshots under **new filenames**, and add a block to the appropriate findings doc in the existing format.
+5. Re-run both evidence gates; both must exit 0.
 
-### 2.2 Why 120 seconds, and what it costs
+**If either half fails, do not fix it inline.** File it with Pros/Cons and a blank selection line. If the 60-second case still drops the player, the likely candidates are that the deploy did not land, or that the resume hook is not firing on a real device the way it does under `handleAppLifecycleStateChanged` — **check the deploy first**, since it is the cheaper of the two to rule out.
 
-A screen timeout is typically 30–60 s and a glance at a message is often longer than 30 s, so the current window fires during entirely normal play. **Two minutes clears the common case with margin.**
-
-It is not free, and the trade must be understood rather than discovered later:
-
-- **The below-3 auto-end reacts more slowly.** A player who genuinely walks away keeps a 3-player game alive for up to two minutes before the match ends. That is the right trade — ending a live game early is worse than ending it late — but say so in the commit.
-- **Seat takeover is slower.** `joinRoom`'s stale path lets a *different* device claim a seat. This path is unaffected for the common case, because a returning player rejoins with the **same** `playerId` cached in `SharedPreferences` and re-binds by ownership, not staleness.
-
-**State the limitation plainly and do not overclaim in the commit: this does not fix a phone locked for five minutes.** No timeout does. That is what Issue 112 Option C — an explicit *away* state that keeps the seat — exists for, and it remains unbuilt by choice.
-
-### 2.3 Validation for M1
-
-- **A test at each boundary, at both sites.** A player stale by **less** than `PRESENCE_STALE_MS` is **not** reaped; one stale by **more** is. Write it against the constant, not the literal, so it follows a future change.
-- **Falsify it.** Flip the comparison (`>` to `<`) and confirm the test fails. A boundary test that passes both ways is testing nothing.
-- **Both sites read the constant.** Assert mechanically that the literal `30000` no longer appears in `functions/src/index.ts`, **and assert the check actually read a non-empty file first** — a grep that matches nothing returns the same "clean" as a grep that passes (lesson 2.21).
-- **Over-reach guard:** the below-3 auto-end still fires when a player is stale beyond the new threshold. Raising a timeout must not disable the rule it feeds.
+**What this still will not prove.** Option B is a longer timeout plus a faster refresh; it does not save a phone locked for five minutes. That is Issue 112 Option C — an explicit *away* state that keeps the seat — which remains unbuilt **by choice**. If beta testers report drops despite this fix, C is the answer, not a larger number.
 
 ---
 
-## 3. M2 — Refresh presence the moment the app resumes
-
-### 3.1 Why the threshold alone is not enough
-
-Raising the window helps the long lock. It does nothing for the **race immediately after unlocking**: the player is back on screen, but their `lastSeen` is still whatever it was when the phone suspended, and stays that way for up to a full 10-second tick. During that gap the host can press START GAME and be refused for a player who is demonstrably present. **That gap is what M2 closes.**
-
-### 3.2 The change
-
-Make `GameService` a `WidgetsBindingObserver` and, on `AppLifecycleState.resumed`:
-
-1. **Write `lastSeen` immediately** — do not wait for the next tick. Reuse the same direct-write path the heartbeat uses, including its `try/catch`: a resume can land before auth and Firestore have settled, and a thrown exception there must not take down the app.
-2. **Cancel and restart the heartbeat timer.** This is the step that is easy to miss. A `Timer.periodic` that was suspended with the app cannot be relied on to resume on its own cadence, and a stalled timer reintroduces the whole problem silently. Restarting is cheap and deterministic.
-
-**Register and unregister deliberately.** Add the observer where a room session begins — alongside `_startHeartbeat` — and remove it in `dispose()` and wherever local room state is cleared. **An observer that is added and never removed leaks**, and widget tests here call `gameService.dispose()` explicitly, so a missing `removeObserver` will surface as cross-test interference rather than a clean failure.
-
-**Do not register in the constructor.** `GameService` is constructed in plain `test()` cases that have no widget binding; touching `WidgetsBinding.instance` there fails in a way unrelated to what those tests are checking. Tying the observer's lifetime to an active room session avoids that entirely, and `_heartbeatDisabledForTest` already gives tests an escape hatch on that path.
-
-### 3.3 Validation for M2
-
-- **A widget test drives the lifecycle**, not the internals: dispatch `AppLifecycleState.resumed` and assert a `lastSeen` write happened **immediately**, without advancing 10 seconds of fake time. That distinction is the whole feature — if the test pumps 10 s first, it proves nothing about the fix.
-- **Falsify it** by removing the resume hook; the test must fail.
-- **Assert the heartbeat still runs** on its normal cadence afterwards, so the restart did not cancel it into silence — a plausible and completely invisible way to break this.
-- **Over-reach guard:** no observer is registered when `_heartbeatDisabledForTest` is set, and `dispose()` leaves none behind.
-
-### 3.4 The check no test can make
-
-**None of this proves a real phone survives a real lock.** Timers under `flutter test` are fake, and the iOS suspension behaviour being worked around does not exist there.
-
-Before the beta goes out, someone must do this by hand: join a room on a **physical device**, **lock the phone for 60 seconds**, unlock, and confirm the player is still in the room and the host can still start. Then repeat at **three minutes** and confirm the player *is* dropped — the threshold must still do its job, or M1 has simply disabled presence. Record both as a playthrough block with screenshots under new filenames.
-
-A simulator is not sufficient evidence here: it does not suspend timers the way a locked device does, so **a passing simulator run says nothing about the case this wave exists to fix.**
-
----
-
-## 4. What legitimately starts a new build
+## 3. What legitimately starts a new build
 
 An empty queue is a valid state. Refactors, renames and "while I was in there" cleanups are not work — they are risk against a green baseline with no issue behind them. Exactly four things start a build:
 
@@ -135,7 +82,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 5. Playthrough procedure — the standing setup
+## 4. Playthrough procedure — the standing setup
 
 1. **`.env` must contain `USE_EMULATOR=false`** — a bundled asset; changing it after the build has no effect.
 2. **Uninstall on every booted simulator** so no stale room is restored from `SharedPreferences`.
@@ -159,7 +106,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 6. Already delivered — do NOT rework
+## 5. Already delivered — do NOT rework
 
 **Verified in source, in the built artefacts, and on devices, August 22, 2026:**
 
@@ -176,7 +123,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 7. Invariants & intentional decisions — do NOT change
+## 6. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.** Deleting them breaks emulator tests; `debugSimulateBotResponses` drives several. Their gating is observable only in a release or profile build.
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty. If a plugin lacks its own manifest, **upgrade the plugin**.
@@ -195,11 +142,13 @@ If none of these has happened, **report the state and stop.**
 - **Dialogs render on `groundRaised`.** **Never interpolate an exception into user-facing text.** **Busy-state disabling is a correctness guard** — `createRoom` is not idempotent.
 - **Phase order is truth → forgery → vote → reveal.** **`ROOM_TTL_MS` is 8 hours.** **`predeploy` stays.**
 
+**Never accept Xcode's "Update to recommended settings" dialog.** It enables `ENABLE_USER_SCRIPT_SANDBOXING`, which **breaks the iOS build** — this project has four shell-script build phases (two `xcode_backend.sh`, two CocoaPods `Podfile.lock` diffs) and Flutter's artefacts fall outside the sandbox. Proven August 25, 2026: enabling it produced `Sandbox: dartvm(...) deny(1) file-read-data .../Flutter.framework/Flutter` and `Failed to build iOS app`; reverting restored a clean build. Xcode will keep offering it; the answer stays no (lesson 2.29).
+
 **Assessed and rejected — do NOT re-propose:** room codes from `Math.random()`; `authUid` exposure in player documents; prototype pollution via `selectedDeckId`; plus the declined options in `ongoing_general_errors.md` §4.
 
 ---
 
-## 8. Where the contracts live
+## 7. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -215,7 +164,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 9. Validation standard
+## 8. Validation standard
 
 **A mechanical check must assert it matched something.** Zero matches and zero violations produce the same number — `check_playthrough_evidence.sh` exists because a mandated check of mine did not.
 
@@ -237,7 +186,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 10. Feedback loop — what past specs got wrong
+## 9. Feedback loop — what past specs got wrong
 
 - **A check that matches nothing returns the same number as a check that passes.** Mine did, and it shipped as a mandatory step.
 - **A defect class mutates faster than the rule written to catch it.** `grep` as observation → prose as observation → a **renamed field** hiding both. Each escaped a rule written for the previous shape. **Match the concept, not the literal.**
@@ -276,28 +225,19 @@ If none of these has happened, **report the state and stop.**
 
 ## Definition of Done
 
-**M1 — the server threshold**
-- [x] A single exported `PRESENCE_STALE_MS` is read at **both** `index.ts:481` and `:1133`; the literal `30000` appears in neither.
-- [x] The "no literal remains" check **asserts it read a non-empty file** before reporting clean.
-- [x] Boundary tests at both sites: below the threshold is not reaped, above it is — written against the constant, not the number.
-- [x] **Falsified**: flipping the comparison makes the tests fail; output in the commit body.
-- [x] **Over-reach guard**: the below-3 auto-end still fires past the new threshold.
-- [x] The commit states the cost plainly — slower auto-end — and does **not** claim this fixes a long lock.
+**There is no active build.** One check is outstanding and needs the beta.
 
-**M2 — the resume hook**
-- [x] `GameService` observes lifecycle; on `resumed` it writes `lastSeen` **immediately** and **restarts** the heartbeat timer.
-- [x] The observer is registered with the room session, **not in the constructor**, and removed in `dispose()` and on room-state clear.
-- [x] Widget test dispatches `AppLifecycleState.resumed` and asserts the write happens **without advancing 10 s**.
-- [x] **Falsified**: removing the hook fails that test.
-- [x] The heartbeat still ticks afterwards — the restart did not silence it.
-- [x] No observer registered under `_heartbeatDisabledForTest`; none left after `dispose()`.
+**The presence check on a real phone (§2)**
+- [ ] `./scripts/check_deploy_fresh.sh` exits **0** first — the threshold lives in Cloud Functions and must be live, or the run tests nothing.
+- [ ] On a **physical device**, not a simulator: locked **60 s** → still in the room, host can still start.
+- [ ] Locked **3 min** → correctly dropped. Both halves, or M1 has disabled presence rather than raised it.
+- [ ] Both outcomes captured under **new** filenames and recorded as a findings block.
+- [ ] Both evidence gates exit **0**.
+- [ ] If either half fails: filed with Pros/Cons and a blank selection line, **not fixed inline** — and the deploy ruled out first.
 
-**Before the beta ships**
-- [ ] **On a physical device**: locked 60 s → still in the room, host can still start. Locked 3 min → correctly dropped.
-- [ ] Recorded as a playthrough block with screenshots under **new** filenames; both evidence gates exit 0.
-- [ ] A simulator run is **not** accepted as evidence for this.
-
-**Across the wave**
-- [x] Battery at or above baseline: **0 errors** · **≥185** (189) · clean functions build · **≥70** (73) · both evidence gates exit 0.
-- [x] `check_deploy_fresh.sh` will go **red** after M1 and that is correct — say so in the commit rather than leaving it looking like a regression. **`firebase deploy` was never run by you.**
-- [x] One item, one commit; Conventional Commit; WHY in the body; Issue 112 moved into the **single** existing Resolved heading, and `design_database_and_security.md` updated — it owns the presence and disconnect contract.
+**If you pick up new work instead**
+- [ ] It came from one of the four triggers in §3 — most likely a human playing the game, which is where every functional defect here has come from. **No gate has ever found one.**
+- [ ] The falsifying validation was written first, run, and **observed to fail**, with output in the commit body.
+- [ ] An over-reach guard exists and can actually fail.
+- [ ] Battery at or above the baseline table.
+- [ ] One item, one commit; Conventional Commit; WHY in the body; the issue moved into the **single** existing Resolved heading, and the design doc that described the old behaviour updated.

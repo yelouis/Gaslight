@@ -33,6 +33,8 @@
 
 **No open issues and nothing to decide.** Issues 1–112 are delivered and Wave M is complete.
 
+**One check remains, and it can only be done on the beta itself.** Wave M's presence fix is verified everywhere a test can reach — both server sites are guarded by boundary tests written against `PRESENCE_STALE_MS` (falsified: flipping the comparison fails 2 tests), and the resume hook has a widget test asserting the immediate write (falsified: removing the hook fails it). **But fake timers under `flutter test` cannot reproduce iOS suspension, which is the entire condition the wave exists for.** On the first TestFlight build: join a room, **lock the phone 60 s** → still in the room and the host can still start; **lock 3 min** → correctly dropped. The second half matters as much as the first, or M1 has simply disabled presence. A simulator is not evidence — it does not suspend timers the way a locked device does. Procedure in `agent_execution_guide.md` §2.
+
 ---
 
 **The match summary has now been observed rendering in a real game** (block **W20**, room `QZER`, 3 players, `totalRounds = 2`, three isolated browser contexts). Verified on August 24, 2026 by opening the artefact rather than reading the block: every quoted string in W20 appears verbatim in `w20_match_summary.png` — **BEST LIE OF THE NIGHT** `"Sapphire"` by Alice with `Fooled 1 player`, **CLEANEST TRUTH** `"Archimedes"` with `Found by only 0 players`, and **THE STING** with `2 wrong votes` — alongside the FINAL STANDINGS table. Best Lie quotes a genuine player-authored forgery, not a placeholder.
@@ -148,6 +150,25 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.29 Never accept Xcode's "Update to recommended settings" on this project
+
+Xcode offers a **Perform Changes** dialog for recommended project settings. **Accepting it breaks the iOS build**, and the failure is not obvious from the dialog — the offending item is **Enable User Script Sandboxing** (`ENABLE_USER_SCRIPT_SANDBOXING`).
+
+This project has **four shell-script build phases**: two running Flutter's `xcode_backend.sh` (`build` and `embed_and_thin`) and two CocoaPods checks that diff `Podfile.lock` against `Manifest.lock`. Sandboxing restricts what those scripts may read, and Flutter's own build artefacts fall outside the permitted set. Verified empirically on **August 25, 2026** by enabling the flag in all three build configurations and building:
+
+```
+Error (Xcode): Sandbox: dartvm(...) deny(1) file-read-data .../Flutter.framework/Flutter
+Error (Xcode): Sandbox: dartvm(...) deny(1) file-read-data .../native_assets/objective_c.framework/objective_c
+Error (Xcode): Sandbox: dartvm(...) deny(1) file-read-data .../.last_build_id
+Failed to build iOS app
+```
+
+Reverting the flag restored a clean `✓ Built build/ios/iphoneos/Runner.app (49.9MB)`.
+
+**So: decline the dialog.** The other items in it (asset symbol extensions, the quoted-include warning, string catalog symbols) are harmless but not worth the risk of accepting the batch, since Xcode applies them together. If a specific one is ever wanted, set it alone and rebuild before committing. **Xcode will keep offering this** — the answer stays no until Flutter's build phases declare sandbox-compatible inputs and outputs.
+
+*Unrelated but worth knowing while in here:* every `flutter build ios` rewrites `ios/Runner.xcodeproj/project.pbxproj` (CocoaPods rewrites `objectVersion`), so a build dirties the tree on its own. That churn is pre-existing and not a change anyone made.
 
 #### 2.28 A screenshot that looks wrong may be an undocumented design rule
 
