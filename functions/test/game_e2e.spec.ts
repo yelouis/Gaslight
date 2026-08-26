@@ -1596,6 +1596,54 @@ describe('Gaslight E2E Game Emulator Tests', () => {
   // caller who claims otherwise is rejected rather than quietly obeyed.
   // Falsified: with the pre-fix server (which drew from request.data), the
   // mismatch call below started cah_dark_humor and threwMismatch stayed false.
+  // Two properties of the opening deal that nothing guarded until now, and that
+  // a Wave N playthrough block appeared to contradict: it recorded the same
+  // prompt on two players' cards. That turned out to be a transcription error
+  // — drawPrompts slices a shuffled copy WITHOUT replacement and startingCards
+  // maps prompts[idx] one-to-one — but "holds by construction" is not a test,
+  // and nothing here would have caught a regression that broke it.
+  it('the opening deal gives every player a distinct prompt, all from the selected deck', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+    const guest2User = await createAnonUser();
+
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice',
+      playerId: 'p_host',
+      forgeriesPerCard: 1,
+      sabotageAnswersCount: 1,
+      debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+
+    await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+    await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
+
+    await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+    await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+
+    const roomSnap = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnap.data()?.currentPhase).to.equal('truth');
+
+    const prompts = (roomSnap.data()?.cards as any[]).map((c) => c.promptText);
+
+    // Guard the guard: a run that found no cards must not pass silently.
+    expect(prompts.length, 'expected one card per active player').to.equal(3);
+
+    // 1. Distinct — two players must never open on the same prompt.
+    expect(new Set(prompts).size, `duplicate opening prompt: ${JSON.stringify(prompts)}`)
+      .to.equal(prompts.length);
+
+    // 2. In-deck — every prompt traced back to the SELECTED deck, which is the
+    //    original Issue 106 defect: prompts arriving from a deck nobody chose.
+    const deckPrompts = new Set(PromptDecks.getAllDecks().find((d) => d.id === ALT_DECK)!.prompts);
+    for (const p of prompts) {
+      expect(deckPrompts.has(p), `"${p}" is not in deck ${ALT_DECK}`).to.be.true;
+    }
+  });
+
   it('Issue 106: startGame resolves the deck from the room and rejects a mismatched claim', async () => {
     const hostUser = await createAnonUser();
     const guestUser = await createAnonUser();
