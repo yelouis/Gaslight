@@ -277,20 +277,20 @@ If none of these has happened, **report the state and stop.**
 ## Definition of Done
 
 **M1 — the server threshold**
-- [ ] A single exported `PRESENCE_STALE_MS` is read at **both** `index.ts:481` and `:1133`; the literal `30000` appears in neither.
-- [ ] The "no literal remains" check **asserts it read a non-empty file** before reporting clean.
-- [ ] Boundary tests at both sites: below the threshold is not reaped, above it is — written against the constant, not the number.
-- [ ] **Falsified**: flipping the comparison makes the tests fail; output in the commit body.
-- [ ] **Over-reach guard**: the below-3 auto-end still fires past the new threshold.
-- [ ] The commit states the cost plainly — slower auto-end — and does **not** claim this fixes a long lock.
+- [x] A single exported `PRESENCE_STALE_MS` is read at **both** `index.ts:481` and `:1133`; the literal `30000` appears in neither.
+- [x] The "no literal remains" check **asserts it read a non-empty file** before reporting clean.
+- [x] Boundary tests at both sites: below the threshold is not reaped, above it is — written against the constant, not the number.
+- [x] **Falsified**: flipping the comparison makes the tests fail; output in the commit body.
+- [x] **Over-reach guard**: the below-3 auto-end still fires past the new threshold.
+- [x] The commit states the cost plainly — slower auto-end — and does **not** claim this fixes a long lock.
 
 **M2 — the resume hook**
-- [ ] `GameService` observes lifecycle; on `resumed` it writes `lastSeen` **immediately** and **restarts** the heartbeat timer.
-- [ ] The observer is registered with the room session, **not in the constructor**, and removed in `dispose()` and on room-state clear.
-- [ ] Widget test dispatches `AppLifecycleState.resumed` and asserts the write happens **without advancing 10 s**.
-- [ ] **Falsified**: removing the hook fails that test.
-- [ ] The heartbeat still ticks afterwards — the restart did not silence it.
-- [ ] No observer registered under `_heartbeatDisabledForTest`; none left after `dispose()`.
+- [x] `GameService` observes lifecycle; on `resumed` it writes `lastSeen` **immediately** and **restarts** the heartbeat timer.
+- [x] The observer is registered with the room session, **not in the constructor**, and removed in `dispose()` and on room-state clear.
+- [x] Widget test dispatches `AppLifecycleState.resumed` and asserts the write happens **without advancing 10 s**.
+- [x] **Falsified**: removing the hook fails that test.
+- [x] The heartbeat still ticks afterwards — the restart did not silence it.
+- [x] No observer registered under `_heartbeatDisabledForTest`; none left after `dispose()`.
 
 **Before the beta ships**
 - [ ] **On a physical device**: locked 60 s → still in the room, host can still start. Locked 3 min → correctly dropped.
@@ -298,6 +298,6 @@ If none of these has happened, **report the state and stop.**
 - [ ] A simulator run is **not** accepted as evidence for this.
 
 **Across the wave**
-- [ ] Battery at or above baseline: **0 errors** · **≥185** · clean functions build · **≥70** · both evidence gates exit 0.
-- [ ] `check_deploy_fresh.sh` will go **red** after M1 and that is correct — say so in the commit rather than leaving it looking like a regression. **`firebase deploy` was never run by you.**
-- [ ] One item, one commit; Conventional Commit; WHY in the body; Issue 112 moved into the **single** existing Resolved heading, and `design_database_and_security.md` updated — it owns the presence and disconnect contract.
+- [x] Battery at or above baseline: **0 errors** · **≥185** (189) · clean functions build · **≥70** (73) · both evidence gates exit 0.
+- [x] `check_deploy_fresh.sh` will go **red** after M1 and that is correct — say so in the commit rather than leaving it looking like a regression. **`firebase deploy` was never run by you.**
+- [x] One item, one commit; Conventional Commit; WHY in the body; Issue 112 moved into the **single** existing Resolved heading, and `design_database_and_security.md` updated — it owns the presence and disconnect contract.

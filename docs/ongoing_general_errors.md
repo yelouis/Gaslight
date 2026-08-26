@@ -31,36 +31,9 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open issues and nothing to decide.** Issues 1–111 are delivered and Wave L is complete.
-
-### Issue 112: A locked phone drops the player after 30 seconds
-**Status**: ⚠️ Confirmed Unresolved — Verified in source. The client heartbeats every **10 s** (`game_service.dart:300`) and the server treats a player as dead once `lastSeen` is more than **30 s** stale (`index.ts:481` for seat re-binding, `:1133` in `handleDisconnect`). iOS suspends app timers within seconds of backgrounding, so **locking the phone stops the heartbeat and the player is removed from the room about 30 seconds later.** This was already observed on web during the Wave-K era — a player's document vanished mid-lobby while the host still saw three names, and `startGame` then refused with "At least 3 players are required" — and **iOS is more aggressive about suspending background apps than a backgrounded browser tab.**
-
-**Why it matters now:** this is a party game. Players put the phone down while somebody else writes, glance at a message, or let the screen time out. On a 30-second fuse that is a constant drop, and the TestFlight beta is the first time it will be many people on real phones at once.
-
-**Option A**: **Raise the stale threshold** — change 30 s to something a screen-lock survives, e.g. 90–120 s, at both sites.
-  - *Pros*: Two-line server change plus a deploy. Immediately removes the common case; nothing else in the design has to move.
-  - *Cons*: Genuinely departed players linger, so the below-3 auto-end and seat re-binding both react more slowly. Picks a timeout that is still a guess, just a longer one.
-
-**Option B (recommended)**: **Raise the threshold *and* refresh `lastSeen` the moment the app resumes** — Option A plus an `AppLifecycleState.resumed` hook that writes `lastSeen` immediately rather than waiting up to 10 s for the next tick.
-  - *Pros*: Covers both halves of the real failure — the long lock (threshold) and the race right after unlocking, where a player is back on screen but still looks stale for up to a heartbeat. Still small, and the lifecycle hook is a well-trodden Flutter pattern.
-  - *Cons*: Touches client and server, so it needs both a rebuild and a deploy. Still a timeout rather than a real presence model.
-
-**Option C**: **Mark players *away* instead of removing them** — keep the seat, name and score; exclude away players from readiness gates and auto-advance; reap only after a long absence or an explicit leave.
-  - *Pros*: The correct model. A player who locks their phone for five minutes rejoins the game they were in rather than finding their seat gone. Removes the guessing entirely.
-  - *Cons*: The largest change of the four. The below-3 auto-end, the readiness gate, seat re-binding and the roster UI all have to learn a third state, and each is a place the 3-player floor could be got wrong.
-
-**Option D**: **Ship the beta as-is and see whether testers actually hit it.**
-  - *Pros*: Zero work; the beta is itself the measurement, and real frequency may differ from my prediction.
-  - *Cons*: The failure is silent and looks like a bug in the *game* — a player vanishes and the host sees a start refused for no visible reason. First impressions on a first beta are expensive, and this is the most likely thing to sour one.
-
-**Recommendation: B before the beta, C afterwards if it still bites.** B is small enough to land alongside the TestFlight setup and removes the common case; C is the durable answer but is not something to start days before a first release.
-
-Your selection: Proceed with Option B.
+**No open issues and nothing to decide.** Issues 1–112 are delivered and Wave M is complete.
 
 ---
-
-**Issue 112 has a selection (Option B) and is specced for build as Wave M** — see `agent_execution_guide.md` §2–§3, ordered **M1 (server threshold) → M2 (resume hook)**. Everything else is delivered.
 
 **The match summary has now been observed rendering in a real game** (block **W20**, room `QZER`, 3 players, `totalRounds = 2`, three isolated browser contexts). Verified on August 24, 2026 by opening the artefact rather than reading the block: every quoted string in W20 appears verbatim in `w20_match_summary.png` — **BEST LIE OF THE NIGHT** `"Sapphire"` by Alice with `Fooled 1 player`, **CLEANEST TRUTH** `"Archimedes"` with `Found by only 0 players`, and **THE STING** with `2 wrong votes` — alongside the FINAL STANDINGS table. Best Lie quotes a genuine player-authored forgery, not a placeholder.
 
@@ -238,9 +211,9 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–111 — August 8 to 24, 2026
+### Issues 65–112 — August 8 to 25, 2026
 
-**46 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**47 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
@@ -267,6 +240,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Web E2E Playthrough (Wave I)** — Playwright automated harness (`test/web_e2e/`); I1 evidence gate widened with strict PNG requirement for W blocks; W1–W16 3-player match with falsification, truth, forgeries, voting lockout, unmasking, standings, GameOver, mid-match refresh restoral, case file share, console hygiene, and below-3 auto-end; W17–W19 responsive sweeps across mobile (375x812), tablet (768x1024), and desktop (1280x800) with 15 screenshots | 106 (Wave I) | `docs/playthrough_findings_web.md`; `test/web_e2e/`; `scripts/check_playthrough_evidence.sh` |
 | **Prompt Source & Sampling (Wave J)** — resolved effective prompt source on `GameState` killing `"custom"` sentinel crash (109 / J1); custom game prompt drawing and re-rolls from players' contributed pool with self-author lockout (108 / J2); uniform re-roll sampling minus live in-play table cards (107 / J3) | 107, 108, 109 | `design_prompt_system.md` §3, §5; `functions/src/index.ts` |
 | **Game Over Payoff & Web Download (Wave K)** — Standings + server-written match summary quoting real answers accumulated into `sealed/_summary` across rounds and published at game over (111 / K1); Case File PNG direct downloads on web via Blob URL and synthetic anchor click (110 / K2) | 110, 111 | `design_scoring_and_ui.md`; `lib/utils/case_file_saver_web.dart`; `functions/src/index.ts` |
+| **Presence & Resume Lifecycle (Wave M)** — 120 s server presence threshold (`PRESENCE_STALE_MS = 120_000`); GameService `WidgetsBindingObserver` immediate `lastSeen` write and heartbeat restart on app resume | 112 (Wave M) | `design_database_and_security.md` §4–§5 |
 
 > **The three highest-value things to know from this wave**, if you read nothing else: the `votes` field has been redefined three times and broken its readers twice (§2 and `design_game_state_and_models.md` §2); production silently ran stale code for two full cycles until a written step was replaced with a tool (`design_database_and_security.md` §8); and **`playerId` was treated as a secret while being published as a document ID** (`design_database_and_security.md` §5).
 
