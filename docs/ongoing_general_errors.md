@@ -33,7 +33,34 @@
 
 **No open issues and nothing to decide.** Issues 1–111 are delivered and Wave L is complete.
 
-**Nothing is outstanding. The queue is empty.**
+### Issue 112: A locked phone drops the player after 30 seconds
+**Status**: ⚠️ Confirmed Unresolved — Verified in source. The client heartbeats every **10 s** (`game_service.dart:300`) and the server treats a player as dead once `lastSeen` is more than **30 s** stale (`index.ts:481` for seat re-binding, `:1133` in `handleDisconnect`). iOS suspends app timers within seconds of backgrounding, so **locking the phone stops the heartbeat and the player is removed from the room about 30 seconds later.** This was already observed on web during the Wave-K era — a player's document vanished mid-lobby while the host still saw three names, and `startGame` then refused with "At least 3 players are required" — and **iOS is more aggressive about suspending background apps than a backgrounded browser tab.**
+
+**Why it matters now:** this is a party game. Players put the phone down while somebody else writes, glance at a message, or let the screen time out. On a 30-second fuse that is a constant drop, and the TestFlight beta is the first time it will be many people on real phones at once.
+
+**Option A**: **Raise the stale threshold** — change 30 s to something a screen-lock survives, e.g. 90–120 s, at both sites.
+  - *Pros*: Two-line server change plus a deploy. Immediately removes the common case; nothing else in the design has to move.
+  - *Cons*: Genuinely departed players linger, so the below-3 auto-end and seat re-binding both react more slowly. Picks a timeout that is still a guess, just a longer one.
+
+**Option B (recommended)**: **Raise the threshold *and* refresh `lastSeen` the moment the app resumes** — Option A plus an `AppLifecycleState.resumed` hook that writes `lastSeen` immediately rather than waiting up to 10 s for the next tick.
+  - *Pros*: Covers both halves of the real failure — the long lock (threshold) and the race right after unlocking, where a player is back on screen but still looks stale for up to a heartbeat. Still small, and the lifecycle hook is a well-trodden Flutter pattern.
+  - *Cons*: Touches client and server, so it needs both a rebuild and a deploy. Still a timeout rather than a real presence model.
+
+**Option C**: **Mark players *away* instead of removing them** — keep the seat, name and score; exclude away players from readiness gates and auto-advance; reap only after a long absence or an explicit leave.
+  - *Pros*: The correct model. A player who locks their phone for five minutes rejoins the game they were in rather than finding their seat gone. Removes the guessing entirely.
+  - *Cons*: The largest change of the four. The below-3 auto-end, the readiness gate, seat re-binding and the roster UI all have to learn a third state, and each is a place the 3-player floor could be got wrong.
+
+**Option D**: **Ship the beta as-is and see whether testers actually hit it.**
+  - *Pros*: Zero work; the beta is itself the measurement, and real frequency may differ from my prediction.
+  - *Cons*: The failure is silent and looks like a bug in the *game* — a player vanishes and the host sees a start refused for no visible reason. First impressions on a first beta are expensive, and this is the most likely thing to sour one.
+
+**Recommendation: B before the beta, C afterwards if it still bites.** B is small enough to land alongside the TestFlight setup and removes the common case; C is the durable answer but is not something to start days before a first release.
+
+Your selection: _____
+
+---
+
+**One issue is open and needs your selection: Issue 112**, filed August 25, 2026 while preparing the TestFlight beta. Everything else is delivered.
 
 **The match summary has now been observed rendering in a real game** (block **W20**, room `QZER`, 3 players, `totalRounds = 2`, three isolated browser contexts). Verified on August 24, 2026 by opening the artefact rather than reading the block: every quoted string in W20 appears verbatim in `w20_match_summary.png` — **BEST LIE OF THE NIGHT** `"Sapphire"` by Alice with `Fooled 1 player`, **CLEANEST TRUTH** `"Archimedes"` with `Found by only 0 players`, and **THE STING** with `2 wrong votes` — alongside the FINAL STANDINGS table. Best Lie quotes a genuine player-authored forgery, not a placeholder.
 
