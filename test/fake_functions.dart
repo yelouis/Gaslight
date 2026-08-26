@@ -214,7 +214,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
           }
         }
 
-        const fallbackDeckId = 'the_daily_grind';
+        const fallbackDeckId = PromptDecks.fallbackDeckId;
         int topUpNeeded = activePlayers.length - pool.length;
         if (topUpNeeded > 0) {
           final fallbackPrompts = PromptDecks.drawPrompts(fallbackDeckId, activePlayers.length * 2);
@@ -547,7 +547,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
           final playersSnap = await roomRef.collection('players').get();
           final players = playersSnap.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
           final activePlayers = players.where((p) => p.role != PlayerRole.spectator).toList();
-          final deckId = currentState.selectedDeckId == 'custom' ? 'the_daily_grind' : currentState.selectedDeckId;
+          final deckId = currentState.selectedDeckId == 'custom' ? PromptDecks.fallbackDeckId : currentState.selectedDeckId;
 
           final newCards = <CardModel>[];
           for (var p in activePlayers) {
@@ -633,7 +633,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
           cardSeenPrompts = List<String>.from(sealedSnap.data()!['seenPrompts']);
         }
 
-        final deckId = currentState.selectedDeckId == 'custom' ? 'the_daily_grind' : currentState.selectedDeckId;
+        final deckId = currentState.selectedDeckId == 'custom' ? PromptDecks.fallbackDeckId : currentState.selectedDeckId;
         final excludedPrompts = {
           ...cards.map((c) => c.promptText),
           ...cardSeenPrompts,

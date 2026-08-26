@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gaslight/main.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/models/game_state.dart';
+import 'package:gaslight/utils/prompt_decks.dart';
 import 'simulation_test.dart';
 import 'fake_functions.dart';
 
@@ -76,7 +77,7 @@ void main() {
       expect(gameService.players.length, 10);
 
       // Start game
-      await gameService.startGame('the_daily_grind');
+      await gameService.startGame(PromptDecks.fallbackDeckId);
       await tick(600); // Allow navigation transition animation to finish
 
       // 5. Verify transition to TRUTH phase
@@ -212,7 +213,7 @@ void main() {
       // Lobby: start game
       await gameService.debugAddBots();
       await tick(200);
-      await gameService.startGame('the_daily_grind');
+      await gameService.startGame(PromptDecks.fallbackDeckId);
       await tick(600);
 
       // Verify truth phase

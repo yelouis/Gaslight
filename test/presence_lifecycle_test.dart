@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gaslight/models/game_state.dart';
 import 'package:gaslight/models/player_state.dart';
 import 'package:gaslight/services/game_service.dart';
+import 'package:gaslight/utils/prompt_decks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart';
@@ -22,7 +23,7 @@ void main() {
       totalPlayers: 3,
       sabotageAnswersCount: 1,
       forgeriesPerCard: 1,
-      selectedDeckId: 'the_daily_grind',
+      selectedDeckId: PromptDecks.fallbackDeckId,
     );
 
     final testPlayer = PlayerState(

@@ -337,32 +337,20 @@ class _FolderCard extends StatelessWidget {
       );
     }
 
+    final deck = PromptDecks.getDeck(deckId);
     final name = PromptDecks.getDeckName(deckId);
     final size = PromptDecks.getDeckSize(deckId);
-    final prompts = PromptDecks.drawPrompts(deckId, size);
+    final prompts = size > 0 ? PromptDecks.drawPrompts(deckId, 1) : const <String>[];
     final firstPrompt = prompts.isNotEmpty ? prompts.first : '';
 
-    // Determine seal properties
-    String? sealLabel;
-    Color sealColor = AppColors.oxblood;
-    bool hasSeal = false;
-
-    if (deckId == 'rated_r_nsfw') {
-      sealLabel = 'R';
-      sealColor = AppColors.oxblood;
-      hasSeal = true;
-    } else if (deckId == 'cah_dark_humor') {
-      sealLabel = 'X';
-      sealColor = const Color(0xFF2A2226);
-      hasSeal = true;
-    } else if (deckId == 'the_daily_grind' ||
-        deckId == 'deep_fears_and_phobias' ||
-        deckId == 'unhinged_quirks' ||
-        deckId == 'romantic_disasters') {
-      sealLabel = 'PG';
-      sealColor = const Color(0xFF7A6A3A);
-      hasSeal = true;
-    }
+    // Seal comes from the deck's declared rating. Adding a deck to
+    // functions/src/prompt_decks.ts and regenerating is all that is needed —
+    // there is deliberately no deck id named anywhere in this file.
+    final rating = deck?.rating;
+    final bool hasSeal = rating != null;
+    final String? sealLabel = rating == null ? null : AppColors.sealLabelFor(rating);
+    final Color sealColor =
+        rating == null ? AppColors.oxblood : AppColors.sealColorFor(rating);
 
     return SizedBox(
       width: 150,

@@ -10,7 +10,7 @@
 // Falsified before the fix: with `startGame(_selectedDeck)` still in place, the
 // first test failed with
 //   Expected: 'rated_r_nsfw'
-//     Actual: 'the_daily_grind'
+//     Actual: PromptDecks.fallbackDeckId
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gaslight/models/game_state.dart';
@@ -18,6 +18,7 @@ import 'package:gaslight/models/player_state.dart';
 import 'package:gaslight/screens/lobby_screen.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/widgets/shared_ui.dart';
+import 'package:gaslight/utils/prompt_decks.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'fake_functions.dart';
@@ -70,7 +71,10 @@ void main() {
   }
 
   group('Issue 106 — the started deck is the chosen deck', () {
-    for (final deckId in const ['rated_r_nsfw', 'cah_dark_humor', 'deep_fears_and_phobias', 'custom']) {
+    // Drawn from the deck catalogue rather than hardcoded, so renaming or
+    // adding a deck in functions/src/prompt_decks.ts cannot silently stop this
+    // covering it. 'custom' is the sentinel and has no catalogue entry.
+    for (final deckId in [...PromptDecks.availableDecks, 'custom']) {
       testWidgets('START GAME sends "$deckId" when the room has it selected', (tester) async {
         // Seed the fake Firestore room too, not just GameService's in-memory
         // state: the fake callable resolves the deck from the room document,
@@ -105,18 +109,18 @@ void main() {
       final stateWithEffective = GameState(
         roomCode: 'TEST',
         selectedDeckId: 'custom',
-        effectiveDeckId: 'the_daily_grind',
+        effectiveDeckId: PromptDecks.fallbackDeckId,
       );
       final mapWith = stateWithEffective.toMap();
       expect(mapWith.containsKey('effectiveDeckId'), isTrue);
-      expect(mapWith['effectiveDeckId'], 'the_daily_grind');
+      expect(mapWith['effectiveDeckId'], PromptDecks.fallbackDeckId);
 
       final restoredWith = GameState.fromMap(mapWith, 'TEST');
-      expect(restoredWith.effectiveDeckId, 'the_daily_grind');
+      expect(restoredWith.effectiveDeckId, PromptDecks.fallbackDeckId);
 
       final stateWithoutEffective = GameState(
         roomCode: 'TEST',
-        selectedDeckId: 'the_daily_grind',
+        selectedDeckId: PromptDecks.fallbackDeckId,
       );
       final mapWithout = stateWithoutEffective.toMap();
       expect(mapWithout.containsKey('effectiveDeckId'), isFalse, reason: 'effectiveDeckId must be omitted when null');

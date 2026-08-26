@@ -1,135 +1,232 @@
 import { HttpsError } from "firebase-functions/v2/https";
 
-const DECKS: Record<string, string[]> = {
-  the_daily_grind: [
-    "The most embarrassing thing I've ever done on a Zoom call.",
-    "The worst excuse I've used to call out of work.",
-    "A time I lied about my skills to get a job or project.",
-    "The most ridiculous thing I've expensed on a company card.",
-    "The biggest mistake I made at work and successfully hid.",
-    "A time I actually fell asleep during a meeting.",
-    "The most unprofessional thing I've done at a holiday party.",
-    "A situation where I completely faked my way through a presentation.",
-    "The pettiest reason I've disliked a coworker.",
-    "A time I gossiped about a boss and got caught.",
-    "The dumbest rule I enforced just because I had the power.",
-    "A time I pretended to understand a concept for months.",
-    "The most inappropriate place I've taken a business call.",
-    "A time I stole someone else's lunch from the fridge.",
-    "The longest I've gone working without actually doing any work.",
-    "A time I accidentally hit 'reply-all' and regretted it.",
-    "The worst lie I told to get out of an after-work event.",
-    "A time I cried at work over something completely insignificant.",
-    "The weirdest coworker interaction I've ever had.",
-    "A time I took credit for someone else's idea."
-  ],
-  deep_fears_and_phobias: [
-    "An irrational fear I have about ordinary household objects.",
-    "The weirdest scenario I regularly play out in my head before sleeping.",
-    "A common animal that completely terrifies me.",
-    "The most embarrassing thing I'm afraid of in the dark.",
-    "A fear I have that makes absolutely no logical sense.",
-    "The weirdest superstition I secretly believe in.",
-    "A time my irrational fear caused a public scene.",
-    "The most ridiculous thing I check before leaving the house.",
-    "A specific noise that instantly sends me into a panic.",
-    "The weirdest intrusive thought I've had while driving.",
-    "A fear I've lied about not having so I wouldn't look stupid.",
-    "The most uncomfortable situation I've avoided out of pure phobia.",
-    "An irrational reason I refused to go into a body of water.",
-    "The most bizarre reason I've been afraid of a piece of technology.",
-    "A childhood fear I still secretly have.",
-    "The weirdest way I prepare for the 'worst-case scenario'.",
-    "A time I let a phobia ruin a fun event.",
-    "The most irrational thought I've had on an airplane.",
-    "A fear I have about going to the doctor.",
-    "The weirdest fear I have about the afterlife."
-  ],
-  unhinged_quirks: [
-    "The weirdest food combination I genuinely enjoy.",
-    "A hyper-fixation I had at 2 AM that lasted for exactly one night.",
-    "The strangest habit I have when I am completely alone.",
-    "A bizarre routine I must do before going to sleep.",
-    "The most unhinged thing I do when I think nobody is watching.",
-    "A weird physical quirk I have that people find disturbing.",
-    "The most ridiculous thing I've searched for on the internet.",
-    "A weird sound I make when I am focused.",
-    "The strangest thing I collect or hoard.",
-    "A bizarre way I eat a very common food.",
-    "The most unhinged criteria I have for dating someone.",
-    "A weird place I prefer to sit or lay down in my house.",
-    "The strangest thing I do in front of the mirror.",
-    "A completely nonsensical preference I have for clothing.",
-    "The most ridiculous thing I enthusiastically talk to my pets about.",
-    "A bizarre superstition I have regarding numbers or counting.",
-    "The weirdest thing that instantly makes me angry.",
-    "A bizarre way I show affection to my friends.",
-    "The most unhinged lie I told just to avoid explaining a quirk.",
-    "A weird thing I do when I am nervous or lying."
-  ],
-  romantic_disasters: [
-    "The absolutely worst first date I've ever been on.",
-    "The most cringe-inducing text message I've sent a crush.",
-    "A time I tried to impress someone and failed miserably.",
-    "The pettiest reason I decided to break up with someone.",
-    "The most embarrassing thing that happened to me during a hookup.",
-    "A time I realized mid-date that the person was completely unhinged.",
-    "The worst lie I've told to reject someone's advances.",
-    "A situation where I was definitely the toxic one in the relationship.",
-    "The most awkward encounter I've had with an ex.",
-    "A time I accidentally insulted my date without realizing it.",
-    "The most desperate thing I've done to get someone's attention.",
-    "A weird dealbreaker I have that no one understands.",
-    "The worst place I've ever taken someone for a date.",
-    "A time I got caught stalking a crush on social media.",
-    "The most inappropriate time I've ever developed feelings for someone.",
-    "A bizarre assumption I made about a partner that was totally wrong.",
-    "The worst gift I have ever given or received in a relationship.",
-    "A time I cried for a stupid reason in front of a date.",
-    "The most awkward 'meet the parents' story I possess.",
-    "A time I accidentally set up a date with the wrong person."
-  ],
-  rated_r_nsfw: [
-    "What's your most embarassing moment?",
-    "If you had to sleep with a president, who would it be?",
-    "What would be the name of your biography?",
-    "What would you take to a dessert island? (can't be a way off)",
-    "What will you name your first kid?",
-    "Which celebrity do you think you're most like?",
-    "What was the last dream you remember?",
-    "When was the last time you shit your pants?",
-    "Where was your most dangerous near-death experience?",
-    "What's the strangest food you've eaten?",
-    "Who are you most likely to assassinate?",
-    "What did you want to be growing up?",
-    "What's your favorite holiday destination?",
-    "Who was your first celebrity crush?",
-    "What's the most NSFW thing you've done in public?",
-    "Which cartoon character would you want to date?",
-    "What's the best thing you can cook?",
-    "What would your dream house include?",
-    "What's your most embarassing item of clothing?",
-    "The worst way I've lost money is…",
-    "The most embarassing thing I've spent money on",
-    "What's the last thing you've broken?",
-    "What's the closest to a serious crime you've ever been?",
-    "What's been your greatest success in the last year?"
-  ],
-  cah_dark_humor: [
-    "The absolute worst thing to say at a funeral.",
-    "A highly inappropriate theme for a children's birthday party.",
-    "The real reason the dinosaurs went extinct.",
-    "A terrible advertising slogan for a brand of baby food.",
-    "The most offensive gift you could bring to a housewarming party.",
-    "What is secretly hiding under the host's floorboards.",
-    "The worst candidate for a modern saint.",
-    "A dark secret that would immediately cancel a politician.",
-    "The real reason I am going to hell.",
-    "A terrible topic to bring up on a first date.",
-    "What my future biographer will write to summarize my life choices.",
-    "The weirdest item to put in a time capsule for future generations."
-  ],
-};
+/**
+ * THE SOURCE OF TRUTH FOR DECKS.
+ *
+ * Everything the app knows about a deck lives here: its id, the name players
+ * see, its content rating, and its prompts. No other file may branch on a deck
+ * id. To add a deck, append a DeckDefinition below and regenerate the Dart
+ * mirror (see below) - nothing else needs editing.
+ *
+ * The Flutter client reads a GENERATED copy at lib/utils/prompt_decks.dart.
+ * Regenerate it with:  ./scripts/generate_prompt_decks_dart.sh
+ * ./scripts/check_decks_in_sync.sh fails the battery if it is stale.
+ */
+
+/** Content rating. The seal COLOUR is a UI concern and lives in app_colors.dart. */
+export type DeckRating = "PG" | "R" | "X";
+
+export interface DeckDefinition {
+  id: string;
+  /** Shown to players. Not derived from the id - "rated_r_nsfw" would render as "Rated R Nsfw". */
+  displayName: string;
+  rating: DeckRating;
+  /**
+   * The deck used when no chosen deck applies: the default for a new room,
+   * the top-up pool for custom decks, and the source for re-rolls in a custom
+   * game. EXACTLY ONE deck must set this - getFallbackDeckId() throws otherwise.
+   * Prefer the largest deck, since custom top-up draws from it.
+   */
+  isFallback?: boolean;
+  prompts: string[];
+}
+
+const DECK_LIST: DeckDefinition[] = [
+  {
+    id: "hypotheticals",
+    displayName: "Hypotheticals",
+    rating: "PG",
+    isFallback: true,
+    prompts: [
+      "The first thing I'm stealing if looting becomes completely legal for one night.",
+      "The dumbest reason I would end up getting kicked out of a cult.",
+      "The weirdly specific side hustle I would start if I went completely broke tomorrow.",
+      "The exact crime I'd probably be convicted of in a dystopian future.",
+      "The fake backstory and name I would use if I went into witness protection.",
+      "The stupid minor issue I would make the centerpiece of my presidential campaign.",
+      "The everyday annoying behavior I would make punishable by immediate jail time.",
+      "The animal I honestly think I could take in a fistfight if my life depended on it.",
+      "The petty reason I would refuse to save someone in a zombie apocalypse.",
+      "The first thing I would buy with lottery money that would make people question my sanity.",
+      "The bizarre rumor I would spread about myself if I became famous overnight.",
+      "The weird hill I would die on during a high-stakes job interview.",
+      "What I would actually do if I got accidentally locked inside a Target overnight.",
+      "The completely useless superpower I would actually get the most mileage out of.",
+      "The minor scam I could easily pull off if I had zero morals.",
+      "The dumb thing I would spend a million dollars on before ever buying a house.",
+      "The weird luxury I would insist on putting in my personal doomsday bunker.",
+      "The reason my friends will probably have to stage an intervention for me in ten years.",
+      "The ridiculous contest I would challenge the devil to for my own soul.",
+      "The embarrassing passion project I would fund if I had unlimited billionaire money.",
+      "The odd job I would be shockingly good at if I quit my career today.",
+      "The petty lie I would tell on a reality dating show to cause maximum drama.",
+      "The weird object in my house I would grab as a weapon during a break-in.",
+      "The bizarre conspiracy theory I could probably be convinced is one hundred percent real.",
+      "The useless, niche topic I could give an hour-long presentation on with zero prep.",
+      "The ridiculous vanity project I would force a movie studio to let me star in.",
+      "The mundane everyday chore I would hire a full-time assistant to handle for me.",
+      "The stupidest bet I would actually agree to take for ten thousand dollars.",
+      "The petty reason I'd get fired on my very first day working retail or fast food.",
+      "What I would bury in my backyard just to mess with future archaeologists.",
+      "The oddly specific red flag that would make me climb out a restaurant bathroom window.",
+      "The ridiculous backstage demand I would put in my contract rider as a touring artist.",
+      "The exact scenario where I would completely sell out my moral principles for cash.",
+      "The weird habit of mine that would immediately expose me as an alien impostor.",
+      "The dumbest thing I would do if I had total invisibility for two hours.",
+      "The terrible business idea I genuinely believe could make millions if someone funded it.",
+      "The fake hobby I would invent just to sound cultured at a fancy party.",
+      "The petty reason I would cut a family member completely out of my will.",
+      "The role I would inevitably end up playing in a post-apocalyptic survivor settlement.",
+      "The harmless lie about myself I plan on taking all the way to my grave.",
+      "The weird item I would definitely try to smuggle through airport security.",
+      "The minor annoyance I would ban nationwide on my first day in power.",
+      "The completely irrational phobia that would get me killed first in a horror movie.",
+      "The stupid internet argument that would actually tempt me to show up at someone's house.",
+      "The chaotic text I would send to my group chats if an asteroid hit tomorrow.",
+      "The trashy reality TV competition I would secretly dominate.",
+      "The oddly specific task I would gladly pay someone two hundred dollars an hour to do.",
+      "The dumb thing I would do with a time machine before fixing any historical events.",
+      "The fake profession I would tell a stranger next to me on a long flight.",
+      "The stupid mistake that would get me caught during an otherwise flawless bank heist."
+    ],
+  },
+  {
+    id: "real_life",
+    displayName: "Real Life",
+    rating: "PG",
+    prompts: [
+      "The weirdest belief I had as a kid.",
+      "The dumbest way I've ever injured myself.",
+      "A food combination I actually enjoy that grosses people out.",
+      "The most embarrassing phase I went through growing up.",
+      "My most irrational pet peeve.",
+      "The pettiest reason I stopped talking to someone.",
+      "The worst gift I've ever received and pretended to like.",
+      "The dumbest lie I ever told my parents.",
+      "A weird habit I have when I'm home alone.",
+      "The most trouble I ever got into at school.",
+      "A time I completely blanked on someone's name.",
+      "The worst first impression I ever made on someone.",
+      "Something I accidentally broke and never confessed to.",
+      "The artist or guilty pleasure song I secretly listen to.",
+      "The most useless item I spent my own money on.",
+      "A trend I participated in that aged terribly.",
+      "Something I pretend to understand just to fit in.",
+      "The most awkward interaction I've had with a stranger.",
+      "The weirdest thing currently in my room or car.",
+      "A bizarre hidden talent or useless skill I have.",
+      "The longest I have ever gone without leaving my house.",
+      "A popular movie or show that I secretly cannot stand.",
+      "The worst haircut or style choice I've ever had.",
+      "A time I got completely lost in a place I knew well.",
+      "My biggest irrational fear that makes no sense."
+    ],
+  },
+  {
+    id: "unhinged_quirks",
+    displayName: "Unhinged Quirks",
+    rating: "PG",
+    prompts: [
+      "A weird habit I have when I think nobody is watching.",
+      "The dumbest routine I do every single day.",
+      "A normal food I eat in a completely wrong way.",
+      "The imaginary argument I rehearse the most in the shower.",
+      "Something stupid I do when I'm bored alone in my room.",
+      "A sound or texture that makes me unreasonably angry.",
+      "The weirdest thing I do while pacing on the phone.",
+      "A ridiculous personal rule I follow that makes zero sense.",
+      "The random thing I hoard and stubbornly refuse to throw away.",
+      "A habit of mine that would drive a roommate crazy.",
+      "The strange way I organize something or do a basic chore.",
+      "Something I have to do before bed or I can't sleep.",
+      "A totally normal phrase or noise that instantly annoys me.",
+      "The random hobby I obsessed over for two weeks and then dropped forever.",
+      "The trick I use to avoid making small talk with people in public.",
+      "The weirdest thing I've caught myself doing on autopilot.",
+      "A superstition I claim not to believe in but still follow anyway.",
+      "Something petty that immediately makes me judge a person.",
+      "The song or short video I've listened to on loop an embarrassing amount.",
+      "A basic everyday task I do in a backwards way.",
+      "The irrational thing I do whenever I get slightly stressed out.",
+      "A weird food order or modification I insist on every time.",
+      "The random topic I could rant about for an hour with zero prep.",
+      "The weirdest note or search tab currently open on my phone.",
+      "The absurdly over-the-top way I react to a minor inconvenience."
+    ],
+  },
+  {
+    id: "love_life",
+    displayName: "Love Life",
+    rating: "PG",
+    prompts: [
+      "The most awkward first date I've ever been on.",
+      "The pettiest romantic ick that immediately turned me off.",
+      "The most cringe thing I did to impress a crush.",
+      "The worst gift I've ever given or received in a relationship.",
+      "A time a date went so badly I actively looked for an escape.",
+      "The dumbest reason I ever broke up with someone.",
+      "The weirdest thing I've found while snooping on a crush's profile.",
+      "The most embarrassing romantic rejection I've ever experienced.",
+      "A cliché romantic gesture I secretly love.",
+      "The worst outfit I wore on a date thinking I looked great.",
+      "The strangest place I've ever gone on a date.",
+      "A time I accidentally completely ruined a romantic moment.",
+      "The obvious red flag I ignored for way too long.",
+      "The most dramatic argument I've had over something tiny with a partner.",
+      "The weirdest habit I learned about someone after staying at their place.",
+      "The most embarrassing pet name I've ever been called or used.",
+      "The worst excuse I used to turn down a second date.",
+      "A weird celebrity crush I had that makes no sense.",
+      "A time I caught feelings for someone at the worst possible time.",
+      "The most awkward interaction I've had with a partner's parents.",
+      "The most desperate thing I did right after a breakup.",
+      "A bizarre dealbreaker I secretly have when dating.",
+      "The worst dating advice a friend gave me that I actually followed.",
+      "A lie I told on a date just to seem more interesting.",
+      "The quickest I have ever lost interest in someone."
+    ],
+  },
+  {
+    id: "rated_r_nsfw",
+    displayName: "Rated R NSFW",
+    rating: "R",
+    prompts: [
+      "The most desperate public bathroom emergency I barely survived.",
+      "The weirdest thing in my private browsing history that I'd die if someone saw.",
+      "The most humiliating accidental nudity moment I've ever experienced.",
+      "The absolute grossest personal hygiene shortcut I take when nobody is around.",
+      "The political figure or president I'd reluctantly sleep with to save humanity.",
+      "The most NSFW thing I've ever done in a semi-public place.",
+      "The most embarrassing item a bag checker or TSA agent has pulled out of my luggage.",
+      "The lowest amount of money I'd accept to publicly stream my entire camera roll.",
+      "The weirdest object I've used as makeshift toilet paper in an emergency.",
+      "A time someone walked in on me at the absolute worst possible moment.",
+      "The most humiliating bodily malfunction I've had during a quiet, crowded event.",
+      "The longest I have ever gone without showering or changing my clothes.",
+      "The most NSFW thing I accidentally broadcasted onto a shared screen or speaker.",
+      "The grossest thing I've eaten off the floor or out of desperation.",
+      "The sketchiest place I've peed or thrown up in public.",
+      "The absolute worst or most forbidden person I've had a fleeting dirty thought about.",
+      "The most degenerate thing I've done while drunk or blacked out.",
+      "The grossest injury, rash, or infection I stubbornly ignored for way too long.",
+      "The most unhinged thing currently sitting in my phone's hidden album.",
+      "The absolute lowest, dirtiest state my bedroom or bathroom has ever reached.",
+      "The pettiest reason I immediately lost attraction right before hooking up.",
+      "The weirdest thing I would let someone pay me five thousand dollars to do.",
+      "The most awkward walk of shame or late-night escape I've ever made.",
+      "The degenerate vice or bad habit I spend way too much money hiding.",
+      "A time an intimate or serious moment was completely ruined by an unsexy bodily noise."
+    ],
+  },
+];
+/** id -> prompts, derived. Draw functions use this; nothing else should. */
+const DECKS: Record<string, string[]> = Object.fromEntries(
+  DECK_LIST.map((d) => [d.id, d.prompts])
+);
+
+const DECK_META: Record<string, DeckDefinition> = Object.fromEntries(
+  DECK_LIST.map((d) => [d.id, d])
+);
 
 export class PromptDecks {
   static getDeckSize(deckId: string): number {
@@ -137,7 +234,40 @@ export class PromptDecks {
   }
 
   static getAvailableDecks(): string[] {
-    return Object.keys(DECKS);
+    return DECK_LIST.map((d) => d.id);
+  }
+
+  /** Everything the UI needs, prompts included. Callers should loop over this. */
+  static getAllDecks(): DeckDefinition[] {
+    return DECK_LIST;
+  }
+
+  static getDeck(deckId: string): DeckDefinition | undefined {
+    return DECK_META[deckId];
+  }
+
+  static getDeckDisplayName(deckId: string): string {
+    return DECK_META[deckId]?.displayName ?? deckId;
+  }
+
+  static getDeckRating(deckId: string): DeckRating | undefined {
+    return DECK_META[deckId]?.rating;
+  }
+
+  /**
+   * The deck to fall back to when no chosen deck applies. Replaces the
+   * hardcoded "the_daily_grind" that used to appear at eight call sites and
+   * broke the moment that deck was renamed.
+   */
+  static getFallbackDeckId(): string {
+    const marked = DECK_LIST.filter((d) => d.isFallback);
+    if (marked.length !== 1) {
+      throw new Error(
+        `Exactly one deck must set isFallback; found ${marked.length}` +
+        (marked.length ? ` (${marked.map((d) => d.id).join(", ")})` : "")
+      );
+    }
+    return marked[0].id;
   }
 
   static drawPrompts(deckId: string, count: number): string[] {

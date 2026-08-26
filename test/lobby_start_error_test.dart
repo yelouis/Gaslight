@@ -13,6 +13,7 @@ import 'package:gaslight/models/player_state.dart';
 import 'package:gaslight/screens/lobby_screen.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/widgets/shared_ui.dart';
+import 'package:gaslight/utils/prompt_decks.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'fake_functions.dart';
@@ -33,7 +34,7 @@ void main() {
         totalPlayers: 3,
         sabotageAnswersCount: 1,
         forgeriesPerCard: 1,
-        selectedDeckId: 'the_daily_grind',
+        selectedDeckId: PromptDecks.fallbackDeckId,
       );
 
   PlayerState host() => PlayerState(id: 'p_host', name: 'Alice', isHost: true, joinedAt: 100, lobbyReady: false);

@@ -8,6 +8,7 @@ import 'package:gaslight/screens/lobby_screen.dart';
 import 'package:gaslight/screens/phase2_craft.dart';
 import 'package:gaslight/screens/phase3_vote.dart';
 import 'package:gaslight/services/game_service.dart';
+import 'package:gaslight/utils/prompt_decks.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'fake_functions.dart';
@@ -49,7 +50,7 @@ void main() {
         currentRound: 1,
         totalRounds: 3,
         totalPlayers: 2,
-        selectedDeckId: 'the_daily_grind',
+        selectedDeckId: PromptDecks.fallbackDeckId,
       );
 
       gameService.debugSetState(lobbyGameState, [hostPlayer, guestPlayer], 'p_host');
@@ -86,7 +87,7 @@ void main() {
         currentRound: 1,
         totalRounds: 3,
         totalPlayers: 2,
-        selectedDeckId: 'the_daily_grind',
+        selectedDeckId: PromptDecks.fallbackDeckId,
         cards: [card],
       );
 
@@ -132,7 +133,7 @@ void main() {
         currentRound: 1,
         totalRounds: 3,
         totalPlayers: 2,
-        selectedDeckId: 'the_daily_grind',
+        selectedDeckId: PromptDecks.fallbackDeckId,
         cards: [card],
         readyPlayers: {'p_host': true},
       );

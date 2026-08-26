@@ -1,6 +1,7 @@
 // ignore_for_file: subtype_of_sealed_class, avoid_relative_lib_imports, annotate_overrides, avoid_print
 
 import 'dart:async';
+import 'package:gaslight/utils/prompt_decks.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../lib/services/game_service.dart';
@@ -257,7 +258,7 @@ void main() {
       print('Players joined: ${gameService.players.length}');
 
       // 3. Start Game
-      await gameService.startGame('the_daily_grind');
+      await gameService.startGame(PromptDecks.fallbackDeckId);
       await Future.delayed(Duration(milliseconds: 100));
       expect(gameService.gameState!.currentPhase, GamePhase.truth);
       print('Game started. Phase: Truth Round');
@@ -357,7 +358,7 @@ void main() {
       print('Players joined: ${gameService.players.length}');
 
       // 3. Start Game
-      await gameService.startGame('the_daily_grind');
+      await gameService.startGame(PromptDecks.fallbackDeckId);
       await Future.delayed(Duration(milliseconds: 100));
       expect(gameService.gameState!.currentPhase, GamePhase.truth);
       print('Game started. Phase: Truth Round');
@@ -482,7 +483,7 @@ void main() {
       await Future.delayed(Duration(milliseconds: 200));
 
       // Start Game
-      await gameService.startGame('the_daily_grind');
+      await gameService.startGame(PromptDecks.fallbackDeckId);
       await Future.delayed(Duration(milliseconds: 100));
       
       // Verify that currentPhase is truth and endTime is null
@@ -523,7 +524,7 @@ void main() {
       
       // Should throw for too few active players (< 3)
       expect(
-        () => gs.startGame('the_daily_grind'),
+        () => gs.startGame(PromptDecks.fallbackDeckId),
         throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('At least 3 players are required to start the game'))),
       );
 
@@ -532,7 +533,7 @@ void main() {
       await Future.delayed(Duration(milliseconds: 100));
       
       expect(
-        () => gs.startGame('the_daily_grind'),
+        () => gs.startGame(PromptDecks.fallbackDeckId),
         throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('At least 3 players are required to start the game'))),
       );
     });
@@ -598,7 +599,7 @@ void main() {
       await Future.delayed(Duration(milliseconds: 100));
 
       // Start game (starts in truth phase)
-      await gs.startGame('the_daily_grind');
+      await gs.startGame(PromptDecks.fallbackDeckId);
       await Future.delayed(Duration(milliseconds: 100));
 
       expect(gs.gameState!.currentPhase, GamePhase.truth);

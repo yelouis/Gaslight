@@ -459,13 +459,16 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     return AnimatedLobbyBackground(child: _buildEntryForm(theme));
   }
 
+  /// "Family friendly" means PG-rated, which each deck declares for itself in
+  /// functions/src/prompt_decks.ts. No deck id appears here, so adding a deck
+  /// — at any rating — needs no change to this file.
+  static bool _isFamilyFriendly(String deckId) =>
+      PromptDecks.getDeckRating(deckId) == DeckRating.pg;
+
   List<String> _availableDecks() => [
-    ...PromptDecks.availableDecks.where((d) {
-      if (_familyFriendlyOnly) {
-        return d != 'rated_r_nsfw' && d != 'cah_dark_humor';
-      }
-      return true;
-    }),
+    ...PromptDecks.availableDecks.where(
+      (d) => !_familyFriendlyOnly || _isFamilyFriendly(d),
+    ),
     'custom',
   ];
 
@@ -788,9 +791,11 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                               // the host sees is what starts.
                               if (val) {
                                 final current = gs.gameState?.selectedDeckId;
-                                if (current == 'rated_r_nsfw' || current == 'cah_dark_humor') {
+                                if (current != null &&
+                                    current != 'custom' &&
+                                    !_isFamilyFriendly(current)) {
                                   gs.updateLobbySettings(
-                                    selectedDeckId: PromptDecks.availableDecks.first,
+                                    selectedDeckId: PromptDecks.fallbackDeckId,
                                   );
                                 }
                               }

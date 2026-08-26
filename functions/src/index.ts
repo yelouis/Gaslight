@@ -236,7 +236,7 @@ export function buildCustomPromptPool(activePlayers: PlayerState[], targetSize: 
     }
   }
 
-  const fallbackDeckId = "the_daily_grind";
+  const fallbackDeckId = PromptDecks.getFallbackDeckId();
   let topUpNeeded = targetSize - pool.length;
   if (topUpNeeded > 0) {
     const fallbackPrompts = PromptDecks.drawPrompts(fallbackDeckId, Math.max(targetSize, activePlayers.length) * 2);
@@ -328,7 +328,7 @@ export function assignPromptsFromCustomPool(
 
 export function resolvePromptSource(room: GameState, activePlayers: PlayerState[]): PromptSource {
   const isCustom = room.selectedDeckId === "custom";
-  const fallbackDeckId = room.effectiveDeckId || "the_daily_grind";
+  const fallbackDeckId = room.effectiveDeckId || PromptDecks.getFallbackDeckId();
 
   if (isCustom && activePlayers && activePlayers.length > 0) {
     const pool = buildCustomPromptPool(activePlayers, activePlayers.length);
@@ -337,8 +337,8 @@ export function resolvePromptSource(room: GameState, activePlayers: PlayerState[
 
   const effective =
     room.effectiveDeckId ||
-    (isCustom ? "the_daily_grind" : room.selectedDeckId) ||
-    "the_daily_grind";
+    (isCustom ? PromptDecks.getFallbackDeckId() : room.selectedDeckId) ||
+    PromptDecks.getFallbackDeckId();
   return { kind: "deck", deckId: effective };
 }
 
@@ -357,7 +357,7 @@ export const createRoom = onCall(async (request) => {
   const forgeriesPerCard = data.forgeriesPerCard != null ? Number(data.forgeriesPerCard) : (data.sabotageAnswersCount != null ? Number(data.sabotageAnswersCount) : null);
   const totalRounds = (data.totalRounds as number) || 1;
   const isTimerDisabled = (data.isTimerDisabled as boolean) || false;
-  const selectedDeckId = (data.selectedDeckId as string) || "the_daily_grind";
+  const selectedDeckId = (data.selectedDeckId as string) || PromptDecks.getFallbackDeckId();
   const debugEnabled = (data.debugEnabled as boolean) || false;
 
   if (!playerName || !playerId) {
@@ -588,7 +588,7 @@ export const startGame = onCall(async (request) => {
     // it. The claim is still validated rather than ignored, so a client that
     // disagrees fails loudly here instead of silently starting a deck the
     // lobby is not showing.
-    const deckId: string = room.selectedDeckId || "the_daily_grind";
+    const deckId: string = room.selectedDeckId || PromptDecks.getFallbackDeckId();
     if (selectedDeckId !== deckId) {
       throw new HttpsError(
         "invalid-argument",
@@ -665,7 +665,7 @@ export const startGame = onCall(async (request) => {
       currentPhase: "truth",
       totalPlayers: players.length,
       selectedDeckId: deckId,
-      effectiveDeckId: deckId === "custom" ? "the_daily_grind" : deckId,
+      effectiveDeckId: deckId === "custom" ? PromptDecks.getFallbackDeckId() : deckId,
       forgeriesPerCard,
       sabotageAnswersCount: forgeriesPerCard,
       totalRounds,
@@ -1693,7 +1693,7 @@ export const updateLobbySettings = onCall(async (request) => {
     const updatePayload: Record<string, any> = {
       totalRounds: newTotalRounds,
       isTimerDisabled: isTimerDisabled != null ? isTimerDisabled : (data.isTimerDisabled || false),
-      selectedDeckId: selectedDeckId != null ? selectedDeckId : (data.selectedDeckId || "the_daily_grind"),
+      selectedDeckId: selectedDeckId != null ? selectedDeckId : (data.selectedDeckId || PromptDecks.getFallbackDeckId()),
       expiresAt: ttlFrom(Date.now())
     };
     if (newForgeries !== undefined) {

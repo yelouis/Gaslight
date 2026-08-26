@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/widgets/deck_carousel.dart';
+import 'package:gaslight/utils/prompt_decks.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart';
 
@@ -27,7 +28,7 @@ void main() {
     });
 
     final availableDecks = [
-      'the_daily_grind',
+      PromptDecks.fallbackDeckId,
       'deep_fears_and_phobias',
       'unhinged_quirks',
       'romantic_disasters',
@@ -39,7 +40,7 @@ void main() {
     Future<void> pumpDeckCarousel(
       WidgetTester tester, {
       required bool isHost,
-      String selectedDeckId = 'the_daily_grind',
+      String selectedDeckId = PromptDecks.fallbackDeckId,
       bool reduceMotion = true,
     }) async {
       await tester.runAsync(() async {
@@ -96,13 +97,13 @@ void main() {
     });
 
     testWidgets('non-host can still see which deck is chosen', (tester) async {
-      await pumpDeckCarousel(tester, isHost: false, selectedDeckId: 'the_daily_grind');
+      await pumpDeckCarousel(tester, isHost: false, selectedDeckId: PromptDecks.fallbackDeckId);
 
       expect(find.text('CHOSEN'), findsOneWidget);
     });
 
     testWidgets('host selection still works', (tester) async {
-      await pumpDeckCarousel(tester, isHost: true, selectedDeckId: 'the_daily_grind');
+      await pumpDeckCarousel(tester, isHost: true, selectedDeckId: PromptDecks.fallbackDeckId);
 
       expect(find.text('THE CHOSEN FILE'), findsNothing);
 
@@ -130,7 +131,7 @@ void main() {
     });
 
     testWidgets('does not yank page when selectedDeckId changes within 3 seconds of swipe', (tester) async {
-      String currentSelected = 'the_daily_grind';
+      String currentSelected = PromptDecks.fallbackDeckId;
 
       await tester.pumpWidget(
         StatefulBuilder(

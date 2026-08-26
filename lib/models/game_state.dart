@@ -1,4 +1,5 @@
 import 'card_model.dart';
+import '../utils/prompt_decks.dart';
 
 enum GamePhase { lobby, forgery, truth, vote, reveal, gameOver }
 
@@ -66,7 +67,7 @@ class GameState {
     this.totalRounds = 1,
     this.currentRound = 1,
     this.isTimerDisabled = false,
-    this.selectedDeckId = 'the_daily_grind',
+    this.selectedDeckId = PromptDecks.fallbackDeckId,
     this.effectiveDeckId,
     this.currentRotationIndex = 0,
     this.cards = const [],
@@ -179,7 +180,7 @@ class GameState {
       totalRounds: map['totalRounds']?.toInt() ?? 1,
       currentRound: map['currentRound']?.toInt() ?? 1,
       isTimerDisabled: map['isTimerDisabled'] as bool? ?? false,
-      selectedDeckId: map['selectedDeckId'] as String? ?? 'the_daily_grind',
+      selectedDeckId: map['selectedDeckId'] as String? ?? PromptDecks.fallbackDeckId,
       effectiveDeckId: map['effectiveDeckId'] as String?,
       currentRotationIndex: map['currentRotationIndex']?.toInt() ?? 0,
       cards: (map['cards'] as List<dynamic>? ?? [])
