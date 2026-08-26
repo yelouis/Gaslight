@@ -16,12 +16,12 @@ Measured August 25, 2026:
 | Client tests | **189/189** | `flutter test` |
 | Functions build | clean | `npm --prefix functions run build` |
 | Functions tests | **73/73** | `npm --prefix functions test` |
-| Deploy freshness | **exit 1 — expected**, see below | `./scripts/check_deploy_fresh.sh` |
+| Deploy freshness | **exit 0** — the presence fix is live | `./scripts/check_deploy_fresh.sh` |
 | iOS evidence | **exit 0** — 15 blocks | `./scripts/check_playthrough_evidence.sh` |
 | Web evidence | **exit 0** — 20 blocks | `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` |
 | iOS release build | **exit 0** — 49.9 MB `Runner.app` | `flutter build ios --release --no-codesign` |
 
-**`check_deploy_fresh.sh` exits 1 and that is correct.** Wave M raised the server presence threshold and it is **undeployed**, so production still drops players at 30 s. It goes green after `firebase deploy --only functions` — **the user's call, not yours.** **The beta must not ship before that deploy**, or the fix the beta is meant to validate will not be running.
+**The presence fix is deployed and live.** Verified August 26, 2026: the gate reports FRESH, all 15 functions were deployed after the last `functions/src` commit, and the deployed `handleDisconnect` bundle contains `PRESENCE_STALE_MS` and `120000` with **zero** occurrences of `30000`. Production now drops players at 120 s, not 30 s — so the beta will exercise the fix it is meant to validate.
 
 ---
 
@@ -53,7 +53,7 @@ Checked against the code and falsified in both halves:
 
 **Why no test can do this.** Wave M is guarded everywhere a test can reach, and both guards were falsified. But `flutter test` uses fake timers and never suspends the isolate, so it **cannot reproduce iOS backgrounding** — the exact condition M1 and M2 exist to survive. A simulator is no better: it does not suspend timers the way a locked device does, so **a passing simulator run says nothing here.** This needs a physical phone.
 
-**Prerequisite: the server must be deployed.** `PRESENCE_STALE_MS` lives in Cloud Functions. Until the user deploys, production still uses 30 s and the check would fail for a reason unrelated to the client. **Confirm `./scripts/check_deploy_fresh.sh` exits 0 before starting**, and do not deploy yourself.
+**Prerequisite, already satisfied.** `PRESENCE_STALE_MS` lives in Cloud Functions and **is deployed** — confirmed in the shipped bundle, not just by the gate. Still re-run `./scripts/check_deploy_fresh.sh` and require **exit 0** before starting, since a later server commit would silently invalidate the run.
 
 **The procedure**, on the TestFlight build:
 
