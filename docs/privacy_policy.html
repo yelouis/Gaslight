@@ -1,4 +1,25 @@
 <!DOCTYPE html>
+<!--
+  SOURCE OF TRUTH for the Gaslight Parlor privacy policy.
+
+  Published at:  https://louisye.dev/gaslight/privacy.html
+  Published from: yelouis/yelouis.github.io -> gaslight/privacy.html (branch: gh-pages)
+  That site builds via GitHub Actions static upload, NOT Jekyll, so this file is
+  served verbatim -- do not add front matter, it would render as literal text.
+  The github.io hostname 301-redirects to louisye.dev because the repo has a CNAME;
+  verify against louisye.dev directly, or curl with -L.
+
+  EDIT HERE, THEN RE-COPY. Never edit the published copy directly, or the two drift
+  and the one describing the app is no longer the one people read.
+
+  Every factual claim below is checked against the code:
+    - 8-hour retention        = ROOM_TTL_MS, functions/src/index.ts:175
+    - collected data types    = ios/Runner/PrivacyInfo.xcprivacy (3 types), and the
+                                App Privacy answers in App Store Connect
+    - "no analytics/ads/tracking" = pubspec.yaml has no such SDK; the only Firebase
+                                products are core, auth, firestore, functions
+  If the app starts collecting something new, all four of those must move together.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
