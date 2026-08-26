@@ -31,9 +31,13 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open issues and nothing to decide.** Issues 1–112 are delivered and Wave M is complete.
+**No open issues and nothing to decide.** Issues 1–112 are delivered.
 
-**One check remains, and it can only be done on the beta itself.** Wave M's presence fix is verified everywhere a test can reach — both server sites are guarded by boundary tests written against `PRESENCE_STALE_MS` (falsified: flipping the comparison fails 2 tests), and the resume hook has a widget test asserting the immediate write (falsified: removing the hook fails it). **But fake timers under `flutter test` cannot reproduce iOS suspension, which is the entire condition the wave exists for.** On the first TestFlight build: join a room, **lock the phone 60 s** → still in the room and the host can still start; **lock 3 min** → correctly dropped. The second half matters as much as the first, or M1 has simply disabled presence. A simulator is not evidence — it does not suspend timers the way a locked device does. The server half is **deployed and live** (verified August 26, 2026 in the shipped bundle: `PRESENCE_STALE_MS` and `120000` present, `30000` absent), so the beta will exercise the real fix. Procedure in `agent_execution_guide.md` §2.
+**Wave N — device validation of the deck refactor — is specced and awaiting a run.** The catalogue refactor (`353d93f`) made deck metadata data rather than code: rating, display name and the fallback are declared per deck in `functions/src/prompt_decks.ts`, `lib/utils/prompt_decks.dart` is generated, and **no file outside the catalogue branches on a deck id**. Every gate is green and the logic is unit-tested, but **none of it has run on a device.** Procedure in `agent_execution_guide.md` §3.
+
+> **Hard prerequisite: the server must be deployed first.** `check_deploy_fresh.sh` exits 1 — production still runs the **old** deck set while the client offers the new one, so a validation run today would fail on Issue 106's mismatch guard rather than on anything real. `firebase deploy --only functions` is the user's call.
+
+The one assertion the wave turns on is **D6**: for each of the five decks, cross-check the prompt text on screen against that deck's array in the catalogue. "A prompt appeared" proves nothing — a prompt appearing from the *wrong* deck is the exact bug that started this.
 
 ---
 
