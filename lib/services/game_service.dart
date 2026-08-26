@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'audio_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/game_state.dart';
@@ -15,7 +16,9 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:uuid/uuid.dart';
 
-class GameService extends ChangeNotifier {
+class GameService extends ChangeNotifier with WidgetsBindingObserver {
+  static const int presenceStaleMs = 120000;
+
   final FirebaseFirestore _db;
   final FirebaseFunctions _functions;
 
@@ -292,9 +295,14 @@ class GameService extends ChangeNotifier {
   }
 
   bool _heartbeatDisabledForTest = false;
+  bool _isObserverRegistered = false;
 
   void _startHeartbeat(String roomCode, String playerId) {
     if (_heartbeatDisabledForTest) return;
+    if (!_isObserverRegistered) {
+      WidgetsBinding.instance.addObserver(this);
+      _isObserverRegistered = true;
+    }
     print("DEBUG HEARTBEAT: started timer for room: $roomCode, player: $playerId");
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
@@ -310,14 +318,46 @@ class GameService extends ChangeNotifier {
     });
   }
 
+  void _stopObserver() {
+    if (_isObserverRegistered) {
+      WidgetsBinding.instance.removeObserver(this);
+      _isObserverRegistered = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _handleAppResumed();
+    }
+  }
+
+  void _handleAppResumed() {
+    final roomCode = _gameState?.roomCode;
+    final playerId = _currentPlayerId;
+    if (roomCode == null || playerId == null || _heartbeatDisabledForTest) return;
+
+    // 1. Write lastSeen immediately
+    try {
+      _db.collection('rooms').doc(roomCode).collection('players').doc(playerId).update({
+        'lastSeen': DateTime.now().millisecondsSinceEpoch,
+      }).catchError((_) {});
+    } catch (_) {}
+
+    // 2. Cancel and restart the heartbeat timer
+    _startHeartbeat(roomCode, playerId);
+  }
+
   @visibleForTesting
   void stopHeartbeat() {
     _heartbeatDisabledForTest = true;
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+    _stopObserver();
   }
 
   Future<void> _clearLocalRoomState() async {
+    _stopObserver();
     _roomSubscription?.cancel();
     _playersSubscription?.cancel();
     _heartbeatTimer?.cancel();
@@ -346,6 +386,7 @@ class GameService extends ChangeNotifier {
     final roomCode = _gameState?.roomCode;
     final playerId = _currentPlayerId;
 
+    _stopObserver();
     _roomSubscription?.cancel();
     _playersSubscription?.cancel();
     _heartbeatTimer?.cancel();
@@ -408,12 +449,12 @@ class GameService extends ChangeNotifier {
 
       final now = DateTime.now().millisecondsSinceEpoch;
       
-      // Clean up inactive/dead players (30 seconds threshold)
+      // Clean up inactive/dead players (presenceStaleMs threshold)
       final deadPlayers = _players.where((p) {
         if (p.id == _currentPlayerId) return false;
         final lastSeen = p.lastSeen;
         if (lastSeen == null) return false;
-        return (now - lastSeen) > 30000;
+        return (now - lastSeen) > presenceStaleMs;
       }).toList();
 
       for (var dp in deadPlayers) {
@@ -630,6 +671,7 @@ class GameService extends ChangeNotifier {
   @override
   void dispose() {
     print("DEBUG HEARTBEAT: gameService.dispose() called");
+    _stopObserver();
     _roomSubscription?.cancel();
     _playersSubscription?.cancel();
     _heartbeatTimer?.cancel();
