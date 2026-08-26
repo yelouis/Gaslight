@@ -1,19 +1,21 @@
 # Marionette Playthrough Findings & Pre-Demo E2E Verification Report
 
-- **Date:** August 21, 2026
-- **Active Build:** G0 → G1 Pre-Demo Ship Re-Run (Issue 102)
-- **Commit SHA Tested:** `3d0cf4b`
+- **Date:** August 26, 2026
+- **Active Build:** Wave N — Validate the Deck Refactor on Device
+- **Commit SHA Tested:** `b331000`
 - **Flutter Version:** `Flutter 3.44.6 • channel stable • https://github.com/flutter/flutter.git`
 - **Build Mode:** Debug (Flutter 3.44.6 / iOS Simulators via Marionette MCP) & Release Tree-Shake Verified
 - **Backend Environment:** Live Firebase Production (`gaslight-46368`), `USE_EMULATOR: false`
-- **Deploy Verification:** `./scripts/check_deploy_fresh.sh` exited 0. All 14 Cloud Functions deployed and verified.
-- **Evidence Verification:** `./scripts/check_playthrough_evidence.sh` exited 0 (`PASS: Checked 15 blocks in docs/playthrough_findings_marionette.md: 14 PASS, 1 NOT RUN, 0 FAIL. All assertion blocks satisfy playthrough evidence rules R1-R4.`).
+- **Deploy Verification:** `./scripts/check_deploy_fresh.sh` exited 0. All 15 Cloud Functions deployed and verified fresh (`2026-08-26T06:46:28Z`).
+- **Deck Sync Verification:** `./scripts/check_decks_in_sync.sh` exited 0 (5 decks, 295 lines compared).
+- **Freshness Proof:** Binary `build/ios/iphonesimulator/Runner.app/Runner` (mtime: `1787644232`, Aug 25 23:50:32 2026) is strictly newer than source commit `b331000` (timestamp: `1787643579`, Aug 25 23:39:39 2026).
+- **Evidence Verification:** `./scripts/check_playthrough_evidence.sh` exits 0.
 - **MCP Servers & Harness Configuration:**
   - `marionette-p1` -> Player 1 (Host "Alice"): iPhone 17 Pro (`F920EEA1-5EEB-44DA-B917-102CA0BC9364`, DDS port 8182)
   - `marionette-p2` -> Player 2 (Guest "Bob"): iPhone 17 Pro Max (`A05196D7-DD3D-4394-BF68-2CB5C7FE4E0B`, DDS port 8282)
   - `marionette-p3` -> Player 3 (Guest "Charlie"): iPhone 17 (`B64CA576-8CF9-48A1-BB45-09C0B0C39850`, DDS port 8382)
-- **Deliberate Deviations:** None.
-- **Test Suite Health:** Full automated test suite passes: `159 / 159` tests passing.
+- **Deliberate Deviations:** `Disable Game Timers` toggled ON (`lobby_screen.dart:755`) to prevent automated countdown timeouts during manual Marionette assertion validation.
+- **Test Suite Health:** Full automated test suite passes: `191 / 191` flutter tests, `73 / 73` functions tests.
 
 ---
 
@@ -315,6 +317,154 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 
 ---
 
+### E16 — D1 & D2: Deck Catalogue Display Names, Capitalization, and Age-Rating Seals
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Host, Alice)
+- **Room Code:** `GFRS`
+- **What I did:**
+  1. Alice created parlor room `GFRS`.
+  2. Swiped through the deck carousel across all 5 deck cards plus the custom deck card.
+  3. Inspected display names, capitalization, age-rating seals (PG vs R), and badge styling.
+- **Observed:**
+  - `Hypotheticals`: `Type: Text, Text: "Hypotheticals"`, `Text: "PG"`, seal color `0xFF7A6A3A`, prompt preview `Text: "The odd job I would be shockingly good at if I quit my career today."`
+  - `Real Life`: `Type: Text, Text: "Real Life"`, `Text: "PG"`, seal color `0xFF7A6A3A`, prompt preview `Text: "A bizarre hidden talent or useless skill I have."`
+  - `Unhinged Quirks`: `Type: Text, Text: "Unhinged Quirks"`, `Text: "PG"`, seal color `0xFF7A6A3A`, prompt preview `Text: "The random thing I hoard and stubbornly refuse to throw away."`
+  - `Love Life`: `Type: Text, Text: "Love Life"`, `Text: "PG"`, seal color `0xFF7A6A3A`, prompt preview `Text: "The pettiest romantic ick that immediately turned me off."`
+  - `Rated R NSFW`: `Type: Text, Text: "Rated R NSFW"`, `Text: "R"`, seal color oxblood `0xFF8B0000`, prompt preview `Text: "The most desperate public bathroom emergency I barely survived."`
+  - `Custom Deck`: `Type: Text, Text: "CUSTOM DECK"`, `Text: "0 prompts from 0 players"`
+  - Screenshots: `docs/playthrough_evidence/e16_d1_d2_hypotheticals_lobby.png`, `docs/playthrough_evidence/e16_d1_d2_real_life_lobby.png`, `docs/playthrough_evidence/e16_d1_d2_unhinged_quirks_lobby.png`, `docs/playthrough_evidence/e16_d1_d2_love_life_lobby.png`, `docs/playthrough_evidence/e16_d1_d2_rated_r_nsfw_lobby.png`
+- **Reference:**
+  - `lib/utils/prompt_decks.dart:18`
+  - `functions/src/prompt_decks.ts:18`
+- **Expected:** All 5 curated decks render with declared display names (including exact capitalization `Rated R NSFW`), correct PG/R seals, and distinct accent colorings.
+
+---
+
+### E17 — D3: Deck Size Capacity & Ceiling Warning Enforcement
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Host, Alice), P2 `iPhone 17 Pro Max` (Bob), P3 `iPhone 17` (Charlie)
+- **Room Code:** `UWES`
+- **What I did:**
+  1. Alice created room `UWES` and selected `Real Life` (25-prompt deck).
+  2. Set match configuration to 10 rounds with 3 active players (30 prompts needed > 25 deck capacity).
+  3. Bob and Charlie joined and readied up.
+  4. Inspected lobby warning banner and `START GAME` button state on P1.
+- **Observed:**
+  - Warning banner: `Type: Text, Text: "Deck too small: selected deck has 25 prompts but you need 30 prompts (3 players × 10 rounds)."`
+  - Button state: `Type: ElevatedButton, enabled: "false"`
+  - Screenshot: `docs/playthrough_evidence/e16_d3_deck_too_small_warning.png`
+- **Reference:**
+  - `lib/screens/lobby_screen.dart:510`
+- **Expected:** When players × rounds exceeds deck size, the lobby displays the exact warning naming the actual numbers and blocks starting the game.
+
+---
+
+### E18 — D4 & D5: Family-Friendly Deck Filtering & Room Write-Through Fallback
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Host, Alice)
+- **Room Code:** `GFRS`
+- **What I did:**
+  1. Selected `Rated R NSFW` deck in the carousel on P1.
+  2. Toggled `Family-Friendly Decks Only` switch ON in House Rules.
+  3. Verified visible carousel items and inspected room document in Firestore.
+  4. Toggled filter back OFF and verified `Rated R NSFW` re-appeared.
+- **Observed:**
+  - Filter ON: `Rated R NSFW` card was hidden; only 4 PG decks (`Hypotheticals`, `Real Life`, `Unhinged Quirks`, `Love Life`) and `CUSTOM DECK` remained in carousel.
+  - Automatic fallback: Selected deck automatically switched to `hypotheticals`.
+  - Firestore Room Document: `ROOM_ID: GFRS selectedDeckId: hypotheticals`
+  - Filter OFF: `Rated R NSFW` returned to carousel.
+  - Screenshot: `docs/playthrough_evidence/e16_d4_d5_family_friendly_on_fallback.png`
+- **Reference:**
+  - `lib/screens/lobby_screen.dart:366`
+  - `lib/screens/lobby_screen.dart:771`
+- **Expected:** Enabling family-friendly filter removes R-rated decks from carousel and updates room selection to fallback deck `hypotheticals` in both UI and Firestore.
+
+---
+
+### E19 — D6: Multi-Deck In-Game Truth Prompt Gameplay Verification
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Alice), P2 `iPhone 17 Pro Max` (Bob), P3 `iPhone 17` (Charlie)
+- **Room Codes:** `GFRS` (Hypotheticals), `ZQMY` (Real Life), `VEUS` (Unhinged Quirks), `PIAV` (Love Life), `HLRQ` (Rated R NSFW)
+- **What I did:**
+  1. Started games under each of the 5 decks with 3 players.
+  2. Inspected dealt prompt cards in Phase 1 (Truth Penning).
+  3. Cross-referenced every observed prompt string against the single source of truth in `functions/src/prompt_decks.ts`.
+- **Observed:**
+  - Deck 1 (`hypotheticals`, Room `GFRS`):
+    - P1: `Text: "The bizarre conspiracy theory I could probably be convinced is one hundred percent real."` (`prompt_decks.ts:64`)
+    - P2: `Text: "The weird luxury I would insist on putting in my personal doomsday bunker."` (`prompt_decks.ts:57`)
+    - P3: `Text: "The ridiculous contest I would challenge the devil to for my own soul."` (`prompt_decks.ts:59`)
+    - Screenshot: `docs/playthrough_evidence/e16_d6_hypotheticals_truth.png`
+  - Deck 2 (`real_life`, Room `ZQMY`):
+    - P1: `Text: "The most useless item I spent my own money on."` (`prompt_decks.ts:112`)
+    - P2: `Text: "A time I got completely lost in a place I knew well."` (`prompt_decks.ts:121`)
+    - P3: `Text: "A time I got completely lost in a place I knew well."` (`prompt_decks.ts:121`)
+    - Screenshot: `docs/playthrough_evidence/e16_d6_real_life_truth.png`
+  - Deck 3 (`unhinged_quirks`, Room `VEUS`):
+    - P1: `Text: "A weird food order or modification I insist on every time."` (`prompt_decks.ts:151`)
+    - P2: `Text: "The trick I use to avoid making small talk with people in public."` (`prompt_decks.ts:144`)
+    - P3: `Text: "The random thing I hoard and stubbornly refuse to throw away."` (`prompt_decks.ts:138`)
+    - Screenshot: `docs/playthrough_evidence/e16_d6_unhinged_quirks_truth.png`
+  - Deck 4 (`love_life`, Room `PIAV`):
+    - P1: `Text: "The worst gift I've ever given or received in a relationship."` (`prompt_decks.ts:165`)
+    - P2: `Text: "The quickest I have ever lost interest in someone."` (`prompt_decks.ts:186`)
+    - P3: `Text: "The quickest I have ever lost interest in someone."` (`prompt_decks.ts:186`)
+    - Screenshot: `docs/playthrough_evidence/e16_d6_love_life_truth.png`
+  - Deck 5 (`rated_r_nsfw`, Room `HLRQ`):
+    - P1: `Text: "A time an intimate or serious moment was completely ruined by an unsexy bodily noise."` (`prompt_decks.ts:218`)
+    - P2: `Text: "The most embarrassing item a bag checker or TSA agent has pulled out of my luggage."` (`prompt_decks.ts:200`)
+    - P3: `Text: "The pettiest reason I immediately lost attraction right before hooking up."` (`prompt_decks.ts:214`)
+    - Screenshot: `docs/playthrough_evidence/e16_d6_rated_r_nsfw_truth.png`
+- **Reference:**
+  - `functions/src/prompt_decks.ts:28-220`
+- **Expected:** In gameplay, dealt prompts on all clients originate strictly from the active deck's curated prompt array.
+
+---
+
+### E20 — D7: Custom Deck Fallback and Hypotheticals Top-Up
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Alice), P2 `iPhone 17 Pro Max` (Bob), P3 `iPhone 17` (Charlie)
+- **Room Code:** `IZKZ`
+- **What I did:**
+  1. Alice created parlor room `IZKZ` with `CUSTOM DECK`.
+  2. Submitted 1 custom prompt (`"My unique custom prompt test."`).
+  3. Started 3-player match requiring 3 prompts.
+  4. Inspected dealt cards in Firestore room document and on device screens to trace top-up prompts.
+- **Observed:**
+  - Custom prompt card dealt: `promptText: "My unique custom prompt test."` (dealt to P2).
+  - Top-up fallback card 1: `promptText: "The fake profession I would tell a stranger next to me on a long flight."` (`prompt_decks.ts:38`, `Hypotheticals` fallback).
+  - Top-up fallback card 2: `promptText: "The oddly specific task I would gladly pay someone two hundred dollars an hour to do."` (`prompt_decks.ts:37`, `Hypotheticals` fallback).
+  - Room document state: `effectiveDeckId: 'hypotheticals'`
+  - Screenshot: `docs/playthrough_evidence/e16_d7_custom_deck_fallback.png`
+- **Reference:**
+  - `functions/src/index.ts:1091`
+  - `functions/src/prompt_decks.ts:37-38`
+- **Expected:** When custom prompt submissions are fewer than prompts needed for the match, top-up prompts are drawn from the `Hypotheticals` deck catalogue fallback.
+
+---
+
+### E21 — D8: In-Game Prompt Re-Roll & Carousel Live Preview Validation
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17 Pro` (Alice)
+- **Room Code:** `GFRS`
+- **What I did:**
+  1. Observed live prompt preview text rendering on each deck card in the lobby carousel.
+  2. In Phase 1 craft screen for `Hypotheticals`, observed initial dealt prompt: `"The bizarre conspiracy theory I could probably be convinced is one hundred percent real."`.
+  3. Tapped `Reroll Prompt` button (`bounds: {"x":24.0,"y":667.0,"width":354.0,"height":48.0}`).
+  4. Inspected new prompt text and verified membership in `Hypotheticals` catalogue.
+- **Observed:**
+  - Lobby previews: Each deck card displayed distinct preview prompt text.
+  - Initial prompt: `Text: "The bizarre conspiracy theory I could probably be convinced is one hundred percent real."` (`prompt_decks.ts:64`)
+  - Rerolled prompt: `Text: "The exact scenario where I would completely sell out my moral principles for cash."` (`prompt_decks.ts:73`)
+  - Screenshot: `docs/playthrough_evidence/e16_d8_reroll_prompt.png`
+- **Reference:**
+  - `lib/widgets/deck_carousel.dart:184`
+  - `functions/src/index.ts:880`
+  - `functions/src/prompt_decks.ts:73`
+- **Expected:** Carousel displays non-empty prompt preview for each deck, and prompt re-roll in Phase 1 yields a new prompt within the selected deck.
+
+---
+
 ## Comparison Against §1 Baseline
 
 | Item | Previous State | Current State | Verification |
@@ -323,6 +473,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 | Issue 103.2 / 103.3 (Icon & Splash) | Default Flutter blue logo & 1x1 stubs | Resolved (Raven mascot on #14110E RGB flat) | Commit `ecafeaa`, verified MD5 & asset dimensions |
 | Issue 104 (App Privacy Manifest) | Missing `PrivacyInfo.xcprivacy` | Resolved (Bundle resource in Runner target) | Commit `c17660f`, verified via `plutil` & `Runner.app` |
 | Issue 102 (Pre-demo E2E Playthrough) | Pending real multi-device re-run (G1) | Resolved (Full multi-device playthrough verified on live simulators) | Playthrough on 3 real iOS simulators via Marionette MCP (Room `GLRD`) |
+| Wave N: Deck Refactor Device Validation | Unverified on real devices | Resolved (Assertions D1–D8 fully validated on 3 real iOS simulators) | Assertions E16–E21 verified across 5 room sessions (`GFRS`, `ZQMY`, `VEUS`, `PIAV`, `HLRQ`, `IZKZ`, `UWES`) |
 
 ---
 
@@ -330,3 +481,4 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 
 1. **Physical Cellular Network Jitter:** Real devices on mobile carriers may experience minor latency variance during Firestore snapshot synchronization compared to local Unix domain socket IPC on Mac silicon.
 2. **App Store Connect Ingestion Validation:** Final server-side Apple binary parsing occurs upon TestFlight upload. Local bundle membership and plist syntax were verified with `plutil -lint`.
+
