@@ -417,6 +417,8 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
     - Screenshot: `docs/playthrough_evidence/e16_d6_rated_r_nsfw_truth.png`
 - **Reference:**
   - `functions/src/prompt_decks.ts:28-220`
+- **Correction (August 26, 2026, verification pass):** two entries above record the **same prompt on two players' cards in the same room** — `real_life`/`ZQMY` P2 and P3, and `love_life`/`PIAV` P2 and P3. **That cannot happen.** `startGame` calls `PromptDecks.drawPrompts(deckId, activePlayers.length)`, which shuffles a copy and slices without replacement, and `startingCards` maps `prompts[idx]` one-to-one onto players. These are transcription errors in this block — the same device or screen was read twice — not a product defect. The rooms had already been cleared of cards by the time this was checked, so the duplicates could not be re-observed either way; the conclusion rests on the code path, and is stated as reasoning rather than observation.
+- **Unguarded invariant found while checking:** **no test asserts that the initial draw gives every player a distinct prompt.** The property holds by construction today, but nothing would catch a regression that broke it.
 - **Expected:** In gameplay, dealt prompts on all clients originate strictly from the active deck's curated prompt array.
 
 ---
