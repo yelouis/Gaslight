@@ -56,11 +56,11 @@
 
 **Recommendation: B before the beta, C afterwards if it still bites.** B is small enough to land alongside the TestFlight setup and removes the common case; C is the durable answer but is not something to start days before a first release.
 
-Your selection: _____
+Your selection: Proceed with Option B.
 
 ---
 
-**One issue is open and needs your selection: Issue 112**, filed August 25, 2026 while preparing the TestFlight beta. Everything else is delivered.
+**Issue 112 has a selection (Option B) and is specced for build as Wave M** — see `agent_execution_guide.md` §2–§3, ordered **M1 (server threshold) → M2 (resume hook)**. Everything else is delivered.
 
 **The match summary has now been observed rendering in a real game** (block **W20**, room `QZER`, 3 players, `totalRounds = 2`, three isolated browser contexts). Verified on August 24, 2026 by opening the artefact rather than reading the block: every quoted string in W20 appears verbatim in `w20_match_summary.png` — **BEST LIE OF THE NIGHT** `"Sapphire"` by Alice with `Fooled 1 player`, **CLEANEST TRUTH** `"Archimedes"` with `Found by only 0 players`, and **THE STING** with `2 wrong votes` — alongside the FINAL STANDINGS table. Best Lie quotes a genuine player-authored forgery, not a placeholder.
 
