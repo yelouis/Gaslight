@@ -169,6 +169,9 @@ export function computeMatchSummary(cards: CardSummary[], players: PlayerState[]
 
 const kMissingAnswerPlaceholder = "THE SOUL IS SILENT";
 
+/** How long a player may go unheard from before the server treats them as gone. */
+export const PRESENCE_STALE_MS = 120_000;
+
 const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
 
 function ttlFrom(nowMs: number): Timestamp {
@@ -475,10 +478,10 @@ export const joinRoom = onCall(async (request) => {
         : null;
       const hasToken = !!storedHash && !!presentedHash && storedHash === presentedHash;
 
-      // A seat nobody has heartbeated for 30s is abandoned and may be reclaimed.
+      // A seat nobody has heartbeated for PRESENCE_STALE_MS is abandoned and may be reclaimed.
       // This preserves recovery after a reinstall (which loses the token) without
       // letting anyone take a live seat. Mirrors handleDisconnect's isDead rule.
-      const isStale = Date.now() - (existing.lastSeen ?? 0) > 30000;
+      const isStale = Date.now() - (existing.lastSeen ?? 0) > PRESENCE_STALE_MS;
 
       if (!isOwner && !hasToken && !isStale) {
         throw new HttpsError("permission-denied", "This seat is held by another player.");
@@ -1130,7 +1133,7 @@ export const handleDisconnect = onCall(async (request) => {
     const callerPlayer = players.find(p => p.authUid === callerUid);
     const disconnectedPlayer = players.find(p => p.id === disconnectedPlayerId);
     const phase = room.currentPhase;
-    const isDead = disconnectedPlayer && disconnectedPlayer.lastSeen && (Date.now() - disconnectedPlayer.lastSeen) > 30000;
+    const isDead = disconnectedPlayer && disconnectedPlayer.lastSeen && (Date.now() - disconnectedPlayer.lastSeen) > PRESENCE_STALE_MS;
 
     if (!callerPlayer || (!callerPlayer.isHost && callerPlayer.id !== disconnectedPlayerId && !isDead)) {
       throw new HttpsError("permission-denied", "Not authorized to trigger disconnect.");

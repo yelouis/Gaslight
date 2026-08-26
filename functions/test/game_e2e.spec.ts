@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import admin from 'firebase-admin';
+import { PRESENCE_STALE_MS } from '../src/index';
 
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
@@ -658,7 +659,7 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     // Find forgery option and its author
     const forgeryEntry = Object.entries(answerAuthors).find(([optId, author]) => author !== currentReaderId);
     expect(forgeryEntry).to.not.be.undefined;
-    const [forgeryOptId, forgerId] = forgeryEntry!;
+    const [forgeryOptId, forgerId] = forgeryEntry! as [string, string];
 
     // Find a voter who is not the forger and not the reader
     const fooledVoterId = ['p_alice', 'p_bob', 'p_charlie'].find(id => id !== forgerId && id !== currentReaderId)!;
@@ -839,9 +840,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     });
     expect(tokenRejoin.role).to.equal('unassigned');
 
-    // Over-reach Guard 3: Stale seat (> 30s) can be reclaimed without token by different user
+    // Over-reach Guard 3: Stale seat (> PRESENCE_STALE_MS) can be reclaimed without token by different user
     const playerRef = db.collection('rooms').doc(roomCode).collection('players').doc('p_host');
-    await playerRef.update({ lastSeen: Date.now() - 35000 });
+    await playerRef.update({ lastSeen: Date.now() - (PRESENCE_STALE_MS + 5000) });
     const staleReclaimUser = await createAnonUser();
     const staleReclaim = await callFn('joinRoom', staleReclaimUser.idToken, {
       roomCode,
@@ -1913,7 +1914,6 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       });
 
       const roomRef = db.collection('rooms').doc(roomCode);
-      const hostPlayerRef = roomRef.collection('players').doc('p_host');
 
       // Host disconnects in lobby phase
       const disconnectRes = await callFn('handleDisconnect', hostUser.idToken, {
@@ -3173,8 +3173,8 @@ describe('Gaslight E2E Game Emulator Tests', () => {
 
       it('Sentinel containment: custom string does not appear inside rerollPrompt or advanceToNextResolution bodies', async () => {
         const fs = await import('fs');
-        const { fileURLToPath } = await import('url');
-        const indexPath = fileURLToPath(new URL('../src/index.ts', import.meta.url));
+        const path = await import('path');
+        const indexPath = path.resolve(__dirname, '../src/index.ts');
         const source = fs.readFileSync(indexPath, 'utf-8');
 
         // Extract rerollPrompt function body
@@ -3602,6 +3602,127 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         const roomSnap = await roomRef.get();
         expect(roomSnap.data()?.currentPhase).to.equal('gameOver');
         expect(roomSnap.data()?.matchSummary).to.be.an('object');
+      });
+    });
+
+    describe('Issue 112 (M1): One shared presence threshold (PRESENCE_STALE_MS = 120_000)', () => {
+      it('Site 1 (joinRoom seat re-bind): protects live seats under PRESENCE_STALE_MS and allows reclaim over PRESENCE_STALE_MS', async () => {
+        const hostUser = await createAnonUser();
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          sabotageAnswersCount: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const playerRef = db.collection('rooms').doc(roomCode).collection('players').doc('p_host');
+        const strangerUser = await createAnonUser();
+
+        // 1. Boundary below PRESENCE_STALE_MS (fresh by 5s) -> stranger rejected with PERMISSION_DENIED
+        await playerRef.update({ lastSeen: Date.now() - (PRESENCE_STALE_MS - 5000) });
+        try {
+          await callFn('joinRoom', strangerUser.idToken, {
+            roomCode,
+            playerName: 'Attacker',
+            playerId: 'p_host'
+          });
+          expect.fail('Expected joinRoom to fail for non-stale seat');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('PERMISSION_DENIED');
+        }
+
+        // 2. Boundary above PRESENCE_STALE_MS (stale by 5s) -> stranger succeeds in reclaiming seat
+        await playerRef.update({ lastSeen: Date.now() - (PRESENCE_STALE_MS + 5000) });
+        const reclaimRes = await callFn('joinRoom', strangerUser.idToken, {
+          roomCode,
+          playerName: 'Reclaimer',
+          playerId: 'p_host'
+        });
+        expect(reclaimRes.role).to.equal('unassigned');
+      });
+
+      it('Site 2 (handleDisconnect isDead): rejects third-party disconnect under PRESENCE_STALE_MS and allows it over PRESENCE_STALE_MS', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          sabotageAnswersCount: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+
+        const g1Ref = roomRef.collection('players').doc('p_g1');
+
+        // 1. Boundary below PRESENCE_STALE_MS (fresh by 5s) -> non-host guest2 cannot disconnect guest1
+        await g1Ref.update({ lastSeen: Date.now() - (PRESENCE_STALE_MS - 5000) });
+        try {
+          await callFn('handleDisconnect', guest2User.idToken, {
+            roomCode,
+            disconnectedPlayerId: 'p_g1'
+          });
+          expect.fail('Expected handleDisconnect to reject third-party non-dead disconnect');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('PERMISSION_DENIED');
+        }
+
+        // Verify guest1 is still present in room
+        const g1Doc = await g1Ref.get();
+        expect(g1Doc.exists).to.be.true;
+
+        // 2. Boundary above PRESENCE_STALE_MS (stale by 5s) -> non-host guest2 CAN trigger disconnect on dead guest1
+        await g1Ref.update({ lastSeen: Date.now() - (PRESENCE_STALE_MS + 5000) });
+        const disconnectRes = await callFn('handleDisconnect', guest2User.idToken, {
+          roomCode,
+          disconnectedPlayerId: 'p_g1'
+        });
+        expect(disconnectRes.success).to.be.true;
+
+        // Verify guest1 is now removed
+        const g1DocAfter = await g1Ref.get();
+        expect(g1DocAfter.exists).to.be.false;
+      });
+
+      it('Over-reach guard: below-3 auto-end still fires when player is pruned past PRESENCE_STALE_MS during active game', async () => {
+        const hostUser = await createAnonUser();
+        const guest1User = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guest1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: 'the_daily_grind' });
+
+        // Set Charlie as dead (> PRESENCE_STALE_MS)
+        const g2Ref = roomRef.collection('players').doc('p_g2');
+        await g2Ref.update({ lastSeen: Date.now() - (PRESENCE_STALE_MS + 5000) });
+
+        // Guest1 triggers disconnect on dead Charlie -> drops room to 2 players -> auto-ends to gameOver
+        await callFn('handleDisconnect', guest1User.idToken, { roomCode, disconnectedPlayerId: 'p_g2' });
+
+        const roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('gameOver');
       });
     });
   });
