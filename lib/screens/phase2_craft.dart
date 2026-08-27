@@ -64,6 +64,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
   }
 
   void _submitAnswer(GameService gs) async {
+    if (_isSubmitting) return;
     final text = _answerController.text.trim();
     if (text.isEmpty) return;
 
@@ -446,14 +447,17 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                 size: 40,
               ),
               const SizedBox(width: 12),
-              Text(
-                isTruthRound ? 'YOUR TRUTH' : targetPlayer.name.toUpperCase(),
-                style: const TextStyle(
-                  fontFamily: 'CormorantGaramond',
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.ink,
-                  letterSpacing: 1.5,
+              Flexible(
+                child: Text(
+                  isTruthRound ? 'YOUR TRUTH' : targetPlayer.name.toUpperCase(),
+                  style: const TextStyle(
+                    fontFamily: 'CormorantGaramond',
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.ink,
+                    letterSpacing: 1.5,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -509,6 +513,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                           key: const ValueKey('answer_field'),
                           controller: _answerController,
                           maxLines: 3,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _submitAnswer(gs),
                           // Capped so the vote screen can render the whole
                           // answer without an ellipsis (see card_grid.dart).
                           // The server enforces the same bound - a client
@@ -537,12 +543,6 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                               fontStyle: FontStyle.italic,
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                        PrimaryButton(
-                          text: 'SUBMIT DOSSIER',
-                          loading: _isSubmitting,
-                          onPressed: () => _submitAnswer(gs),
                         ),
                       ],
                     ),
@@ -619,6 +619,18 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                     ),
                 ],
               ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: SizedBox(
+            width: double.infinity,
+            child: PrimaryButton(
+              text: 'SUBMIT DOSSIER',
+              loading: _isSubmitting,
+              onPressed: () => _submitAnswer(gs),
             ),
           ),
         ),
