@@ -13,22 +13,13 @@ class VotingAnswer {
 
 /// Answers are capped at [kMaxAnswerLength] characters on both the client
 /// (`phase2_craft.dart`) and the server (`submitAnswer`), and an option card
-/// must render the longest legal answer in full — no ellipsis. The font steps
-/// down with length so 100 characters still fit the smallest card: two columns
-/// at 375 px wide with `childAspectRatio` 1.1, which gives the text 136.5 x
-/// 121.6 logical pixels. At 12 px with height 1.3 that is 7 lines of headroom,
-/// and 100 characters need at most 7 even with pathological wrapping.
+/// must render the longest legal answer in full — no ellipsis. In portrait,
+/// answers render one option per row, bounded between 72 and 132 logical
+/// pixels high so [AutoSizedAnswerText] scales cleanly without truncation.
 ///
 /// `test/vote_option_truncation_test.dart` asserts this mechanically via
-/// `RenderParagraph.didExceedMaxLines`; it fails if this table is loosened or
-/// the cap is raised without re-tuning.
+/// `RenderParagraph.didExceedMaxLines` at 320, 375, and 430 pt viewports.
 const int kMaxAnswerLength = 100;
-
-double answerFontSizeFor(int length) {
-  if (length <= 40) return 16;
-  if (length <= 70) return 14;
-  return 12;
-}
 
 class AutoSizedAnswerText extends StatelessWidget {
   final String text;
@@ -102,27 +93,49 @@ class CardGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
+
+    if (isPortrait) {
+      return ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: answers.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final ans = answers[index];
+          return ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 72, maxHeight: 132),
+            child: SizedBox(
+              height: 92,
+              child: _buildCardItem(context, ans),
+            ),
+          );
+        },
+      );
+    }
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: isPortrait ? 2 : 3,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: isPortrait ? 1.1 : 1.3,
+        childAspectRatio: 1.3,
       ),
       itemCount: answers.length,
-      itemBuilder: (context, index) {
-        final ans = answers[index];
-        final isSelfAnswer = myOptionIdForThisCard != null
-            ? ans.authorId == myOptionIdForThisCard
-            : ans.isSelfAnswer;
-        final isPlaceholder = ans.text == 'THE SOUL IS SILENT' || ans.text.trim().isEmpty;
-        final isUnvotable = isTarget || isSelfAnswer || isPlaceholder;
-        final isSelected = selectedAuthorId == ans.authorId;
+      itemBuilder: (context, index) => _buildCardItem(context, answers[index]),
+    );
+  }
+
+  Widget _buildCardItem(BuildContext context, VotingAnswer ans) {
+    final theme = Theme.of(context);
+    final isSelfAnswer = myOptionIdForThisCard != null
+        ? ans.authorId == myOptionIdForThisCard
+        : ans.isSelfAnswer;
+    final isPlaceholder = ans.text == 'THE SOUL IS SILENT' || ans.text.trim().isEmpty;
+    final isUnvotable = isTarget || isSelfAnswer || isPlaceholder;
+    final isSelected = selectedAuthorId == ans.authorId;
 
         return Material(
           color: Colors.transparent,
@@ -257,7 +270,5 @@ class CardGrid extends StatelessWidget {
             ),
           ),
         );
-      },
-    );
   }
 }

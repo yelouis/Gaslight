@@ -133,21 +133,12 @@ void main() {
     expectNoTruncation(tester, answer);
   });
 
-  testWidgets('the font table steps down with length', (tester) async {
-    expect(answerFontSizeFor(10), 16);
-    expect(answerFontSizeFor(40), 16);
-    expect(answerFontSizeFor(41), 14);
-    expect(answerFontSizeFor(70), 14);
-    expect(answerFontSizeFor(71), 12);
-    expect(answerFontSizeFor(kMaxAnswerLength), 12);
-  });
-
-  testWidgets('O8: 100-character answer renders in full across 320px, 360px, 375px widths and 1.3 text scale (Issue 119)', (tester) async {
+  testWidgets('P9: 100-character answer renders in full across 320px, 375px, and 430px widths at 1.0 and 1.3 text scale (Issue 132)', (tester) async {
     const answer =
         'I once told my entire team the deadline had moved and then quietly moved it back before anyone check';
     expect(answer.length, kMaxAnswerLength);
 
-    for (final width in [320.0, 360.0, 375.0]) {
+    for (final width in [320.0, 375.0, 430.0]) {
       for (final scale in [1.0, 1.3]) {
         final customSurface = Size(width, 700);
         await tester.binding.setSurfaceSize(customSurface);
@@ -183,5 +174,115 @@ void main() {
         expectNoTruncation(tester, answer);
       }
     }
+  });
+
+  testWidgets('P9 discoverability: six options at 320x640 portrait exceed viewport height and option at index 3 has non-zero height below fold', (tester) async {
+    const surfaceSize = Size(320, 640);
+    await tester.binding.setSurfaceSize(surfaceSize);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final scrollController = ScrollController();
+    addTearDown(() => scrollController.dispose());
+
+    final answers = [
+      for (int i = 0; i < 6; i++)
+        VotingAnswer(authorId: 'a$i', text: 'Option number $i with some believable lie content'),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: surfaceSize, accessibleNavigation: true),
+          child: Scaffold(
+            body: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 100), // Prompt header simulation
+                    CardGrid(
+                      answers: answers,
+                      selectedAuthorId: null,
+                      currentPlayerId: 'me',
+                      onSelect: (_) {},
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The scroll view scrollable extent should exceed viewport
+    expect(scrollController.position.maxScrollExtent, greaterThan(0.0),
+        reason: 'Content height must exceed 640pt viewport so user can scroll');
+
+    // Scroll to reveal index 3 and verify its height is positive
+    await tester.scrollUntilVisible(
+      find.text(answers[3].text),
+      200.0,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    final item3Finder = find.text(answers[3].text);
+    expect(item3Finder, findsOneWidget);
+    final renderBox = tester.renderObject<RenderBox>(item3Finder);
+    expect(renderBox.size.height, greaterThan(0));
+  });
+
+  testWidgets('P9: SEALED stamp appears on placeholder and own-answer options and tap is disabled', (tester) async {
+    await tester.binding.setSurfaceSize(surface);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    String? selectedId;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: surface, accessibleNavigation: true),
+          child: Scaffold(
+            body: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SingleChildScrollView(
+                child: CardGrid(
+                  answers: [
+                    VotingAnswer(authorId: 'self', text: 'My own forgery', isSelfAnswer: true),
+                    VotingAnswer(authorId: 'placeholder', text: 'THE SOUL IS SILENT'),
+                    VotingAnswer(authorId: 'valid', text: 'A valid candidate'),
+                  ],
+                  selectedAuthorId: null,
+                  currentPlayerId: 'self',
+                  onSelect: (id) => selectedId = id,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Two SEALED stamps: self answer and placeholder
+    expect(find.text('SEALED'), findsNWidgets(2));
+
+    // Tap self answer -> should not select
+    await tester.tap(find.text('My own forgery'));
+    await tester.pump();
+    expect(selectedId, isNull);
+
+    // Tap placeholder -> should not select
+    await tester.tap(find.text('THE SOUL IS SILENT'));
+    await tester.pump();
+    expect(selectedId, isNull);
+
+    // Tap valid -> should select
+    await tester.tap(find.text('A valid candidate'));
+    await tester.pump();
+    expect(selectedId, equals('valid'));
   });
 }
