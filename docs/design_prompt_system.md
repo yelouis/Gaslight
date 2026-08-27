@@ -59,6 +59,10 @@ happened here once, from a stale deploy.
 
 Each deck contains highly subjective prompts that allow believable lies to be written on behalf of other players, avoiding objective questions (e.g., "What is my height?") and favoring experiential claims.
 
+### Client-side Deck Peek & Preview (August 2026)
+
+Because the prompt catalogue is compiled directly into the client via `lib/utils/prompt_decks.dart`, deck contents and sample prompts can be previewed instantly in the lobby carousel without Firestore reads or server calls. Players can tap `PEEK INSIDE` on the active deck card to inspect the deck's display name, rating seal, total prompt count, and 8 randomly sampled prompts with a shuffle control (`DeckPeekSheet`).
+
 ---
 
 ## 2. Drawing Engine Logic

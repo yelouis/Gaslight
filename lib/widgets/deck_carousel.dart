@@ -8,6 +8,8 @@ import '../theme/app_icons.dart';
 import '../utils/prompt_decks.dart';
 import '../services/game_service.dart';
 import '../models/player_state.dart';
+import 'deck_peek_sheet.dart';
+import 'shared_ui.dart';
 
 class DeckCarousel extends StatefulWidget {
   final String selectedDeckId;
@@ -140,12 +142,15 @@ class _DeckCarouselState extends State<DeckCarousel> with TickerProviderStateMix
           final double delta = (index - _currentPage).abs();
           final double scale = (1.0 - 0.1 * delta).clamp(0.9, 1.0);
           final double opacity = (1.0 - 0.4 * delta).clamp(0.6, 1.0);
+          final bool isCentred = delta < 0.5;
 
           final bool isSelected = deckId == widget.selectedDeckId;
 
           Widget card = _FolderCard(
             deckId: deckId,
             gameService: widget.gameService,
+            isCentred: isCentred,
+            onPeek: () => DeckPeekSheet.show(context, deckId),
           );
 
           if (isSelected) {
@@ -230,10 +235,14 @@ class _DeckCarouselState extends State<DeckCarousel> with TickerProviderStateMix
 class _FolderCard extends StatelessWidget {
   final String deckId;
   final GameService gameService;
+  final bool isCentred;
+  final VoidCallback? onPeek;
 
   const _FolderCard({
     required this.deckId,
     required this.gameService,
+    this.isCentred = false,
+    this.onPeek,
   });
 
   @override
@@ -416,21 +425,44 @@ class _FolderCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      // First Prompt Peek Strip
+                      // Prompt count & Peek button
                       Positioned(
                         left: 2,
                         bottom: 2,
                         right: 32,
-                        child: Text(
-                          firstPrompt,
-                          style: TextStyle(
-                            fontFamily: 'Lora',
-                            fontSize: 9,
-                            fontStyle: FontStyle.italic,
-                            color: AppColors.ink.withOpacity(0.6),
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '$size PROMPTS',
+                              style: TextStyle(
+                                fontFamily: 'Lora',
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.ink.withOpacity(0.7),
+                              ),
+                            ),
+                            if (isCentred && deck != null && deck.prompts.isNotEmpty) ...[
+                              const SizedBox(height: 1),
+                              GestureDetector(
+                                key: ValueKey('peek_inside_$deckId'),
+                                onTap: onPeek,
+                                child: const Text(
+                                  'PEEK INSIDE',
+                                  style: TextStyle(
+                                    fontFamily: 'Lora',
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.brass,
+                                    letterSpacing: 0.5,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: AppColors.brass,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       // Wax Seal
