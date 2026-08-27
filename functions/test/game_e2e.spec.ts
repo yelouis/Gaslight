@@ -4872,6 +4872,138 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         expect(revealCard.scoreDeltas[voters[0]]).to.be.greaterThan(0);
       });
     });
+
+    describe('Issue 130 (P5): Casual mode default & configurable timer durations', () => {
+      it('createRoom defaults to isTimerDisabled: true and endTime is null on game start', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host'
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        let snap = await roomRef.get();
+        expect(snap.data()?.isTimerDisabled).to.be.true;
+        expect(snap.data()?.timerSeconds).to.equal(60);
+
+        await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        snap = await roomRef.get();
+        expect(snap.data()?.endTime).to.be.null;
+      });
+
+      it('rejects timerSeconds outside 15-300 and accepts valid boundaries 15 and 300', async () => {
+        const hostUser = await createAnonUser();
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host'
+        });
+        const roomCode = createRes.roomCode;
+
+        // Rejected: 14 and 301
+        let err14 = false;
+        try {
+          await callFn('updateLobbySettings', hostUser.idToken, { roomCode, timerSeconds: 14 });
+        } catch (e: any) {
+          err14 = true;
+          expect(e.status).to.equal('INVALID_ARGUMENT');
+        }
+        expect(err14).to.be.true;
+
+        let err301 = false;
+        try {
+          await callFn('updateLobbySettings', hostUser.idToken, { roomCode, timerSeconds: 301 });
+        } catch (e: any) {
+          err301 = true;
+          expect(e.status).to.equal('INVALID_ARGUMENT');
+        }
+        expect(err301).to.be.true;
+
+        // Accepted: 15 and 300
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, timerSeconds: 15 });
+        let snap = await db.collection('rooms').doc(roomCode).get();
+        expect(snap.data()?.timerSeconds).to.equal(15);
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, timerSeconds: 300 });
+        snap = await db.collection('rooms').doc(roomCode).get();
+        expect(snap.data()?.timerSeconds).to.equal(300);
+      });
+
+      it('derives truth/forgery at 100% and vote at 75% when timers are enabled', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          isTimerDisabled: false,
+          timerSeconds: 40,
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        const nowBefore = Date.now();
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        let snap = await roomRef.get();
+
+        // Truth phase: ~40s (40000ms)
+        const truthEndTime = snap.data()?.endTime;
+        expect(truthEndTime).to.be.a('number');
+        const truthDiff = truthEndTime - nowBefore;
+        expect(truthDiff).to.be.within(37000, 44000);
+
+        // Submit truths
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice painted a red sailboat on canvas', isTruth: true });
+        await callFn('submitAnswer', guestUser.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob baked twelve chocolate muffins yesterday', isTruth: true });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie climbed a snowy mountain in winter', isTruth: true });
+
+        // Forgery rotation 1: ~40s
+        const nowForgery = Date.now();
+        snap = await roomRef.get();
+        expect(snap.data()?.currentPhase).to.equal('forgery');
+        const forgeryEndTime = snap.data()?.endTime;
+        expect(forgeryEndTime).to.be.a('number');
+        const forgeryDiff = forgeryEndTime - nowForgery;
+        expect(forgeryDiff).to.be.within(37000, 44000);
+
+        // Submit forgeries (forgery rotation 1 and 2)
+        const lieSentences: Record<string, string[]> = {
+          'p_host': ['Alice rode an elephant through the jungle', 'Alice swam across the wide blue lake'],
+          'p_g1': ['Bob repaired an ancient wooden grandfather clock', 'Bob planted giant sunflowers along the garden fence'],
+          'p_g2': ['Charlie played acoustic guitar in the village tavern', 'Charlie caught three rainbow trout in the river'],
+        };
+        for (let rot = 1; rot <= 2; rot++) {
+          const rSnap = await roomRef.get();
+          const assignments = rSnap.data()?.currentCardAssignments as Record<string, string>;
+          for (const [holderId, targetId] of Object.entries(assignments)) {
+            const user = holderId === 'p_host' ? hostUser : (holderId === 'p_g1' ? guestUser : guest2User);
+            const text = lieSentences[holderId][rot - 1];
+            await callFn('submitAnswer', user.idToken, { roomCode, targetCardId: targetId, authorId: holderId, text, isTruth: false });
+          }
+        }
+
+        // Vote phase: ~30s (75% of 40s = 30000ms)
+        const nowVote = Date.now();
+        snap = await roomRef.get();
+        expect(snap.data()?.currentPhase).to.equal('vote');
+        const voteEndTime = snap.data()?.endTime;
+        expect(voteEndTime).to.be.a('number');
+        const voteDiff = voteEndTime - nowVote;
+        expect(voteDiff).to.be.within(27000, 34000);
+      });
+    });
   });
 });
 

@@ -755,14 +755,68 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                     'Disable Game Timers',
                                     style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
                                   ),
-                                  value: gs.gameState?.isTimerDisabled ?? false,
+                                  value: gs.gameState?.isTimerDisabled ?? true,
                                   activeColor: AppColors.brass,
                                   contentPadding: EdgeInsets.zero,
-                                  onChanged: (val) {
-                                    gs.updateLobbySettings(isTimerDisabled: val);
-                                  },
+                                  onChanged: isHost
+                                      ? (val) {
+                                          gs.updateLobbySettings(isTimerDisabled: val);
+                                        }
+                                      : null,
                                 ),
                               ),
+                              if ((gs.gameState?.isTimerDisabled ?? true) == false) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Seconds per round',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.ivory,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '15–300 seconds. Voting gets 75% of this.',
+                                            style: TextStyle(
+                                              color: AppColors.ivory.withOpacity(0.6),
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    SizedBox(
+                                      width: 80,
+                                      child: TextFormField(
+                                        key: const ValueKey('timer_seconds_field'),
+                                        enabled: isHost,
+                                        initialValue: (gs.gameState?.timerSeconds ?? 60).toString(),
+                                        keyboardType: TextInputType.number,
+                                        style: const TextStyle(color: AppColors.ivory),
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        onChanged: (val) {
+                                          final parsed = int.tryParse(val);
+                                          if (parsed != null && parsed >= 15 && parsed <= 300) {
+                                            gs.updateLobbySettings(timerSeconds: parsed);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         ),

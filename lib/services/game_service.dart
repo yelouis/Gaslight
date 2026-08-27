@@ -175,7 +175,7 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     return storedId;
   }
 
-  Future<void> createRoom(String playerName, String? playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex, bool isTimerDisabled = false, bool debugEnabled = false}) async {
+  Future<void> createRoom(String playerName, String? playerId, {int totalPlayers = 4, int sabotageAnswersCount = 2, int? avatarIndex, bool isTimerDisabled = true, int timerSeconds = 60, bool debugEnabled = false}) async {
     _roomClosed = false;
     _playerRemoved = false;
     await ensureAuthenticated();
@@ -188,6 +188,7 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
       'avatarIndex': avatarIndex ?? _getRandomAvatar(),
       'sabotageAnswersCount': sabotageAnswersCount,
       'isTimerDisabled': isTimerDisabled,
+      'timerSeconds': timerSeconds,
       'debugEnabled': debugEnabled,
     });
 
@@ -496,7 +497,7 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
-  Future<void> updateLobbySettings({int? forgeriesPerCard, int? sabotageAnswersCount, int? totalRounds, bool? isTimerDisabled, String? selectedDeckId}) async {
+  Future<void> updateLobbySettings({int? forgeriesPerCard, int? sabotageAnswersCount, int? totalRounds, bool? isTimerDisabled, String? selectedDeckId, int? timerSeconds}) async {
     if (_gameState == null || currentPlayer?.isHost != true) return;
     final payload = <String, dynamic>{'roomCode': _gameState!.roomCode};
     final fCount = forgeriesPerCard ?? sabotageAnswersCount;
@@ -507,6 +508,7 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     if (totalRounds != null) payload['totalRounds'] = totalRounds;
     if (isTimerDisabled != null) payload['isTimerDisabled'] = isTimerDisabled;
     if (selectedDeckId != null) payload['selectedDeckId'] = selectedDeckId;
+    if (timerSeconds != null) payload['timerSeconds'] = timerSeconds;
     await _functions.httpsCallable('updateLobbySettings').call(payload);
   }
 

@@ -270,5 +270,41 @@ void main() {
         gameService.dispose();
       }
     });
+
+    testWidgets('Seconds per round is hidden when isTimerDisabled is true and shown when false (Issue 130)', (tester) async {
+      try {
+        // 1. isTimerDisabled: true -> Seconds per round is hidden
+        await setupRoomAndPump(tester, isHost: true, isTimerDisabled: true);
+        expect(find.text('Seconds per round'), findsNothing);
+        expect(find.byKey(const ValueKey('timer_seconds_field')), findsNothing);
+
+        // 2. Tap switch to enable timers -> Seconds per round becomes visible
+        final timerSwitch = find.widgetWithText(SwitchListTile, 'Disable Game Timers');
+        await tester.ensureVisible(timerSwitch);
+        await tester.pump();
+        await tester.tap(timerSwitch);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(find.text('Seconds per round'), findsOneWidget);
+        expect(find.byKey(const ValueKey('timer_seconds_field')), findsOneWidget);
+        expect(find.text('15–300 seconds. Voting gets 75% of this.'), findsOneWidget);
+      } finally {
+        gameService.dispose();
+      }
+    });
+
+    testWidgets('Non-host sees disabled timer control and field when timers enabled (Issue 130)', (tester) async {
+      try {
+        await setupRoomAndPump(tester, isHost: false, isTimerDisabled: false);
+        expect(find.text('Seconds per round'), findsOneWidget);
+        final fieldFinder = find.byKey(const ValueKey('timer_seconds_field'));
+        expect(fieldFinder, findsOneWidget);
+        final field = tester.widget<TextFormField>(fieldFinder);
+        expect(field.enabled, isFalse);
+      } finally {
+        gameService.dispose();
+      }
+    });
   });
 }

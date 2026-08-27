@@ -212,6 +212,17 @@ function generateRoomCode(): string {
   return result;
 }
 
+function getPhaseDurations(timerSeconds?: number) {
+  const sec = timerSeconds != null && Number.isInteger(timerSeconds) && timerSeconds >= 15 && timerSeconds <= 300
+    ? timerSeconds
+    : 60;
+  return {
+    truthDuration: sec * 1000,
+    forgeryDuration: sec * 1000,
+    voteDuration: Math.round(sec * 0.75) * 1000,
+  };
+}
+
 export interface PromptItem {
   text: string;
   authorId: string;
@@ -362,7 +373,15 @@ export const createRoom = onCall(async (request) => {
   const avatarIndex = (data.avatarIndex as number) || 0;
   const forgeriesPerCard = data.forgeriesPerCard != null ? Number(data.forgeriesPerCard) : (data.sabotageAnswersCount != null ? Number(data.sabotageAnswersCount) : null);
   const totalRounds = (data.totalRounds as number) || 1;
-  const isTimerDisabled = (data.isTimerDisabled as boolean) || false;
+  const isTimerDisabled = data.isTimerDisabled !== undefined ? Boolean(data.isTimerDisabled) : true;
+  let timerSeconds = 60;
+  if (data.timerSeconds != null) {
+    const parsed = Number(data.timerSeconds);
+    if (!Number.isInteger(parsed) || parsed < 15 || parsed > 300) {
+      throw new HttpsError("invalid-argument", `timerSeconds (${data.timerSeconds}) must be an integer between 15 and 300.`);
+    }
+    timerSeconds = parsed;
+  }
   const selectedDeckId = (data.selectedDeckId as string) || PromptDecks.getFallbackDeckId();
   const debugEnabled = (data.debugEnabled as boolean) || false;
 
@@ -398,6 +417,7 @@ export const createRoom = onCall(async (request) => {
     totalRounds,
     currentRound: 1,
     isTimerDisabled,
+    timerSeconds,
     selectedDeckId,
     currentRotationIndex: 0,
     cards: [],
@@ -665,7 +685,8 @@ export const startGame = onCall(async (request) => {
       unmaskGuesses: {}
     }));
 
-    const endTime = room.isTimerDisabled ? null : Date.now() + 60000;
+    const { truthDuration } = getPhaseDurations(room.timerSeconds);
+    const endTime = room.isTimerDisabled ? null : Date.now() + truthDuration;
 
     transaction.update(roomRef, {
       currentPhase: "truth",
@@ -1251,13 +1272,14 @@ export const handleDisconnect = onCall(async (request) => {
         for (const id of activePlayerIds) {
           truthAssignments[id] = id;
         }
+        const { truthDuration } = getPhaseDurations(room.timerSeconds);
         nextState = {
           ...nextState,
           currentPhase: "truth",
           currentCardAssignments: truthAssignments,
           sabotageAnswersCount: 0,
           currentRotationIndex: 0,
-          endTime: room.isTimerDisabled ? null : Date.now() + 60000
+          endTime: room.isTimerDisabled ? null : Date.now() + truthDuration
         };
       } else {
         const newRotations = RotationEngine.generateRotations(activePlayerIds, remainingRotations);
@@ -1399,7 +1421,8 @@ async function concludeResolutionRound(
       });
     }
 
-    const endTime = room.isTimerDisabled ? null : Date.now() + 60000;
+    const { truthDuration } = getPhaseDurations(room.timerSeconds);
+    const endTime = room.isTimerDisabled ? null : Date.now() + truthDuration;
 
     transaction.update(roomRef, {
       currentPhase: "truth",
@@ -1432,8 +1455,7 @@ async function advancePhaseInternal(
   currentCards: CardModel[],
   sealedDataOverrides: Record<string, any> = {}
 ) {
-  const forgeryDuration = 60000;
-  const voteDuration = 45000;
+  const { forgeryDuration, voteDuration } = getPhaseDurations(room.timerSeconds);
 
   const nextReadyPlayers: Record<string, boolean> = {};
 
@@ -1864,7 +1886,7 @@ export const updateLobbySettings = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
   }
   const callerUid = request.auth.uid;
-  const { roomCode, forgeriesPerCard, sabotageAnswersCount, totalRounds, isTimerDisabled, selectedDeckId } = request.data as any;
+  const { roomCode, forgeriesPerCard, sabotageAnswersCount, totalRounds, isTimerDisabled, selectedDeckId, timerSeconds } = request.data as any;
   if (!roomCode) {
     throw new HttpsError("invalid-argument", "roomCode is required.");
   }
@@ -1911,10 +1933,17 @@ export const updateLobbySettings = onCall(async (request) => {
 
     const updatePayload: Record<string, any> = {
       totalRounds: newTotalRounds,
-      isTimerDisabled: isTimerDisabled != null ? isTimerDisabled : (data.isTimerDisabled || false),
+      isTimerDisabled: isTimerDisabled != null ? isTimerDisabled : (data.isTimerDisabled !== undefined ? data.isTimerDisabled : true),
       selectedDeckId: selectedDeckId != null ? selectedDeckId : (data.selectedDeckId || PromptDecks.getFallbackDeckId()),
       expiresAt: ttlFrom(Date.now())
     };
+    if (timerSeconds != null) {
+      const parsedSeconds = Number(timerSeconds);
+      if (!Number.isInteger(parsedSeconds) || parsedSeconds < 15 || parsedSeconds > 300) {
+        throw new HttpsError("invalid-argument", `timerSeconds (${timerSeconds}) must be an integer between 15 and 300.`);
+      }
+      updatePayload.timerSeconds = parsedSeconds;
+    }
     if (newForgeries !== undefined) {
       updatePayload.forgeriesPerCard = newForgeries;
       updatePayload.sabotageAnswersCount = newForgeries;
@@ -2026,7 +2055,8 @@ export const advanceToNextResolution = onCall(async (request) => {
 
     if (currentIdx !== -1 && nextIdx < order.length) {
       const nextReaderId = order[nextIdx];
-      const endTime = room.isTimerDisabled ? null : Date.now() + 45000;
+      const { voteDuration } = getPhaseDurations(room.timerSeconds);
+      const endTime = room.isTimerDisabled ? null : Date.now() + voteDuration;
       transaction.update(roomRef, {
         currentPhase: "vote",
         currentReaderId: nextReaderId,

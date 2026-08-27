@@ -18,6 +18,7 @@ export interface GameState {
   totalRounds?: number;
   currentRound?: number;
   isTimerDisabled: boolean;
+  timerSeconds?: number;
   selectedDeckId: string;
   effectiveDeckId?: string;
   currentRotationIndex: number;

@@ -87,13 +87,15 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final avatarIndex = params['avatarIndex'];
       final sabotageAnswersCount = params['sabotageAnswersCount'];
       final isTimerDisabled = params['isTimerDisabled'];
+      final timerSeconds = params['timerSeconds'];
 
       const generatedCode = 'TEST';
       final initialState = GameState(
         roomCode: generatedCode,
         totalPlayers: 1,
         sabotageAnswersCount: sabotageAnswersCount,
-        isTimerDisabled: isTimerDisabled,
+        isTimerDisabled: isTimerDisabled ?? true,
+        timerSeconds: timerSeconds ?? 60,
       );
       final initialPlayer = PlayerState(
         id: playerId,
@@ -592,6 +594,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final totalRounds = params['totalRounds'];
       final isTimerDisabled = params['isTimerDisabled'];
       final selectedDeckId = params['selectedDeckId'];
+      final timerSeconds = params['timerSeconds'];
 
       final roomRef = db.collection('rooms').doc(roomCode);
       final snapshot = await roomRef.get();
@@ -602,6 +605,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         totalRounds: totalRounds ?? currentState.totalRounds,
         isTimerDisabled: isTimerDisabled ?? currentState.isTimerDisabled,
         selectedDeckId: selectedDeckId ?? currentState.selectedDeckId,
+        timerSeconds: timerSeconds ?? currentState.timerSeconds,
       ).toMap());
 
       return FakeHttpsCallableResult({'success': true} as T);

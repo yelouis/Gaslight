@@ -13,6 +13,7 @@ class GameState {
   final int totalRounds;
   final int currentRound;
   final bool isTimerDisabled;
+  final int timerSeconds;
   final String selectedDeckId;
   final String? effectiveDeckId;
 
@@ -66,7 +67,8 @@ class GameState {
     int? sabotageAnswersCount,
     this.totalRounds = 1,
     this.currentRound = 1,
-    this.isTimerDisabled = false,
+    this.isTimerDisabled = true,
+    this.timerSeconds = 60,
     this.selectedDeckId = PromptDecks.fallbackDeckId,
     this.effectiveDeckId,
     this.currentRotationIndex = 0,
@@ -91,6 +93,7 @@ class GameState {
     int? totalRounds,
     int? currentRound,
     bool? isTimerDisabled,
+    int? timerSeconds,
     String? selectedDeckId,
     String? effectiveDeckId,
     int? currentRotationIndex,
@@ -118,6 +121,7 @@ class GameState {
       totalRounds: totalRounds ?? this.totalRounds,
       currentRound: currentRound ?? this.currentRound,
       isTimerDisabled: isTimerDisabled ?? this.isTimerDisabled,
+      timerSeconds: timerSeconds ?? this.timerSeconds,
       selectedDeckId: selectedDeckId ?? this.selectedDeckId,
       effectiveDeckId: clearEffectiveDeckId ? null : (effectiveDeckId ?? this.effectiveDeckId),
       currentRotationIndex: currentRotationIndex ?? this.currentRotationIndex,
@@ -144,6 +148,7 @@ class GameState {
       'totalRounds': totalRounds,
       'currentRound': currentRound,
       'isTimerDisabled': isTimerDisabled,
+      'timerSeconds': timerSeconds,
       'selectedDeckId': selectedDeckId,
       if (effectiveDeckId != null) 'effectiveDeckId': effectiveDeckId,
       'currentRotationIndex': currentRotationIndex,
@@ -179,7 +184,8 @@ class GameState {
       forgeriesPerCard: map['forgeriesPerCard']?.toInt() ?? map['sabotageAnswersCount']?.toInt(),
       totalRounds: map['totalRounds']?.toInt() ?? 1,
       currentRound: map['currentRound']?.toInt() ?? 1,
-      isTimerDisabled: map['isTimerDisabled'] as bool? ?? false,
+      isTimerDisabled: map['isTimerDisabled'] as bool? ?? true,
+      timerSeconds: map['timerSeconds']?.toInt() ?? 60,
       selectedDeckId: map['selectedDeckId'] as String? ?? PromptDecks.fallbackDeckId,
       effectiveDeckId: map['effectiveDeckId'] as String?,
       currentRotationIndex: map['currentRotationIndex']?.toInt() ?? 0,
