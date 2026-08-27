@@ -91,7 +91,7 @@ A re-bind is now permitted only when **one of three** conditions holds:
 
 1. **Ownership** — `existing.authUid === request.auth.uid`. The ordinary reconnect.
 2. **Seat token** — the caller presents the `seatToken` minted for that seat. The token is generated server-side with `randomUUID()` at `createRoom` and at the new-player branch of `joinRoom`, returned to that caller **once** in the callable response, and persisted client-side per room as `seat_token_{roomCode}`. **Only its SHA-256 hash is stored, and only in `sealed/seat_{playerId}` — the default-deny subcollection.** This is the reinstall / second-device path.
-3. **Staleness** — nobody has heartbeated the seat for `PRESENCE_STALE_MS` (`Date.now() - (existing.lastSeen ?? 0) > PRESENCE_STALE_MS`), mirroring `handleDisconnect`'s `isDead` rule. This is what keeps a crashed player's seat reclaimable when the token is gone. **On this path the constant genuinely governs** — unlike the eviction path, which Issue 123 shows is still effectively 120 s.
+3. **Staleness** — nobody has heartbeated the seat for `PRESENCE_STALE_MS` (`Date.now() - (existing.lastSeen ?? 0) > PRESENCE_STALE_MS`), mirroring `handleDisconnect`'s `isDead` rule. This is what keeps a crashed player's seat reclaimable when the token is gone. **Both this path and the eviction path now honour the constant** — the eviction path was effectively 120 s until Issue 123 moved enforcement onto the server (see §4).
 
 **Three properties that must not be lost:**
 
