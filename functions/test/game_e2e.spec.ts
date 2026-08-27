@@ -1080,17 +1080,31 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     const readerToken = getToken(currentReader);
 
     const sealedSnap = await roomRef.collection('sealed').doc(currentReader).get();
-    const truthOptId = sealedSnap.data()?.truthAnswerId || 'TRUTH';
+    const answerAuthors = sealedSnap.data()?.answerAuthors || {};
+
+    const card = (roomSnap.data()?.cards || []).find((c: any) => c.targetPlayerId === currentReader);
+    const options = card?.options || [];
+    const votable = options.filter((o: any) => o.text !== 'THE SOUL IS SILENT' && o.text && o.text.trim().length > 0);
+    expect(votable.length).to.be.greaterThan(0);
 
     const playerIds = ['p_host', 'p_guest', 'p_guest2'];
     for (const pId of playerIds) {
       if (pId !== currentReader) {
-        await callFn('castVote', getToken(pId), {
-          roomCode,
-          targetCardId: currentReader,
-          voterId: pId,
-          votedForId: truthOptId
-        });
+        const chosenOption = votable.find((o: any) => answerAuthors[o.id] !== pId);
+        if (chosenOption) {
+          await callFn('castVote', getToken(pId), {
+            roomCode,
+            targetCardId: currentReader,
+            voterId: pId,
+            votedForId: chosenOption.id
+          });
+        } else {
+          await callFn('setReady', getToken(pId), {
+            roomCode,
+            playerId: pId,
+            ready: true
+          });
+        }
       }
     }
     await callFn('setReady', readerToken, {
