@@ -60,24 +60,7 @@ Your selection: Proceed with Option A.
 
 ---
 
-### Issue 115: Game over shows raw player IDs once players leave
-**Status**: ⚠️ Confirmed Unresolved — Observed on device: after players tapped RETURN TO LOBBY, **BEST LIE OF THE NIGHT** rendered `By 0be3acd3-9116-4816-8486-b86e3669d9e3` and **RIVALRIES** listed UUIDs. The match summary stores author **ids**; names are resolved against the live players subcollection, and leaving deletes that document — so the name has nowhere to come from and the raw id shows through.
 
-**Option A (recommended)**: **Snapshot display names into the summary when it is published at game over.** Store `authorName` alongside `authorId` so the screen never depends on a player document that may already be gone.
-  - *Pros*: The end screen becomes self-contained and correct no matter who leaves or when — which is the behaviour asked for. Names at game over are exactly the right ones to freeze.
-  - *Cons*: A functions change and deploy, and a small amount of duplicated data on the room document.
-
-**Option B**: **Keep a client-side name cache** — remember names seen during the match and fall back to it.
-  - *Pros*: Client-only, no deploy.
-  - *Cons*: Only helps players who watched the whole match. Someone who rejoined late, or reloaded on the game-over screen, still sees UUIDs — the bug survives in the cases most likely to hit it.
-
-**Option C**: **Fall back to "A departed player"** when the name cannot be resolved.
-  - *Pros*: Smallest possible change; never shows a UUID.
-  - *Cons*: The award loses its point — nobody learns whose lie won the night.
-
-Your selection: Proceed with Option A.
-
----
 
 ### Issue 116: The raven is missing from the "Your ballot is sealed" screen
 **Status**: ⚠️ Unconfirmed in source — Reported from device: the raven mascot that appears elsewhere is absent on the sealed-ballot waiting screen, which shows only the candle. Not yet traced to a cause; it may never have been placed there rather than having disappeared.
@@ -396,7 +379,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Evidence mechanical gate & E10/E11 device verification** — `check_playthrough_evidence.sh` tool enforcing R1–R4 with 3 exit codes; E10 in-game leave auto-end verified on both remaining devices (`e10_p1_gameover.png`, `e10_p2_gameover.png`); E11 release build verified with zero DEBUG controls (`e11_release_lobby.png`); repointed dead citations to `functions/src/index.ts:986` | 105 | `docs/agent_execution_guide.md` §2–§3; `scripts/check_playthrough_evidence.sh`; `docs/playthrough_findings_marionette.md` |
 | **Web E2E Playthrough (Wave I)** — Playwright automated harness (`test/web_e2e/`); I1 evidence gate widened with strict PNG requirement for W blocks; W1–W16 3-player match with falsification, truth, forgeries, voting lockout, unmasking, standings, GameOver, mid-match refresh restoral, case file share, console hygiene, and below-3 auto-end; W17–W19 responsive sweeps across mobile (375x812), tablet (768x1024), and desktop (1280x800) with 15 screenshots | 106 (Wave I) | `docs/playthrough_findings_web.md`; `test/web_e2e/`; `scripts/check_playthrough_evidence.sh` |
 | **Prompt Source & Sampling (Wave J)** — resolved effective prompt source on `GameState` killing `"custom"` sentinel crash (109 / J1); custom game prompt drawing and re-rolls from players' contributed pool with self-author lockout (108 / J2); uniform re-roll sampling minus live in-play table cards (107 / J3) | 107, 108, 109 | `design_prompt_system.md` §3, §5; `functions/src/index.ts` |
-| **Game Over Payoff & Web Download (Wave K)** — Standings + server-written match summary quoting real answers accumulated into `sealed/_summary` across rounds and published at game over (111 / K1); Case File PNG direct downloads on web via Blob URL and synthetic anchor click (110 / K2) | 110, 111 | `design_scoring_and_ui.md`; `lib/utils/case_file_saver_web.dart`; `functions/src/index.ts` |
+| **Game Over Payoff & Web Download (Wave K & Wave O / O3)** — Standings + server-written match summary quoting real answers accumulated into `sealed/_summary` across rounds and published at game over with snapshotted display names (111 / K1, 115 / O3); Case File PNG direct downloads on web via Blob URL and synthetic anchor click (110 / K2) | 110, 111, 115 | `design_scoring_and_ui.md`; `lib/utils/case_file_saver_web.dart`; `functions/src/index.ts` |
 | **Presence & Resume Lifecycle (Wave M)** — 120 s server presence threshold (`PRESENCE_STALE_MS = 120_000`); GameService `WidgetsBindingObserver` immediate `lastSeen` write and heartbeat restart on app resume | 112 (Wave M) | `design_database_and_security.md` §4–§5 |
 
 > **The three highest-value things to know from this wave**, if you read nothing else: the `votes` field has been redefined three times and broken its readers twice (§2 and `design_game_state_and_models.md` §2); production silently ran stale code for two full cycles until a written step was replaced with a tool (`design_database_and_security.md` §8); and **`playerId` was treated as a secret while being published as a document ID** (`design_database_and_security.md` §5).

@@ -37,10 +37,12 @@ export interface GameState {
 export interface CardSummary {
   round: number;
   targetPlayerId: string;
+  targetPlayerName?: string;
   promptText: string;
   truthAnswer: string;
   forgeries: Array<{
     authorId: string;
+    authorName?: string;
     text: string;
     fooled: number;
     fooledVoters?: string[];

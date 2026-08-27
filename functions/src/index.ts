@@ -10,10 +10,16 @@ import { isTooSimilar } from "./text_similarity";
 admin.initializeApp();
 const db = admin.firestore();
 
-export function computeMatchSummary(cards: CardSummary[], players: PlayerState[]): MatchSummary {
-  const playerNameMap: Record<string, string> = {};
+export function computeMatchSummary(
+  cards: CardSummary[],
+  players: PlayerState[],
+  snapshottedPlayerNames: Record<string, string> = {}
+): MatchSummary {
+  const playerNameMap: Record<string, string> = { ...snapshottedPlayerNames };
   for (const p of players) {
-    playerNameMap[p.id] = p.name;
+    if (p && p.id && p.name) {
+      playerNameMap[p.id] = p.name;
+    }
   }
 
   // 1. Best Lie of the Night
@@ -32,7 +38,7 @@ export function computeMatchSummary(cards: CardSummary[], players: PlayerState[]
       if (f.fooled > 0) {
         allForgeries.push({
           authorId: f.authorId,
-          authorName: playerNameMap[f.authorId] || f.authorId,
+          authorName: playerNameMap[f.authorId] || f.authorName || f.authorId,
           text: f.text,
           promptText: card.promptText,
           fooled: f.fooled,
@@ -72,7 +78,7 @@ export function computeMatchSummary(cards: CardSummary[], players: PlayerState[]
     if (card.truthAnswer && card.truthAnswer.trim().length > 0 && card.truthAnswer !== kMissingAnswerPlaceholder) {
       allTruths.push({
         targetPlayerId: card.targetPlayerId,
-        targetPlayerName: playerNameMap[card.targetPlayerId] || card.targetPlayerId,
+        targetPlayerName: playerNameMap[card.targetPlayerId] || card.targetPlayerName || card.targetPlayerId,
         text: card.truthAnswer,
         promptText: card.promptText,
         foundCount: card.truthFinders.length,
@@ -1127,8 +1133,14 @@ export const handleDisconnect = onCall(async (request) => {
     const playersSnap = await transaction.get(roomRef.collection("players"));
     const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
     const summarySnap = await transaction.get(roomRef.collection("sealed").doc("_summary"));
-    const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [] };
+    const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [], playerNames: {} };
     const accumulatedCards: CardSummary[] = Array.isArray(summaryDoc.cards) ? summaryDoc.cards : [];
+    const snapshottedPlayerNames: Record<string, string> = { ...(summaryDoc.playerNames || {}) };
+    for (const p of players) {
+      if (p && p.id && p.name) {
+        snapshottedPlayerNames[p.id] = p.name;
+      }
+    }
 
     const callerPlayer = players.find(p => p.authUid === callerUid);
     const disconnectedPlayer = players.find(p => p.id === disconnectedPlayerId);
@@ -1250,7 +1262,7 @@ export const handleDisconnect = onCall(async (request) => {
     }
 
     if (nextState.currentPhase === "gameOver" || (phase !== "lobby" && activePlayerCount < 3)) {
-      const matchSummary = computeMatchSummary(accumulatedCards, players);
+      const matchSummary = computeMatchSummary(accumulatedCards, players, snapshottedPlayerNames);
       nextState = {
         ...nextState,
         currentPhase: "gameOver",
@@ -1297,8 +1309,14 @@ async function advancePhaseInternal(
   // Fetch all sealed documents up front (READS BEFORE WRITES)
   const summaryRef = roomRef.collection("sealed").doc("_summary");
   const summarySnap = await transaction.get(summaryRef);
-  const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [] };
+  const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [], playerNames: {} };
   const accumulatedCards: CardSummary[] = Array.isArray(summaryDoc.cards) ? summaryDoc.cards : [];
+  const accumulatedPlayerNames: Record<string, string> = { ...(summaryDoc.playerNames || {}) };
+  for (const p of activePlayers) {
+    if (p && p.id && p.name) {
+      accumulatedPlayerNames[p.id] = p.name;
+    }
+  }
 
   const sealedDataMap: Record<string, any> = {};
   for (const card of currentCards) {
@@ -1518,6 +1536,7 @@ async function advancePhaseInternal(
       const truthFinders: string[] = [];
       const forgeriesSummary: Array<{
         authorId: string;
+        authorName?: string;
         text: string;
         fooled: number;
         fooledVoters: string[];
@@ -1532,6 +1551,7 @@ async function advancePhaseInternal(
         }
         forgeriesSummary.push({
           authorId: forgerId,
+          authorName: accumulatedPlayerNames[forgerId] || forgerId,
           text: (fText || "").slice(0, 100),
           fooled: fooledVoters.length,
           fooledVoters
@@ -1547,6 +1567,7 @@ async function advancePhaseInternal(
       const newCardSummary: CardSummary = {
         round: room.currentRound || 1,
         targetPlayerId: card.targetPlayerId,
+        targetPlayerName: accumulatedPlayerNames[card.targetPlayerId] || card.targetPlayerId,
         promptText: (card.promptText || "").slice(0, 100),
         truthAnswer: (cardWithAnswers.truthAnswer || "").slice(0, 100),
         forgeries: forgeriesSummary,
@@ -1556,7 +1577,7 @@ async function advancePhaseInternal(
       if (accumulatedCards.length < 60) {
         accumulatedCards.push(newCardSummary);
       }
-      transaction.set(summaryRef, { cards: accumulatedCards }, { merge: true });
+      transaction.set(summaryRef, { cards: accumulatedCards, playerNames: accumulatedPlayerNames }, { merge: true });
     }
 
     const unmaskDeadline = hasFooled ? Date.now() + 20000 : null;
@@ -1735,8 +1756,14 @@ export const advanceToNextResolution = onCall(async (request) => {
     const playersSnap = await transaction.get(roomRef.collection("players"));
     const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
     const summarySnap = await transaction.get(roomRef.collection("sealed").doc("_summary"));
-    const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [] };
+    const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [], playerNames: {} };
     const accumulatedCards: CardSummary[] = Array.isArray(summaryDoc.cards) ? summaryDoc.cards : [];
+    const snapshottedPlayerNames: Record<string, string> = { ...(summaryDoc.playerNames || {}) };
+    for (const p of players) {
+      if (p && p.id && p.name) {
+        snapshottedPlayerNames[p.id] = p.name;
+      }
+    }
 
     const hostPlayer = players.find(p => p.authUid === callerUid);
 
@@ -1834,7 +1861,7 @@ export const advanceToNextResolution = onCall(async (request) => {
           expiresAt: ttlFrom(Date.now())
         });
       } else {
-        const matchSummary = computeMatchSummary(accumulatedCards, players);
+        const matchSummary = computeMatchSummary(accumulatedCards, players, snapshottedPlayerNames);
         transaction.update(roomRef, {
           currentPhase: "gameOver",
           unmaskDeadline: null,

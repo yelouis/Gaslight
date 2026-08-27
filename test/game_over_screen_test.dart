@@ -458,5 +458,83 @@ void main() {
       expect(find.text('Share Case File'), findsOneWidget);
       await gameService.leaveRoom();
     });
+
+    testWidgets('O3: _buildMatchHighlights renders snapshotted player names even when author is not in active players', (WidgetTester tester) async {
+      final p1 = PlayerState(id: 'p1', name: 'Alice', totalScore: 20);
+      final p2 = PlayerState(id: 'p2', name: 'Bob', totalScore: 10);
+
+      final summaryPayload = {
+        'bestLie': {
+          'authorId': 'departed_player_uuid',
+          'authorName': 'DepartedCharlie',
+          'text': 'A clever falsehood',
+          'promptText': 'The secret prompt',
+          'fooled': 3,
+        },
+        'cleanestTruth': {
+          'targetPlayerId': 'another_departed_uuid',
+          'targetPlayerName': 'DepartedDave',
+          'text': 'The hidden truth',
+          'promptText': 'Another prompt',
+          'foundCount': 0,
+        },
+        'theSting': {
+          'targetPlayerId': 'p1',
+          'promptText': 'Tricky question',
+          'wrongVoteCount': 4,
+        },
+        'headToHead': [
+          {
+            'deceiverId': 'departed_player_uuid',
+            'deceiverName': 'DepartedCharlie',
+            'victimId': 'p2',
+            'victimName': 'Bob',
+            'count': 2,
+          }
+        ],
+      };
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.gameOver,
+        totalPlayers: 2,
+        cards: [],
+        currentCardAssignments: {},
+        readyPlayers: {},
+        matchSummary: summaryPayload,
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('p1').set(p1.toMap()..['authUid'] = 'uid1');
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('p2').set(p2.toMap()..['authUid'] = 'uid2');
+
+      gameService.listenToRoom('TEST');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('room_code', 'TEST');
+      await prefs.setString('player_id', 'p1');
+      await gameService.tryRejoinSession();
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: const MaterialApp(
+            home: GameOverScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('MATCH HIGHLIGHTS'), findsOneWidget);
+      expect(find.text('BEST LIE OF THE NIGHT'), findsOneWidget);
+      expect(find.textContaining('By DepartedCharlie for prompt "The secret prompt"'), findsOneWidget);
+      expect(find.textContaining('DepartedDave\'s Truth for prompt "Another prompt"'), findsOneWidget);
+      expect(find.text('DepartedCharlie fooled Bob 2 times'), findsOneWidget);
+
+      await gameService.leaveRoom();
+    });
   });
 }
