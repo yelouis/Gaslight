@@ -2496,7 +2496,8 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         roomSnap = await roomRef.get();
         expect(roomSnap.data()?.currentPhase).to.equal('reveal');
 
-        // Unmask window opens -> close unmask window before checking finalized scores
+        // Unmask window opens -> expire deadline then close unmask window before checking finalized scores
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
         await callFn('closeUnmaskWindow', hostUser.idToken, { roomCode });
 
         // Check scores:
@@ -2617,7 +2618,8 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         roomSnap = await roomRef.get();
         expect(roomSnap.data()?.currentPhase).to.equal('reveal');
 
-        // Unmask window opens -> close unmask window before checking finalized scores
+        // Unmask window opens -> expire deadline then close unmask window before checking finalized scores
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
         await callFn('closeUnmaskWindow', hostUser.idToken, { roomCode });
 
         // P=5, S=3 -> ceil((5-1)/(3+1)) = ceil(4/4) = 1
@@ -4708,7 +4710,8 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         const sealedDuringUnmask = await roomRef.collection('sealed').doc(currentReader).get();
         expect(sealedDuringUnmask.data()?.pendingScoreDeltas).to.not.be.undefined;
 
-        // Now host calls closeUnmaskWindow
+        // Now host calls closeUnmaskWindow after deadline expires
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
         const closeRes = await callFn('closeUnmaskWindow', hostUser.idToken, { roomCode });
         expect(closeRes.success).to.be.true;
 
@@ -5002,6 +5005,279 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         expect(voteEndTime).to.be.a('number');
         const voteDiff = voteEndTime - nowVote;
         expect(voteDiff).to.be.within(27000, 34000);
+      });
+    });
+
+    describe('Wave Q: Issue 133 / Q1 - closeUnmaskWindow deadline guard and permissions', () => {
+      async function setupRevealWithFooledPlayer() {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Truth phase
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice Truth', isTruth: true });
+        await callFn('submitAnswer', g1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob Truth', isTruth: true });
+        await callFn('submitAnswer', g2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie Truth', isTruth: true });
+
+        // Forgery phase
+        let roomSnap = await roomRef.get();
+        const assignments = roomSnap.data()?.currentCardAssignments as Record<string, string>;
+        for (const [holderId, targetId] of Object.entries(assignments)) {
+          const user = holderId === 'p_host' ? hostUser : (holderId === 'p_g1' ? g1User : g2User);
+          await callFn('submitAnswer', user.idToken, { roomCode, targetCardId: targetId, authorId: holderId, text: `Lie by ${holderId}`, isTruth: false });
+        }
+
+        // Vote phase
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+        const currentReader = roomSnap.data()?.currentReaderId as string;
+        const currentCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+
+        const sealedSnap = await roomRef.collection('sealed').doc(currentReader).get();
+        const answerAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+        const forgeryOpt = currentCard.options.find((o: any) => answerAuthors[o.id] !== currentReader);
+        const truthOpt = currentCard.options.find((o: any) => answerAuthors[o.id] === currentReader);
+
+        const voters = ['p_host', 'p_g1', 'p_g2'].filter(id => id !== currentReader);
+        const forgerId = answerAuthors[forgeryOpt.id];
+        // Voter 1 falls for forgery (fooled)
+        const voter1Id = voters.find(id => id !== forgerId)!;
+        const voter1User = voter1Id === 'p_host' ? hostUser : (voter1Id === 'p_g1' ? g1User : g2User);
+        await callFn('castVote', voter1User.idToken, { roomCode, targetCardId: currentReader, voterId: voter1Id, votedForId: forgeryOpt.id });
+
+        // Voter 2 (forger) votes for truth
+        const voter2Id = forgerId;
+        const voter2User = voter2Id === 'p_host' ? hostUser : (voter2Id === 'p_g1' ? g1User : g2User);
+        await callFn('castVote', voter2User.idToken, { roomCode, targetCardId: currentReader, voterId: voter2Id, votedForId: truthOpt.id });
+
+        // Target calls setReady to transition to reveal
+        const targetUser = currentReader === 'p_host' ? hostUser : (currentReader === 'p_g1' ? g1User : g2User);
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReader, ready: true });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+
+        return {
+          hostUser,
+          g1User,
+          g2User,
+          roomCode,
+          roomRef,
+          currentReader,
+          forgerId,
+          fooledVoterId: voter1Id,
+          fooledVoterUser: voter1User,
+          truthVoterId: voter2Id,
+          truthVoterUser: voter2User
+        };
+      }
+
+      it('F1 — the fix: refuses early close with failed-precondition and leaves deltas and deadline unchanged', async () => {
+        const { roomRef, roomCode, currentReader, fooledVoterUser } = await setupRevealWithFooledPlayer();
+
+        const roomSnap = await roomRef.get();
+        const initialDeadline = roomSnap.data()?.unmaskDeadline;
+        expect(initialDeadline).to.be.greaterThan(Date.now());
+
+        let threw = false;
+        try {
+          await callFn('closeUnmaskWindow', fooledVoterUser.idToken, { roomCode });
+        } catch (e: any) {
+          threw = true;
+          expect(e.message).to.include('The unmask window has not expired yet');
+        }
+        expect(threw).to.be.true;
+
+        const freshSnap = await roomRef.get();
+        const card = (freshSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+        expect(card.scoreDeltas).to.be.undefined;
+        expect(freshSnap.data()?.unmaskDeadline).to.equal(initialDeadline);
+      });
+
+      it('F2 — the happy path still works when deadline is in the past', async () => {
+        const { roomRef, roomCode, currentReader, forgerId, fooledVoterUser } = await setupRevealWithFooledPlayer();
+
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
+        const res = await callFn('closeUnmaskWindow', fooledVoterUser.idToken, { roomCode });
+        expect(res.success).to.be.true;
+
+        const freshSnap = await roomRef.get();
+        expect(freshSnap.data()?.unmaskDeadline).to.equal(0);
+        const card = (freshSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+        expect(card.scoreDeltas).to.not.be.undefined;
+        expect(card.scoreDeltas[forgerId]).to.be.greaterThan(0);
+      });
+
+      it('F3 — idempotency: double-call applies scores exactly once by arithmetic', async () => {
+        const { roomRef, roomCode, forgerId, truthVoterId, fooledVoterId, g1User, g2User } = await setupRevealWithFooledPlayer();
+
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
+        const res1 = await callFn('closeUnmaskWindow', g1User.idToken, { roomCode });
+        expect(res1.success).to.be.true;
+
+        const res2 = await callFn('closeUnmaskWindow', g2User.idToken, { roomCode });
+        expect(res2.success).to.be.true;
+        expect(res2.alreadyClosed).to.be.true;
+
+        const playersSnap = await roomRef.collection('players').get();
+        const forgerDoc = playersSnap.docs.find(d => d.id === forgerId);
+        const truthVoterDoc = playersSnap.docs.find(d => d.id === truthVoterId);
+        const fooledVoterDoc = playersSnap.docs.find(d => d.id === fooledVoterId);
+
+        // Forger got +1 for fooling + 2 for finding truth = 3
+        expect(forgerDoc?.data().totalScore).to.equal(3);
+        // Truth voter (forger also found truth)
+        expect(truthVoterDoc?.data().totalScore).to.equal(3);
+        // Fooled voter got 0
+        expect(fooledVoterDoc?.data().totalScore || 0).to.equal(0);
+      });
+
+      it('F4 — concurrency: simultaneous calls apply scores exactly once', async () => {
+        const { roomRef, roomCode, forgerId, hostUser, g1User } = await setupRevealWithFooledPlayer();
+
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
+        const results = await Promise.all([
+          callFn('closeUnmaskWindow', g1User.idToken, { roomCode }),
+          callFn('closeUnmaskWindow', hostUser.idToken, { roomCode })
+        ]);
+
+        expect(results[0].success).to.be.true;
+        expect(results[1].success).to.be.true;
+
+        const playersSnap = await roomRef.collection('players').get();
+        const forgerDoc = playersSnap.docs.find(d => d.id === forgerId);
+        expect(forgerDoc?.data().totalScore).to.equal(3);
+      });
+
+      it('F5 — over-reach guard: non-member rejected with permission-denied', async () => {
+        const { roomRef, roomCode } = await setupRevealWithFooledPlayer();
+        const outsider = await createAnonUser();
+
+        // While window is open
+        let threwOpen = false;
+        try {
+          await callFn('closeUnmaskWindow', outsider.idToken, { roomCode });
+        } catch (e: any) {
+          threwOpen = true;
+          expect(e.message).to.include('Caller is not in this room');
+        }
+        expect(threwOpen).to.be.true;
+
+        // After window expires
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
+        let threwExpired = false;
+        try {
+          await callFn('closeUnmaskWindow', outsider.idToken, { roomCode });
+        } catch (e: any) {
+          threwExpired = true;
+          expect(e.message).to.include('Caller is not in this room');
+        }
+        expect(threwExpired).to.be.true;
+      });
+
+      it('F6 — over-reach guard: nobody-fooled card keeps published deltas and returns alreadyClosed', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Truth phase
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice Truth', isTruth: true });
+        await callFn('submitAnswer', g1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob Truth', isTruth: true });
+        await callFn('submitAnswer', g2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie Truth', isTruth: true });
+
+        // Forgery phase
+        let roomSnap = await roomRef.get();
+        const assignments = roomSnap.data()?.currentCardAssignments as Record<string, string>;
+        for (const [holderId, targetId] of Object.entries(assignments)) {
+          const user = holderId === 'p_host' ? hostUser : (holderId === 'p_g1' ? g1User : g2User);
+          await callFn('submitAnswer', user.idToken, { roomCode, targetCardId: targetId, authorId: holderId, text: `Lie by ${holderId}`, isTruth: false });
+        }
+
+        // Vote phase: ALL voters vote for truth (nobody is fooled)
+        roomSnap = await roomRef.get();
+        const currentReader = roomSnap.data()?.currentReaderId as string;
+        const currentCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+
+        const sealedSnap = await roomRef.collection('sealed').doc(currentReader).get();
+        const answerAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+        const truthOpt = currentCard.options.find((o: any) => answerAuthors[o.id] === currentReader);
+
+        const voters = ['p_host', 'p_g1', 'p_g2'].filter(id => id !== currentReader);
+        for (const vId of voters) {
+          const u = vId === 'p_host' ? hostUser : (vId === 'p_g1' ? g1User : g2User);
+          await callFn('castVote', u.idToken, { roomCode, targetCardId: currentReader, voterId: vId, votedForId: truthOpt.id });
+        }
+
+        const targetUser = currentReader === 'p_host' ? hostUser : (currentReader === 'p_g1' ? g1User : g2User);
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReader, ready: true });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+        expect(roomSnap.data()?.unmaskDeadline == null).to.be.true;
+
+        const revealCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+        const originalDeltas = { ...revealCard.scoreDeltas };
+        expect(Object.keys(originalDeltas).length).to.be.greaterThan(0);
+
+        const res = await callFn('closeUnmaskWindow', hostUser.idToken, { roomCode });
+        expect(res.success).to.be.true;
+        expect(res.alreadyClosed).to.be.true;
+
+        const freshSnap = await roomRef.get();
+        const afterCard = (freshSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+        expect(afterCard.scoreDeltas).to.deep.equal(originalDeltas);
+      });
+
+      it('F7 — over-reach guard: advanceToNextResolution still flushes pending deltas during an open window', async () => {
+        const { roomRef, roomCode, forgerId, hostUser } = await setupRevealWithFooledPlayer();
+
+        const roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.unmaskDeadline).to.be.greaterThan(Date.now());
+
+        // Host advances during open unmask window
+        await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+
+        const playersSnap = await roomRef.collection('players').get();
+        const forgerDoc = playersSnap.docs.find(d => d.id === forgerId);
+        expect(forgerDoc?.data().totalScore).to.equal(3);
       });
     });
   });

@@ -39,6 +39,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
   String? _playedRevealForTargetId;
   String? _playedUnmaskForTargetId;
   bool _hasClosedUnmaskWindow = false;
+  int _closeAttempts = 0;
   Timer? _countdownTimer;
 
   int _computeStage(int now, GameState? state) {
@@ -85,10 +86,15 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
         final gs = Provider.of<GameService>(context, listen: false);
         final state = gs.gameState;
         final now = clock.now().millisecondsSinceEpoch;
-        if (state != null && state.unmaskDeadline != null && state.unmaskDeadline! > 0 && now >= state.unmaskDeadline!) {
-          if (gs.currentPlayer?.isHost == true && !_hasClosedUnmaskWindow) {
+        if (state != null && state.unmaskDeadline != null && state.unmaskDeadline! > 0) {
+          if (!_hasClosedUnmaskWindow && now >= state.unmaskDeadline! + 1500) {
             _hasClosedUnmaskWindow = true;
-            gs.closeUnmaskWindow();
+            gs.closeUnmaskWindow().then((closed) {
+              if (!closed && mounted && _closeAttempts < 5) {
+                _closeAttempts++;
+                _hasClosedUnmaskWindow = false;
+              }
+            });
           }
         }
         setState(() {});
@@ -262,6 +268,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     if (currentTargetId != _previousTargetId) {
       _previousTargetId = currentTargetId;
       _hasClosedUnmaskWindow = false;
+      _closeAttempts = 0;
       _revealStartTime = clock.now().millisecondsSinceEpoch;
     }
 

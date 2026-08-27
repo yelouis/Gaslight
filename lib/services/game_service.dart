@@ -701,14 +701,22 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
-  Future<void> closeUnmaskWindow() async {
-    if (_gameState == null) return;
+  Future<bool> closeUnmaskWindow() async {
+    if (_gameState == null) return true;
     try {
       await _functions.httpsCallable('closeUnmaskWindow').call({
         'roomCode': _gameState!.roomCode,
       });
+      return true;
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'failed-precondition') {
+        return false;
+      }
+      debugPrint('Error calling closeUnmaskWindow: $e');
+      return true;
     } catch (e) {
       debugPrint('Error calling closeUnmaskWindow: $e');
+      return true;
     }
   }
 

@@ -8,23 +8,23 @@
 
 ## 1. Open & in-flight
 
-**Wave P — Wave O repair + playtest requests (Issues 122–132) — landed as eleven commits across server (P1–P5) and client (P6–P11) batches (August 27, 2026).**
+**Wave Q — Q1 (Issue 133) complete and verified in code and tests (August 27, 2026).** Awaiting user server deployment (`firebase deploy --only functions`) before proceeding to Q2 five-player soak.
 
 **Gate state, measured August 27, 2026:**
 
 | Gate | Result |
 |---|---|
 | `flutter analyze lib test` | **0 errors**, 0 warnings (221 infos) |
-| `flutter test` | **227 passing** |
+| `flutter test` | **234 passing** (227 baseline + 7 Q1 W1–W7) |
 | `npm --prefix functions run build` | clean |
-| `npm --prefix functions test` | **94 passing, 0 failing** |
+| `npm --prefix functions test` | **101 passing, 0 failing** (94 baseline + 7 Q1 F1–F7) |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** — 5 decks, 295 lines |
-| `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** Server batch (P1–P5) is ready for deploy by user (`firebase deploy --only functions`) |
+| `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** Q1 server changes are ready for deploy by user (`firebase deploy --only functions`) |
 | `./scripts/check_playthrough_evidence.sh` | **exit 0** — 21 blocks: 20 PASS, 1 NOT RUN, 0 FAIL (28 artefact paths verified on disk) |
 
 **Read the exit code, not the pipeline's.** `./scripts/check_deploy_fresh.sh | tail -6` reports `$?` from `tail`, which is always 0. The gate is correct; a piped check of it is not.
 
-**Undeployed and therefore not yet true in production:** P1–P5 server batch (placeholder round skip, 10-minute presence enforcement, score delta unmask withholding + `closeUnmaskWindow`, configurable timer defaults). To be deployed by the user via `firebase deploy --only functions`.
+**Undeployed and therefore not yet true in production:** Q1 (`closeUnmaskWindow` deadline check). To be deployed by the user via `firebase deploy --only functions`.
 
 **Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it.
 
@@ -288,14 +288,14 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–132 — August 8 to 27, 2026
+### Issues 65–133 — August 8 to 27, 2026
 
-**58 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**59 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave Q `closeUnmaskWindow` deadline guard & non-host trigger** (server-side `failed-precondition` check on `Date.now() <= room.unmaskDeadline`, `null`/`0` early returns; client non-host trigger with 1500ms safety margin and bounded 5-attempt retry) | 133 | `design_scoring_and_ui.md` §3.3; `functions/src/index.ts:2241`; `lib/screens/phase4_reveal.dart`; `lib/services/game_service.dart` |
 | **Wave P playtest & repair** (repair red functions gate on placeholder timeout; skip vote phase on all-placeholder round; enforce 10-minute presence window server-side; withhold score deltas until unmask window closes with `closeUnmaskWindow`; configurable round timers with casual mode default; clear queued snackbars on re-roll; departure notification snackbar; deck prompt peek modal; one vote option per row with bounded height; submit on done key & pinned bottom bar; single-line gameplay guidance subtitles) | 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132 | `design_database_and_security.md` §4–§5; `design_game_state_and_models.md` §1; `design_scoring_and_ui.md` §3.2–§3.3; `design_prompt_system.md`; `design_ui_direction.md` |
-| ⚠️ **Caveat on 124.** Its stated goal is delivered and verified — `scoreDeltas` is `undefined` while the unmask window is open. The `closeUnmaskWindow` callable added to close that window shipped **without its deadline guard**, which is a separate live defect | see **Issue 133** | `functions/src/index.ts:2241` |
 | **Security — access control** (`/rooms` collection enumeration; seat/host takeover via `joinRoom` re-binding on a world-readable `playerId`; seat tokens hashed into default-deny `sealed`) | 96, 97 | `design_database_and_security.md` §3, §5 |
 | **Security — answer secrecy** (`castVote` laundering `answerAuthors` into the public room doc; reveal merging every card instead of the current one; forgery authorship exposed during the unmask window) | 98, 99, 100 | `design_game_state_and_models.md` §2; `design_scoring_and_ui.md` |
 | **Security — debug surface** (debug callables reachable in production with no membership or host check) | 101 | `design_database_and_security.md` §7.1 |

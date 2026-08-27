@@ -990,6 +990,10 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       return FakeHttpsCallableResult({'success': true} as T);
     }
 
+    if (name == 'closeUnmaskWindow') {
+      return FakeHttpsCallableResult({'success': true} as T);
+    }
+
     throw UnimplementedError('Callable mock handler not found: $name');
   }
 

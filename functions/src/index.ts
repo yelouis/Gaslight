@@ -2257,12 +2257,15 @@ export const closeUnmaskWindow = onCall(async (request) => {
     }
     const room = roomSnap.data() as GameState;
     if (room.currentPhase !== "reveal") {
-      return { success: true };
+      return { success: true, alreadyClosed: true };
+    }
+    if (room.unmaskDeadline === null || room.unmaskDeadline === undefined || room.unmaskDeadline === 0) {
+      return { success: true, alreadyClosed: true };
     }
 
     const currentCardIdx = room.cards.findIndex(c => c.targetPlayerId === room.currentReaderId);
     if (currentCardIdx === -1) {
-      return { success: true };
+      return { success: true, alreadyClosed: true };
     }
     const currentCard = room.cards[currentCardIdx];
 
@@ -2272,11 +2275,14 @@ export const closeUnmaskWindow = onCall(async (request) => {
     if (!callerPlayer) {
       throw new HttpsError("permission-denied", "Caller is not in this room.");
     }
+    if (Date.now() <= room.unmaskDeadline) {
+      throw new HttpsError("failed-precondition", "The unmask window has not expired yet.");
+    }
 
     const sealedRef = roomRef.collection("sealed").doc(currentCard.targetPlayerId);
     const sealedSnap = await transaction.get(sealedRef);
     if (!sealedSnap.exists) {
-      return { success: true };
+      return { success: true, alreadyClosed: true };
     }
     const sealedData = sealedSnap.data() as any;
     const pendingScoreDeltas = sealedData.pendingScoreDeltas;
