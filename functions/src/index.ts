@@ -910,6 +910,11 @@ export const castVote = onCall(async (request) => {
     }
 
     const card = room.cards[cardIdx];
+    const votedOption = (card.options || []).find(o => o.id === votedForId);
+    if (votedOption && (votedOption.text === kMissingAnswerPlaceholder || votedOption.text.trim() === "")) {
+      throw new HttpsError("invalid-argument", "Cannot vote for a placeholder answer.");
+    }
+
     if (card.votes?.[voterId]) {
       throw new HttpsError("failed-precondition", "You have already voted on this card.");
     }
@@ -1461,20 +1466,26 @@ async function advancePhaseInternal(
         });
       }
 
-      // Shuffle order for voting resolution
+      // Shuffle order for voting resolution, excluding any cards where all options are placeholders
       const pIds = activePlayers.map(p => p.id);
       for (let i = pIds.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pIds[i], pIds[j]] = [pIds[j], pIds[i]];
       }
 
+      const validResolutionOrder = pIds.filter(pid => {
+        const c = updatedCards.find(card => card.targetPlayerId === pid);
+        if (!c || !c.options || c.options.length === 0) return false;
+        return c.options.some(o => o.text && o.text.trim().length > 0 && o.text !== kMissingAnswerPlaceholder);
+      });
+
       const endTime = room.isTimerDisabled ? null : Date.now() + voteDuration;
 
       transaction.update(roomRef, {
         currentPhase: "vote",
         cards: updatedCards,
-        currentReaderId: pIds.length > 0 ? pIds[0] : null,
-        resolutionOrder: pIds,
+        currentReaderId: validResolutionOrder.length > 0 ? validResolutionOrder[0] : null,
+        resolutionOrder: validResolutionOrder,
         readyPlayers: nextReadyPlayers,
         endTime,
         expiresAt: ttlFrom(Date.now())
@@ -1774,8 +1785,19 @@ export const advanceToNextResolution = onCall(async (request) => {
     const order = room.resolutionOrder || [];
     const currentIdx = order.indexOf(room.currentReaderId || "");
 
-    if (currentIdx !== -1 && currentIdx < order.length - 1) {
-      const nextReaderId = order[currentIdx + 1];
+    let nextIdx = currentIdx + 1;
+    while (nextIdx < order.length) {
+      const nextCardTargetId = order[nextIdx];
+      const nextCard = room.cards.find(c => c.targetPlayerId === nextCardTargetId);
+      const isCardVotable = nextCard && nextCard.options && nextCard.options.some(o => o.text && o.text.trim().length > 0 && o.text !== kMissingAnswerPlaceholder);
+      if (isCardVotable) {
+        break;
+      }
+      nextIdx++;
+    }
+
+    if (currentIdx !== -1 && nextIdx < order.length) {
+      const nextReaderId = order[nextIdx];
       const endTime = room.isTimerDisabled ? null : Date.now() + 45000;
       transaction.update(roomRef, {
         currentPhase: "vote",

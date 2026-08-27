@@ -597,5 +597,73 @@ void main() {
 
       await gameService.leaveRoom();
     });
+
+    testWidgets('O4: placeholder answers are sealed and unvotable for all players', (WidgetTester tester) async {
+      final p1 = PlayerState(id: 'p1', name: 'Alice', role: PlayerRole.voter, isHost: true);
+      final p2 = PlayerState(id: 'p2', name: 'Bob', role: PlayerRole.voter);
+      final p3 = PlayerState(id: 'p3', name: 'Charlie', role: PlayerRole.voter);
+
+      final card = CardModel(
+        promptText: 'A prompt',
+        targetPlayerId: 'p1',
+        options: [
+          CardAnswerOption(id: 'opt_truth', text: 'Real Truth Answer'),
+          CardAnswerOption(id: 'opt_placeholder', text: 'THE SOUL IS SILENT'),
+          CardAnswerOption(id: 'opt_forgery', text: 'Real Forgery'),
+        ],
+        votes: {},
+      );
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.vote,
+        totalPlayers: 3,
+        currentReaderId: 'p1',
+        cards: [card],
+        currentCardAssignments: {},
+        readyPlayers: {},
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('p1').set(p1.toMap()..['authUid'] = 'uid1');
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('p2').set(p2.toMap()..['authUid'] = 'uid2');
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('p3').set(p3.toMap()..['authUid'] = 'uid3');
+
+      gameService.listenToRoom('TEST');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('room_code', 'TEST');
+      await prefs.setString('player_id', 'p2');
+      await gameService.tryRejoinSession();
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: MaterialApp(
+            home: const Phase3VoteScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Placeholder option tile should have onTap == null and show SEALED banner
+      final placeholderFinder = find.ancestor(
+        of: find.text('THE SOUL IS SILENT'),
+        matching: find.byType(InkWell),
+      );
+      expect(placeholderFinder, findsOneWidget);
+      final placeholderInkWell = tester.widget<InkWell>(placeholderFinder);
+      expect(placeholderInkWell.onTap, isNull, reason: 'Placeholder tile must be disabled/unvotable');
+
+      // Real forgery option tile should have onTap != null
+      final forgeryFinder = find.ancestor(
+        of: find.text('Real Forgery'),
+        matching: find.byType(InkWell),
+      );
+      expect(forgeryFinder, findsOneWidget);
+      final forgeryInkWell = tester.widget<InkWell>(forgeryFinder);
+      expect(forgeryInkWell.onTap, isNotNull, reason: 'Valid non-self option must be votable');
+
+      await gameService.leaveRoom();
+    });
   });
 }

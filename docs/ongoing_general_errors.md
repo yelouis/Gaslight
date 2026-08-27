@@ -78,24 +78,7 @@ Your selection: Proceed with Option B.
 ---
 
 
-### Issue 118: A departed player's placeholder answer is sealed for some voters and not others
-**Status**: ⚠️ Confirmed Unresolved — Reported from a playtest: a player left, their answers became the `THE SOUL IS SILENT` placeholder (`index.ts:170`), and that option appeared **sealed for some players and votable for others**. Requested behaviour: every placeholder answer should be sealed for everyone, and **if every option on a card ends up sealed, the card should be skipped**.
 
-**Option A (recommended)**: **Treat the placeholder as unvotable server-side, and skip a card with no votable options.** `castVote` rejects a vote for a placeholder option; the reveal transition skips a card where nothing is votable.
-  - *Pros*: One rule, enforced where it cannot be bypassed, so every client agrees by construction — the inconsistency reported here is exactly what happens when clients decide independently. Also delivers the skip behaviour, which no client-only change can.
-  - *Cons*: Functions change and deploy. The skip path needs care so scoring and the round advance handle a card with no votes.
-
-**Option B**: **Grey the placeholder client-side only.**
-  - *Pros*: No deploy; visually fixes the common case.
-  - *Cons*: Does not skip an all-sealed card, and leaves the server accepting a vote the UI forbids — the same client/server disagreement that produced the inconsistency.
-
-**Option C**: **Drop departed players' cards from the round entirely** rather than showing placeholders.
-  - *Pros*: The cleanest experience — no dead cards at all.
-  - *Cons*: Much larger blast radius: the rotation, `resolutionOrder` and scoring all assume one card per active player. Changing that mid-match is where subtle rotation bugs come from.
-
-Your selection: Proceed with Option A.
-
----
 
 ### Issue 119: Vote options are still truncated on smaller phones
 **Status**: ⚠️ Confirmed Unresolved — Reported across phones of different sizes. The card was tuned in Wave K to fit **100 characters at 375 pt wide** with a length-tiered font (`card_grid.dart`), and that is verified by test at that width — but the tiers are **fixed numbers validated at one width**, so a narrower device or a larger accessibility text size still clips. Requirement stands: nothing up to 100 characters should ever truncate.
@@ -367,7 +350,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Own-answer lockout** — option id as authority, per-card text as fallback, never unioned; `getMyOptionId` and its client call discipline; cross-round `answerAuthors` map isolation without `{ merge: true }` | 90, 91, 92, 94, 117 | `design_scoring_and_ui.md` §3.2; `design_database_and_security.md` §2; `functions/src/index.ts` |
 | **Reveal & unmask** — who may accuse vs who may be accused; the five-beat reveal and its deadline; server-published per-card `scoreDeltas` including unmask ±1 (Wave O / O2) | 79, 80, 113 | `design_scoring_and_ui.md` §3.3; `functions/src/index.ts` |
 | **Prompts & decks** — per-player `seenPrompts` in `sealed`; exhaustion boundary and the `resource-exhausted` → SnackBar mapping whose fall-through is the failure mode | 67, 68, 69, 83, 88 | `design_prompt_system.md` §5 |
-| **Answer integrity** — spurious `THE SOUL IS SILENT` placeholder; forgery author key derived server-side; forgery defaults and the 3-player floor as an independent guard | 72, 76 | `design_game_state_and_models.md` §1–§2 |
+| **Answer integrity** — spurious `THE SOUL IS SILENT` placeholder; forgery author key derived server-side; forgery defaults and the 3-player floor as an independent guard; placeholder votes rejected and all-placeholder cards skipped server-side with sealed placeholder UI (72, 76, 118 / O4) | 72, 76, 118 | `design_game_state_and_models.md` §1–§2; `functions/src/index.ts`; `lib/widgets/card_grid.dart` |
 | **UI surfaces** — dialog contrast (ratio-asserted, not string-asserted); error surfaces mapped on `e.code` and never interpolating the exception; busy states as a correctness guard because `createRoom` is not idempotent | 84, 93, 95 | `design_ui_direction.md` §6 |
 | **Debug controls & dead fields** — host debug controls cleaned up; reaction medallions removed with `lastReaction`/`lastReactionAt` deliberately retained in the model and rules to avoid a migration | 73, 74 | `design_database_and_security.md` §3 |
 | **Standings & honors** — tabular-figure alignment; honors metrics | 75 | `design_scoring_and_ui.md` |

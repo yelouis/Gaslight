@@ -4109,6 +4109,117 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(matchSummary.bestLie.authorName).to.equal(expectedName);
       });
     });
+
+    describe('Wave O: Issue 118 / O4 - placeholder votes rejected & all-placeholder cards skipped', () => {
+      it('O4: castVote throws invalid-argument when voting for a placeholder answer', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Truth phase: all time out (all become placeholders)
+        await callFn('advancePhase', hostUser.idToken, { roomCode });
+        
+        // Forgery phase: find who is assigned to p_host and submit real forgery
+        let roomSnap = await roomRef.get();
+        const assignments = roomSnap.data()?.currentCardAssignments as Record<string, string>;
+        const forgerId = Object.keys(assignments).find(holderId => assignments[holderId] === 'p_host')!;
+        const forgerUser = forgerId === 'p_host' ? hostUser : (forgerId === 'p_g1' ? g1User : g2User);
+        await callFn('submitAnswer', forgerUser.idToken, { roomCode, targetCardId: 'p_host', authorId: forgerId, text: 'Real Forgery', isTruth: false });
+        await callFn('advancePhase', hostUser.idToken, { roomCode });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+
+        const aliceCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+        const options = aliceCard.options as Array<{ id: string; text: string }>;
+        const placeholderOpt = options.find(o => o.text === 'THE SOUL IS SILENT')!;
+        expect(placeholderOpt).to.exist;
+
+        const voterId = ['p_host', 'p_g1', 'p_g2'].find(id => id !== 'p_host' && id !== forgerId)!;
+        const voterUser = voterId === 'p_host' ? hostUser : (voterId === 'p_g1' ? g1User : g2User);
+
+        let errorCaught = false;
+        try {
+          await callFn('castVote', voterUser.idToken, {
+            roomCode,
+            targetCardId: 'p_host',
+            voterId,
+            votedForId: placeholderOpt.id
+          });
+        } catch (e: any) {
+          errorCaught = true;
+          expect(e.message).to.include('Cannot vote for a placeholder answer');
+        }
+        expect(errorCaught).to.be.true;
+      });
+
+      it('O4: skips card from resolutionOrder when all options on the card are placeholders', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Truth phase: Alice and Bob write truths, Charlie times out
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice Truth', isTruth: true });
+        await callFn('submitAnswer', g1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob Truth', isTruth: true });
+        await callFn('advancePhase', hostUser.idToken, { roomCode });
+
+        // Forgery phase: Alice writes for Bob, Bob writes for Alice, nobody writes for Charlie
+        let roomSnap = await roomRef.get();
+        const assignments = roomSnap.data()?.currentCardAssignments as Record<string, string>;
+        for (const [holderId, targetId] of Object.entries(assignments)) {
+          if (targetId !== 'p_g2') {
+            const user = holderId === 'p_host' ? hostUser : (holderId === 'p_g1' ? g1User : g2User);
+            await callFn('submitAnswer', user.idToken, { roomCode, targetCardId: targetId, authorId: holderId, text: `Lie by ${holderId}`, isTruth: false });
+          }
+        }
+        await callFn('advancePhase', hostUser.idToken, { roomCode });
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+        const resolutionOrder = roomSnap.data()?.resolutionOrder as string[];
+        // Charlie's card has 100% placeholder options (both truth and forgeries were missing), so it must be skipped from resolutionOrder
+        expect(resolutionOrder).to.not.include('p_g2');
+        expect(resolutionOrder.length).to.equal(2);
+      });
+    });
   });
 });
 

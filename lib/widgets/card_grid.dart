@@ -66,17 +66,19 @@ class CardGrid extends StatelessWidget {
         final isSelfAnswer = myOptionIdForThisCard != null
             ? ans.authorId == myOptionIdForThisCard
             : ans.isSelfAnswer;
+        final isPlaceholder = ans.text == 'THE SOUL IS SILENT' || ans.text.trim().isEmpty;
+        final isUnvotable = isSelfAnswer || isPlaceholder;
         final isSelected = selectedAuthorId == ans.authorId;
 
         return Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: isSelfAnswer ? null : () => onSelect(ans.authorId),
+            onTap: isUnvotable ? null : () => onSelect(ans.authorId),
             borderRadius: BorderRadius.circular(12),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               decoration: BoxDecoration(
-                color: isSelfAnswer 
+                color: isUnvotable 
                     ? theme.colorScheme.surface.withOpacity(0.5) 
                     : theme.colorScheme.surface, // Parchment
                 borderRadius: BorderRadius.circular(12),
@@ -114,7 +116,7 @@ class CardGrid extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (isSelfAnswer)
+                  if (isUnvotable)
                     Positioned(
                       top: 8,
                       left: -20,
