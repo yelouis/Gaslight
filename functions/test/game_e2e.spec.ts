@@ -2854,7 +2854,8 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         // 2. Falsifying assertion: host kicks guest1 from the lobby
         await callFn('handleDisconnect', hostUser.idToken, {
           roomCode,
-          disconnectedPlayerId: 'p_g1'
+          disconnectedPlayerId: 'p_g1',
+          reason: 'kick'
         });
 
         // Assert guest1 doc no longer exists
@@ -4248,9 +4249,238 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       });
     });
 
-    describe('Wave O: Issue 120 / O5 - presence window 10 minutes', () => {
-      it('O5: PRESENCE_STALE_MS is exported and equals 600,000 (10 minutes)', async () => {
-        expect(PRESENCE_STALE_MS).to.equal(600_000);
+    describe('Wave P: Issue 123 / P3 - server enforces 10-minute presence window', () => {
+      it('P3: presence window protects player seen 150s ago (inside 10-minute window)', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Set Bob's lastSeen to 150 seconds ago (inside 10-minute window)
+        const recentLastSeen = Date.now() - 150_000;
+        await roomRef.collection('players').doc('p_g1').update({ lastSeen: recentLastSeen });
+
+        // Host calls handleDisconnect with reason: 'presence'
+        const res = await callFn('handleDisconnect', hostUser.idToken, {
+          roomCode,
+          disconnectedPlayerId: 'p_g1',
+          reason: 'presence'
+        });
+
+        expect(res.success).to.be.false;
+        expect(res.reason).to.equal('still-present');
+
+        // Bob's player document still exists
+        const bobSnap = await roomRef.collection('players').doc('p_g1').get();
+        expect(bobSnap.exists).to.be.true;
+      });
+
+      it('P3: presence window evicts player stale by 601s', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Set Bob's lastSeen to 601 seconds ago
+        const staleLastSeen = Date.now() - 601_000;
+        await roomRef.collection('players').doc('p_g1').update({ lastSeen: staleLastSeen });
+
+        const res = await callFn('handleDisconnect', hostUser.idToken, {
+          roomCode,
+          disconnectedPlayerId: 'p_g1',
+          reason: 'presence'
+        });
+
+        expect(res.success).to.be.true;
+        const bobSnap = await roomRef.collection('players').doc('p_g1').get();
+        expect(bobSnap.exists).to.be.false;
+      });
+
+      it('P3: leave reason removes player immediately even when seen 1s ago', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Bob leaves voluntarily
+        const res = await callFn('handleDisconnect', g1User.idToken, {
+          roomCode,
+          disconnectedPlayerId: 'p_g1',
+          reason: 'leave'
+        });
+
+        expect(res.success).to.be.true;
+        const bobSnap = await roomRef.collection('players').doc('p_g1').get();
+        expect(bobSnap.exists).to.be.false;
+      });
+
+      it('P3: kick reason by host removes player immediately even when seen 1s ago', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Host kicks Bob
+        const res = await callFn('handleDisconnect', hostUser.idToken, {
+          roomCode,
+          disconnectedPlayerId: 'p_g1',
+          reason: 'kick'
+        });
+
+        expect(res.success).to.be.true;
+        const bobSnap = await roomRef.collection('players').doc('p_g1').get();
+        expect(bobSnap.exists).to.be.false;
+      });
+
+      it('P3: peer calling presence on fresh player is rejected with permission-denied', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Charlie tries to call handleDisconnect on Bob with reason: 'presence' when Bob is fresh
+        let errorCaught = false;
+        try {
+          await callFn('handleDisconnect', g2User.idToken, {
+            roomCode,
+            disconnectedPlayerId: 'p_g1',
+            reason: 'presence'
+          });
+        } catch (e: any) {
+          errorCaught = true;
+          expect(e.message).to.include('Not authorized');
+        }
+        expect(errorCaught).to.be.true;
+      });
+
+      it('P3: reconcile cleans up card when player document is already gone', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Delete Bob's player document directly in Firestore to simulate external cleanup
+        await roomRef.collection('players').doc('p_g1').delete();
+
+        // Host calls handleDisconnect with reason: 'reconcile'
+        const res = await callFn('handleDisconnect', hostUser.idToken, {
+          roomCode,
+          disconnectedPlayerId: 'p_g1',
+          reason: 'reconcile'
+        });
+
+        expect(res.success).to.be.true;
+        const roomSnap = await roomRef.get();
+        const cardTargetIds = (roomSnap.data()?.cards || []).map((c: any) => c.targetPlayerId);
+        expect(cardTargetIds).to.not.include('p_g1');
       });
     });
 

@@ -1118,9 +1118,15 @@ export const handleDisconnect = onCall(async (request) => {
   }
 
   const callerUid = request.auth.uid;
-  const { roomCode, disconnectedPlayerId } = request.data;
+  const { roomCode, disconnectedPlayerId, reason } = request.data;
   if (!roomCode || !disconnectedPlayerId) {
     throw new HttpsError("invalid-argument", "roomCode and disconnectedPlayerId are required.");
+  }
+
+  if (reason !== undefined && reason !== null) {
+    if (reason !== "leave" && reason !== "kick" && reason !== "presence" && reason !== "reconcile") {
+      throw new HttpsError("invalid-argument", "Invalid disconnect reason.");
+    }
   }
 
   const roomRef = db.collection("rooms").doc(roomCode);
@@ -1152,8 +1158,27 @@ export const handleDisconnect = onCall(async (request) => {
     const phase = room.currentPhase;
     const isDead = disconnectedPlayer && disconnectedPlayer.lastSeen && (Date.now() - disconnectedPlayer.lastSeen) > PRESENCE_STALE_MS;
 
-    if (!callerPlayer || (!callerPlayer.isHost && callerPlayer.id !== disconnectedPlayerId && !isDead)) {
+    if (!callerPlayer) {
       throw new HttpsError("permission-denied", "Not authorized to trigger disconnect.");
+    }
+
+    const effectiveReason = reason || (callerPlayer.id === disconnectedPlayerId ? "leave" : "presence");
+
+    if (effectiveReason === "leave") {
+      if (callerPlayer.id !== disconnectedPlayerId) {
+        throw new HttpsError("permission-denied", "Only the player themself may leave.");
+      }
+    } else if (effectiveReason === "kick" || effectiveReason === "reconcile") {
+      if (!callerPlayer.isHost) {
+        throw new HttpsError("permission-denied", "Only host may kick or reconcile.");
+      }
+    } else if (effectiveReason === "presence") {
+      if (!callerPlayer.isHost && callerPlayer.id !== disconnectedPlayerId && !isDead) {
+        throw new HttpsError("permission-denied", "Not authorized to trigger disconnect.");
+      }
+      if (disconnectedPlayer && !isDead) {
+        return { success: false, reason: "still-present" };
+      }
     }
 
     const hasCard = room.cards.some(c => c.targetPlayerId === disconnectedPlayerId);
@@ -1169,12 +1194,16 @@ export const handleDisconnect = onCall(async (request) => {
 
     // 2. Already pruned (no card dealt for this player) -> unchanged behaviour.
     if (!hasCard) {
-      transaction.delete(playerRef);
+      if (disconnectedPlayer) {
+        transaction.delete(playerRef);
+      }
       return { success: true };
     }
 
     // 1. Delete player document
-    transaction.delete(playerRef);
+    if (disconnectedPlayer) {
+      transaction.delete(playerRef);
+    }
 
     // 2. Adjust GameState arrays/maps
     const remainingCards = room.cards.filter(c => c.targetPlayerId !== disconnectedPlayerId);

@@ -17,8 +17,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:uuid/uuid.dart';
 
 class GameService extends ChangeNotifier with WidgetsBindingObserver {
-  static const int presenceStaleMs = 120000;
-
   final FirebaseFirestore _db;
   final FirebaseFunctions _functions;
 
@@ -399,6 +397,7 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
         await _functions.httpsCallable('handleDisconnect').call({
           'roomCode': roomCode,
           'disconnectedPlayerId': playerId,
+          'reason': 'leave',
         });
       } catch (e) {
         debugPrint('Error calling handleDisconnect on leave: $e');
@@ -415,6 +414,7 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     await _functions.httpsCallable('handleDisconnect').call({
       'roomCode': roomCode,
       'disconnectedPlayerId': playerId,
+      'reason': 'kick',
     });
   }
 
@@ -449,18 +449,19 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
 
       final now = DateTime.now().millisecondsSinceEpoch;
       
-      // Clean up inactive/dead players (presenceStaleMs threshold)
+      // Clean up inactive/dead players (60s local threshold, server enforces 10min presence window)
       final deadPlayers = _players.where((p) {
         if (p.id == _currentPlayerId) return false;
         final lastSeen = p.lastSeen;
         if (lastSeen == null) return false;
-        return (now - lastSeen) > presenceStaleMs;
+        return (now - lastSeen) > 60000;
       }).toList();
 
       for (var dp in deadPlayers) {
         _functions.httpsCallable('handleDisconnect').call({
           'roomCode': roomCode,
           'disconnectedPlayerId': dp.id,
+          'reason': 'presence',
         }).then((_) {}).catchError((_) {});
       }
 
@@ -548,6 +549,7 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
       await _functions.httpsCallable('handleDisconnect').call({
         'roomCode': _gameState!.roomCode,
         'disconnectedPlayerId': disconnectedPlayerId,
+        'reason': 'reconcile',
       });
     } finally {
       _disconnectsInFlight.remove(disconnectedPlayerId);
