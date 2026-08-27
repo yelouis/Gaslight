@@ -2,6 +2,8 @@
   "mcpServers": {
     "marionette-p1": { "command": "/Users/louisye/.pub-cache/bin/marionette_mcp", "args": [] },
     "marionette-p2": { "command": "/Users/louisye/.pub-cache/bin/marionette_mcp", "args": [] },
-    "marionette-p3": { "command": "/Users/louisye/.pub-cache/bin/marionette_mcp", "args": [] }
+    "marionette-p3": { "command": "/Users/louisye/.pub-cache/bin/marionette_mcp", "args": [] },
+    "marionette-p4": { "command": "/Users/louisye/.pub-cache/bin/marionette_mcp", "args": [] },
+    "marionette-p5": { "command": "/Users/louisye/.pub-cache/bin/marionette_mcp", "args": [] }
   }
 }
