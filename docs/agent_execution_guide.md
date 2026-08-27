@@ -1,22 +1,29 @@
-# Agent Execution Guide — Active Build: Wave Q — Close the `closeUnmaskWindow` hole (Issue 133) — August 27, 2026
+# Agent Execution Guide — Active Build: Wave Q — Close the `closeUnmaskWindow` hole, then a five-player soak — August 27, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**One item. One commit. The selection is made: Issue 133 → Option A.**
+**Two items. The code selection is made: Issue 133 → Option A.**
 
 | # | Item | Issue → choice | Side | Deploy |
 |---|---|---|---|---|
 | **Q1** | `closeUnmaskWindow` must refuse an early close, and any room member must be able to call it | **133 → A** | server + client | ✅ |
+| **Q2** | Five-player Marionette soak — departures in every phase, and every Wave O/P/Q feature on a real device | user request | test only | — |
 
 **Do not run `firebase deploy` yourself** — that call is the user's, and it is what makes the server half of Q1 real.
+
+### Ordering: Q1 → the user deploys → Q2. This is not optional.
+
+Q2 exercises the unmask window and the points tray. Running it before Q1 lands **and is deployed** tests a build with a known hole in exactly the path Q2 is meant to certify, and every finding about the reveal beat would have to be thrown away and re-gathered. **The soak runs against production** (`USE_EMULATOR=false`), so what matters is the deployed server, not the local tree — check `./scripts/check_deploy_fresh.sh` exits 0 before starting, and **stop and tell the user if it does not.**
 
 **Every number and literal string below is a decision, not a suggestion.** Implement as written. If a value is impossible, keep the intent, deviate minimally, and say so in the commit body.
 
 ---
 
-## 0. What this item is, in one paragraph
+## 0. What these two items are
 
 Wave P's Issue 124 fix correctly stopped publishing `scoreDeltas` while the unmask window is open, and added a `closeUnmaskWindow` callable to close the window on the timeout path. **The callable shipped without the deadline check that made it safe.** Any player can call it the instant the reveal begins, which ends the guessing window for the whole table and publishes the map that names every fooling forger. Separately, the client only calls it when the caller is the host, so a table whose host has left never closes the window at all. **Q1 fixes both halves in one commit**, because fixing only the guard leaves the empty-tray path and fixing only the trigger widens who can exploit the missing guard.
+
+**Q2 is a five-player Marionette soak**, requested by the user. Every functional defect this project has ever had was found by a person playing, and every one of them was found at **three** players — the most this harness has ever driven. Five is where the forgery chain, the reader rotation and the departure logic all become non-trivial, and where a card first carries five options. Q2 writes a report and files what it finds; **it writes no production code.**
 
 ---
 
@@ -29,7 +36,8 @@ Wave P's Issue 124 fix correctly stopped publishing `scoreDeltas` while the unma
 - **Read a gate's exit code bare, never through a pipe.** `./scripts/check_deploy_fresh.sh | tail -6` reports `$?` from `tail`, which is always `0`.
 - **Never hand-edit `lib/utils/prompt_decks.dart`** — it is generated.
 - **When a change adds or alters a callable, enumerate what it now permits** before enumerating what it fixes (lesson 2.32). That is the lesson this whole wave exists to apply.
-- **Do not touch anything in §7 or §8.**
+- **Q2 finds defects; it does not fix them.** A report written against a moving build proves nothing. File and stop.
+- **Do not touch anything in §8 or §9.**
 
 ---
 
@@ -159,7 +167,138 @@ If the host has left or backgrounded the app, nobody calls, `scoreDeltas` is nev
 
 ---
 
-## 4. Definition of Done
+## 4. Q2 — Five-player Marionette soak
+
+**What this means for the user:** every functional defect this project has ever had was found by a person playing the game, and every one of them was found at **three** players. Five players is where the rotation, the forgery chain and the departure logic all get harder, and none of it has ever been driven on a device.
+
+**This is a test-only item. Write no production code.** If the soak finds a defect, **stop and file it** in `docs/ongoing_general_errors.md` with options and a blank selection line — do not fix it inside the soak, because a report written against a moving build proves nothing.
+
+### 4.1 Why five, specifically
+
+At five players the following become reachable for the first time, and all of them are untested on a device:
+
+- `forgeriesPerCard` defaults to `Math.min(activePlayers.length - 1, 5)` = **4** (`index.ts:640`), so a card carries **1 truth + 4 forgeries = 5 options**. Issue 132's one-option-per-row layout was designed for exactly this and has only ever been seen with 3.
+- A table can lose **two** players and still play. The 3-player floor (`activePlayerCount < 3` → `gameOver`, `index.ts:1321`) has only ever been hit from 3 → 2.
+- The forgery **assignment chain** has enough links to re-link non-trivially when someone in the middle leaves (`index.ts:1246`).
+- The **current reader** can leave mid-vote with other readers still queued behind them (`index.ts:1306`), which at 3 players almost always collapsed straight to game over instead.
+
+### 4.2 Prerequisites — do these in order, and prove each one
+
+1. **Add two more Marionette servers.** `.agents/mcp_config.json` currently declares `marionette-p1` … `p3`. Add `marionette-p4` and `marionette-p5` with the same `command` and empty `args`. **The MCP client must be restarted to see them** — confirm all five respond before booting anything, and if the harness only exposes three, **stop and tell the user**; do not silently run a 3-player soak and label it five.
+2. **Five booted simulators, five distinct device models.** Record each `udid` and DDS port in the report header. The existing convention is p1→8182, p2→8282, p3→8382; continue it as **p4→8482, p5→8582**.
+3. **`.env` must contain `USE_EMULATOR=false`.** It is a bundled asset — changing it after the build has no effect.
+4. **Uninstall the app on every one of the five simulators** before installing, so no stale room is restored from `SharedPreferences`. A resumed room from a previous run is the single most common way these soaks produce nonsense.
+5. **Build once, then prove the binary is newer than the source.** Paste both lines into the report header:
+   ```bash
+   stat -f '%Sm binary' build/ios/iphonesimulator/Runner.app/Runner; git log -1 --format='%cd source' -- lib ios
+   ```
+6. **Install to one device at a time.** Concurrent builds corrupt `build/`.
+7. **Paste `flutter --version` into the header** rather than recalling it.
+8. **Confirm `./scripts/check_deploy_fresh.sh` exits 0** and paste the function count and timestamp. The soak hits production; a stale server invalidates every server-side assertion in it.
+
+### 4.3 Where the report goes, and the evidence contract
+
+Write to a **new file, `docs/playthrough_findings_5player.md`.** Do not append to `docs/playthrough_findings_marionette.md` — that is the Wave N report and its header describes a different build.
+
+**Block IDs must be `E<number>` and must continue from the existing report: start at `E22`.** The gate only recognises headings matching `^### [EW]\d+`, and reusing `E1`–`E21` would make cross-references ambiguous.
+
+Add the new file to the battery and say so in the commit:
+```bash
+./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md
+```
+
+Every block takes this shape. The gate parses it mechanically:
+
+```
+### E22 — Short title
+- **Verdict:** PASS | FAIL | NOT RUN
+- **Devices:** P1 `model` (Name), … 
+- **Room Code:** `XXXX`
+- **What I did:** numbered steps
+- **Observed:** …
+- **Reference:** file:line
+- **Expected:** one sentence
+```
+
+**Rules the gate enforces — R1–R5:**
+- A `PASS` or `FAIL` block **must** have a non-empty `**Observed:**` field. `NOT RUN` **must** have a `**Reason:**`.
+- `**Observed:**` must contain at least one real artefact: a screenshot path matching `docs/playthrough_evidence/<name>.png`, a widget entry (`Type: …` or `Text: "…"`), or a `flutter:` log line.
+- **A `grep -` in an Observed field is a hard failure.** A grep is not an observation.
+- **Every cited `.png` must exist on disk.** Cite it only after you have written it.
+- **Name the field `Observed:`.** A renamed variant is what let a bad block through a human review once already.
+
+**And a rule the gate cannot enforce, which matters more than the ones it can:** **open the screenshot and look at it.** A path satisfies R5; it does not prove the image shows what the prose claims. Three separate defects in this project's history survived because nobody did.
+
+### 4.4 Match configuration
+
+Run the soak as **two matches**, because one configuration cannot cover both goals.
+
+**Match A — the departure soak.** `forgeriesPerCard = 2`, `totalRounds = 2`, timers **off** (now the default), deck `Hypotheticals`. Two forgeries keeps the typing tractable across five devices while leaving every departure path reachable.
+
+**Match B — the wide-card check.** Leave `forgeriesPerCard` at its **default** so it resolves to 4 and each card shows **5 options**. `totalRounds = 1`. This match exists to look at the vote screen and the reveal, not to soak departures.
+
+**Set `Disable Game Timers` deliberately per block and record it.** Timers now default **off** (Issue 130), so the old reports' "timers ON as a deliberate deviation" note no longer applies — the deviation is now turning them **on**, which E38 and E39 require.
+
+### 4.5 The blocks
+
+Each entry gives the setup, the action, and **what must be true afterwards**. Assert the stated post-condition on **every** device named, not just the one that acted — a departure that looks right to the leaver and wrong to everyone else is the failure mode.
+
+#### Lobby and setup
+
+- **E22 — Five players join and the ledger shows all five.** Alice hosts; Bob, Charlie, Dana, Erin join by room code. **Assert on all five devices:** five avatars, one marked host, and the room code visible. **Reference:** `index.ts:535` (the 10-player cap is not hit).
+- **E23 — Peek inside a deck before choosing.** On P1, tap `PEEK INSIDE` on the centred deck card. **Assert:** exactly **8** prompt rows under `A TASTE OF WHAT'S INSIDE`; tap `SHUFFLE` and assert the visible set changes; dismiss and assert `selectedDeckId` is unchanged. **Reference:** `lib/widgets/deck_peek_sheet.dart`. *(Issue 126.)*
+- **E24 — Timers default to off, and the duration field appears only when they are on.** **Assert:** `Disable Game Timers` is **on** by default; toggling it off reveals `Seconds per round` defaulting to **60** with helper text `15–300 seconds. Voting gets 75% of this.`; entering `10` and `301` are both refused. **Reference:** `lib/screens/lobby_screen.dart:777`. *(Issue 130.)*
+- **E25 — Host kicks a guest in the lobby.** Alice kicks Erin. **Assert:** Erin's device returns to `THE GUEST LEDGER`; the other four show four players. Then Erin rejoins for the rest of the run. *(Extends E8 from 3 players to 5.)*
+- **E26 — Host leaving the lobby closes the room for everyone.** Do this **last among the lobby blocks**, in a throwaway room: Alice leaves while in the lobby. **Assert on all five:** every device returns to `THE GUEST LEDGER`, and the room document is gone. **Reference:** `index.ts:1213` (`roomClosed: true`). Then create the real Match A room.
+
+#### Match A — departures in every phase
+
+- **E27 — Guidance lines are present in all three phases.** **Assert the exact strings:** truth — `Write something true about you — the more surprising, the better. Others must be able to believe it.`; forgery — begins `You are writing as ` and names a **real player name**, never an id; vote — `Talk it out — discussion is part of the game.` **Reference:** `lib/screens/phase2_craft.dart:434`. *(Issue 129.)*
+- **E28 — The return key submits.** On P2 during truth, type an answer and send the keyboard's **done** action instead of tapping the button. **Assert:** the answer is submitted and the screen advances to waiting. Then on P3, type **101 characters** and send done. **Assert:** it is **refused** with the `Trim it to 100 or fewer` snackbar, and no submission occurred. **Reference:** `lib/screens/phase2_craft.dart:540`. *(Issue 131.)*
+- **E29 — The room code is visible in every in-game phase.** **Assert:** `ROOM: XXXX` is legible in the AppBar during truth, forgery, vote and reveal, on a device at each of the five screen sizes. *(Issue 120.)*
+- **E30 — Guest departs during the TRUTH phase (5 → 4).** Dana taps `Leave game` and confirms. **Assert:** Dana's device returns to the ledger; **the other four each show a snackbar reading `Dana has left the parlour.`** *(Issue 128)*; the match continues; Dana's card is gone from the rotation; `totalPlayers` is 4.
+- **E31 — Guest departs during the FORGERY phase (4 → 3), and the assignment chain re-links.** **Before Erin leaves, record who was assigned to write on whose card.** Erin leaves mid-forgery. **Assert:** the player who had been assigned *to Erin's card* is reassigned to Erin's former target, so no one is left holding a card that no longer exists; the forgery rotation count drops if it now exceeds `players − 1`; the match continues at 3. **Reference:** `index.ts:1246`. **This is the block most likely to find something** — it is the only place the chain is re-linked, and it has never been driven on a device.
+- **E32 — Rejoin after a force-quit (seat recovery at 5 players).** Restart the room with all five. Mid-match, `xcrun simctl terminate` on P4, then relaunch. **Assert:** P4 returns straight into the current phase with its seat, name and score intact — not to the ledger. **Reference:** `design_database_and_security.md` §5. *(Extends E7 to 5 players.)*
+- **E33 — The current reader departs mid-VOTE with readers still queued.** Wait until `currentReaderId` is Charlie and at least two readers remain behind them, then Charlie leaves. **Assert:** the vote phase advances to another player's card rather than stalling or jumping to game over; the remaining players can still vote; nobody sees an empty vote screen. **Reference:** `index.ts:1306`. **This is the case 3-player runs could never reach**, because losing a player there hit the floor instead.
+- **E34 — A player departs during REVEAL.** **Assert:** the reveal continues for the remaining players; the standings drop the departed player; no card is left unresolvable.
+- **E35 — The host departs mid-match and the crown transfers.** Alice leaves during an active phase. **Assert:** exactly one remaining player becomes host — specifically `remainingActivePlayers[0]`, the earliest joiner (`index.ts:1342`) — and that device now sees the host-only controls; the match continues; the room is **not** closed (that only happens in the lobby, E26).
+- **E36 — Dropping below three auto-ends the match with scores intact.** Continue until only two players remain. **Assert on both survivors:** navigation to Game Over, `matchSummary` present, and **scores preserved** rather than reset. **Reference:** `index.ts:1321`.
+- **E37 — A departed player still appears by name in MATCH HIGHLIGHTS.** On the same Game Over screen from E36, **assert that a player who left mid-match is still named** in `BEST LIE OF THE NIGHT`, `CLEANEST TRUTH` or a head-to-head line — **a display name, never a raw id.** *(Issue 115. This is the cross-feature assertion — it can only be checked by combining a departure with a completed match, which no unit test does.)*
+
+#### Timer-driven and long-running
+
+- **E38 — Timeout fills placeholders, and a placeholder cannot be voted for.** New room, timers **on**, `Seconds per round = 15`. Have exactly one player go silent through truth. **Assert:** their slot fills with `THE SOUL IS SILENT`; on the vote screen that option is stamped `SEALED` and **cannot be tapped**; the rest of the card votes normally. *(Issue 118.)*
+- **E39 — A round where nobody answers is skipped, not stranded.** Same configuration; **every** player stays silent through both truth and forgery. **Assert:** the table does **not** land on an empty vote screen — it advances to the next round or to Game Over — and players see `Nobody answered last round. Dealing a new one.` **Reference:** `index.ts:1630`. *(Issue 125.)*
+- **E40 — The presence window really is ten minutes.** ⚠️ **This block takes ~12 minutes of wall clock. Budget for it and run it last, or in parallel with report writing.** Force-quit P5 (`xcrun simctl terminate`) mid-match and note the time. **Assert at ~2 minutes: P5 is STILL seated** — this is the whole point, because before Issue 123 they were evicted at exactly this mark. **Assert at ~11 minutes: P5 has been dropped.** Record both timestamps. **Reference:** `index.ts:179`, `handleDisconnect`'s `"presence"` branch. **No unit test can cover this** — fake timers do not suspend an isolate. *(Issue 123.)*
+
+#### Match B — the wide card
+
+- **E41 — Five options, one per row, all reachable.** With `forgeriesPerCard` at its default of 4, reach the vote phase. **Assert:** the options render **one per row**, not in a two-column grid; **all five are reachable by scrolling**; no text is truncated or ellipsized on the narrowest device in the set. Screenshot every device. *(Issue 132 — this is the configuration it was designed for and has never been seen in.)*
+- **E42 — Your own answer is locked out, in round 2 as well as round 1.** In a 2-round Match B, **assert in round 2** that the option the player themself authored is greyed and untappable, and that it is the *correct* option — the one whose text they wrote this round. **Reference:** `getMyOptionId`, `index.ts`. *(Issue 117 — the bug was that round 1's option id leaked into round 2, so a single-round check cannot see it.)*
+- **E43 — The unmask window withholds the deltas, then publishes them.** On a card where someone was fooled: **assert during the 20-second window** that no per-player points are shown; **assert after it closes** that `POINTS AWARDED THIS CARD` appears with the correct values including the unmask ±1, and that the standings badges update. **Then assert it also works when the host is absent** — have the host leave before the window expires and confirm the tray still fills on the remaining devices. *(Issues 124 and 133 — that last sentence is the whole point of Q1's client change, and it cannot be tested any other way.)*
+
+### 4.6 Reporting
+
+- One block per assertion, in the shape of §4.3, with a screenshot for anything visual.
+- **A block you did not run is `NOT RUN` with a `Reason:`** — never omitted, and never quietly folded into a neighbouring block. An omitted assertion reads as though it passed.
+- **Record every deviation**, including any block you simplified because five devices proved unwieldy.
+- Close with a **What the harness could not see** section. Known entries before you start: real network jitter; App Store ingestion; anything gated on `kDebugMode`, since Marionette can only attach to a debug build and the release gating is therefore invisible to it.
+- **Every defect found is filed, not fixed** — `ongoing_general_errors.md`, options, Pros/Cons, one `(recommended)`, blank selection line.
+
+### 4.7 Definition of Done for Q2
+
+- [ ] Five Marionette servers responding, five simulators, five distinct models, ports recorded.
+- [ ] `.env` `USE_EMULATOR=false`; app uninstalled on all five before install; binary-newer-than-source proof pasted.
+- [ ] `./scripts/check_deploy_fresh.sh` exited **0** before the soak began, with Q1 deployed.
+- [ ] `docs/playthrough_findings_5player.md` exists with blocks **E22–E43**, each PASS/FAIL/NOT RUN.
+- [ ] `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` exits **0**, and the count of blocks it reports **matches the number you wrote** — a gate that parsed fewer blocks than exist has told you nothing.
+- [ ] **Every cited screenshot was opened and looked at**, not merely written and referenced.
+- [ ] E31 (forgery chain re-link), E33 (reader departs mid-vote), E40 (ten-minute presence) and E43 (unmask window without the host) are all genuinely attempted — **these four are the reason the soak exists**; a run that marks them NOT RUN has not delivered Q2.
+- [ ] Every defect found is filed with options; **none is fixed in this commit**.
+
+---
+
+## 5. Definition of Done — Q1
 
 - [ ] **F1 written first, run against the current code, and observed to fail.** Failing output pasted into the commit body.
 - [ ] The guard **throws `failed-precondition`** while the window is open, and `scoreDeltas` and `unmaskDeadline` are both left untouched by the rejected call.
@@ -176,7 +315,7 @@ If the host has left or backgrounded the app, nobody calls, `scoreDeltas` is nev
 
 ---
 
-## 5. Carry forward — no selection needed, not part of Q1
+## 6. Carry forward — no selection needed, not part of Q1
 
 Do these only if a future item already touches the file. They are not work on their own.
 
@@ -186,7 +325,7 @@ Do these only if a future item already touches the file. They are not work on th
 
 ---
 
-## 6. Verified baseline — measured in-session, August 27, 2026
+## 7. Verified baseline — measured in-session, August 27, 2026
 
 This is the regression bar. Every number came from running the command.
 
@@ -202,7 +341,7 @@ This is the regression bar. Every number came from running the command.
 
 ---
 
-## 7. Already delivered — do NOT rework
+## 8. Already delivered — do NOT rework
 
 - **All of Wave P except the Issue 133 defect.** Verified in source and against a running emulator, August 27, 2026:
   - **P1**/122 — the timeout test picks a non-placeholder, non-self option; all three original assertions survive.
@@ -224,7 +363,7 @@ This is the regression bar. Every number came from running the command.
 
 ---
 
-## 8. Accepted equivalents & intentional decisions — do NOT change
+## 9. Accepted equivalents & intentional decisions — do NOT change
 
 **Accepted equivalents** — different structure, same guarantee. Do not "fix" these back:
 
@@ -262,7 +401,7 @@ This is the regression bar. Every number came from running the command.
 
 ---
 
-## 9. Where the contracts live
+## 10. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -278,7 +417,7 @@ This is the regression bar. Every number came from running the command.
 
 ---
 
-## 10. Validation standard
+## 11. Validation standard
 
 **Ask what the change permits, not only what it fixes** (lesson 2.32). The probe that caught Issue 133 called the new callable; a probe that re-read the room document reported the leak closed.
 
@@ -290,7 +429,7 @@ This is the regression bar. Every number came from running the command.
 
 **Assert the arithmetic, not the absence of an error.** F3 and F4 exist because "it returned success twice" cannot detect a double-applied score.
 
-**A test that exercises a mirror of the shipped logic tests nothing about the shipped logic** (§5, first bullet).
+**A test that exercises a mirror of the shipped logic tests nothing about the shipped logic** (§6, first bullet).
 
 **Record every substitution.** An omitted assertion reads as though it passed.
 
@@ -300,7 +439,7 @@ This is the regression bar. Every number came from running the command.
 
 ---
 
-## 11. Feedback loop — why this defect escaped a detailed spec
+## 12. Feedback loop — why this defect escaped a detailed spec
 
 The Wave P spec named this guard **twice** — once in the implementation steps, once in the Definition of Done — and it still fell out. Three corrections, all applied in this document:
 
@@ -313,8 +452,8 @@ The Wave P spec named this guard **twice** — once in the implementation steps,
 ## THE LOOP
 
 ```
-(1) STUDY §2 and §3 here + Issue 133 in ongoing_general_errors.md + the files
-    at the cited anchors. RE-GREP every anchor; numbers drift -- three did
+(1) STUDY §2 and §3 (Q1) or §4 (Q2) here + Issue 133 in
+    ongoing_general_errors.md + the files at the cited anchors. RE-GREP every anchor; numbers drift -- three did
     between Wave P and this document.
 (2) ENUMERATE WHAT THE CHANGE PERMITS, not only what it fixes.
 (3) GREP THE EXISTING SUITE for tests asserting the rule you are changing.
@@ -334,4 +473,4 @@ The Wave P spec named this guard **twice** — once in the implementation steps,
     design_scoring_and_ui.md §3.3.
 ```
 
-**After Q1 lands, the queue is empty.** Report the state, tell the user the deploy is theirs to run, and stop. Do not invent work.
+**After Q1 lands, stop and hand the deploy to the user — Q2 cannot start until the server is fresh.** Once Q2's report is written and any defects it found are filed with options, **the queue is empty.** Report the state and stop. Do not invent work.

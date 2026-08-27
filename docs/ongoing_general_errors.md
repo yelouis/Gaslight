@@ -32,6 +32,12 @@
 
 **Issue 133 is selected (Option A) and specced as Wave Q in `agent_execution_guide.md`.** One item, one commit, server + client together — the deadline guard alone leaves the empty-tray path, and the client-trigger change alone widens who can exploit the missing guard.
 
+**A second Wave Q item, Q2, is a five-player Marionette soak** — the user asked for E2E coverage at five players including mid-game departures. It is **test-only**: it writes `docs/playthrough_findings_5player.md` with blocks **E22–E43** and files what it finds, but changes no production code. **It runs after Q1 is deployed**, because it certifies the unmask window and the points tray, and running it against the current server would test a path with a known hole.
+
+Five is not an arbitrary number. It is the smallest table where `forgeriesPerCard` defaults to 4 (`index.ts:640`), so a card carries **five options** — the configuration Issue 132's one-per-row layout was designed for and has never been seen in; where a table can lose **two** players and still play, so the 3-player floor is reached by attrition rather than immediately; where the forgery **assignment chain** has enough links to re-link non-trivially when someone in the middle leaves (`index.ts:1246`); and where the **current reader** can leave mid-vote with other readers still queued (`index.ts:1306`) instead of collapsing straight to game over. Four blocks — E31, E33, E40 and E43 — are the reason the soak exists; the guide states that a run marking those NOT RUN has not delivered Q2.
+
+**The soak needs `.agents/mcp_config.json` extended to five Marionette servers** (it currently declares three) and five booted simulators. The guide tells the agent to stop and say so rather than quietly running three and labelling it five.
+
 **Two details found while speccing that the option text did not cover:**
 
 1. **`unmaskDeadline` is not a boolean.** It holds `null` (no window — nobody was fooled), `0` (already closed), a future timestamp (open) or a past one (expired). A naive truthy guard gets `null` and `0` wrong, so the spec carries a four-state table and requires explicit comparisons rather than a falsy check (lesson 2.1).
