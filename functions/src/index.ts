@@ -682,7 +682,7 @@ export const startGame = onCall(async (request) => {
 
     pIds.forEach((pid, idx) => {
       const sealedRef = roomRef.collection("sealed").doc(pid);
-      transaction.set(sealedRef, { seenPrompts: [prompts[idx]] }, { merge: true });
+      transaction.set(sealedRef, { seenPrompts: [prompts[idx]], truthAnswer: "", sabotageAnswers: {}, answerAuthors: {} });
     });
 
     transaction.set(roomRef.collection("sealed").doc("_summary"), { cards: [] });
@@ -1433,7 +1433,7 @@ async function advancePhaseInternal(
         sealedData.answerAuthors = answerAuthors;
         sealedData.truthAnswerId = truthOptId;
         const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
-        transaction.set(sealedRef, sealedData, { merge: true });
+        transaction.set(sealedRef, sealedData);
 
         updatedCards.push({
           ...card,
@@ -1801,7 +1801,7 @@ export const advanceToNextResolution = onCall(async (request) => {
           const seenPrompts = Array.from(playerSeenMap[p.id] || []);
           const updatedSeen = [...seenPrompts, newPrompt];
           const sealedRef = roomRef.collection("sealed").doc(p.id);
-          transaction.set(sealedRef, { seenPrompts: updatedSeen, truthAnswer: "", sabotageAnswers: {} }, { merge: true });
+          transaction.set(sealedRef, { seenPrompts: updatedSeen, truthAnswer: "", sabotageAnswers: {}, answerAuthors: {}, truthAnswerId: "" });
 
           newCards.push({
             targetPlayerId: p.id,

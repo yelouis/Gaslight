@@ -113,28 +113,6 @@ Your selection: Proceed with Option B.
 
 ---
 
-### Issue 117: Your own forgery was not sealed on the round-2 vote screen
-**Status**: ⚠️ Confirmed Unresolved, cause NOT yet identified — Observed on device in round 2: none of the options were greyed even though the player had written one of them. The own-answer lockout (Issue 90) has two layers — the authoritative option id from `getMyOptionId`, and a per-card text fallback.
-
-**Two candidate causes were investigated and ruled out**, which is worth recording so nobody re-checks them: the client's option-id cache is **already round-scoped** (`_cardKey` is `'$currentRound:$cardId'`, `game_service.dart:97`), and the submitted-text fallback is keyed the same way.
-
-**One genuine hazard was found but not confirmed as the cause:** the round advance merges `{ truthAnswer: "", sabotageAnswers: {} }` into each `sealed/{playerId}` document and **never clears `answerAuthors`**, so a round-1 option→author mapping survives into round 2 until the round-2 vote transition overwrites it (`index.ts:1433`).
-
-**Option A (recommended)**: **Reproduce with logging before changing anything** — capture what `getMyOptionId` returns during a round-2 vote and whether the text fallback fires.
-  - *Pros*: This is a two-layer mechanism with a stale-data hazard nearby; a blind fix is as likely to mask the cause as remove it. The failure is silent — the player simply can vote for their own answer — so a wrong fix looks identical to a right one.
-  - *Cons*: Needs a 3-player multi-round session to reproduce.
-
-**Option B**: **Clear `answerAuthors` at the round advance**, on the hazard above.
-  - *Pros*: Correct regardless — stale authorship should not outlive its round — and cheap.
-  - *Cons*: May well not be the cause, and shipping it as "the fix" would close the issue while the bug survives.
-
-**Option C**: **Harden the fallback** so a null option id always falls through to per-card text matching.
-  - *Pros*: Makes the lockout resilient to whatever the underlying cause is.
-  - *Cons*: Treats the symptom; a client bound tighter than the server's has itself been a defect here before (Issue 90).
-
-Your selection: Proceed with Option A. I am confident that the issue so if it is not discoverd in logging, see if you can check the firebase logs from the game that was played.
-
----
 
 ### Issue 118: A departed player's placeholder answer is sealed for some voters and not others
 **Status**: ⚠️ Confirmed Unresolved — Reported from a playtest: a player left, their answers became the `THE SOUL IS SILENT` placeholder (`index.ts:170`), and that option appeared **sealed for some players and votable for others**. Requested behaviour: every placeholder answer should be sealed for everyone, and **if every option on a card ends up sealed, the card should be skipped**.
@@ -422,7 +400,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Deploy discipline** — `predeploy` wired so a red suite blocks a deploy; then production ran stale code for two cycles anyway, until the written instruction was replaced with `scripts/check_deploy_fresh.sh` (three exit codes, epoch comparison, rules checked separately) | 65, 77, 81 | `design_database_and_security.md` §8 |
 | **Lobby authority** — readiness gate on `startGame` with the host-exemption deadlock guard; host kick reusing `handleDisconnect` | 86, 87 | `design_game_state_and_models.md` §1; `design_database_and_security.md` §4 |
 | **Mid-match departure** — in-game leave controls; the 3-player floor applied during play, not only at start | 85 | `design_game_state_and_models.md` §1 |
-| **Own-answer lockout** — option id as authority, per-card text as fallback, never unioned; `getMyOptionId` and its client call discipline | 90, 91, 92, 94 | `design_scoring_and_ui.md` §3.2; `design_database_and_security.md` §2 |
+| **Own-answer lockout** — option id as authority, per-card text as fallback, never unioned; `getMyOptionId` and its client call discipline; cross-round `answerAuthors` map isolation without `{ merge: true }` | 90, 91, 92, 94, 117 | `design_scoring_and_ui.md` §3.2; `design_database_and_security.md` §2; `functions/src/index.ts` |
 | **Reveal & unmask** — who may accuse vs who may be accused; the five-beat reveal and its deadline | 79, 80 | `design_scoring_and_ui.md` |
 | **Prompts & decks** — per-player `seenPrompts` in `sealed`; exhaustion boundary and the `resource-exhausted` → SnackBar mapping whose fall-through is the failure mode | 67, 68, 69, 83, 88 | `design_prompt_system.md` §5 |
 | **Answer integrity** — spurious `THE SOUL IS SILENT` placeholder; forgery author key derived server-side; forgery defaults and the 3-player floor as an independent guard | 72, 76 | `design_game_state_and_models.md` §1–§2 |

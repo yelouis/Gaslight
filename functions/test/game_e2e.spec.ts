@@ -3796,7 +3796,133 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(roomSnap.data()?.currentPhase).to.equal('gameOver');
       });
     });
+
+    describe('Wave O: Issue 117 / O1 - answerAuthors isolation across rounds', () => {
+      it('O1: answerAuthors map contains exactly card options count in round 2 and getMyOptionId returns valid round 2 option', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+        const g3User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 3,
+          sabotageAnswersCount: 3,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await callFn('joinRoom', g3User.idToken, { roomCode, playerName: 'Dave', playerId: 'p_g3' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g3').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, totalRounds: 2, forgeriesPerCard: 3, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, totalRounds: 2, selectedDeckId: FALLBACK_DECK });
+
+        // --- ROUND 1: TRUTH ---
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice loved eating pancakes for dinner', isTruth: true });
+        await callFn('submitAnswer', g1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob ran three marathons in Tokyo', isTruth: true });
+        await callFn('submitAnswer', g2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie built a telescope from scratch', isTruth: true });
+        await callFn('submitAnswer', g3User.idToken, { roomCode, targetCardId: 'p_g3', authorId: 'p_g3', text: 'Dave adopted four stray dogs yesterday', isTruth: true });
+
+        const lieDictionary: Record<string, string[]> = {
+          p_host: ['Alice stole ancient golden coins', 'Alice climbed Mount Kilimanjaro alone', 'Alice designed a rocket engine prototype'],
+          p_g1: ['Bob invented a new musical instrument', 'Bob wrestled an alligator in Florida', 'Bob slept through an earthquake'],
+          p_g2: ['Charlie became a chess grandmaster', 'Charlie founded a secret social club', 'Charlie solved an unsolved math puzzle'],
+          p_g3: ['Dave sailed across the Atlantic ocean', 'Dave wrote a bestselling mystery novel', 'Dave discovered a rare dinosaur fossil']
+        };
+
+        // --- ROUND 1: FORGERY (3 rotations) ---
+        for (let rot = 1; rot <= 3; rot++) {
+          const rSnap = await roomRef.get();
+          const assignments = rSnap.data()?.currentCardAssignments as Record<string, string>;
+          for (const [holderId, targetId] of Object.entries(assignments)) {
+            const user = holderId === 'p_host' ? hostUser : (holderId === 'p_g1' ? g1User : (holderId === 'p_g2' ? g2User : g3User));
+            const text = lieDictionary[holderId][rot - 1] + ' r1';
+            await callFn('submitAnswer', user.idToken, { roomCode, targetCardId: targetId, authorId: holderId, text, isTruth: false });
+          }
+        }
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+
+        // Verify Round 1 sealed answerAuthors has 4 entries
+        const r1SealedHost = await roomRef.collection('sealed').doc('p_host').get();
+        const r1Authors = r1SealedHost.data()?.answerAuthors as Record<string, string>;
+        expect(Object.keys(r1Authors)).to.have.lengthOf(4);
+
+        // Advance through all 4 cards in Round 1
+        const orderR1 = roomSnap.data()?.resolutionOrder as string[];
+        for (let i = 0; i < orderR1.length; i++) {
+          const curReader = orderR1[i];
+          const curRoomSnap = await roomRef.get();
+          const curCard = (curRoomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === curReader);
+          const options = curCard.options as Array<{ id: string; text: string }>;
+          const sealedSnap = await roomRef.collection('sealed').doc(curReader).get();
+          const aAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+
+          const voters = [
+            { id: 'p_host', token: hostUser.idToken },
+            { id: 'p_g1', token: g1User.idToken },
+            { id: 'p_g2', token: g2User.idToken },
+            { id: 'p_g3', token: g3User.idToken }
+          ];
+          for (const v of voters) {
+            if (v.id !== curReader) {
+              const opt = options.find(o => aAuthors[o.id] !== v.id);
+              if (opt) {
+                await callFn('castVote', v.token, { roomCode, targetCardId: curReader, voterId: v.id, votedForId: opt.id });
+              }
+            }
+          }
+          await callFn('advancePhase', hostUser.idToken, { roomCode });
+          await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+        }
+
+        // --- ROUND 2: TRUTH ---
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+        expect(roomSnap.data()?.currentRound).to.equal(2);
+
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice painted a giant mural on brick', isTruth: true });
+        await callFn('submitAnswer', g1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob learned how to fly a helicopter', isTruth: true });
+        await callFn('submitAnswer', g2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie cooked dinner for the president', isTruth: true });
+        await callFn('submitAnswer', g3User.idToken, { roomCode, targetCardId: 'p_g3', authorId: 'p_g3', text: 'Dave won a gold medal in snowboarding', isTruth: true });
+
+        // --- ROUND 2: FORGERY (3 rotations) ---
+        for (let rot = 1; rot <= 3; rot++) {
+          const rSnap = await roomRef.get();
+          const assignments = rSnap.data()?.currentCardAssignments as Record<string, string>;
+          for (const [holderId, targetId] of Object.entries(assignments)) {
+            const user = holderId === 'p_host' ? hostUser : (holderId === 'p_g1' ? g1User : (holderId === 'p_g2' ? g2User : g3User));
+            const text = lieDictionary[holderId][rot - 1] + ' r2';
+            await callFn('submitAnswer', user.idToken, { roomCode, targetCardId: targetId, authorId: holderId, text, isTruth: false });
+          }
+        }
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+
+        // PRIMARY ASSERTION: In round 2, sealed answerAuthors MUST have exactly 4 entries (not 8)
+        const r2SealedHost = await roomRef.collection('sealed').doc('p_host').get();
+        const r2Authors = r2SealedHost.data()?.answerAuthors as Record<string, string>;
+        expect(Object.keys(r2Authors)).to.have.lengthOf(4, 'answerAuthors must not accumulate across rounds (expected 4, found ' + Object.keys(r2Authors).length + ')');
+
+        // SYMPTOM ASSERTION: getMyOptionId for Bob on Alice's card must return an option id PRESENT in round 2 card.options
+        const r2HostCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+        const r2OptionIds = (r2HostCard.options as any[]).map(o => o.id);
+        const myOptionRes = await callFn('getMyOptionId', g1User.idToken, { roomCode, cardId: 'p_host', playerId: 'p_g1' });
+        expect(myOptionRes.optionId).to.be.a('string');
+        expect(r2OptionIds).to.include(myOptionRes.optionId, 'getMyOptionId must return an option ID from round 2 options, not stale round 1');
+      });
+    });
   });
 });
+
 
 
