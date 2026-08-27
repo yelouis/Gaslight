@@ -1,16 +1,19 @@
-# Agent Execution Guide — Active Build: Wave N — Validate the Deck Refactor on Device — August 26, 2026
+# Agent Execution Guide — Playtest Triage: Issues 113–121 Awaiting Selection — August 26, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-The deck catalogue was just refactored (`353d93f`) so that **deck metadata is data, not code**. Every gate is green and the logic is unit-tested, but **nothing has been run on a device**. Wave N is that validation. It is observation work: **you are not expected to write feature code.**
+**Build 4 reached real testers and the playtest produced eleven reports, now filed as nine issues (113–121) in `ongoing_general_errors.md`.** Every one ends in a blank `Your selection: _____`.
 
-## ⛔ STOP — the server must be deployed first
+## ⛔ STOP — all nine are blocked on the user
 
-`./scripts/check_deploy_fresh.sh` currently **exits 1**. The refactor changed `functions/src`, and production still runs the **old deck set** (`the_daily_grind`, `cah_dark_humor`, …) while the client now offers the **new** one (`hypotheticals`, `real_life`, …).
+Do not start any of them. Each carries options with pros, cons and a marked `(recommended)`; **that label is advice for the user, not permission for you.** Never fill in a selection line.
 
-Run the validation against that and **everything fails for the wrong reason**: `startGame` will refuse with Issue 106's deck-mismatch error, or `drawPrompts` will throw `not-found` for a deck the deployed server has never heard of. You would spend the session diagnosing a deploy.
+**Read the issues before touching anything** — several contain investigation that is already done and should not be repeated:
 
-**`firebase deploy --only functions` is the user's call, not yours.** Confirm the gate exits **0** before device work, and if it does not, say so and stop.
+- **113 folds two reported symptoms into one bug.** The reveal's ▲ badge is computed client-side from card scoring only and omits the unmask ±1, so it disagrees with the authoritative total beside it. The "Louis got +3 but shows 2" report is **the badge being wrong, not the score** — 2 was correct.
+- **117 records two ruled-out causes**, so nobody re-checks them: the client's option-id cache is already round-scoped, and so is the text fallback. It also names a real hazard found nearby — `answerAuthors` survives the round reset — which is **not** confirmed as the cause.
+- **116 is unconfirmed in source** and its recommended option is to reproduce first, not to fix.
+- **120 is Issue 112 Option C**, previously filed and deliberately deferred. It is the largest item here and touches the 3-player floor.
 
 ## Verified baseline — the regression bar
 

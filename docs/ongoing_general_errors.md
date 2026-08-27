@@ -31,13 +31,184 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open issues and nothing to decide.** Issues 1–112 are delivered.
+**Nine issues are open from the August 26 TestFlight playtest (build 4) and need your selection.** They are numbered 113–121 below. Two reported symptoms (#4 and #6) turned out to share one root cause and are filed together as Issue 113.
 
-**Wave N — device validation of the deck refactor — is specced and awaiting a run.** The catalogue refactor (`353d93f`) made deck metadata data rather than code: rating, display name and the fallback are declared per deck in `functions/src/prompt_decks.ts`, `lib/utils/prompt_decks.dart` is generated, and **no file outside the catalogue branches on a deck id**. Every gate is green and the logic is unit-tested, but **none of it has run on a device.** Procedure in `agent_execution_guide.md` §3.
+---
 
-> **Hard prerequisite: the server must be deployed first.** `check_deploy_fresh.sh` exits 1 — production still runs the **old** deck set while the client offers the new one, so a validation run today would fail on Issue 106's mismatch guard rather than on anything real. `firebase deploy --only functions` is the user's call.
+### Issue 113: The reveal's ▲ delta badge disagrees with the standings, because it ignores unmask points
+**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/phase4_reveal.dart:260`: the badge is computed **client-side** as `ScoringLogic.calculateScores(...)`, which scores **the card only**. The unmask window's ±1 (correct accusation: **+1** guesser, **−1** forger) is applied **server-side** and never enters that number. So the badge and the authoritative `totalScore` beside it can disagree.
 
-The one assertion the wave turns on is **D6**: for each of the five decks, cross-check the prompt text on screen against that deck's array in the catalogue. "A prompt appeared" proves nothing — a prompt appearing from the *wrong* deck is the exact bug that started this.
+**This explains both reported symptoms, which are one bug:**
+- *"Louis accused itgel — SUCCESS but Louis got no points"*: a successful accusation is worth +1, but unmask points never appear in the delta, so Louis's gain is invisible even though his total already includes it.
+- *"Louis got +3 but standings say 2"*: Louis earned +3 on the card and **−1 for being unmasked by itgel**, so **2 is the correct total**. The badge showed ▲+3 because it omits the penalty. The number that looked wrong was right; the badge was wrong.
+
+**Option A (recommended)**: **Publish the per-card delta from the server** — the reveal transaction already computes every player's total change including unmask adjustments; write it to the card (or the room) and have the client render that instead of recomputing.
+  - *Pros*: One authority for a number shown next to the authoritative total, so they cannot disagree again. Kills the whole class rather than this instance. The values already exist in the transaction that applies them.
+  - *Cons*: Adds a field and a functions deploy. Needs a decision about where it lives so it does not leak authorship before the unmask window closes.
+
+**Option B**: **Add the unmask adjustment to the client calculation** — read `unmaskGuesses` off the card and apply ±1 locally.
+  - *Pros*: Client-only, ships without a deploy.
+  - *Cons*: Now **two** implementations of scoring must agree forever, which is exactly how this drifted. The client would also have to replicate the correctness rule it deliberately cannot see, since authorship is withheld during the window.
+
+**Option C**: **Remove the delta badge.**
+  - *Pros*: Zero risk of disagreement; the total is already shown.
+  - *Cons*: Loses the "what just happened to me" beat, which is most of the reveal's payoff.
+
+Your selection: _____
+
+---
+
+### Issue 114: Badge pills overflow the screen edge on narrow phones
+**Status**: ⚠️ Confirmed Unresolved — Observed on device in two places: the game-over **MATCH HIGHLIGHTS** badges (`Fooled 2 players`, `Found by only 0 players`, `4 wrong votes`) are clipped at the right edge and overlap their section titles, and the lobby's **`Lobby Total: 0/…`** pill runs off the screen on the Custom Deck panel. Both are a fixed-width pill sitting beside a title in a `Row` with no flexibility.
+
+**Option A (recommended)**: **Let the title flex and the badge keep its intrinsic width** — wrap the title in `Expanded`/`Flexible` and allow it to ellipsize, so the badge is never clipped.
+  - *Pros*: The badge is the number people came for and is always fully legible; the title is recognisable even when trimmed. Small, local change with no layout redesign.
+  - *Cons*: Long titles get an ellipsis on the narrowest phones.
+
+**Option B**: **Wrap the badge below the title when space is tight** — a `Wrap` instead of a `Row`.
+  - *Pros*: Nothing is ever truncated at any width.
+  - *Cons*: Row heights become inconsistent between cards, which reads as ragged in a stacked list.
+
+**Option C**: **Shorten the badge text** — "Fooled 2", "Found by 0", "4 wrong".
+  - *Pros*: Trivial; likely fits everywhere.
+  - *Cons*: Loses the sentence quality that makes these read as awards, and only postpones the problem for a longer future label.
+
+Your selection: _____
+
+---
+
+### Issue 115: Game over shows raw player IDs once players leave
+**Status**: ⚠️ Confirmed Unresolved — Observed on device: after players tapped RETURN TO LOBBY, **BEST LIE OF THE NIGHT** rendered `By 0be3acd3-9116-4816-8486-b86e3669d9e3` and **RIVALRIES** listed UUIDs. The match summary stores author **ids**; names are resolved against the live players subcollection, and leaving deletes that document — so the name has nowhere to come from and the raw id shows through.
+
+**Option A (recommended)**: **Snapshot display names into the summary when it is published at game over.** Store `authorName` alongside `authorId` so the screen never depends on a player document that may already be gone.
+  - *Pros*: The end screen becomes self-contained and correct no matter who leaves or when — which is the behaviour asked for. Names at game over are exactly the right ones to freeze.
+  - *Cons*: A functions change and deploy, and a small amount of duplicated data on the room document.
+
+**Option B**: **Keep a client-side name cache** — remember names seen during the match and fall back to it.
+  - *Pros*: Client-only, no deploy.
+  - *Cons*: Only helps players who watched the whole match. Someone who rejoined late, or reloaded on the game-over screen, still sees UUIDs — the bug survives in the cases most likely to hit it.
+
+**Option C**: **Fall back to "A departed player"** when the name cannot be resolved.
+  - *Pros*: Smallest possible change; never shows a UUID.
+  - *Cons*: The award loses its point — nobody learns whose lie won the night.
+
+Your selection: _____
+
+---
+
+### Issue 116: The raven is missing from the "Your ballot is sealed" screen
+**Status**: ⚠️ Unconfirmed in source — Reported from device: the raven mascot that appears elsewhere is absent on the sealed-ballot waiting screen, which shows only the candle. Not yet traced to a cause; it may never have been placed there rather than having disappeared.
+
+**Option A (recommended)**: **Reproduce first, then decide.** Establish whether the raven was ever on this screen — check the widget tree and the git history for that screen — before choosing a fix.
+  - *Pros*: Avoids "fixing" a screen that was designed this way, and avoids adding a second raven if one is present but invisible behind the candle or clipped off-screen.
+  - *Cons*: Costs a round trip before anything visibly changes.
+
+**Option B**: **Add the raven to the waiting state** with a pose appropriate to waiting.
+  - *Pros*: Directly delivers what was asked; the sealed-ballot screen is a long dead wait and the mascot is what gives it life.
+  - *Cons*: If it *is* already there and merely hidden, this creates a duplicate rather than fixing the cause.
+
+Your selection: _____
+
+---
+
+### Issue 117: Your own forgery was not sealed on the round-2 vote screen
+**Status**: ⚠️ Confirmed Unresolved, cause NOT yet identified — Observed on device in round 2: none of the options were greyed even though the player had written one of them. The own-answer lockout (Issue 90) has two layers — the authoritative option id from `getMyOptionId`, and a per-card text fallback.
+
+**Two candidate causes were investigated and ruled out**, which is worth recording so nobody re-checks them: the client's option-id cache is **already round-scoped** (`_cardKey` is `'$currentRound:$cardId'`, `game_service.dart:97`), and the submitted-text fallback is keyed the same way.
+
+**One genuine hazard was found but not confirmed as the cause:** the round advance merges `{ truthAnswer: "", sabotageAnswers: {} }` into each `sealed/{playerId}` document and **never clears `answerAuthors`**, so a round-1 option→author mapping survives into round 2 until the round-2 vote transition overwrites it (`index.ts:1433`).
+
+**Option A (recommended)**: **Reproduce with logging before changing anything** — capture what `getMyOptionId` returns during a round-2 vote and whether the text fallback fires.
+  - *Pros*: This is a two-layer mechanism with a stale-data hazard nearby; a blind fix is as likely to mask the cause as remove it. The failure is silent — the player simply can vote for their own answer — so a wrong fix looks identical to a right one.
+  - *Cons*: Needs a 3-player multi-round session to reproduce.
+
+**Option B**: **Clear `answerAuthors` at the round advance**, on the hazard above.
+  - *Pros*: Correct regardless — stale authorship should not outlive its round — and cheap.
+  - *Cons*: May well not be the cause, and shipping it as "the fix" would close the issue while the bug survives.
+
+**Option C**: **Harden the fallback** so a null option id always falls through to per-card text matching.
+  - *Pros*: Makes the lockout resilient to whatever the underlying cause is.
+  - *Cons*: Treats the symptom; a client bound tighter than the server's has itself been a defect here before (Issue 90).
+
+Your selection: _____
+
+---
+
+### Issue 118: A departed player's placeholder answer is sealed for some voters and not others
+**Status**: ⚠️ Confirmed Unresolved — Reported from a playtest: a player left, their answers became the `THE SOUL IS SILENT` placeholder (`index.ts:170`), and that option appeared **sealed for some players and votable for others**. Requested behaviour: every placeholder answer should be sealed for everyone, and **if every option on a card ends up sealed, the card should be skipped**.
+
+**Option A (recommended)**: **Treat the placeholder as unvotable server-side, and skip a card with no votable options.** `castVote` rejects a vote for a placeholder option; the reveal transition skips a card where nothing is votable.
+  - *Pros*: One rule, enforced where it cannot be bypassed, so every client agrees by construction — the inconsistency reported here is exactly what happens when clients decide independently. Also delivers the skip behaviour, which no client-only change can.
+  - *Cons*: Functions change and deploy. The skip path needs care so scoring and the round advance handle a card with no votes.
+
+**Option B**: **Grey the placeholder client-side only.**
+  - *Pros*: No deploy; visually fixes the common case.
+  - *Cons*: Does not skip an all-sealed card, and leaves the server accepting a vote the UI forbids — the same client/server disagreement that produced the inconsistency.
+
+**Option C**: **Drop departed players' cards from the round entirely** rather than showing placeholders.
+  - *Pros*: The cleanest experience — no dead cards at all.
+  - *Cons*: Much larger blast radius: the rotation, `resolutionOrder` and scoring all assume one card per active player. Changing that mid-match is where subtle rotation bugs come from.
+
+Your selection: _____
+
+---
+
+### Issue 119: Vote options are still truncated on smaller phones
+**Status**: ⚠️ Confirmed Unresolved — Reported across phones of different sizes. The card was tuned in Wave K to fit **100 characters at 375 pt wide** with a length-tiered font (`card_grid.dart`), and that is verified by test at that width — but the tiers are **fixed numbers validated at one width**, so a narrower device or a larger accessibility text size still clips. Requirement stands: nothing up to 100 characters should ever truncate.
+
+**Option A (recommended)**: **Size the text to the space rather than to a table** — measure the available box and scale the font down until 100 characters fit, with a readable floor.
+  - *Pros*: Correct at every width and every text-scale setting by construction, instead of at the widths someone remembered to test. Removes the tier table, which is a guess that has now been wrong twice.
+  - *Cons*: Text size varies between cards, which looks less uniform. Needs a floor, and a decision about what happens below it.
+
+**Option B**: **Add more tiers and test at the narrowest supported device.**
+  - *Pros*: Small, predictable change; keeps uniform sizing within a tier.
+  - *Cons*: Still a fixed table validated at chosen widths, and still ignores accessibility text scaling — the same failure will recur on the next device that is a little smaller.
+
+**Option C**: **Make the option card scrollable or tappable-to-expand.**
+  - *Pros*: Any length fits, including beyond 100 characters.
+  - *Cons*: Voters compare options at a glance; hiding text behind interaction changes the game, not just the layout.
+
+Your selection: _____
+
+---
+
+### Issue 120: A player who switched apps was dropped and could not get back in
+**Status**: ⚠️ Confirmed Unresolved — Reported from the playtest. Wave M raised the presence window to **120 s** and refreshes on resume (`PRESENCE_STALE_MS`), which is deployed — but a player who spends longer in another app is still removed. Three things were asked for: a **longer** grace period, the ability to **rejoin by room code and keep your name**, and the **room code visible during the game** so people can read it out.
+
+This is Issue 112 **Option C**, which was filed and deliberately deferred: an explicit *away* state that keeps the seat.
+
+**Option A (recommended)**: **Implement the away state (112 Option C) and surface the room code in-game.** A stale player is marked away rather than deleted — seat, name and score preserved; away players are excluded from readiness gates and auto-advance; the seat is reclaimed by the same `playerId` on return, and only reaped after a long absence or an explicit leave.
+  - *Pros*: The only option that actually delivers "come back and still be you", because the seat still exists to come back to. Removes the timeout guessing game rather than lengthening it.
+  - *Cons*: The largest change here. The below-3 auto-end, the readiness gate, seat re-binding and the roster UI must each learn a third state, and the 3-player floor is exactly where a subtle mistake would hide.
+
+**Option B**: **Raise the threshold again** — 120 s to, say, 10 minutes — and show the room code in-game.
+  - *Pros*: Two small changes; covers most real absences.
+  - *Cons*: A departed player now keeps a game alive for ten minutes, delaying the below-3 auto-end badly. Still a guess, just a longer one, and it does not restore anyone who exceeds it.
+
+**Option C**: **Rejoin-by-room-code without an away state** — a returning player re-enters with their old name if the code matches.
+  - *Pros*: Directly addresses "let me back in with my name".
+  - *Cons*: Their seat and **score** are gone; they rejoin as a new player mid-match, which is worse than being away and is likely to read as a fresh bug.
+
+Your selection: _____
+
+---
+
+### Issue 121: The player being voted on cannot see the options
+**Status**: ⚠️ Confirmed Unresolved — By design today, the target and reader see a locked status screen during voting (`design_scoring_and_ui.md` §3.2, "Reader & Target Lockout"). Requested: the target should **see all the options while others vote**, while still being unable to vote.
+
+**Option A (recommended)**: **Show the target the full option grid, read-only.** Same cards as everyone else, no selection possible, no CONFIRM VOTE.
+  - *Pros*: The target is the one person who knows the truth and is watching people fall for lies about them — that is the best seat in the game and it is currently a blank screen. No new information is exposed: these are their own card's options, revealed to everyone moments later.
+  - *Cons*: The target learns which forgeries exist slightly before the reveal, so their live reactions could leak information to observant players in the room.
+
+**Option B**: **Show the options with authorship and vote counts hidden**, plus a waiting indicator.
+  - *Pros*: Same benefit, and explicitly rules out leaking who wrote what or who is winning.
+  - *Cons*: Very close to Option A in practice — authorship and votes are already withheld during the vote phase — so the extra scoping may be effort for no real difference.
+
+**Option C**: **Leave the lockout as it is.**
+  - *Pros*: Zero risk; the current behaviour is deliberate and documented.
+  - *Cons*: Does not address the report, and leaves one player staring at a status screen for the most entertaining phase of the game.
+
+Your selection: _____
 
 ---
 
