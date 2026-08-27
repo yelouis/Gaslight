@@ -179,6 +179,19 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
 
     if (me.role != PlayerRole.spectator) {
       if (state.currentPhase != _lastPhase || state.currentRotationIndex != _lastRotation) {
+        if (_lastPhase == GamePhase.forgery && state.currentPhase == GamePhase.truth) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).clearSnackBars();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Nobody answered last round. Dealing a new one.'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          });
+        }
         _lastPhase = state.currentPhase;
         _lastRotation = state.currentRotationIndex;
         if (!(state.readyPlayers[me.id] ?? false)) {

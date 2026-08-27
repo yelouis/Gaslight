@@ -1298,6 +1298,103 @@ export const handleDisconnect = onCall(async (request) => {
   });
 });
 
+async function concludeResolutionRound(
+  transaction: FirebaseFirestore.Transaction,
+  roomRef: FirebaseFirestore.DocumentReference,
+  room: GameState,
+  players: PlayerState[],
+  accumulatedCards: CardSummary[],
+  snapshottedPlayerNames: Record<string, string>,
+  playerSeenMap?: Record<string, Set<string>>
+) {
+  const totalRounds = room.totalRounds || 1;
+  const currentRound = room.currentRound || 1;
+
+  if (currentRound < totalRounds) {
+    const nextRound = currentRound + 1;
+    const activePlayers = players.filter(p => p.role !== "spectator");
+    const promptSource = resolvePromptSource(room, activePlayers);
+
+    let finalPlayerSeenMap = playerSeenMap;
+    if (!finalPlayerSeenMap) {
+      const sealedDocs = await Promise.all(
+        activePlayers.map(p => transaction.get(roomRef.collection("sealed").doc(p.id)))
+      );
+
+      finalPlayerSeenMap = {};
+      for (let i = 0; i < activePlayers.length; i++) {
+        const p = activePlayers[i];
+        const sealedSnap = sealedDocs[i];
+        const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
+        const seenPrompts: string[] = Array.isArray(sealedData.seenPrompts) ? sealedData.seenPrompts : [];
+        finalPlayerSeenMap[p.id] = new Set(seenPrompts);
+      }
+    }
+
+    let assignedPrompts: Record<string, string>;
+    if ("pool" in promptSource) {
+      assignedPrompts = assignPromptsFromCustomPool(
+        promptSource.pool,
+        activePlayers,
+        promptSource.fallbackDeckId,
+        finalPlayerSeenMap
+      );
+    } else {
+      assignedPrompts = {};
+      const assignedThisRound = new Set<string>();
+      for (const p of activePlayers) {
+        const seen = finalPlayerSeenMap[p.id] || new Set<string>();
+        const chosen = PromptDecks.drawOneExcluding(promptSource.deckId, seen, assignedThisRound);
+        assignedPrompts[p.id] = chosen;
+        assignedThisRound.add(chosen);
+      }
+    }
+
+    const newCards: CardModel[] = [];
+    for (let i = 0; i < activePlayers.length; i++) {
+      const p = activePlayers[i];
+      const newPrompt = assignedPrompts[p.id];
+      const seenPrompts = Array.from(finalPlayerSeenMap[p.id] || []);
+      const updatedSeen = [...seenPrompts, newPrompt];
+      const sealedRef = roomRef.collection("sealed").doc(p.id);
+      transaction.set(sealedRef, { seenPrompts: updatedSeen, truthAnswer: "", sabotageAnswers: {}, answerAuthors: {}, truthAnswerId: "" });
+
+      newCards.push({
+        targetPlayerId: p.id,
+        promptText: newPrompt,
+        truthAnswer: "",
+        sabotageAnswers: {},
+        options: [],
+        votes: {},
+        unmaskGuesses: {}
+      });
+    }
+
+    const endTime = room.isTimerDisabled ? null : Date.now() + 60000;
+
+    transaction.update(roomRef, {
+      currentPhase: "truth",
+      currentRound: nextRound,
+      currentRotationIndex: 0,
+      cards: newCards,
+      currentCardAssignments: {},
+      rotationPlan: {},
+      readyPlayers: {},
+      endTime,
+      resolutionOrder: [],
+      unmaskDeadline: null,
+      expiresAt: ttlFrom(Date.now())
+    });
+  } else {
+    const matchSummary = computeMatchSummary(accumulatedCards, players, snapshottedPlayerNames);
+    transaction.update(roomRef, {
+      currentPhase: "gameOver",
+      unmaskDeadline: null,
+      matchSummary
+    });
+  }
+}
+
 async function advancePhaseInternal(
   transaction: FirebaseFirestore.Transaction,
   roomRef: FirebaseFirestore.DocumentReference,
@@ -1351,7 +1448,7 @@ async function advancePhaseInternal(
         sealedData.truthAnswer = kMissingAnswerPlaceholder;
       }
       const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
-      transaction.set(sealedRef, sealedData, { merge: true });
+      transaction.set(sealedRef, sealedData);
     }
 
     // 2. Generate forgery rotations now that truth phase is complete
@@ -1393,7 +1490,7 @@ async function advancePhaseInternal(
         if (!answer || answer.trim().length === 0) {
           sealedData.sabotageAnswers = { ...(sealedData.sabotageAnswers || {}), [holderId]: kMissingAnswerPlaceholder };
           const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
-          transaction.set(sealedRef, sealedData, { merge: true });
+          transaction.set(sealedRef, sealedData);
         }
       }
     }
@@ -1403,7 +1500,7 @@ async function advancePhaseInternal(
       for (const card of currentCards) {
         const sealedData = sealedDataMap[card.targetPlayerId];
         const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
-        transaction.set(sealedRef, sealedData, { merge: true });
+        transaction.set(sealedRef, sealedData);
       }
 
       const nextRot = room.currentRotationIndex + 1;
@@ -1479,17 +1576,37 @@ async function advancePhaseInternal(
         return c.options.some(o => o.text && o.text.trim().length > 0 && o.text !== kMissingAnswerPlaceholder);
       });
 
-      const endTime = room.isTimerDisabled ? null : Date.now() + voteDuration;
+      if (validResolutionOrder.length === 0) {
+        // If all cards are placeholder/unvotable, skip vote phase and conclude round immediately
+        const playerSeenMap: Record<string, Set<string>> = {};
+        for (const p of activePlayers) {
+          const sealedData = sealedDataMap[p.id] || {};
+          const seenPrompts: string[] = Array.isArray(sealedData.seenPrompts) ? sealedData.seenPrompts : [];
+          playerSeenMap[p.id] = new Set(seenPrompts);
+        }
 
-      transaction.update(roomRef, {
-        currentPhase: "vote",
-        cards: updatedCards,
-        currentReaderId: validResolutionOrder.length > 0 ? validResolutionOrder[0] : null,
-        resolutionOrder: validResolutionOrder,
-        readyPlayers: nextReadyPlayers,
-        endTime,
-        expiresAt: ttlFrom(Date.now())
-      });
+        await concludeResolutionRound(
+          transaction,
+          roomRef,
+          room,
+          activePlayers,
+          accumulatedCards,
+          accumulatedPlayerNames,
+          playerSeenMap
+        );
+      } else {
+        const endTime = room.isTimerDisabled ? null : Date.now() + voteDuration;
+
+        transaction.update(roomRef, {
+          currentPhase: "vote",
+          cards: updatedCards,
+          currentReaderId: validResolutionOrder[0],
+          resolutionOrder: validResolutionOrder,
+          readyPlayers: nextReadyPlayers,
+          endTime,
+          expiresAt: ttlFrom(Date.now())
+        });
+      }
     }
   } else if (room.currentPhase === "vote") {
     // Merge sealed data into public cards ONLY for the card being revealed
@@ -1807,89 +1924,14 @@ export const advanceToNextResolution = onCall(async (request) => {
         unmaskDeadline: null
       });
     } else {
-      const totalRounds = room.totalRounds || 1;
-      const currentRound = room.currentRound || 1;
-
-      if (currentRound < totalRounds) {
-        const nextRound = currentRound + 1;
-        const activePlayers = players.filter(p => p.role !== "spectator");
-        const promptSource = resolvePromptSource(room, activePlayers);
-
-        const sealedDocs = await Promise.all(
-          activePlayers.map(p => transaction.get(roomRef.collection("sealed").doc(p.id)))
-        );
-
-        const playerSeenMap: Record<string, Set<string>> = {};
-        for (let i = 0; i < activePlayers.length; i++) {
-          const p = activePlayers[i];
-          const sealedSnap = sealedDocs[i];
-          const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
-          const seenPrompts: string[] = Array.isArray(sealedData.seenPrompts) ? sealedData.seenPrompts : [];
-          playerSeenMap[p.id] = new Set(seenPrompts);
-        }
-
-        let assignedPrompts: Record<string, string>;
-        if ("pool" in promptSource) {
-          assignedPrompts = assignPromptsFromCustomPool(
-            promptSource.pool,
-            activePlayers,
-            promptSource.fallbackDeckId,
-            playerSeenMap
-          );
-        } else {
-          assignedPrompts = {};
-          const assignedThisRound = new Set<string>();
-          for (const p of activePlayers) {
-            const seen = playerSeenMap[p.id] || new Set<string>();
-            const chosen = PromptDecks.drawOneExcluding(promptSource.deckId, seen, assignedThisRound);
-            assignedPrompts[p.id] = chosen;
-            assignedThisRound.add(chosen);
-          }
-        }
-
-        const newCards: CardModel[] = [];
-        for (let i = 0; i < activePlayers.length; i++) {
-          const p = activePlayers[i];
-          const newPrompt = assignedPrompts[p.id];
-          const seenPrompts = Array.from(playerSeenMap[p.id] || []);
-          const updatedSeen = [...seenPrompts, newPrompt];
-          const sealedRef = roomRef.collection("sealed").doc(p.id);
-          transaction.set(sealedRef, { seenPrompts: updatedSeen, truthAnswer: "", sabotageAnswers: {}, answerAuthors: {}, truthAnswerId: "" });
-
-          newCards.push({
-            targetPlayerId: p.id,
-            promptText: newPrompt,
-            truthAnswer: "",
-            sabotageAnswers: {},
-            options: [],
-            votes: {},
-            unmaskGuesses: {}
-          });
-        }
-
-        const endTime = room.isTimerDisabled ? null : Date.now() + 60000;
-
-        transaction.update(roomRef, {
-          currentPhase: "truth",
-          currentRound: nextRound,
-          currentRotationIndex: 0,
-          cards: newCards,
-          currentCardAssignments: {},
-          rotationPlan: {},
-          readyPlayers: {},
-          endTime,
-          resolutionOrder: [],
-          unmaskDeadline: null,
-          expiresAt: ttlFrom(Date.now())
-        });
-      } else {
-        const matchSummary = computeMatchSummary(accumulatedCards, players, snapshottedPlayerNames);
-        transaction.update(roomRef, {
-          currentPhase: "gameOver",
-          unmaskDeadline: null,
-          matchSummary
-        });
-      }
+      await concludeResolutionRound(
+        transaction,
+        roomRef,
+        room,
+        players,
+        accumulatedCards,
+        snapshottedPlayerNames
+      );
     }
 
     return { success: true };

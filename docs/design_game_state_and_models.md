@@ -42,6 +42,10 @@ const unreadyNonHosts = activePlayers.filter(p => !p.isHost && p.lobbyReady !== 
 * **`lobbyReady` is reset to `false` for every player after a start** (`index.ts:435`), so a returning lobby begins unready.
 * The client mirrors this in `startWarning` for explanation only. **The server guard is the bound** — before Issue 86 the client computed `allNonHostsReady` and spent it on a button *decoration* while both layers let an unready start through.
 
+### Skipped Vote Phase on All-Placeholder Round (Issue 125, August 2026)
+
+If all cards in a round contain only placeholder options (`THE SOUL IS SILENT`), `validResolutionOrder` is empty. Rather than writing a reader-less `vote` phase (`currentReaderId: null`), `advancePhaseInternal` invokes the shared `concludeResolutionRound` helper immediately: advancing to the next round's `truth` phase if `currentRound < totalRounds`, or ending the match (`gameOver`) on the final round. The client notifies players with a brief message (`Nobody answered last round. Dealing a new one.`).
+
 ## 2. Card Model (`CardModel`)
 
 A card represents a prompt assigned to a player, holding their answers, vote choices, and unmask guesses.

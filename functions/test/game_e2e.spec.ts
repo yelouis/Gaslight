@@ -4316,6 +4316,85 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(errorCaught).to.be.true;
       });
     });
+
+    describe('Wave P: Issue 125 / P2 - empty resolution order skips vote phase', () => {
+      it('P2: skips vote phase directly to gameOver when all cards in round 1 are placeholders', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Truth phase: nobody submits -> advance to forgery (fills missing truth with placeholder)
+        await callFn('advancePhase', hostUser.idToken, { roomCode });
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+
+        // Forgery phase: nobody submits -> advance
+        await callFn('advancePhase', hostUser.idToken, { roomCode });
+        roomSnap = await roomRef.get();
+
+        // Must skip vote phase and go directly to gameOver because all cards are placeholders
+        expect(roomSnap.data()?.currentPhase).to.equal('gameOver');
+        expect(roomSnap.data()?.currentReaderId == null).to.be.true;
+      });
+
+      it('P2: multi-round: skips empty vote phase directly to round 2 truth phase', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 2,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Round 1 Truth: nobody submits -> advance to forgery
+        await callFn('advancePhase', hostUser.idToken, { roomCode });
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+
+        // Round 1 Forgery: nobody submits -> advance
+        await callFn('advancePhase', hostUser.idToken, { roomCode });
+        roomSnap = await roomRef.get();
+
+        // Must advance directly to round 2 truth phase
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+        expect(roomSnap.data()?.currentRound).to.equal(2);
+        expect(roomSnap.data()?.cards.length).to.equal(3);
+      });
+    });
   });
 });
 
