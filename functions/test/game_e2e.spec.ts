@@ -386,8 +386,8 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(forgeryEntry).to.not.be.undefined;
     const [forgeryOptId, forgerId] = forgeryEntry!;
 
-    // Find voter who is not the forger
-    const activeVoterId = ['p_alice', 'p_bob', 'p_charlie'].find(id => id !== forgerId)!;
+    // Find voter who is not the forger and not the target/reader
+    const activeVoterId = ['p_alice', 'p_bob', 'p_charlie'].find(id => id !== forgerId && id !== currentReaderId)!;
     const voterToken = activeVoterId === 'p_alice' ? hostUser.idToken : (activeVoterId === 'p_bob' ? bobUser.idToken : charlieUser.idToken);
 
     // Guard 2: Voting for a card other than currentReaderId throws FAILED_PRECONDITION
@@ -1028,7 +1028,7 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     let roomSnap = await roomRef.get();
     expect(roomSnap.data()?.currentPhase).to.equal('truth');
 
-    // Submit host truth
+    // Submit host and guest truth
     await callFn('submitAnswer', hostUser.idToken, {
       roomCode,
       targetCardId: 'p_host',
@@ -1036,26 +1036,39 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       text: 'Host truth',
       isTruth: true
     });
+    await callFn('submitAnswer', guestUser.idToken, {
+      roomCode,
+      targetCardId: 'p_guest',
+      authorId: 'p_guest',
+      text: 'Guest truth',
+      isTruth: true
+    });
 
-    // Advance phase to fill missing guest truth with placeholder -> moves to forgery phase
+    // Advance phase to fill missing guest2 truth with placeholder -> moves to forgery phase
     await callFn('advancePhase', hostUser.idToken, { roomCode });
 
     roomSnap = await roomRef.get();
     expect(roomSnap.data()?.currentPhase).to.equal('forgery');
 
     const assignments = roomSnap.data()?.currentCardAssignments;
-    const guestCardTarget = assignments['p_host'];
 
     // Submit host forgery
     await callFn('submitAnswer', hostUser.idToken, {
       roomCode,
-      targetCardId: guestCardTarget,
+      targetCardId: assignments['p_host'],
       authorId: 'p_host',
       text: 'Host lie',
       isTruth: false
     });
+    await callFn('submitAnswer', guestUser.idToken, {
+      roomCode,
+      targetCardId: assignments['p_guest'],
+      authorId: 'p_guest',
+      text: 'Guest lie',
+      isTruth: false
+    });
 
-    // Advance phase to fill missing guest forgery with placeholder -> moves to vote phase
+    // Advance phase to fill missing guest2 forgery with placeholder -> moves to vote phase
     await callFn('advancePhase', hostUser.idToken, { roomCode });
 
     roomSnap = await roomRef.get();
@@ -1090,7 +1103,7 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     expect(roomSnap.data()?.currentPhase).to.equal('reveal');
 
     const guestSealedSnap = await roomRef.collection('sealed').doc('p_guest').get();
-    expect(guestSealedSnap.data()?.truthAnswer).to.equal('THE SOUL IS SILENT');
+    expect(guestSealedSnap.data()?.truthAnswer).to.equal('Guest truth');
 
     const hostSealedSnap = await roomRef.collection('sealed').doc('p_host').get();
     expect(hostSealedSnap.data()?.truthAnswer).to.equal('Host truth');
@@ -4224,6 +4237,69 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     describe('Wave O: Issue 120 / O5 - presence window 10 minutes', () => {
       it('O5: PRESENCE_STALE_MS is exported and equals 600,000 (10 minutes)', async () => {
         expect(PRESENCE_STALE_MS).to.equal(600_000);
+      });
+    });
+
+    describe('Wave O: Issue 121 / O9 - target cannot vote on own card', () => {
+      it('O9: castVote rejects vote submission when voterId is targetCardId', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'AliceHost',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Truth phase
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice Truth', isTruth: true });
+        await callFn('submitAnswer', g1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob Truth', isTruth: true });
+        await callFn('submitAnswer', g2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie Truth', isTruth: true });
+
+        // Forgery phase
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+        const assignments = roomSnap.data()?.currentCardAssignments as Record<string, string>;
+        for (const [holderId, targetId] of Object.entries(assignments)) {
+          const user = holderId === 'p_host' ? hostUser : (holderId === 'p_g1' ? g1User : g2User);
+          await callFn('submitAnswer', user.idToken, { roomCode, targetCardId: targetId, authorId: holderId, text: `Lie by ${holderId}`, isTruth: false });
+        }
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+        const currentReader = roomSnap.data()?.currentReaderId as string;
+        const currentCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+        const anOptionId = currentCard.options[0].id;
+
+        // Target tries to vote on their own card
+        const targetUser = currentReader === 'p_host' ? hostUser : (currentReader === 'p_g1' ? g1User : g2User);
+        let errorCaught = false;
+        try {
+          await callFn('castVote', targetUser.idToken, {
+            roomCode,
+            targetCardId: currentReader,
+            voterId: currentReader,
+            votedForId: anOptionId
+          });
+        } catch (e: any) {
+          errorCaught = true;
+          expect(e.message).to.include('Self-voting is not allowed');
+        }
+        expect(errorCaught).to.be.true;
       });
     });
   });

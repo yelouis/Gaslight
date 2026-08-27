@@ -900,7 +900,7 @@ export const castVote = onCall(async (request) => {
       throw new HttpsError("invalid-argument", "Option ID is invalid or does not exist.");
     }
 
-    if (voterId === resolvedAuthorId) {
+    if (voterId === targetCardId || voterId === resolvedAuthorId) {
       throw new HttpsError("failed-precondition", "Self-voting is not allowed.");
     }
 

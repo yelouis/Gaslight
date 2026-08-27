@@ -138,7 +138,7 @@ void main() {
         final isHostTarget = gameService.currentPlayerId == gameService.gameState!.currentReaderId;
 
         if (isHostTarget) {
-          expect(find.text('THE PARLOR DELIBERATES…'), findsOneWidget);
+          expect(find.text('THEY ARE VOTING ON YOUR TRUTH'), findsOneWidget);
           await tester.tap(find.text('I\'M READY'));
           await tick(400);
         } else {

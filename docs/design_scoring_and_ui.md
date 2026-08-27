@@ -98,7 +98,7 @@ To allow seamless recovery from app restarts, device sleep, or connection losses
 * **Timers**: Embeds `AutoAdvanceTimer` in the AppBar. If the timer expires, the host calls `forceAdvance()` to submit generic placeholders for unready players.
 
 ### 2. Phase 3 (Voting Phase)
-* **Reader & Target Lockout**: The active reader and target see a locked status screen: `"THEY ARE VOTING ON YOUR CARD..."`.
+* **Target Read-Only View** (Issue 121, August 2026): The target player whose card is being resolved sees the prompt and the full option grid in read-only mode (`CardGrid` with `isTarget = true`, all options untappable, with `(Your Truth)` marked on their truth answer) alongside the sealed-ballot ticker and ready controls. `castVote` enforces target lockout server-side (`voterId === targetCardId` rejects with `Self-voting is not allowed.`).
 * **Voter View**: Shuffles options using `_shuffledCardId` to ensure the placement of answers remains static for the duration of that card's vote.
 * **Spectator View**: Displays the active prompt and vote status (`Votes Locked In: X / Y`) without revealing the voting cards or options.
 * **Own-answer lockout — two layers, and the order matters** (Issue 90 & Issue 117, August 2026). An option the voter authored is greyed and made untappable (`card_grid.dart`, `onTap: isSelfAnswer ? null : …`). Identification is layered:

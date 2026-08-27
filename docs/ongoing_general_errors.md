@@ -31,58 +31,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**All nine playtest issues (113–121) have selections and are specced for build as Wave O** — see `agent_execution_guide.md` §2–§8. Nine items, nine commits: **O1–O5 are server-side and land before one deploy; O6–O9 are client-only.**
-
-> **Issue 117's cause is now CONFIRMED and the guide says not to re-investigate.** `advancePhaseInternal` writes `answerAuthors` with `{merge: true}`, and Firestore merges a map field key-by-key — so each round's mapping is unioned with the last rather than replacing it. Proven from the live playtest room `EKGL`: four cards carry **8** `answerAuthors` entries for **4** options. `getMyOptionId` returns the first author match, which can be **round 1's** option id, matching nothing in round 2's grid. Vote resolution is unaffected (option ids are UUIDs), so scoring was never wrong — only the lockout.
-
----
-
-
-
----
-
-
-
-
-
-### Issue 116: The raven is missing from the "Your ballot is sealed" screen
-**Status**: ⚠️ Unconfirmed in source — Reported from device: the raven mascot that appears elsewhere is absent on the sealed-ballot waiting screen, which shows only the candle. Not yet traced to a cause; it may never have been placed there rather than having disappeared.
-
-**Option A (recommended)**: **Reproduce first, then decide.** Establish whether the raven was ever on this screen — check the widget tree and the git history for that screen — before choosing a fix.
-  - *Pros*: Avoids "fixing" a screen that was designed this way, and avoids adding a second raven if one is present but invisible behind the candle or clipped off-screen.
-  - *Cons*: Costs a round trip before anything visibly changes.
-
-**Option B**: **Add the raven to the waiting state** with a pose appropriate to waiting.
-  - *Pros*: Directly delivers what was asked; the sealed-ballot screen is a long dead wait and the mascot is what gives it life.
-  - *Cons*: If it *is* already there and merely hidden, this creates a duplicate rather than fixing the cause.
-
-Your selection: Proceed with Option B.
-
----
-
-
-
-
-
-
-
-
-### Issue 121: The player being voted on cannot see the options
-**Status**: ⚠️ Confirmed Unresolved — By design today, the target and reader see a locked status screen during voting (`design_scoring_and_ui.md` §3.2, "Reader & Target Lockout"). Requested: the target should **see all the options while others vote**, while still being unable to vote.
-
-**Option A (recommended)**: **Show the target the full option grid, read-only.** Same cards as everyone else, no selection possible, no CONFIRM VOTE.
-  - *Pros*: The target is the one person who knows the truth and is watching people fall for lies about them — that is the best seat in the game and it is currently a blank screen. No new information is exposed: these are their own card's options, revealed to everyone moments later.
-  - *Cons*: The target learns which forgeries exist slightly before the reveal, so their live reactions could leak information to observant players in the room.
-
-**Option B**: **Show the options with authorship and vote counts hidden**, plus a waiting indicator.
-  - *Pros*: Same benefit, and explicitly rules out leaking who wrote what or who is winning.
-  - *Cons*: Very close to Option A in practice — authorship and votes are already withheld during the vote phase — so the extra scoping may be effort for no real difference.
-
-**Option C**: **Leave the lockout as it is.**
-  - *Pros*: Zero risk; the current behaviour is deliberate and documented.
-  - *Cons*: Does not address the report, and leaves one player staring at a status screen for the most entertaining phase of the game.
-
-Your selection: Proceed with Option A.
+*None currently unresolved. All Wave O issues (113–121) have been implemented, tested, and resolved across single-issue commits O1–O9.*
 
 ---
 
@@ -298,7 +247,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Reveal & unmask** — who may accuse vs who may be accused; the five-beat reveal and its deadline; server-published per-card `scoreDeltas` including unmask ±1 (Wave O / O2) | 79, 80, 113 | `design_scoring_and_ui.md` §3.3; `functions/src/index.ts` |
 | **Prompts & decks** — per-player `seenPrompts` in `sealed`; exhaustion boundary and the `resource-exhausted` → SnackBar mapping whose fall-through is the failure mode | 67, 68, 69, 83, 88 | `design_prompt_system.md` §5 |
 | **Answer integrity** — spurious `THE SOUL IS SILENT` placeholder; forgery author key derived server-side; forgery defaults and the 3-player floor as an independent guard; placeholder votes rejected and all-placeholder cards skipped server-side with sealed placeholder UI (72, 76, 118 / O4) | 72, 76, 118 | `design_game_state_and_models.md` §1–§2; `functions/src/index.ts`; `lib/widgets/card_grid.dart` |
-| **UI surfaces** — dialog contrast (ratio-asserted, not string-asserted); error surfaces mapped on `e.code` and never interpolating the exception; busy states as a correctness guard because `createRoom` is not idempotent; flex/ellipsis on MATCH HIGHLIGHTS and Lobby custom prompts badge pills to prevent narrow-device clipping (84, 93, 95, 114 / O6); Raven mascot displayed on ballot-sealed waiting screen (116 / O7); dynamic text scaling in CardGrid (`AutoSizedAnswerText`) fitting 100-character answers across narrow viewports and accessibility text scales without truncation (119 / O8) | 84, 93, 95, 114, 116, 119 | `design_ui_direction.md` §6; `design_scoring_and_ui.md` §3.2, §4; `lib/widgets/card_grid.dart`; `lib/screens/game_over_screen.dart`; `lib/screens/lobby_screen.dart`; `lib/screens/phase3_vote.dart` |
+| **UI surfaces** — dialog contrast (ratio-asserted, not string-asserted); error surfaces mapped on `e.code` and never interpolating the exception; busy states as a correctness guard because `createRoom` is not idempotent; flex/ellipsis on MATCH HIGHLIGHTS and Lobby custom prompts badge pills to prevent narrow-device clipping (84, 93, 95, 114 / O6); Raven mascot displayed on ballot-sealed waiting screen (116 / O7); dynamic text scaling in CardGrid (`AutoSizedAnswerText`) fitting 100-character answers across narrow viewports and accessibility text scales without truncation (119 / O8); read-only option grid with target truth label and server-side self-vote rejection for target during voting (121 / O9) | 84, 93, 95, 114, 116, 119, 121 | `design_ui_direction.md` §6; `design_scoring_and_ui.md` §3.2, §4; `lib/widgets/card_grid.dart`; `lib/screens/game_over_screen.dart`; `lib/screens/lobby_screen.dart`; `lib/screens/phase3_vote.dart`; `functions/src/index.ts` |
 | **Debug controls & dead fields** — host debug controls cleaned up; reaction medallions removed with `lastReaction`/`lastReactionAt` deliberately retained in the model and rules to avoid a migration | 73, 74 | `design_database_and_security.md` §3 |
 | **Standings & honors** — tabular-figure alignment; honors metrics | 75 | `design_scoring_and_ui.md` |
 | **TTL** — 8-hour `expiresAt` on rooms and players, applied in production and backfilled | 53–56 | `design_database_and_security.md` §6 |

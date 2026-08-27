@@ -280,259 +280,230 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
   Widget _buildVotingUI(GameState state, dynamic me, ThemeData theme, CardModel? currentCard) {
     if (currentCard == null) return const Text('No card to vote on.');
 
-    if (me.id == state.currentReaderId || me.id == currentCard.targetPlayerId) {
-      final gs = context.read<GameService>();
-      final expectedVoters = gs.players
-          .where((p) =>
-              p.role != PlayerRole.spectator &&
-              p.id != state.currentReaderId &&
-              p.id != currentCard.targetPlayerId)
-          .toList();
-
-      if (_lastReaderId != state.currentReaderId) {
-        _sealedSoundPlayed.clear();
-        _lastReaderId = state.currentReaderId;
-        if (AppMotion.reduce(context)) {
-          for (var voter in expectedVoters) {
-            if (state.readyPlayers[voter.id] ?? false) {
-              _sealedSoundPlayed.add(voter.id);
-            }
-          }
-        }
-      }
-
-      for (var voter in expectedVoters) {
-        if (state.readyPlayers[voter.id] == true && !_sealedSoundPlayed.contains(voter.id)) {
-          _sealedSoundPlayed.add(voter.id);
-          if (!AppMotion.reduce(context)) {
-            AudioService.instance.playVote(volume: 0.4);
-          }
-        }
-        if (state.readyPlayers[voter.id] == true) {
-          playRavenPose(RavenState.peck, onceKey: 'vote:${voter.id}:${currentCard?.targetPlayerId}');
-        }
-      }
-
-      final M = expectedVoters.length;
-      final N = expectedVoters.where((voter) => state.readyPlayers[voter.id] ?? false).length;
-
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          ThematicIcon(type: ThematicIconType.observe, size: 80, color: theme.colorScheme.secondary),
-          const SizedBox(height: 24),
-          Text(
-            'THE PARLOR DELIBERATES…',
-            style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 2),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'They are voting on your card. Keep a straight face.',
-            style: TextStyle(color: AppColors.ivory, fontSize: 16),
-          ),
-          const SizedBox(height: 32),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        children: expectedVoters.map((voter) {
-                          final isVoted = state.readyPlayers[voter.id] ?? false;
-                          return SizedBox(
-                            width: 36,
-                            height: 48,
-                            child: FlippingRevealCard(
-                              isRevealed: isVoted,
-                              back: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: AppColors.ivory.withOpacity(0.3),
-                                    width: 1.5,
-                                  ),
-                                ),
-                              ),
-                              front: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(4),
-                                  color: AppColors.ground,
-                                  border: Border.all(
-                                    color: AppColors.brass.withOpacity(0.4),
-                                    width: 1.0,
-                                  ),
-                                ),
-                                child: const Center(
-                                  child: WaxSealBadge(size: 28),
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(width: 16),
-                      const BlinkingEye(size: 24),
-                    ],
-                  ),
-                  Positioned(
-                    right: -24,
-                    top: -44,
-                    child: RavenMascot(
-                      state: ravenPose,
-                      size: 48,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '$N of $M ballots sealed',
-                style: const TextStyle(
-                  fontFamily: 'Lora',
-                  fontSize: 14,
-                  color: AppColors.ivory,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-          PrimaryButton(
-            text: 'I\'M READY',
-            onPressed: () async {
-              setState(() => _submitted = true);
-              try {
-                await context.read<GameService>().setPlayerReady(true);
-                AudioService.instance.playVote();
-              } catch (e) {
-                debugPrint('setPlayerReady error: $e');
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Something went wrong. Try again.'),
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                  );
-                  setState(() => _submitted = false);
-                }
-              }
-            },
-          ),
-          if (kDebugMode && context.read<GameService>().currentPlayer!.isHost)
-            TextButton(
-              onPressed: () => context.read<GameService>().debugSimulateBotResponses(),
-              child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
-            ),
-        ],
-      );
-    }
-
     final gs = context.watch<GameService>();
-    final cardId = currentCard?.targetPlayerId;
-    if (cardId != null) {
-      gs.fetchMyOptionId(cardId);
-    }
-    final myOptionId = cardId != null ? gs.getMyOptionIdForCard(cardId) : null;
+    final cardId = currentCard.targetPlayerId;
+    gs.fetchMyOptionId(cardId);
+    final myOptionId = gs.getMyOptionIdForCard(cardId);
 
-    // Whose card this is. The target wrote the truth and is locked out of
-    // voting, so naming them is what makes the question answerable. This header
-    // used to render `me` — the viewer's own avatar — which told the voter
-    // nothing about what they were deciding.
-    PlayerState? targetPlayer;
-    if (cardId != null) {
-      for (final p in gs.players) {
-        if (p.id == cardId) {
-          targetPlayer = p;
-          break;
+    final bool isTarget = (me.id == currentCard.targetPlayerId);
+
+    final expectedVoters = gs.players
+        .where((p) =>
+            p.role != PlayerRole.spectator &&
+            p.id != state.currentReaderId &&
+            p.id != currentCard.targetPlayerId)
+        .toList();
+
+    if (_lastReaderId != state.currentReaderId) {
+      _sealedSoundPlayed.clear();
+      _lastReaderId = state.currentReaderId;
+      if (AppMotion.reduce(context)) {
+        for (var voter in expectedVoters) {
+          if (state.readyPlayers[voter.id] ?? false) {
+            _sealedSoundPlayed.add(voter.id);
+          }
         }
       }
     }
 
-    final gridAnswers = currentCard?.options.map((opt) {
+    for (var voter in expectedVoters) {
+      if (state.readyPlayers[voter.id] == true && !_sealedSoundPlayed.contains(voter.id)) {
+        _sealedSoundPlayed.add(voter.id);
+        if (!AppMotion.reduce(context)) {
+          AudioService.instance.playVote(volume: 0.4);
+        }
+      }
+      if (state.readyPlayers[voter.id] == true) {
+        playRavenPose(RavenState.peck, onceKey: 'vote:${voter.id}:${currentCard.targetPlayerId}');
+      }
+    }
+
+    final M = expectedVoters.length;
+    final N = expectedVoters.where((voter) => state.readyPlayers[voter.id] ?? false).length;
+
+    // Whose card this is.
+    PlayerState? targetPlayer;
+    for (final p in gs.players) {
+      if (p.id == cardId) {
+        targetPlayer = p;
+        break;
+      }
+    }
+
+    final gridAnswers = currentCard.options.map((opt) {
       final isSelf = gs.isMySubmittedAnswer(currentCard.targetPlayerId, opt.text);
       return VotingAnswer(authorId: opt.id, text: opt.text, isSelfAnswer: isSelf);
-    }).toList() ?? [];
+    }).toList();
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 500),
       child: Column(
         children: [
-           if (targetPlayer != null) ...[
-             Text(
-               'VOTING ON',
-               style: TextStyle(
-                 color: theme.colorScheme.secondary.withOpacity(0.7),
-                 fontSize: 11,
-                 fontWeight: FontWeight.bold,
-                 letterSpacing: 3,
-               ),
-             ),
-             const SizedBox(height: 8),
-             PlayerAvatar(player: targetPlayer, size: 50),
-             const SizedBox(height: 10),
-             Text(
-               "One of these is ${targetPlayer.name}'s truth.",
-               style: TextStyle(
-                 color: theme.colorScheme.onSurface.withOpacity(0.75),
-                 fontSize: 13,
-                 fontStyle: FontStyle.italic,
-               ),
-               textAlign: TextAlign.center,
-             ),
-           ] else
-             PlayerAvatar(player: me, size: 50),
-           const SizedBox(height: 16),
-           Text(
-             'WHICH ONE IS THE TRUTH?',
-             style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 2),
-           ),
-           const SizedBox(height: 16),
-           ParchmentCard(
-             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-             child: Column(
-               children: [
-                 Text(
-                   'Prompt:',
-                   style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontWeight: FontWeight.bold, fontSize: 13),
-                 ),
-                 const SizedBox(height: 6),
-                 Text(
-                   currentCard.promptText,
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontFamily: 'Lora'),
-                   textAlign: TextAlign.center,
-                 ),
-               ],
-             ),
-           ),
-           const SizedBox(height: 16),
-           Expanded(
-             child: SingleChildScrollView(
-               child: CardGrid(
-                 answers: gridAnswers,
-                 selectedAuthorId: _localSelectedAuthorId,
-                 currentPlayerId: me.id,
-                 myOptionIdForThisCard: myOptionId,
-                 onSelect: (authorId) {
-                   setState(() {
-                     _localSelectedAuthorId = authorId;
-                   });
-                 },
-               ),
-             ),
-           ),
-           const SizedBox(height: 16),
-           PrimaryButton(
-             text: 'CONFIRM VOTE',
-             onPressed: _localSelectedAuthorId == null 
-                 ? null 
-                 : () => _castVote(context.read<GameService>(), _localSelectedAuthorId!),
-           ),
+          if (isTarget) ...[
+            PlayerAvatar(player: me, size: 50),
+            const SizedBox(height: 8),
+            Text(
+              'THEY ARE VOTING ON YOUR TRUTH',
+              style: TextStyle(
+                color: theme.colorScheme.secondary,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                letterSpacing: 2,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Keep a straight face while the parlor deliberates.',
+              style: TextStyle(
+                color: theme.colorScheme.onSurface.withOpacity(0.75),
+                fontSize: 13,
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ] else if (targetPlayer != null) ...[
+            Text(
+              'VOTING ON',
+              style: TextStyle(
+                color: theme.colorScheme.secondary.withOpacity(0.7),
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 3,
+              ),
+            ),
+            const SizedBox(height: 8),
+            PlayerAvatar(player: targetPlayer, size: 50),
+            const SizedBox(height: 10),
+            Text(
+              "One of these is ${targetPlayer.name}'s truth.",
+              style: TextStyle(
+                color: theme.colorScheme.onSurface.withOpacity(0.75),
+                fontSize: 13,
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'WHICH ONE IS THE TRUTH?',
+              style: TextStyle(
+                color: theme.colorScheme.secondary,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 2,
+              ),
+            ),
+          ] else ...[
+            PlayerAvatar(player: me, size: 50),
+            const SizedBox(height: 16),
+            Text(
+              'WHICH ONE IS THE TRUTH?',
+              style: TextStyle(
+                color: theme.colorScheme.secondary,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 2,
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          ParchmentCard(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              children: [
+                Text(
+                  'Prompt:',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  currentCard.promptText,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                    fontFamily: 'Lora',
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: SingleChildScrollView(
+              child: CardGrid(
+                answers: gridAnswers,
+                selectedAuthorId: isTarget ? null : _localSelectedAuthorId,
+                currentPlayerId: me.id,
+                myOptionIdForThisCard: myOptionId,
+                isTarget: isTarget,
+                onSelect: isTarget ? (_) {} : (authorId) {
+                  setState(() {
+                    _localSelectedAuthorId = authorId;
+                  });
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (isTarget) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const BlinkingEye(size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  '$N of $M ballots sealed',
+                  style: const TextStyle(
+                    fontFamily: 'Lora',
+                    fontSize: 14,
+                    color: AppColors.ivory,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            PrimaryButton(
+              text: "I'M READY",
+              onPressed: () async {
+                setState(() => _submitted = true);
+                try {
+                  await context.read<GameService>().setPlayerReady(true);
+                  AudioService.instance.playVote();
+                } catch (e) {
+                  debugPrint('setPlayerReady error: $e');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Something went wrong. Try again.'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                    setState(() => _submitted = false);
+                  }
+                }
+              },
+            ),
+            if (kDebugMode && context.read<GameService>().currentPlayer!.isHost)
+              TextButton(
+                onPressed: () => context.read<GameService>().debugSimulateBotResponses(),
+                child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+              ),
+          ] else ...[
+            PrimaryButton(
+              text: 'CONFIRM VOTE',
+              onPressed: _localSelectedAuthorId == null
+                  ? null
+                  : () => _castVote(context.read<GameService>(), _localSelectedAuthorId!),
+            ),
+          ],
         ],
       ),
     );

@@ -87,6 +87,7 @@ class CardGrid extends StatelessWidget {
   final String? selectedAuthorId;
   final String currentPlayerId;
   final String? myOptionIdForThisCard;
+  final bool isTarget;
   final ValueChanged<String> onSelect;
 
   const CardGrid({
@@ -95,6 +96,7 @@ class CardGrid extends StatelessWidget {
     required this.selectedAuthorId,
     required this.currentPlayerId,
     this.myOptionIdForThisCard,
+    this.isTarget = false,
     required this.onSelect,
   });
 
@@ -119,7 +121,7 @@ class CardGrid extends StatelessWidget {
             ? ans.authorId == myOptionIdForThisCard
             : ans.isSelfAnswer;
         final isPlaceholder = ans.text == 'THE SOUL IS SILENT' || ans.text.trim().isEmpty;
-        final isUnvotable = isSelfAnswer || isPlaceholder;
+        final isUnvotable = isTarget || isSelfAnswer || isPlaceholder;
         final isSelected = selectedAuthorId == ans.authorId;
 
         return Material(
@@ -168,7 +170,7 @@ class CardGrid extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (isUnvotable)
+                  if (isUnvotable && !isTarget)
                     Positioned(
                       top: 8,
                       left: -20,
@@ -219,7 +221,7 @@ class CardGrid extends StatelessWidget {
                           if (isSelfAnswer) ...[
                             const SizedBox(height: 2),
                             Text(
-                              '(Your Forgery)',
+                              isTarget ? '(Your Truth)' : '(Your Forgery)',
                               style: TextStyle(
                                 color: theme.colorScheme.onSurface.withOpacity(0.4),
                                 fontSize: 10,

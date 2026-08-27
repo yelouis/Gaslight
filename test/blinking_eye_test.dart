@@ -23,6 +23,15 @@ class MockGameService extends ChangeNotifier implements GameService {
   });
 
   @override
+  Future<String?> fetchMyOptionId(String cardId) async => null;
+
+  @override
+  String? getMyOptionIdForCard(String cardId) => null;
+
+  @override
+  bool isMySubmittedAnswer(String targetPlayerId, String answerText) => false;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -77,8 +86,8 @@ void main() {
       ),
     );
 
-    // Verify 'THE PARLOR DELIBERATES…' is present
-    expect(find.text('THE PARLOR DELIBERATES…'), findsOneWidget);
+    // Verify 'THEY ARE VOTING ON YOUR TRUTH' is present
+    expect(find.text('THEY ARE VOTING ON YOUR TRUTH'), findsOneWidget);
 
     // Verify BlinkingEye is present representing the observer
     expect(find.byType(BlinkingEye), findsOneWidget);

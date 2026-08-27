@@ -724,5 +724,84 @@ void main() {
 
       await gameService.leaveRoom();
     });
+
+    testWidgets('O9: Target player sees card prompt and read-only options grid with no confirm vote button (Issue 121)', (WidgetTester tester) async {
+      final p1 = PlayerState(id: 'p1', name: 'Alice', isHost: true);
+      final p2 = PlayerState(id: 'p2', name: 'Bob');
+      final p3 = PlayerState(id: 'p3', name: 'Charlie');
+
+      final card = CardModel(
+        promptText: 'What is Alice secret truth?',
+        targetPlayerId: 'p1',
+        options: [
+          CardAnswerOption(id: 'opt1', text: 'Alice Truth Answer'),
+          CardAnswerOption(id: 'opt2', text: 'Bob Forgery Answer'),
+        ],
+      );
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.vote,
+        totalPlayers: 3,
+        currentReaderId: 'p1',
+        cards: [card],
+        currentCardAssignments: {'p1': 'p1'},
+        readyPlayers: {},
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+      for (var p in [p1, p2, p3]) {
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc(p.id).set(
+          p.toMap()..['authUid'] = 'uid_${p.id}',
+        );
+      }
+
+      gameService.listenToRoom('TEST');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('room_code', 'TEST');
+      await prefs.setString('player_id', 'p1'); // Alice is the target player
+      await gameService.tryRejoinSession();
+
+      // Submit Alice's answer so isSelf matches
+      await gameService.submitCardAnswer('p1', 'p1', 'Alice Truth Answer', true);
+      await mockDb.collection('rooms').doc('TEST').update({'readyPlayers': {}});
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: const MaterialApp(
+            home: Phase3VoteScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // 1. Verify target sees header and prompt
+      expect(find.text('THEY ARE VOTING ON YOUR TRUTH'), findsOneWidget);
+      expect(find.text('What is Alice secret truth?'), findsOneWidget);
+
+      // 2. Verify options are visible in the grid
+      expect(find.text('Alice Truth Answer'), findsOneWidget);
+      expect(find.text('Bob Forgery Answer'), findsOneWidget);
+      expect(find.text('(Your Truth)'), findsOneWidget);
+
+      // 3. Verify options are read-only / disabled for target
+      final truthTileFinder = find.ancestor(
+        of: find.text('Alice Truth Answer'),
+        matching: find.byType(InkWell),
+      );
+      expect(truthTileFinder, findsOneWidget);
+      final truthInkWell = tester.widget<InkWell>(truthTileFinder);
+      expect(truthInkWell.onTap, isNull, reason: 'Target cannot tap options');
+
+      // 4. Verify CONFIRM VOTE button is absent for target
+      expect(find.text('CONFIRM VOTE'), findsNothing);
+
+      await gameService.leaveRoom();
+    });
   });
 }
