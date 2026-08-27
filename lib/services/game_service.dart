@@ -59,6 +59,8 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
   String? _currentPlayerId;
   bool _roomClosed = false;
   bool _playerRemoved = false;
+  bool _hasReceivedInitialPlayersSnapshot = false;
+  final List<String> _departureMessages = [];
 
   bool get roomClosed => _roomClosed;
   bool get playerRemoved => _playerRemoved;
@@ -67,11 +69,39 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
   List<PlayerState> get players => _players;
   String? get currentPlayerId => _currentPlayerId;
 
+  List<String> consumeDepartureMessages() {
+    if (_departureMessages.isEmpty) return const [];
+    final messages = List<String>.from(_departureMessages);
+    _departureMessages.clear();
+    return messages;
+  }
+
+  @visibleForTesting
+  void processPlayersSnapshotForTesting(List<PlayerState> newPlayers) {
+    if (_hasReceivedInitialPlayersSnapshot) {
+      if (_gameState != null &&
+          _gameState!.currentPhase != GamePhase.lobby &&
+          _gameState!.currentPhase != GamePhase.gameOver) {
+        final newIds = newPlayers.map((p) => p.id).toSet();
+        for (final prevPlayer in _players) {
+          if (!newIds.contains(prevPlayer.id)) {
+            _departureMessages.add('${prevPlayer.name} has left the parlour.');
+          }
+        }
+      }
+    } else {
+      _hasReceivedInitialPlayersSnapshot = true;
+    }
+    _players = newPlayers;
+    notifyListeners();
+  }
+
   @visibleForTesting
   void debugSetState(GameState gameState, List<PlayerState> players, String currentPlayerId) {
     _gameState = gameState;
     _players = players;
     _currentPlayerId = currentPlayerId;
+    _hasReceivedInitialPlayersSnapshot = true;
     notifyListeners();
   }
 
@@ -423,6 +453,8 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     _roomSubscription?.cancel();
     _playersSubscription?.cancel();
     _heartbeatTimer?.cancel();
+    _hasReceivedInitialPlayersSnapshot = false;
+    _departureMessages.clear();
 
     if (_currentPlayerId != null) {
       _startHeartbeat(roomCode, _currentPlayerId!);
@@ -442,7 +474,24 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
 
     // Listen to Players
     _playersSubscription = _db.collection('rooms').doc(roomCode).collection('players').snapshots().listen((snapshot) {
-      _players = snapshot.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
+      final newPlayers = snapshot.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
+
+      if (_hasReceivedInitialPlayersSnapshot) {
+        if (_gameState != null &&
+            _gameState!.currentPhase != GamePhase.lobby &&
+            _gameState!.currentPhase != GamePhase.gameOver) {
+          final newIds = newPlayers.map((p) => p.id).toSet();
+          for (final prevPlayer in _players) {
+            if (!newIds.contains(prevPlayer.id)) {
+              _departureMessages.add('${prevPlayer.name} has left the parlour.');
+            }
+          }
+        }
+      } else {
+        _hasReceivedInitialPlayersSnapshot = true;
+      }
+
+      _players = newPlayers;
       
       if (_currentPlayerId != null && _gameState != null && _gameState!.currentPhase == GamePhase.lobby && !_players.any((p) => p.id == _currentPlayerId)) {
         _playerRemoved = true;

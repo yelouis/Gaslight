@@ -21,6 +21,7 @@ import 'services/game_service.dart';
 
 import 'package:marionette_flutter/marionette_flutter.dart';
 import 'widgets/gaslight_route.dart';
+import 'widgets/table_departure_listener.dart';
 
 void main() async {
   if (kDebugMode) {
@@ -95,7 +96,7 @@ class GaslightApp extends StatelessWidget {
         final scale = media.textScaler.clamp(minScaleFactor: 1.0, maxScaleFactor: 1.3);
         return MediaQuery(
           data: media.copyWith(textScaler: scale),
-          child: child!,
+          child: TableDepartureListener(child: child!),
         );
       },
       initialRoute: '/',
