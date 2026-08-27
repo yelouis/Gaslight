@@ -1341,18 +1341,22 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'YOUR CUSTOM PROMPTS',
-                style: TextStyle(
-                  fontFamily: 'CormorantGaramond',
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.secondary,
-                  letterSpacing: 2,
+              Expanded(
+                child: Text(
+                  'YOUR CUSTOM PROMPTS',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'CormorantGaramond',
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.secondary,
+                    letterSpacing: 2,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(

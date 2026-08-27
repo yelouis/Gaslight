@@ -41,24 +41,7 @@
 
 ---
 
-### Issue 114: Badge pills overflow the screen edge on narrow phones
-**Status**: ⚠️ Confirmed Unresolved — Observed on device in two places: the game-over **MATCH HIGHLIGHTS** badges (`Fooled 2 players`, `Found by only 0 players`, `4 wrong votes`) are clipped at the right edge and overlap their section titles, and the lobby's **`Lobby Total: 0/…`** pill runs off the screen on the Custom Deck panel. Both are a fixed-width pill sitting beside a title in a `Row` with no flexibility.
 
-**Option A (recommended)**: **Let the title flex and the badge keep its intrinsic width** — wrap the title in `Expanded`/`Flexible` and allow it to ellipsize, so the badge is never clipped.
-  - *Pros*: The badge is the number people came for and is always fully legible; the title is recognisable even when trimmed. Small, local change with no layout redesign.
-  - *Cons*: Long titles get an ellipsis on the narrowest phones.
-
-**Option B**: **Wrap the badge below the title when space is tight** — a `Wrap` instead of a `Row`.
-  - *Pros*: Nothing is ever truncated at any width.
-  - *Cons*: Row heights become inconsistent between cards, which reads as ragged in a stacked list.
-
-**Option C**: **Shorten the badge text** — "Fooled 2", "Found by 0", "4 wrong".
-  - *Pros*: Trivial; likely fits everywhere.
-  - *Cons*: Loses the sentence quality that makes these read as awards, and only postpones the problem for a longer future label.
-
-Your selection: Proceed with Option A.
-
----
 
 
 
@@ -332,7 +315,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Reveal & unmask** — who may accuse vs who may be accused; the five-beat reveal and its deadline; server-published per-card `scoreDeltas` including unmask ±1 (Wave O / O2) | 79, 80, 113 | `design_scoring_and_ui.md` §3.3; `functions/src/index.ts` |
 | **Prompts & decks** — per-player `seenPrompts` in `sealed`; exhaustion boundary and the `resource-exhausted` → SnackBar mapping whose fall-through is the failure mode | 67, 68, 69, 83, 88 | `design_prompt_system.md` §5 |
 | **Answer integrity** — spurious `THE SOUL IS SILENT` placeholder; forgery author key derived server-side; forgery defaults and the 3-player floor as an independent guard; placeholder votes rejected and all-placeholder cards skipped server-side with sealed placeholder UI (72, 76, 118 / O4) | 72, 76, 118 | `design_game_state_and_models.md` §1–§2; `functions/src/index.ts`; `lib/widgets/card_grid.dart` |
-| **UI surfaces** — dialog contrast (ratio-asserted, not string-asserted); error surfaces mapped on `e.code` and never interpolating the exception; busy states as a correctness guard because `createRoom` is not idempotent | 84, 93, 95 | `design_ui_direction.md` §6 |
+| **UI surfaces** — dialog contrast (ratio-asserted, not string-asserted); error surfaces mapped on `e.code` and never interpolating the exception; busy states as a correctness guard because `createRoom` is not idempotent; flex/ellipsis on MATCH HIGHLIGHTS and Lobby custom prompts badge pills to prevent narrow-device clipping (84, 93, 95, 114 / O6) | 84, 93, 95, 114 | `design_ui_direction.md` §6; `design_scoring_and_ui.md` §4; `lib/screens/game_over_screen.dart`; `lib/screens/lobby_screen.dart` |
 | **Debug controls & dead fields** — host debug controls cleaned up; reaction medallions removed with `lastReaction`/`lastReactionAt` deliberately retained in the model and rules to avoid a migration | 73, 74 | `design_database_and_security.md` §3 |
 | **Standings & honors** — tabular-figure alignment; honors metrics | 75 | `design_scoring_and_ui.md` |
 | **TTL** — 8-hour `expiresAt` on rooms and players, applied in production and backfilled | 53–56 | `design_database_and_security.md` §6 |

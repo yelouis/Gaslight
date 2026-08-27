@@ -594,12 +594,12 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                 }
 
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   child: Row(
                     children: [
                       // Rank
                       Container(
-                        width: 32,
+                        width: 28,
                         alignment: Alignment.centerLeft,
                         child: Text(
                           '#$rank',
@@ -614,10 +614,10 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                       // Avatar
                       PlayerAvatar(
                         player: player,
-                        size: 36,
+                        size: 32,
                         showName: false,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       // Name & Stats
                       Expanded(
                         child: Column(
@@ -638,6 +638,8 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                             const SizedBox(height: 2),
                             Text(
                               'Fooled ${player.playersDeceived} · Fooled by ${player.timesFooled}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontFamily: 'Lora',
                                 fontSize: 11,
@@ -653,7 +655,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                         '${player.totalScore} PTS',
                         style: const TextStyle(
                           fontFamily: 'CormorantGaramond',
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.w900,
                           color: AppColors.brass,
                         ),
@@ -782,7 +784,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
     required String badgeText,
   }) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.groundRaised,
         borderRadius: BorderRadius.circular(10),
@@ -793,33 +795,42 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
         children: [
           Row(
             children: [
-              ThematicIcon(type: sigilType, size: 18, color: AppColors.brass),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontFamily: 'CormorantGaramond',
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brass,
-                  letterSpacing: 1.5,
+              ThematicIcon(type: sigilType, size: 16, color: AppColors.brass),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'CormorantGaramond',
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brass,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.ground,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: AppColors.brass.withOpacity(0.4)),
-                ),
-                child: Text(
-                  badgeText,
-                  style: const TextStyle(
-                    fontFamily: 'Lora',
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.ivory,
+              const SizedBox(width: 6),
+              Flexible(
+                fit: FlexFit.loose,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.ground,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: AppColors.brass.withOpacity(0.4)),
+                  ),
+                  child: Text(
+                    badgeText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Lora',
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.ivory,
+                    ),
                   ),
                 ),
               ),
