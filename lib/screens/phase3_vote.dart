@@ -237,6 +237,11 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        RavenMascot(
+          state: ravenPose,
+          size: 72,
+        ),
+        const SizedBox(height: 12),
         const CandleFlameIndicator(),
         const SizedBox(height: 24),
         Text(

@@ -7,6 +7,7 @@ import 'package:gaslight/models/game_state.dart';
 import 'package:gaslight/models/player_state.dart';
 import 'package:gaslight/models/card_model.dart';
 import 'package:gaslight/screens/phase3_vote.dart';
+import 'package:gaslight/widgets/raven_mascot.dart';
 import 'package:gaslight/services/audio_service.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart'; // import FakeFirestore
@@ -662,6 +663,64 @@ void main() {
       expect(forgeryFinder, findsOneWidget);
       final forgeryInkWell = tester.widget<InkWell>(forgeryFinder);
       expect(forgeryInkWell.onTap, isNotNull, reason: 'Valid non-self option must be votable');
+
+      await gameService.leaveRoom();
+    });
+
+    testWidgets('O7: RavenMascot is displayed on the ballot-sealed waiting screen (Issue 116)', (WidgetTester tester) async {
+      final p1 = PlayerState(id: 'p1', name: 'Alice', isHost: true);
+      final p2 = PlayerState(id: 'p2', name: 'Bob');
+      final p3 = PlayerState(id: 'p3', name: 'Charlie');
+
+      final card = CardModel(
+        promptText: 'What is the secret?',
+        targetPlayerId: 'p1',
+        options: [
+          CardAnswerOption(id: 'opt1', text: 'Truth option'),
+          CardAnswerOption(id: 'opt2', text: 'Forgery option'),
+        ],
+      );
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.vote,
+        totalPlayers: 3,
+        currentReaderId: 'p1',
+        cards: [card],
+        currentCardAssignments: {'p1': 'p1'},
+        readyPlayers: {'p2': true}, // p2 has sealed their ballot
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+      for (var p in [p1, p2, p3]) {
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc(p.id).set(
+          p.toMap()..['authUid'] = 'uid_${p.id}',
+        );
+      }
+
+      gameService.listenToRoom('TEST');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('room_code', 'TEST');
+      await prefs.setString('player_id', 'p2');
+      await gameService.tryRejoinSession();
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: const MaterialApp(
+            home: Phase3VoteScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Verify "YOUR BALLOT IS SEALED" text and RavenMascot are both present
+      expect(find.text('YOUR BALLOT IS SEALED'), findsOneWidget);
+      expect(find.byType(RavenMascot), findsOneWidget);
 
       await gameService.leaveRoom();
     });
