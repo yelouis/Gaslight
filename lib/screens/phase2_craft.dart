@@ -218,11 +218,18 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                 text: state.currentPhase == GamePhase.truth ? 'TRUTH' : 'FORGERY',
                 style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
               ),
-              const SizedBox(height: 4),
-
+              const SizedBox(height: 2),
+              Text(
+                'ROOM: ${state.roomCode}',
+                style: AppTextStyles.sectionLabel.copyWith(
+                  letterSpacing: 1.5,
+                  fontSize: 11,
+                  color: theme.colorScheme.secondary.withOpacity(0.8),
+                ),
+              ),
               if (state.currentPhase == GamePhase.forgery)
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     'Rotation ${state.currentRotationIndex} of ${state.sabotageAnswersCount}',
                     style: AppTextStyles.sectionLabel,

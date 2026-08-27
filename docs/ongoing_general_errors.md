@@ -99,26 +99,7 @@ Your selection: Proceed with Option A.
 
 ---
 
-### Issue 120: A player who switched apps was dropped and could not get back in
-**Status**: ⚠️ Confirmed Unresolved — Reported from the playtest. Wave M raised the presence window to **120 s** and refreshes on resume (`PRESENCE_STALE_MS`), which is deployed — but a player who spends longer in another app is still removed. Three things were asked for: a **longer** grace period, the ability to **rejoin by room code and keep your name**, and the **room code visible during the game** so people can read it out.
 
-This is Issue 112 **Option C**, which was filed and deliberately deferred: an explicit *away* state that keeps the seat.
-
-**Option A (recommended)**: **Implement the away state (112 Option C) and surface the room code in-game.** A stale player is marked away rather than deleted — seat, name and score preserved; away players are excluded from readiness gates and auto-advance; the seat is reclaimed by the same `playerId` on return, and only reaped after a long absence or an explicit leave.
-  - *Pros*: The only option that actually delivers "come back and still be you", because the seat still exists to come back to. Removes the timeout guessing game rather than lengthening it.
-  - *Cons*: The largest change here. The below-3 auto-end, the readiness gate, seat re-binding and the roster UI must each learn a third state, and the 3-player floor is exactly where a subtle mistake would hide.
-
-**Option B**: **Raise the threshold again** — 120 s to, say, 10 minutes — and show the room code in-game.
-  - *Pros*: Two small changes; covers most real absences.
-  - *Cons*: A departed player now keeps a game alive for ten minutes, delaying the below-3 auto-end badly. Still a guess, just a longer one, and it does not restore anyone who exceeds it.
-
-**Option C**: **Rejoin-by-room-code without an away state** — a returning player re-enters with their old name if the code matches.
-  - *Pros*: Directly addresses "let me back in with my name".
-  - *Cons*: Their seat and **score** are gone; they rejoin as a new player mid-match, which is worse than being away and is likely to read as a fresh bug.
-
-Your selection: Proceed with Option B.
-
----
 
 ### Issue 121: The player being voted on cannot see the options
 **Status**: ⚠️ Confirmed Unresolved — By design today, the target and reader see a locked status screen during voting (`design_scoring_and_ui.md` §3.2, "Reader & Target Lockout"). Requested: the target should **see all the options while others vote**, while still being unable to vote.
@@ -363,7 +344,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Web E2E Playthrough (Wave I)** — Playwright automated harness (`test/web_e2e/`); I1 evidence gate widened with strict PNG requirement for W blocks; W1–W16 3-player match with falsification, truth, forgeries, voting lockout, unmasking, standings, GameOver, mid-match refresh restoral, case file share, console hygiene, and below-3 auto-end; W17–W19 responsive sweeps across mobile (375x812), tablet (768x1024), and desktop (1280x800) with 15 screenshots | 106 (Wave I) | `docs/playthrough_findings_web.md`; `test/web_e2e/`; `scripts/check_playthrough_evidence.sh` |
 | **Prompt Source & Sampling (Wave J)** — resolved effective prompt source on `GameState` killing `"custom"` sentinel crash (109 / J1); custom game prompt drawing and re-rolls from players' contributed pool with self-author lockout (108 / J2); uniform re-roll sampling minus live in-play table cards (107 / J3) | 107, 108, 109 | `design_prompt_system.md` §3, §5; `functions/src/index.ts` |
 | **Game Over Payoff & Web Download (Wave K & Wave O / O3)** — Standings + server-written match summary quoting real answers accumulated into `sealed/_summary` across rounds and published at game over with snapshotted display names (111 / K1, 115 / O3); Case File PNG direct downloads on web via Blob URL and synthetic anchor click (110 / K2) | 110, 111, 115 | `design_scoring_and_ui.md`; `lib/utils/case_file_saver_web.dart`; `functions/src/index.ts` |
-| **Presence & Resume Lifecycle (Wave M)** — 120 s server presence threshold (`PRESENCE_STALE_MS = 120_000`); GameService `WidgetsBindingObserver` immediate `lastSeen` write and heartbeat restart on app resume | 112 (Wave M) | `design_database_and_security.md` §4–§5 |
+| **Presence & Resume Lifecycle (Wave M & Wave O / O5)** — 10-minute server presence threshold (`PRESENCE_STALE_MS = 600_000`); room code displayed in AppBar across Craft, Vote, and Reveal in-game phases; GameService `WidgetsBindingObserver` immediate `lastSeen` write and heartbeat restart on app resume (112 / M2, 120 / O5) | 112, 120 | `design_database_and_security.md` §4–§5; `functions/src/index.ts` |
 
 > **The three highest-value things to know from this wave**, if you read nothing else: the `votes` field has been redefined three times and broken its readers twice (§2 and `design_game_state_and_models.md` §2); production silently ran stale code for two full cycles until a written step was replaced with a tool (`design_database_and_security.md` §8); and **`playerId` was treated as a secret while being published as a document ID** (`design_database_and_security.md` §5).
 

@@ -176,7 +176,7 @@ export function computeMatchSummary(
 const kMissingAnswerPlaceholder = "THE SOUL IS SILENT";
 
 /** How long a player may go unheard from before the server treats them as gone. */
-export const PRESENCE_STALE_MS = 120_000;
+export const PRESENCE_STALE_MS = 600_000; // 10 minutes (Issue 120 / O5)
 
 const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
 

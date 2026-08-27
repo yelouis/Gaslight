@@ -315,9 +315,22 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
             onPressed: () => _confirmLeaveGame(context, gs),
             tooltip: 'Leave game',
           ),
-          title: TitleSettle(
-            text: 'THE REVEAL',
-            style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
+          title: Column(
+            children: [
+              TitleSettle(
+                text: 'THE REVEAL',
+                style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'ROOM: ${state.roomCode}',
+                style: AppTextStyles.sectionLabel.copyWith(
+                  letterSpacing: 1.5,
+                  fontSize: 11,
+                  color: theme.colorScheme.secondary.withOpacity(0.8),
+                ),
+              ),
+            ],
           ),
           centerTitle: true,
           backgroundColor: Colors.transparent,

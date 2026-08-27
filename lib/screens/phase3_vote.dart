@@ -155,7 +155,15 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                 text: 'THE VOTE',
                 style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
+              Text(
+                'ROOM: ${state.roomCode}',
+                style: AppTextStyles.sectionLabel.copyWith(
+                  letterSpacing: 1.5,
+                  fontSize: 11,
+                  color: theme.colorScheme.secondary.withOpacity(0.8),
+                ),
+              ),
             ],
           ),
           centerTitle: true,

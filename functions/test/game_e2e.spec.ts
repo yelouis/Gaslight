@@ -4220,6 +4220,12 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(resolutionOrder.length).to.equal(2);
       });
     });
+
+    describe('Wave O: Issue 120 / O5 - presence window 10 minutes', () => {
+      it('O5: PRESENCE_STALE_MS is exported and equals 600,000 (10 minutes)', async () => {
+        expect(PRESENCE_STALE_MS).to.equal(600_000);
+      });
+    });
   });
 });
 
