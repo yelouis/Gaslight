@@ -31,7 +31,9 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Nine issues are open from the August 26 TestFlight playtest (build 4) and need your selection.** They are numbered 113–121 below. Two reported symptoms (#4 and #6) turned out to share one root cause and are filed together as Issue 113.
+**All nine playtest issues (113–121) have selections and are specced for build as Wave O** — see `agent_execution_guide.md` §2–§8. Nine items, nine commits: **O1–O5 are server-side and land before one deploy; O6–O9 are client-only.**
+
+> **Issue 117's cause is now CONFIRMED and the guide says not to re-investigate.** `advancePhaseInternal` writes `answerAuthors` with `{merge: true}`, and Firestore merges a map field key-by-key — so each round's mapping is unioned with the last rather than replacing it. Proven from the live playtest room `EKGL`: four cards carry **8** `answerAuthors` entries for **4** options. `getMyOptionId` returns the first author match, which can be **round 1's** option id, matching nothing in round 2's grid. Vote resolution is unaffected (option ids are UUIDs), so scoring was never wrong — only the lockout.
 
 ---
 
@@ -54,7 +56,7 @@
   - *Pros*: Zero risk of disagreement; the total is already shown.
   - *Cons*: Loses the "what just happened to me" beat, which is most of the reveal's payoff.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -73,7 +75,7 @@ Your selection: _____
   - *Pros*: Trivial; likely fits everywhere.
   - *Cons*: Loses the sentence quality that makes these read as awards, and only postpones the problem for a longer future label.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -92,7 +94,7 @@ Your selection: _____
   - *Pros*: Smallest possible change; never shows a UUID.
   - *Cons*: The award loses its point — nobody learns whose lie won the night.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -107,7 +109,7 @@ Your selection: _____
   - *Pros*: Directly delivers what was asked; the sealed-ballot screen is a long dead wait and the mascot is what gives it life.
   - *Cons*: If it *is* already there and merely hidden, this creates a duplicate rather than fixing the cause.
 
-Your selection: _____
+Your selection: Proceed with Option B.
 
 ---
 
@@ -130,7 +132,7 @@ Your selection: _____
   - *Pros*: Makes the lockout resilient to whatever the underlying cause is.
   - *Cons*: Treats the symptom; a client bound tighter than the server's has itself been a defect here before (Issue 90).
 
-Your selection: _____
+Your selection: Proceed with Option A. I am confident that the issue so if it is not discoverd in logging, see if you can check the firebase logs from the game that was played.
 
 ---
 
@@ -149,7 +151,7 @@ Your selection: _____
   - *Pros*: The cleanest experience — no dead cards at all.
   - *Cons*: Much larger blast radius: the rotation, `resolutionOrder` and scoring all assume one card per active player. Changing that mid-match is where subtle rotation bugs come from.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -168,7 +170,7 @@ Your selection: _____
   - *Pros*: Any length fits, including beyond 100 characters.
   - *Cons*: Voters compare options at a glance; hiding text behind interaction changes the game, not just the layout.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -189,7 +191,7 @@ This is Issue 112 **Option C**, which was filed and deliberately deferred: an ex
   - *Pros*: Directly addresses "let me back in with my name".
   - *Cons*: Their seat and **score** are gone; they rejoin as a new player mid-match, which is worse than being away and is likely to read as a fresh bug.
 
-Your selection: _____
+Your selection: Proceed with Option B.
 
 ---
 
@@ -208,7 +210,7 @@ Your selection: _____
   - *Pros*: Zero risk; the current behaviour is deliberate and documented.
   - *Cons*: Does not address the report, and leaves one player staring at a status screen for the most entertaining phase of the game.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 

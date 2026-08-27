@@ -1,139 +1,158 @@
-# Agent Execution Guide — Playtest Triage: Issues 113–121 Awaiting Selection — August 26, 2026
+# Agent Execution Guide — Active Build: Wave O — Playtest Fixes (Issues 113–121) — August 26, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**Build 4 reached real testers and the playtest produced eleven reports, now filed as nine issues (113–121) in `ongoing_general_errors.md`.** Every one ends in a blank `Your selection: _____`.
+**All nine selections are made.** Build exactly these, in this order.
 
-## ⛔ STOP — all nine are blocked on the user
+| # | Item | Issue → choice | Side | Deploy |
+|---|---|---|---|---|
+| **O1** | Stop `answerAuthors` accumulating across rounds | **117 → A** | server | ✅ |
+| **O2** | Publish the per-card score delta from the server | **113 → A** | server + client | ✅ |
+| **O3** | Snapshot player names into the match summary | **115 → A** | server + client | ✅ |
+| **O4** | Placeholder answers unvotable; skip an all-sealed card | **118 → A** | server | ✅ |
+| **O5** | Longer presence window + room code visible in game | **120 → B** | server + client | ✅ |
+| **O6** | Badge pills stop overflowing | **114 → A** | client | — |
+| **O7** | Raven on the sealed-ballot screen | **116 → B** | client | — |
+| **O8** | Vote options never truncate up to 100 chars | **119 → A** | client | — |
+| **O9** | The target sees the options, read-only | **121 → A** | client | — |
 
-Do not start any of them. Each carries options with pros, cons and a marked `(recommended)`; **that label is advice for the user, not permission for you.** Never fill in a selection line.
+**O1–O5 are server-side; land them together and deploy once.** O6–O9 are client-only and need no deploy. **Do not run `firebase deploy` yourself** — that call is the user's, and it is the step that makes O1–O5 real.
 
-**Read the issues before touching anything** — several contain investigation that is already done and should not be repeated:
-
-- **113 folds two reported symptoms into one bug.** The reveal's ▲ badge is computed client-side from card scoring only and omits the unmask ±1, so it disagrees with the authoritative total beside it. The "Louis got +3 but shows 2" report is **the badge being wrong, not the score** — 2 was correct.
-- **117 records two ruled-out causes**, so nobody re-checks them: the client's option-id cache is already round-scoped, and so is the text fallback. It also names a real hazard found nearby — `answerAuthors` survives the round reset — which is **not** confirmed as the cause.
-- **116 is unconfirmed in source** and its recommended option is to reproduce first, not to fix.
-- **120 is Issue 112 Option C**, previously filed and deliberately deferred. It is the largest item here and touches the 3-player floor.
-
-## Verified baseline — the regression bar
-
-| Gate | Result | Command |
-|---|---|---|
-| Analyzer | **0 errors** | `flutter analyze lib test` |
-| Client tests | **191/191** | `flutter test` |
-| Functions build | clean | `npm --prefix functions run build` |
-| Functions tests | **73/73** | `npm --prefix functions test` |
-| **Deck sync** | **PASS** — 5 decks, 295 lines compared | `./scripts/check_decks_in_sync.sh` |
-| Deploy freshness | **exit 1 until deployed** | `./scripts/check_deploy_fresh.sh` |
-| iOS evidence | **exit 0** — 15 blocks | `./scripts/check_playthrough_evidence.sh` |
-| Web evidence | **exit 0** — 20 blocks | `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` |
+**One item = one commit** — nine commits, not one.
 
 ---
 
-## 0. The catalogue you are validating against
+## 0. What is already established — do NOT re-derive it
 
-`functions/src/prompt_decks.ts` is the **source of truth**. `lib/utils/prompt_decks.dart` is **generated** — never hand-edit it; regenerate with `./scripts/generate_prompt_decks_dart.sh`.
+### O1's cause is CONFIRMED. Do not "reproduce with logging" first.
 
-| id | Display name | Rating | Prompts | |
-|---|---|---|---|---|
-| `hypotheticals` | **Hypotheticals** | PG | 50 | **fallback** |
-| `real_life` | **Real Life** | PG | 25 | |
-| `unhinged_quirks` | **Unhinged Quirks** | PG | 25 | |
-| `love_life` | **Love Life** | PG | 25 | |
-| `rated_r_nsfw` | **Rated R NSFW** | R | 25 | |
+Issue 117 was filed asking for reproduction, and the user's selection anticipated checking Firebase. **That has been done and the cause is proven from live production data**, so skip straight to the fix:
 
-Seal colours (`app_colors.dart`, keyed by rating — never by deck): **PG `0xFF7A6A3A`**, **R `0xFF8B0000`** (oxblood), X `0xFF2A2226` (no deck currently uses X).
+- `advancePhaseInternal` builds a fresh `answerAuthors` map and writes it with
+  `transaction.set(sealedRef, sealedData, { merge: true })` (`index.ts:1437`).
+  **Firestore's `merge: true` merges a map field key-by-key**, so round 2's mapping is *unioned* with round 1's instead of replacing it.
+- **Evidence from the playtest room `EKGL`** (2 rounds, still live at the time of writing): four cards carry **`answerAuthors` with 8 entries** while each card has only **4 options** (1 truth + 3 forgeries). 8 = two rounds × four options.
+- `getMyOptionId` iterates that map and returns the **first** entry whose `authorId` matches (`index.ts`, near the end of the callable). With both rounds present it can return **round 1's option id**, which matches nothing in round 2's grid — so the player's own answer is never greyed. That is exactly the reported symptom.
 
-**These five values are what every assertion below compares against.** If the catalogue changes before you run, re-read it rather than trusting this table.
+**Blast radius, checked so you do not panic:** vote resolution at `index.ts:1478` looks up `answerAuthors[votedOptionId]` by option id, and option ids are UUIDs, so a stale extra entry cannot mis-resolve a vote. **Scoring was not affected** — only the lockout.
+
+### Issue 113 inverts one of the reports
+
+"Louis got +3 but the standings say 2" — **2 was correct.** Louis earned +3 on the card and **−1 for being unmasked**. The ▲ badge was wrong for omitting the penalty. **Do not "fix" the total.**
+
+### Issue 120 Option B does not deliver everything that was asked
+
+The original report asked for three things: a longer grace period, **rejoining with your name**, and the room code visible in game. **Option B delivers the first and third only.** Rejoining with your seat and score intact is Issue 112 Option C (an *away* state), which remains deliberately unbuilt. Do not build it here, and do not claim O5 restores departed players.
 
 ---
 
 ## 1. Standing constraints
 
-- **Do not run `firebase deploy`.**
-- **Never hand-edit `lib/utils/prompt_decks.dart`.** It is generated; edits are erased and `check_decks_in_sync.sh` will fail.
+- **One item = one commit.**
 - **Never fill in a `Your selection: _____` line.**
-- **A `grep` is not an observation.** `Observed:` takes widget-tree output, screen text, or a screenshot path.
-- **Open the artefact.** A screenshot path satisfies the evidence gate; it does not prove the image shows what the block claims (lessons 2.25–2.28).
+- **Do not run `firebase deploy`.**
+- **Never hand-edit `lib/utils/prompt_decks.dart`** — it is generated.
+- **A `grep` is not an observation.** **Open the artefact** before trusting a screenshot claim (lessons 2.25–2.28).
 - **`flutter analyze lib test`, never bare `flutter analyze`.**
-- **Do not fix product defects inline.** File them with Pros/Cons, a marked `(recommended)` option, and a blank selection line, per `.agents/skills/bug_documentation_guidelines/SKILL.md`.
-- **Do not touch anything in §7 or §8.**
+- **File anything new** with Pros/Cons, a marked `(recommended)` and a blank selection line.
+- **Do not touch anything in §11 or §12.**
 
 ---
 
-## 2. Marionette setup
+## 2. O1 — `answerAuthors` must not survive its round (117 → A)
 
-The standing procedure is §6 — **read it before starting.** The essentials, plus what is specific to this wave:
+**The fix:** make the write replace the map rather than merge into it. Either clear it explicitly at the round advance (where `sealed/{playerId}` is already reset with `truthAnswer: ""` and `sabotageAnswers: {}`), or write `answerAuthors` with `FieldValue.delete()` before setting the new map, or stop using `merge: true` for that field.
 
-- **Three simulators, one MCP server each, on separate DDS ports.** The Wave G/H runs used `marionette-p1/p2/p3` on 8182/8282/8382; that configuration is recorded in the header of `docs/playthrough_findings_marionette.md`.
-- **Marionette drives a DEBUG build.** `MarionetteBinding.ensureInitialized()` sits behind `kDebugMode` (`main.dart:26`), so a release build cannot be driven this way.
-- **Because it is a debug build, `DEBUG: ADD 9 BOTS` is available. Do not use it.** Bots are server-seeded documents and exercise none of the client path — and this wave is specifically about what the *client* renders and sends. **Three real clients.**
-- `.env` must contain `USE_EMULATOR=false`; it is a bundled asset, so changing it after the build has no effect.
-- **Uninstall on every simulator first**, or a stale room is restored from `SharedPreferences` — and a room created before the refactor holds a deck id that no longer exists.
-- **Launch one device at a time**; concurrent builds corrupt `build/`.
-- `Disable Game Timers` **on**, recorded as a deviation.
+**Prefer clearing at the round advance**, next to the existing resets, so the invariant reads as "a sealed doc holds this round's data" in one place.
 
----
-
-## 3. What to validate
-
-Write findings to `docs/playthrough_findings_marionette.md` as new `### E<n>` blocks continuing the existing numbering, in the existing format. Screenshots go to `docs/playthrough_evidence/` under **new** filenames.
-
-### D1 — The catalogue renders, with declared names
-
-All five decks appear in the lobby carousel, with the **display names exactly as in §0**.
-
-**The decisive one is `Rated R NSFW`.** The old code derived names by splitting the id on underscores, which rendered it **`Rated R Nsfw`**. Seeing the correct capitalisation is proof the declared-name path is live; seeing the old form means the client is running stale code.
-
-### D2 — Seals come from ratings
-
-Four decks show a **PG** seal, one shows **R**. Compare the seal colours against §0 from a screenshot — the widget tree will give you the label but not reliably the colour.
-
-**No deck may show a seal whose letter does not match its rating in §0.**
-
-### D3 — Sizes and the deck-size ceiling
-
-Hypotheticals reports **50** prompts, the other four **25**.
-
-Then confirm the ceiling behaves: a **25-prompt deck cannot serve `players × rounds > 25`**. With 3 players, set rounds to 5 → 15, fine. **This is expected behaviour, not a defect** — the lobby's own `Deck too small` warning should state the real numbers and block START GAME. Only file something if the warning is absent, or its numbers are wrong.
-
-### D4 — The family-friendly filter is rating-driven
-
-Toggle **Family-Friendly Decks Only** ON. **Exactly `Rated R NSFW` disappears**; the four PG decks and `custom` remain. Toggle off and it returns.
-
-### D5 — The toggle writes through (mirror-image of Issue 106)
-
-Select **Rated R NSFW**, then toggle Family-Friendly **ON**. The room's `selectedDeckId` must change to the fallback, **`hypotheticals`**, and the carousel must show Hypotheticals as chosen.
-
-**Verify the room document, not just the screen.** If the UI switches but the room still holds `rated_r_nsfw`, the host sees one deck while the server would start another — the exact class of bug Issue 106 was.
-
-### D6 — Prompts actually come from the chosen deck ⭐
-
-**This is the assertion the whole refactor exists for, and the one that is easy to fake.** "A prompt appeared" proves nothing — the original bug was a prompt appearing from the *wrong* deck.
-
-For **each** of the five decks: select it, start a 3-player game, and **cross-check the prompt text on each card against that deck's `prompts` array in `functions/src/prompt_decks.ts`.** Quote the prompt and name the deck it belongs to in `Observed:`.
-
-A prompt that appears in no deck, or in a different deck than the one selected, is a **FAIL** — file it, do not fix it.
-
-### D7 — Custom games fall back to `hypotheticals`
-
-Create a custom-deck game, contribute prompts, and re-roll until the pool cannot serve one. The replacement must come from **Hypotheticals** — the deck marked `isFallback` — not from any other deck and not from a hardcoded name. Cross-check the text the same way as D6.
-
-### D8 — Re-roll and the carousel preview still work
-
-Re-roll changes the card and the new prompt belongs to the same deck. The carousel's preview line shows a prompt from the deck on that card — this path changed from drawing the whole deck to drawing one, so confirm it still renders text rather than blank.
+**Validation**
+- An emulator test plays **two** rounds and asserts, after round 2's vote transition, that `sealed/{targetId}.answerAuthors` has **exactly the number of options on that card** — not more. **Falsify it** by restoring the merge; it must fail with 8 where 4 is expected.
+- Assert `getMyOptionId` in round 2 returns an option id that **is present in round 2's `card.options`**. This is the assertion that maps to the player-visible symptom; the count alone does not.
+- **Over-reach guard:** round 1 still works, and vote resolution still maps votes to authors correctly in both rounds.
 
 ---
 
-## 4. What NOT to conclude
+## 3. O2 — Publish the per-card delta (113 → A)
 
-- **A blocked start on a 25-prompt deck at high player×round counts is correct**, not a bug. See D3.
-- **A prompt repeating after many re-rolls is correct.** Re-rolls sample uniformly minus what is live on the table (Issue 107 Option B); repeats across a player's own history are legal by design.
-- **The absence of an X-rated deck is correct.** `cah_dark_humor` was removed by the deck rewrite; the X seal colour remains defined for a future deck.
-- **The Case File share, the match summary, and presence timing are out of scope.** They were validated in Waves K–M; do not re-run them.
+**The fix:** the reveal transaction already computes every player's total change for the card **including** the unmask ±1. Publish that map alongside the card so the client renders it instead of recomputing.
+
+Replace the client-side computation at `phase4_reveal.dart:260` (`ScoringLogic.calculateScores(...)`) with a read of the published map. **Leave `ScoringLogic` in place** — the server uses it.
+
+**Where it lives matters.** Publish it only when the card is revealed, and only for the card being revealed — the same scoping the reveal already uses. **A delta map keyed by player, published early, leaks who gained from a forgery before authorship is revealed**, which reopens Issues 99 and 100.
+
+**Validation**
+- Emulator test: on a card where a player is both scored and unmasked, the published delta equals card points **plus** the unmask adjustment, computed from the votes and guesses the test cast — **not** read back from the summary.
+- Widget test: the badge renders the published value; a player with a net **negative** delta is displayed sensibly (today the badge only renders `if (delta > 0)`, so decide and test what a −1 shows).
+- **Falsify** by publishing a wrong value and confirming the test fails.
+- **Leak guard:** the delta map is absent from cards that are not currently being revealed.
 
 ---
-## 5. What legitimately starts a new build
+
+## 4. O3 — Snapshot names into the summary (115 → A)
+
+**The fix:** when `computeMatchSummary` runs at game over, store the **display name** next to every player id it references — best lie author, cleanest truth author, and both sides of every rivalry line. The game-over screen then renders names without consulting the players subcollection, which is being emptied as people leave.
+
+**Validation**
+- Emulator test: a player **leaves after game over**, and `room.matchSummary` still carries their name. Assert on the summary, not on the players collection.
+- Widget test: the game-over screen renders names when the players list is **empty**. That is the reported condition and the one that regresses.
+- **Falsify** by removing the snapshot; the widget test must show ids again.
+
+---
+
+## 5. O4 — Placeholder answers are unvotable; an all-sealed card is skipped (118 → A)
+
+**The fix, server-side**, because the reported symptom — sealed for some players, votable for others — is what happens when clients decide independently:
+1. `castVote` rejects a vote whose resolved option text is `kMissingAnswerPlaceholder` (`index.ts:170`), with `invalid-argument`.
+2. The client greys placeholder options too, so the rule is visible rather than only enforced.
+3. If **every** option on a card is a placeholder, the card is **skipped** — advance past it without a vote phase.
+
+**The skip path is where the risk is.** `resolutionOrder`, scoring, and the round advance all assume a card gets votes. A skipped card must not strand the rotation, must not divide by zero in scoring, and must not leave `currentReaderId` pointing at a card nobody will resolve.
+
+**Validation**
+- Emulator: a card with one placeholder → that option cannot be voted for; the rest of the card behaves normally.
+- Emulator: a card where **all** options are placeholders → the match advances past it and reaches the next card or game over. **Assert the room actually progresses**, not merely that no error was thrown.
+- **Over-reach guard:** a normal card with no placeholders is unaffected — same votes, same scoring.
+- **Falsify** both by removing each guard in turn.
+
+---
+
+## 6. O5 — Longer presence window, and the room code on screen (120 → B)
+
+**The fix:** raise `PRESENCE_STALE_MS` (currently `120_000`, `index.ts`) to **10 minutes**, and surface the 4-letter room code somewhere persistent during play so people can read it out.
+
+**State the cost in the commit, because it is real.** A player who genuinely leaves now keeps a 3-player game alive for up to ten minutes before the below-3 auto-end fires. With timers enabled, force-advance fills their answers with placeholders — which is precisely why **O4 should land first**: without the skip rule, a long-absent player produces cards nobody can vote on.
+
+**Do not invent a second threshold** to make the auto-end faster. If the delayed auto-end proves annoying in the next playtest, that is a new issue with its own options.
+
+**Validation**
+- The existing `PRESENCE_STALE_MS` boundary tests still pass, written against the constant rather than the number — confirm they were, and that they now exercise 10 minutes.
+- The room code is visible during truth, forgery, vote and reveal, at the sizes covered by O8's approach — **not** clipped on a narrow phone.
+- **This cannot be fully tested here.** Fake timers do not suspend an isolate; the real check is a physical phone backgrounded for several minutes. Record it as a playthrough block, not as a unit test result.
+
+---
+
+## 7. O6–O9 — the client-only fixes
+
+**O6 — badge pills (114 → A).** Wrap the title in `Expanded`/`Flexible` so it ellipsizes and the badge keeps its intrinsic width, in both the game-over MATCH HIGHLIGHTS rows and the lobby's `Lobby Total` pill. **Validation:** widget tests at **320 pt** and **375 pt** asserting the badge's `RenderBox` is fully inside the screen bounds. Falsify by restoring the rigid `Row`.
+
+**O7 — the raven (116 → B).** Add the mascot to the sealed-ballot waiting screen with a pose suited to waiting. **Check first whether one is already present but hidden or clipped** — the issue was filed unconfirmed, and adding a second raven would be worse than the absence. **Validation:** a widget test finds exactly **one** raven on that screen, plus a screenshot.
+
+**O8 — vote option sizing (119 → A).** Replace the fixed font tiers in `card_grid.dart` with measurement: compute the available box and scale the text down until 100 characters fit, with a readable floor. **The current tiers were validated at 375 pt only, which is why this recurred.** **Validation:** extend `test/vote_option_truncation_test.dart` to assert `didExceedMaxLines == false` at **320, 375 and 430 pt** *and* under a large `textScaleFactor`. **Keep loading the real Lora font** — `flutter test` otherwise substitutes a square-glyph fallback that needed 10 lines where Lora needs 5, and tuning against it would shrink real text to nothing.
+
+**O9 — target sees the options (121 → A).** Render the full option grid for the card's target, read-only: no selection, no CONFIRM VOTE. **Validation:** widget test asserting the target sees the same option count as a voter and that tapping changes nothing; and that `castVote` still refuses a target's vote server-side — a client that merely hides the button is not the bound.
+
+---
+
+## 8. Ordering and deploy
+
+Land **O1 → O5** first as five commits, then the user deploys once. **O4 before O5**, because a longer presence window produces more placeholder answers and O4 is what stops those cards stranding a round.
+
+Then **O6 → O9**, client-only, and a fresh `flutter build ipa` plus a web redeploy.
+
+`check_deploy_fresh.sh` will go red the moment O1 lands and stay red until the user deploys. **Say so in each commit** rather than leaving it looking like a regression.
+
+---
+## 9. What legitimately starts a new build
 
 An empty queue is a valid state. Refactors, renames and "while I was in there" cleanups are not work — they are risk against a green baseline with no issue behind them. Exactly four things start a build:
 
@@ -146,7 +165,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 6. Playthrough procedure — the standing setup
+## 10. Playthrough procedure — the standing setup
 
 1. **`.env` must contain `USE_EMULATOR=false`** — a bundled asset; changing it after the build has no effect.
 2. **Uninstall on every booted simulator** so no stale room is restored from `SharedPreferences`.
@@ -170,7 +189,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 7. Already delivered — do NOT rework
+## 11. Already delivered — do NOT rework
 
 **Verified in source, in the built artefacts, and on devices, August 22, 2026:**
 
@@ -187,7 +206,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 8. Invariants & intentional decisions — do NOT change
+## 12. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.** Deleting them breaks emulator tests; `debugSimulateBotResponses` drives several. Their gating is observable only in a release or profile build.
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty. If a plugin lacks its own manifest, **upgrade the plugin**.
@@ -214,7 +233,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 9. Where the contracts live
+## 13. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -230,7 +249,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 10. Validation standard
+## 14. Validation standard
 
 **A mechanical check must assert it matched something.** Zero matches and zero violations produce the same number — `check_playthrough_evidence.sh` exists because a mandated check of mine did not.
 
@@ -252,7 +271,7 @@ If none of these has happened, **report the state and stop.**
 
 ---
 
-## 11. Feedback loop — what past specs got wrong
+## 15. Feedback loop — what past specs got wrong
 
 - **A check that matches nothing returns the same number as a check that passes.** Mine did, and it shipped as a mandatory step.
 - **A defect class mutates faster than the rule written to catch it.** `grep` as observation → prose as observation → a **renamed field** hiding both. Each escaped a rule written for the previous shape. **Match the concept, not the literal.**
@@ -291,29 +310,21 @@ If none of these has happened, **report the state and stop.**
 
 ## Definition of Done
 
-**Before any device work**
-- [ ] `./scripts/check_deploy_fresh.sh` exits **0**. If it exits 1, the server still has the old decks — **stop and report**, do not deploy.
-- [ ] `./scripts/check_decks_in_sync.sh` exits **0**, so the client you are about to build matches the catalogue you are asserting against.
-- [ ] Build freshness proven in epoch seconds; both numbers pasted into the report header.
-- [ ] Three simulators, uninstalled first, launched one at a time. **No bots.**
+**Server items — O1–O5, five commits, then ONE deploy by the user**
+- [ ] **O1** — `answerAuthors` holds only the current round; an emulator test asserts the entry count equals the card's option count, and `getMyOptionId` in round 2 returns an id present in round 2's `card.options`. Falsified by restoring the merge (must fail 8 ≠ 4).
+- [ ] **O2** — the per-card delta is published by the server and rendered by the client; it equals card points **plus** the unmask adjustment, computed in the test from the votes and guesses it cast. Negative deltas render sensibly. Leak guard: absent from non-revealed cards.
+- [ ] **O3** — the summary carries display names; the game-over screen renders correctly with an **empty** players collection. Falsified by removing the snapshot.
+- [ ] **O4** — placeholder options are unvotable server-side and greyed client-side; an all-placeholder card is **skipped and the room provably advances**. Over-reach: normal cards unchanged.
+- [ ] **O5** — `PRESENCE_STALE_MS` is 10 minutes with the existing boundary tests still green; the room code is visible in all four in-game phases. The commit **states the delayed auto-end cost** and does **not** claim departed players can rejoin with their name.
 
-**The assertions**
-- [ ] **D1** — five decks render with the declared display names, **`Rated R NSFW` capitalised correctly**.
-- [ ] **D2** — four PG seals and one R seal; colours checked against §0 from a screenshot.
-- [ ] **D3** — sizes 50 / 25 / 25 / 25 / 25, and the `Deck too small` warning states real numbers when the ceiling is crossed.
-- [ ] **D4** — the toggle hides exactly `Rated R NSFW` and nothing else.
-- [ ] **D5** — toggling with NSFW selected switches the **room document** to `hypotheticals`, verified in Firestore and not only on screen.
-- [ ] **D6** — for **all five** decks, every prompt observed is quoted and matched to that deck's array in the catalogue. This is the wave's core assertion; a block that says "prompts appeared" has not done it.
-- [ ] **D7** — a custom game's fallback prompt is traced to **Hypotheticals**.
-- [ ] **D8** — re-roll changes the card and stays in-deck; the carousel preview renders text.
-
-**Recording it**
-- [ ] New `### E<n>` blocks in `docs/playthrough_findings_marionette.md`, existing format, screenshots under **new** filenames.
-- [ ] `./scripts/check_playthrough_evidence.sh` exits **0**.
-- [ ] Any failure is **filed** with Pros/Cons, a `(recommended)` option and a blank selection line — **not fixed inline**.
+**Client items — O6–O9, four commits, no deploy**
+- [ ] **O6** — badge fully on screen at 320 pt and 375 pt, asserted on the `RenderBox`.
+- [ ] **O7** — exactly **one** raven on the sealed-ballot screen; checked for a pre-existing hidden one first.
+- [ ] **O8** — no truncation of 100 characters at **320, 375 and 430 pt** and under a large text scale, with the **real Lora font loaded** in the test.
+- [ ] **O9** — the target sees the full grid read-only; `castVote` still refuses their vote server-side.
 
 **Across the wave**
-- [ ] Battery at or above baseline: **0 errors** · **≥191** · clean functions build · **≥73** · deck sync PASS · both evidence gates exit 0.
-- [ ] **`firebase deploy` was never run by you.**
-- [ ] `lib/utils/prompt_decks.dart` was never hand-edited.
-- [ ] One item, one commit; Conventional Commit; WHY in the body.
+- [ ] Every fix has a falsifying test that was **run and observed to fail**, with the output in the commit body.
+- [ ] Battery at or above baseline: **0 errors** · **≥191** · clean functions build · **≥74** · deck sync PASS · both evidence gates exit 0.
+- [ ] `check_deploy_fresh.sh` red after O1 is expected and explained; **`firebase deploy` was never run by you**.
+- [ ] One item, one commit; Conventional Commit; WHY in the body; Issues 113–121 moved into the **single** existing Resolved heading, and the design docs that described the old behaviour updated — `design_scoring_and_ui.md` owns the reveal beats, the honours and the target lockout, and §3.2's "Reader & Target Lockout" changes with O9.
