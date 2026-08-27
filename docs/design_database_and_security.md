@@ -64,7 +64,8 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
 
 * Every client updates **only** `lastSeen` on its own player doc every 10 seconds (permitted by the rules).
 * On app resume (`AppLifecycleState.resumed`), `GameService` (via `WidgetsBindingObserver`) writes `lastSeen` immediately and restarts its 10 s periodic timer, preventing suspended timers and closing the gap after phone unlock.
-* Any client that observes a player with `lastSeen` older than `PRESENCE_STALE_MS` (10 minutes, exported constant `PRESENCE_STALE_MS = 600_000`, Issue 120) calls the `handleDisconnect` callable. The function verifies staleness/authority itself (`isDead`), so duplicate or racing calls are safe (idempotent: if the player's card is already gone, it just deletes the doc). Client-side deletes no longer exist.
+* Any client that observes a player with `lastSeen` older than its own `presenceStaleMs` calls the `handleDisconnect` callable. Duplicate or racing calls are safe (idempotent: if the player's card is already gone, it just deletes the doc). Client-side deletes no longer exist.
+* **⚠️ The 10-minute window is not in force — see Issue 123.** The server exports `PRESENCE_STALE_MS = 600_000`, but two things defeat it: the client still uses `presenceStaleMs = 120000` (`lib/services/game_service.dart:20`), and `isDead` appears **only inside the authorization condition** in `handleDisconnect` (`functions/src/index.ts:1155`) — it decides whether a *peer* may evict someone, and has never limited the **host**, who is authorized unconditionally. The effective window is therefore still **120 seconds**. Verified in the emulator: a player stale by 150 s was deleted by a host-initiated call. **Do not describe the window as 10 minutes until Issue 123 is selected and built.**
 * **`handleDisconnect` is also the host's kick and the player's quit** (Issues 85 and 87, August 2026). Its authorisation check rejects only a **non-host acting on another player's document**, so three callers are legitimate and no separate callable exists or should be added:
   * a player disconnecting **themselves** — the lobby leave control, and the in-game `LEAVE GAME` control on all three phase screens;
   * the **host** disconnecting **any** player — the lobby kick control;
@@ -89,7 +90,7 @@ A re-bind is now permitted only when **one of three** conditions holds:
 
 1. **Ownership** — `existing.authUid === request.auth.uid`. The ordinary reconnect.
 2. **Seat token** — the caller presents the `seatToken` minted for that seat. The token is generated server-side with `randomUUID()` at `createRoom` and at the new-player branch of `joinRoom`, returned to that caller **once** in the callable response, and persisted client-side per room as `seat_token_{roomCode}`. **Only its SHA-256 hash is stored, and only in `sealed/seat_{playerId}` — the default-deny subcollection.** This is the reinstall / second-device path.
-3. **Staleness** — nobody has heartbeated the seat for **10 minutes** (`Date.now() - (existing.lastSeen ?? 0) > PRESENCE_STALE_MS`, Issue 120), mirroring `handleDisconnect`'s `isDead` rule. This is what keeps a crashed player's seat reclaimable when the token is gone.
+3. **Staleness** — nobody has heartbeated the seat for `PRESENCE_STALE_MS` (`Date.now() - (existing.lastSeen ?? 0) > PRESENCE_STALE_MS`), mirroring `handleDisconnect`'s `isDead` rule. This is what keeps a crashed player's seat reclaimable when the token is gone. **On this path the constant genuinely governs** — unlike the eviction path, which Issue 123 shows is still effectively 120 s.
 
 **Three properties that must not be lost:**
 

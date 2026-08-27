@@ -112,7 +112,8 @@ To allow seamless recovery from app restarts, device sleep, or connection losses
 
 ### 3. Phase 4 (Reveal Phase)
 * **Voter Chip Wrap**: Uses Flutter's `Wrap` widget to display player avatars who voted for each option, preventing UI overflow.
-* **Points Delta**: Server publishes authoritative `scoreDeltas` on `card` during single-card reveal, updated when unmask revenge guesses resolve (Issue 113). Standings badges display positive (`▲+$delta`) and negative (`▼$delta`) adjustments without client-side recomputation. Unrevealed cards omit `scoreDeltas` to preserve answer and author secrecy.
+* **Points Delta**: Server publishes authoritative `scoreDeltas` on `card` during single-card reveal, updated when unmask revenge guesses resolve (Issue 113). Standings badges display positive (`▲+$delta`) and negative (`▼$delta`) adjustments without client-side recomputation. Unrevealed cards omit `scoreDeltas`.
+* **⚠️ `scoreDeltas` currently leaks forgery authorship during the unmask window — see Issue 124.** The revealed card publishes the map even in the branch that deliberately withholds `sabotageAnswers` and obfuscates votes, and `ScoringLogic` credits `deltas[votedForId] += 1` per person fooled — so a non-target player with a positive delta *is* a forger who fooled someone. This re-opens **Issue 100**. It is not visible in the UI (the points tray and standings delta are both gated on `revealStage >= 4`, and the unmask tray is stage 3), and `totalScore`/`playersDeceived` already increment at the same moment, so the channel pre-dates O2 — but the map makes it directly readable. **The rule this section states — no authorship before the deadline — is aspirational until Issue 124 is selected and built.**
 * **Cleanup**: Returning to the lobby triggers `leaveRoom()`, deleting active player records and shutting down subscriptions.
 
 ### 4. Phase 5 (Game Over Screen) — Standings, Match Highlights & Case File Export (Wave K)
