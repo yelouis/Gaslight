@@ -30,6 +30,15 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
+**Issue 133 is selected (Option A) and specced as Wave Q in `agent_execution_guide.md`.** One item, one commit, server + client together — the deadline guard alone leaves the empty-tray path, and the client-trigger change alone widens who can exploit the missing guard.
+
+**Two details found while speccing that the option text did not cover:**
+
+1. **`unmaskDeadline` is not a boolean.** It holds `null` (no window — nobody was fooled), `0` (already closed), a future timestamp (open) or a past one (expired). A naive truthy guard gets `null` and `0` wrong, so the spec carries a four-state table and requires explicit comparisons rather than a falsy check (lesson 2.1).
+2. **The reveal screen's timer ticks every 200 ms** (`lib/screens/phase4_reveal.dart:83`), which makes the client half genuinely delicate. Clearing the retry latch on failure would produce ~25 rejected calls per card per player on a fast clock; never clearing it would mean that if *every* client's clock runs ahead of the server's, no client ever closes the window and the points tray stays empty — the exact regression this issue exists to remove. Wave Q therefore specifies a **1500 ms safety margin plus a hard cap of five retries per card**. The bounded failure mode is safe: `pendingScoreDeltas` is flushed at **three** sites, not one, so if the close never happens the scores are still applied when the host advances — one card's tray stays empty, and nothing is lost or double-applied.
+
+---
+
 ### Issue 133: `closeUnmaskWindow` has no deadline guard — any player can end the unmask window early and read the forger
 **Status**: ⚠️ Confirmed Unresolved — **verified against a running emulator, and live in production** (the callable deployed 2026-08-27T16:02:43Z).
 
@@ -64,7 +73,7 @@ Two distinct harms: it **re-opens Issue 100** by a new route, and it lets any si
   - *Pros*: No client can influence the window at all, early or late; the close becomes genuinely authoritative and time-driven; eliminates the whole class rather than guarding it.
   - *Cons*: Introduces scheduled infrastructure this project does not currently use, with its own deploy, IAM and emulator-testing story; a 20-second timer is at the low end of what task scheduling handles reliably; substantially more than one commit, for a case Option A already covers.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
