@@ -32,6 +32,7 @@ class CardModel {
   final List<CardAnswerOption> options;
   final Map<String, String> votes; // VoterId -> VotedForAuthorId
   final Map<String, String> unmaskGuesses; // GuesserId -> GuessedAuthorId
+  final Map<String, int> scoreDeltas; // PlayerId -> Delta points on this card
 
   CardModel({
     required this.targetPlayerId,
@@ -41,6 +42,7 @@ class CardModel {
     this.options = const [],
     this.votes = const {},
     this.unmaskGuesses = const {},
+    this.scoreDeltas = const {},
   });
 
   CardModel copyWith({
@@ -51,6 +53,7 @@ class CardModel {
     List<CardAnswerOption>? options,
     Map<String, String>? votes,
     Map<String, String>? unmaskGuesses,
+    Map<String, int>? scoreDeltas,
   }) {
     return CardModel(
       targetPlayerId: targetPlayerId ?? this.targetPlayerId,
@@ -60,6 +63,7 @@ class CardModel {
       options: options ?? this.options,
       votes: votes ?? this.votes,
       unmaskGuesses: unmaskGuesses ?? this.unmaskGuesses,
+      scoreDeltas: scoreDeltas ?? this.scoreDeltas,
     );
   }
 
@@ -72,6 +76,7 @@ class CardModel {
       'options': options.map((o) => o.toMap()).toList(),
       'votes': votes,
       'unmaskGuesses': unmaskGuesses,
+      'scoreDeltas': scoreDeltas,
     };
   }
 
@@ -92,6 +97,9 @@ class CardModel {
       options: parsedOptions,
       votes: Map<String, String>.from(map['votes'] ?? {}),
       unmaskGuesses: Map<String, String>.from(map['unmaskGuesses'] ?? {}),
+      scoreDeltas: Map<String, int>.from(
+        (map['scoreDeltas'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? {},
+      ),
     );
   }
 }

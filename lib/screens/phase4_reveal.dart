@@ -257,13 +257,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
       } catch (_) {}
     }
 
-    final _latestDeltas = currentCard != null
-        ? ScoringLogic.calculateScores(
-            state: state,
-            currentCard: currentCard,
-            playerVotes: currentCard.votes,
-          )
-        : <String, int>{};
+    final _latestDeltas = currentCard?.scoreDeltas ?? const <String, int>{};
 
     if (currentTargetId != _previousTargetId) {
       _previousTargetId = currentTargetId;
@@ -427,13 +421,16 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                 spacing: 12,
                                 runSpacing: 8,
                                 alignment: WrapAlignment.center,
-                                children: _latestDeltas.entries.where((e) => e.value > 0).map((e) {
+                                children: _latestDeltas.entries.where((e) => e.value != 0).map((e) {
                                   final player = gs.players.firstWhere((p) => p.id == e.key, orElse: () => PlayerState(id: e.key, name: 'Unknown'));
+                                  final isPositive = e.value > 0;
+                                  final prefix = isPositive ? '+' : '';
+                                  final color = isPositive ? theme.colorScheme.primary : AppColors.oxblood;
                                   return Chip(
                                     avatar: PlayerAvatar(player: player, size: 20, showName: false),
-                                    label: Text('${player.name}: +${e.value}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
-                                    backgroundColor: theme.colorScheme.secondary.withOpacity(0.2),
-                                    side: BorderSide(color: theme.colorScheme.secondary),
+                                    label: Text('${player.name}: $prefix${e.value}', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                                    backgroundColor: (isPositive ? theme.colorScheme.secondary : AppColors.oxblood).withOpacity(0.2),
+                                    side: BorderSide(color: isPositive ? theme.colorScheme.secondary : AppColors.oxblood),
                                   );
                                 }).toList(),
                               ),
@@ -555,6 +552,16 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                                     fontSize: 13,
                                                     fontWeight: FontWeight.bold,
                                                     color: AppColors.verdigris,
+                                                  ),
+                                                ),
+                                              ] else if (delta < 0) ...[
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  '▼$delta',
+                                                  style: const TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.oxblood,
                                                   ),
                                                 ),
                                               ],

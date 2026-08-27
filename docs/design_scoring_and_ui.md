@@ -108,7 +108,7 @@ To allow seamless recovery from app restarts, device sleep, or connection losses
 
 ### 3. Phase 4 (Reveal Phase)
 * **Voter Chip Wrap**: Uses Flutter's `Wrap` widget to display player avatars who voted for each option, preventing UI overflow.
-* **Points Delta**: Computes and overlays points awarded specifically during the current resolution using a localized scoring lookup.
+* **Points Delta**: Server publishes authoritative `scoreDeltas` on `card` during single-card reveal, updated when unmask revenge guesses resolve (Issue 113). Standings badges display positive (`▲+$delta`) and negative (`▼$delta`) adjustments without client-side recomputation. Unrevealed cards omit `scoreDeltas` to preserve answer and author secrecy.
 * **Cleanup**: Returning to the lobby triggers `leaveRoom()`, deleting active player records and shutting down subscriptions.
 
 ### 4. Phase 5 (Game Over Screen) — Standings, Match Highlights & Case File Export (Wave K)

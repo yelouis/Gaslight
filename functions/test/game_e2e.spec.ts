@@ -3921,6 +3921,103 @@ describe('Gaslight E2E Game Emulator Tests', () => {
         expect(r2OptionIds).to.include(myOptionRes.optionId, 'getMyOptionId must return an option ID from round 2 options, not stale round 1');
       });
     });
+
+    describe('Wave O: Issue 113 / O2 - per-card score delta publishing & unmask adjustment', () => {
+      it('O2: publishes per-card scoreDeltas including unmask adjustment and keeps unrevealed cards scoreDeltas sealed', async () => {
+        const hostUser = await createAnonUser();
+        const g1User = await createAnonUser();
+        const g2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          sabotageAnswersCount: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', g1User.idToken, { roomCode, playerName: 'Bob', playerId: 'p_g1' });
+        await callFn('joinRoom', g2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_g2' });
+        await roomRef.collection('players').doc('p_g1').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_g2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        // Truth submissions
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice Truth Answer Unique', isTruth: true });
+        await callFn('submitAnswer', g1User.idToken, { roomCode, targetCardId: 'p_g1', authorId: 'p_g1', text: 'Bob Truth Answer Unique', isTruth: true });
+        await callFn('submitAnswer', g2User.idToken, { roomCode, targetCardId: 'p_g2', authorId: 'p_g2', text: 'Charlie Truth Answer Unique', isTruth: true });
+
+        // Forgery submissions
+        let roomSnap = await roomRef.get();
+        const assignments = roomSnap.data()?.currentCardAssignments as Record<string, string>;
+        // Bob writes forgery on Alice's card (or whoever is assigned)
+        for (const [holderId, targetId] of Object.entries(assignments)) {
+          const user = holderId === 'p_host' ? hostUser : (holderId === 'p_g1' ? g1User : g2User);
+          await callFn('submitAnswer', user.idToken, { roomCode, targetCardId: targetId, authorId: holderId, text: `Deceptive lie by ${holderId}`, isTruth: false });
+        }
+
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+
+        const firstReaderId = (roomSnap.data()?.resolutionOrder as string[])[0];
+        const curCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === firstReaderId);
+        const options = curCard.options as Array<{ id: string; text: string }>;
+        const sealedSnap = await roomRef.collection('sealed').doc(firstReaderId).get();
+        const answerAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+
+        // Find forgery option and truth option on this card
+        const forgeryOpt = options.find(o => answerAuthors[o.id] !== firstReaderId);
+        const truthOpt = options.find(o => answerAuthors[o.id] === firstReaderId);
+        const forgerId = answerAuthors[forgeryOpt!.id];
+
+        // Voter 1 (non-reader, non-forger) votes for forgery -> fooled
+        // Voter 2 (the forger) votes for truth -> finds truth (+2)
+        const otherVoterId = ['p_host', 'p_g1', 'p_g2'].find(id => id !== firstReaderId && id !== forgerId)!;
+        const otherUser = otherVoterId === 'p_host' ? hostUser : (otherVoterId === 'p_g1' ? g1User : g2User);
+        const forgerUser = forgerId === 'p_host' ? hostUser : (forgerId === 'p_g1' ? g1User : g2User);
+
+        await callFn('castVote', otherUser.idToken, { roomCode, targetCardId: firstReaderId, voterId: otherVoterId, votedForId: forgeryOpt!.id });
+        await callFn('castVote', forgerUser.idToken, { roomCode, targetCardId: firstReaderId, voterId: forgerId, votedForId: truthOpt!.id });
+
+        // Advance to reveal
+        await callFn('advancePhase', hostUser.idToken, { roomCode });
+
+        let revealSnap = await roomRef.get();
+        expect(revealSnap.data()?.currentPhase).to.equal('reveal');
+
+        const revealedCards = revealSnap.data()?.cards as any[];
+        const activeRevealedCard = revealedCards.find(c => c.targetPlayerId === firstReaderId);
+        const unrevealedCard = revealedCards.find(c => c.targetPlayerId !== firstReaderId);
+
+        // LEAK GUARD: unrevealed cards MUST NOT have scoreDeltas
+        expect(unrevealedCard.scoreDeltas).to.be.undefined;
+
+        // Active revealed card has base scoreDeltas:
+        // forger gained +1 for fooling otherVoter and +2 for finding truth = +3
+        expect(activeRevealedCard.scoreDeltas).to.be.an('object');
+        expect(activeRevealedCard.scoreDeltas[forgerId]).to.equal(3);
+        expect(activeRevealedCard.scoreDeltas[otherVoterId] || 0).to.equal(0);
+
+        // Now otherVoter makes a revenge unmask guess against forgerId
+        await callFn('submitUnmaskGuess', otherUser.idToken, {
+          roomCode,
+          guesserId: otherVoterId,
+          guessedAuthorId: forgerId
+        });
+
+        // After successful unmask guess:
+        // forger loses 1 (3 - 1 = 2)
+        // otherVoter gains 1 (0 + 1 = 1)
+        const unmaskUpdatedSnap = await roomRef.get();
+        const unmaskCard = (unmaskUpdatedSnap.data()?.cards as any[]).find(c => c.targetPlayerId === firstReaderId);
+        expect(unmaskCard.scoreDeltas[forgerId]).to.equal(2, 'Forger net delta must include -1 unmask penalty');
+        expect(unmaskCard.scoreDeltas[otherVoterId]).to.equal(1, 'Guesser net delta must include +1 unmask reward');
+      });
+    });
   });
 });
 

@@ -1106,8 +1106,16 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final hasFooled = currentCard.votes.values.any((v) => v != currentCard.targetPlayerId);
       final unmaskDeadline = hasFooled ? DateTime.now().millisecondsSinceEpoch + 20000 : null;
 
+      final updatedCards = state.cards.map((c) {
+        if (c.targetPlayerId == state.currentReaderId) {
+          return c.copyWith(scoreDeltas: deltas);
+        }
+        return c;
+      }).toList();
+
       nextState = nextState.copyWith(
         currentPhase: GamePhase.reveal,
+        cards: updatedCards,
         unmaskDeadline: unmaskDeadline,
       );
     }

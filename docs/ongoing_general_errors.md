@@ -37,26 +37,7 @@
 
 ---
 
-### Issue 113: The reveal's ▲ delta badge disagrees with the standings, because it ignores unmask points
-**Status**: ⚠️ Confirmed Unresolved — Verified in `lib/screens/phase4_reveal.dart:260`: the badge is computed **client-side** as `ScoringLogic.calculateScores(...)`, which scores **the card only**. The unmask window's ±1 (correct accusation: **+1** guesser, **−1** forger) is applied **server-side** and never enters that number. So the badge and the authoritative `totalScore` beside it can disagree.
 
-**This explains both reported symptoms, which are one bug:**
-- *"Louis accused itgel — SUCCESS but Louis got no points"*: a successful accusation is worth +1, but unmask points never appear in the delta, so Louis's gain is invisible even though his total already includes it.
-- *"Louis got +3 but standings say 2"*: Louis earned +3 on the card and **−1 for being unmasked by itgel**, so **2 is the correct total**. The badge showed ▲+3 because it omits the penalty. The number that looked wrong was right; the badge was wrong.
-
-**Option A (recommended)**: **Publish the per-card delta from the server** — the reveal transaction already computes every player's total change including unmask adjustments; write it to the card (or the room) and have the client render that instead of recomputing.
-  - *Pros*: One authority for a number shown next to the authoritative total, so they cannot disagree again. Kills the whole class rather than this instance. The values already exist in the transaction that applies them.
-  - *Cons*: Adds a field and a functions deploy. Needs a decision about where it lives so it does not leak authorship before the unmask window closes.
-
-**Option B**: **Add the unmask adjustment to the client calculation** — read `unmaskGuesses` off the card and apply ±1 locally.
-  - *Pros*: Client-only, ships without a deploy.
-  - *Cons*: Now **two** implementations of scoring must agree forever, which is exactly how this drifted. The client would also have to replicate the correctness rule it deliberately cannot see, since authorship is withheld during the window.
-
-**Option C**: **Remove the delta badge.**
-  - *Pros*: Zero risk of disagreement; the total is already shown.
-  - *Cons*: Loses the "what just happened to me" beat, which is most of the reveal's payoff.
-
-Your selection: Proceed with Option A.
 
 ---
 
@@ -401,7 +382,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Lobby authority** — readiness gate on `startGame` with the host-exemption deadlock guard; host kick reusing `handleDisconnect` | 86, 87 | `design_game_state_and_models.md` §1; `design_database_and_security.md` §4 |
 | **Mid-match departure** — in-game leave controls; the 3-player floor applied during play, not only at start | 85 | `design_game_state_and_models.md` §1 |
 | **Own-answer lockout** — option id as authority, per-card text as fallback, never unioned; `getMyOptionId` and its client call discipline; cross-round `answerAuthors` map isolation without `{ merge: true }` | 90, 91, 92, 94, 117 | `design_scoring_and_ui.md` §3.2; `design_database_and_security.md` §2; `functions/src/index.ts` |
-| **Reveal & unmask** — who may accuse vs who may be accused; the five-beat reveal and its deadline | 79, 80 | `design_scoring_and_ui.md` |
+| **Reveal & unmask** — who may accuse vs who may be accused; the five-beat reveal and its deadline; server-published per-card `scoreDeltas` including unmask ±1 (Wave O / O2) | 79, 80, 113 | `design_scoring_and_ui.md` §3.3; `functions/src/index.ts` |
 | **Prompts & decks** — per-player `seenPrompts` in `sealed`; exhaustion boundary and the `resource-exhausted` → SnackBar mapping whose fall-through is the failure mode | 67, 68, 69, 83, 88 | `design_prompt_system.md` §5 |
 | **Answer integrity** — spurious `THE SOUL IS SILENT` placeholder; forgery author key derived server-side; forgery defaults and the 3-player floor as an independent guard | 72, 76 | `design_game_state_and_models.md` §1–§2 |
 | **UI surfaces** — dialog contrast (ratio-asserted, not string-asserted); error surfaces mapped on `e.code` and never interpolating the exception; busy states as a correctness guard because `createRoom` is not idempotent | 84, 93, 95 | `design_ui_direction.md` §6 |

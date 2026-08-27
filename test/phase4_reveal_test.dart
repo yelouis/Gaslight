@@ -345,5 +345,86 @@ void main() {
         gameService.dispose();
       }
     });
+
+    testWidgets('O2: renders published scoreDeltas including negative deltas (▼-1) and positive deltas (▲+3)', (WidgetTester tester) async {
+      try {
+        final localPlayer = PlayerState(id: 'local_player_id', name: 'Alice', joinedAt: 100);
+        final guest1Player = PlayerState(id: 'guest_1', name: 'Bob', joinedAt: 200);
+        final guest2Player = PlayerState(id: 'guest_2', name: 'Charlie', joinedAt: 300);
+
+        final card = CardModel(
+          targetPlayerId: 'local_player_id',
+          promptText: 'Whose secret is this?',
+          truthAnswer: 'I love cats',
+          sabotageAnswers: {'guest_1': 'I love dogs'},
+          votes: {'guest_2': 'guest_1'},
+          scoreDeltas: {
+            'local_player_id': -1,
+            'guest_1': 3,
+            'guest_2': 0,
+          },
+        );
+
+        final gameState = GameState(
+          roomCode: 'TEST',
+          currentPhase: GamePhase.reveal,
+          totalPlayers: 3,
+          currentReaderId: 'local_player_id',
+          cards: [card],
+          readyPlayers: {'local_player_id': true, 'guest_1': true, 'guest_2': true},
+          resolutionOrder: ['local_player_id'],
+          unmaskDeadline: 0,
+        );
+
+        await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc('local_player_id').set(
+          localPlayer.toMap()..['authUid'] = 'local_auth_uid',
+        );
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc('guest_1').set(
+          guest1Player.toMap()..['authUid'] = 'guest_1_auth_uid',
+        );
+        await mockDb.collection('rooms').doc('TEST').collection('players').doc('guest_2').set(
+          guest2Player.toMap()..['authUid'] = 'guest_2_auth_uid',
+        );
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('room_code', 'TEST');
+        await prefs.setString('player_id', 'local_player_id');
+        await gameService.tryRejoinSession();
+        gameService.listenToRoom('TEST');
+        await tester.runAsync(() async {
+          await Future.delayed(const Duration(milliseconds: 100));
+        });
+
+        tester.view.physicalSize = const Size(1200, 2000);
+        tester.view.devicePixelRatio = 1.0;
+
+        await tester.pumpWidget(
+          ChangeNotifierProvider<GameService>.value(
+            value: gameService,
+            child: const MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(accessibleNavigation: true),
+                child: Phase4RevealScreen(),
+              ),
+            ),
+          ),
+        );
+
+        await settleReveal(tester, 10000);
+
+        // Assert positive delta badge: '▲+3'
+        expect(find.text('▲+3'), findsOneWidget);
+        // Assert negative delta badge: '▼-1'
+        expect(find.text('▼-1'), findsOneWidget);
+
+        // Assert chips in POINTS AWARDED THIS CARD tray
+        expect(find.text('Bob: +3'), findsOneWidget);
+        expect(find.text('Alice: -1'), findsOneWidget);
+      } finally {
+        gameService.dispose();
+      }
+    });
   });
 }
+

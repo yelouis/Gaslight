@@ -6,6 +6,7 @@ export interface CardModel {
   options?: Array<{ id: string; text: string }>;
   votes: Record<string, string>;
   unmaskGuesses?: Record<string, string>;
+  scoreDeltas?: Record<string, number>;
 }
 
 export interface GameState {
