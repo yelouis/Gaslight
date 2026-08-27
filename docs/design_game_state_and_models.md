@@ -61,6 +61,7 @@ A card represents a prompt assigned to a player, holding their answers, vote cho
   * **There is no sentinel.** A vote is a truth vote **iff `votes[voterId] == card.targetPlayerId`**, because the target authored the truth for their own card. The retired `'TRUTH'` string must never be reintroduced.
   * **This contract has broken twice.** Issue 62/63 redefined the value once; Issue 71 redefined it again and left nine readers testing the dead sentinel (Issue 78), which silently zeroed the reward for finding the truth and marked every player as "fooled". **Both `ScoringLogic` implementations and every `phase4_reveal.dart` predicate read this field during reveal — when you change what it holds, enumerate its readers.**
 * `unmaskGuesses` (Map<String, String>?): A map of `guesserPlayerId` to `accusedPlayerId` representing unmask guesses cast during the `reveal` phase.
+* `scoreDeltas` (Map<String, int>?): Authoritative per-card delta breakdown published on the public card model. When an unmask window opens (`unmaskDeadline != null`), `scoreDeltas` is **withheld (null/omitted)** from the public card, and player `totalScore` increments are deferred in `sealed/{cardId}.pendingScoreDeltas` until the unmask window closes (via `submitUnmaskGuess`, `closeUnmaskWindow`, or reveal advance) to prevent players from deducing author identities from score updates before unmasking (Issue 124, August 2026). If nobody was fooled, deltas are published and player scores update immediately upon entering reveal.
 
 ---
 

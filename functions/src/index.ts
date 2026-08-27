@@ -1674,19 +1674,31 @@ async function advancePhaseInternal(
         }
       }
 
-      for (const p of activePlayers) {
-        const sDelta = deltas[p.id] || 0;
-        const tfDelta = timesFooledDeltas[p.id] || 0;
-        const pdDelta = playersDeceivedDeltas[p.id] || 0;
+      if (!hasFooled) {
+        // If nobody was fooled (no unmask window), apply scores immediately
+        for (const p of activePlayers) {
+          const sDelta = deltas[p.id] || 0;
+          const tfDelta = timesFooledDeltas[p.id] || 0;
+          const pdDelta = playersDeceivedDeltas[p.id] || 0;
 
-        if (sDelta !== 0 || tfDelta !== 0 || pdDelta !== 0) {
-          const pRef = roomRef.collection("players").doc(p.id);
-          transaction.update(pRef, {
-            totalScore: FieldValue.increment(sDelta),
-            timesFooled: FieldValue.increment(tfDelta),
-            playersDeceived: FieldValue.increment(pdDelta)
-          });
+          if (sDelta !== 0 || tfDelta !== 0 || pdDelta !== 0) {
+            const pRef = roomRef.collection("players").doc(p.id);
+            transaction.update(pRef, {
+              totalScore: FieldValue.increment(sDelta),
+              timesFooled: FieldValue.increment(tfDelta),
+              playersDeceived: FieldValue.increment(pdDelta)
+            });
+          }
         }
+      } else {
+        // Unmask window will open: withhold scores and stash pending deltas in sealed document
+        const sealedRef = roomRef.collection("sealed").doc(card.targetPlayerId);
+        transaction.set(sealedRef, {
+          ...sealedData,
+          pendingScoreDeltas: deltas,
+          pendingTimesFooled: timesFooledDeltas,
+          pendingPlayersDeceived: playersDeceivedDeltas
+        });
       }
 
       // Accumulate card summary for match highlights
@@ -1754,7 +1766,7 @@ async function advancePhaseInternal(
       const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
 
       if (unmaskDeadline !== null) {
-        // While unmask window is open, withhold sabotage answers and forgery author mapping
+        // While unmask window is open, withhold sabotage answers, score deltas, and forgery author mapping
         const publicVotes: Record<string, string> = {};
         for (const [voterId, votedOptionId] of Object.entries(card.votes || {})) {
           const author = answerAuthors[votedOptionId] || votedOptionId;
@@ -1765,11 +1777,10 @@ async function advancePhaseInternal(
           ...card,
           votes: publicVotes,
           truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
-          sabotageAnswers: {},
-          scoreDeltas: calculatedDeltas
+          sabotageAnswers: {}
         });
       } else {
-        // Nobody was fooled: publish full answers and resolved votes immediately
+        // Nobody was fooled: publish full answers, resolved votes, and score deltas immediately
         const resolvedVotes: Record<string, string> = {};
         for (const [voterId, votedOptionId] of Object.entries(card.votes || {})) {
           resolvedVotes[voterId] = answerAuthors[votedOptionId] || votedOptionId;
@@ -1794,12 +1805,37 @@ async function advancePhaseInternal(
       expiresAt: ttlFrom(Date.now())
     });
   } else if (room.currentPhase === "reveal") {
-    // When advancing from reveal, if unmask window was open, publish the revealed sabotage answers and resolve votes
+    // When advancing from reveal, if unmask window was open, publish the revealed sabotage answers, resolve votes, and flush score deltas
     const currentCardIdx = currentCards.findIndex(c => c.targetPlayerId === room.currentReaderId);
     if (currentCardIdx !== -1) {
       const currentCard = currentCards[currentCardIdx];
       const sealedData = sealedDataMap[currentCard.targetPlayerId] || {};
       const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+      const pendingScoreDeltas = sealedData.pendingScoreDeltas;
+
+      if (pendingScoreDeltas) {
+        for (const p of activePlayers) {
+          const sDelta = pendingScoreDeltas[p.id] || 0;
+          const tfDelta = (sealedData.pendingTimesFooled?.[p.id]) || 0;
+          const pdDelta = (sealedData.pendingPlayersDeceived?.[p.id]) || 0;
+
+          if (sDelta !== 0 || tfDelta !== 0 || pdDelta !== 0) {
+            const pRef = roomRef.collection("players").doc(p.id);
+            transaction.update(pRef, {
+              totalScore: FieldValue.increment(sDelta),
+              timesFooled: FieldValue.increment(tfDelta),
+              playersDeceived: FieldValue.increment(pdDelta)
+            });
+          }
+        }
+
+        const sealedRef = roomRef.collection("sealed").doc(currentCard.targetPlayerId);
+        transaction.update(sealedRef, {
+          pendingScoreDeltas: FieldValue.delete(),
+          pendingTimesFooled: FieldValue.delete(),
+          pendingPlayersDeceived: FieldValue.delete()
+        });
+      }
 
       const resolvedVotes: Record<string, string> = {};
       for (const [vId, optId] of Object.entries(currentCard.votes || {})) {
@@ -1810,7 +1846,8 @@ async function advancePhaseInternal(
       updatedCards[currentCardIdx] = {
         ...currentCard,
         votes: resolvedVotes,
-        sabotageAnswers: sealedData.sabotageAnswers || {}
+        sabotageAnswers: sealedData.sabotageAnswers || {},
+        scoreDeltas: pendingScoreDeltas || currentCard.scoreDeltas || {}
       };
 
       transaction.update(roomRef, {
@@ -1912,6 +1949,8 @@ export const advanceToNextResolution = onCall(async (request) => {
 
     const playersSnap = await transaction.get(roomRef.collection("players"));
     const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
+    const activePlayers = players.filter(p => p.role !== "spectator");
+
     const summarySnap = await transaction.get(roomRef.collection("sealed").doc("_summary"));
     const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [], playerNames: {} };
     const accumulatedCards: CardSummary[] = Array.isArray(summaryDoc.cards) ? summaryDoc.cards : [];
@@ -1919,6 +1958,49 @@ export const advanceToNextResolution = onCall(async (request) => {
     for (const p of players) {
       if (p && p.id && p.name) {
         snapshottedPlayerNames[p.id] = p.name;
+      }
+    }
+
+    const currentReaderSealedSnap = room.currentReaderId
+      ? await transaction.get(roomRef.collection("sealed").doc(room.currentReaderId))
+      : null;
+
+    // Pre-read all sealed docs for active players before any write
+    const sealedDocs = await Promise.all(
+      activePlayers.map(p => transaction.get(roomRef.collection("sealed").doc(p.id)))
+    );
+
+    const playerSeenMap: Record<string, Set<string>> = {};
+    for (let i = 0; i < activePlayers.length; i++) {
+      const p = activePlayers[i];
+      const sealedSnap = sealedDocs[i];
+      const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
+      const seenPrompts: string[] = Array.isArray(sealedData.seenPrompts) ? sealedData.seenPrompts : [];
+      playerSeenMap[p.id] = new Set(seenPrompts);
+    }
+
+    if (currentReaderSealedSnap && currentReaderSealedSnap.exists) {
+      const sealedData = currentReaderSealedSnap.data() as any;
+      const pendingScoreDeltas = sealedData.pendingScoreDeltas;
+      if (pendingScoreDeltas) {
+        for (const p of players) {
+          const sDelta = pendingScoreDeltas[p.id] || 0;
+          const tfDelta = (sealedData.pendingTimesFooled?.[p.id]) || 0;
+          const pdDelta = (sealedData.pendingPlayersDeceived?.[p.id]) || 0;
+          if (sDelta !== 0 || tfDelta !== 0 || pdDelta !== 0) {
+            const pRef = roomRef.collection("players").doc(p.id);
+            transaction.update(pRef, {
+              totalScore: FieldValue.increment(sDelta),
+              timesFooled: FieldValue.increment(tfDelta),
+              playersDeceived: FieldValue.increment(pdDelta)
+            });
+          }
+        }
+        transaction.update(currentReaderSealedSnap.ref, {
+          pendingScoreDeltas: FieldValue.delete(),
+          pendingTimesFooled: FieldValue.delete(),
+          pendingPlayersDeceived: FieldValue.delete()
+        });
       }
     }
 
@@ -1959,7 +2041,8 @@ export const advanceToNextResolution = onCall(async (request) => {
         room,
         players,
         accumulatedCards,
-        snapshottedPlayerNames
+        snapshottedPlayerNames,
+        playerSeenMap
       );
     }
 
@@ -2007,6 +2090,9 @@ export const submitUnmaskGuess = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "Current reader card not found.");
     }
     const currentCard = room.cards[currentCardIdx];
+
+    const playersSnap = await transaction.get(roomRef.collection("players"));
+    const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
 
     const sealedRef = roomRef.collection("sealed").doc(currentCard.targetPlayerId);
     const sealedSnap = await transaction.get(sealedRef);
@@ -2057,23 +2143,35 @@ export const submitUnmaskGuess = onCall(async (request) => {
     let updatedCard: CardModel;
     let nextUnmaskDeadline = room.unmaskDeadline;
     const isCorrect = guessedAuthorId === votedForId;
-    const nextScoreDeltas = currentCard.scoreDeltas ? { ...currentCard.scoreDeltas } : {};
+    const currentPendingDeltas: Record<string, number> = { ...(sealedData.pendingScoreDeltas || currentCard.scoreDeltas || {}) };
     if (isCorrect) {
-      nextScoreDeltas[voterId] = (nextScoreDeltas[voterId] || 0) + 1;
-      nextScoreDeltas[votedForId] = (nextScoreDeltas[votedForId] || 0) - 1;
-
-      const guesserRef = roomRef.collection("players").doc(voterId);
-      const forgerRef = roomRef.collection("players").doc(votedForId);
-
-      transaction.update(guesserRef, {
-        totalScore: FieldValue.increment(1)
-      });
-      transaction.update(forgerRef, {
-        totalScore: FieldValue.increment(-1)
-      });
+      currentPendingDeltas[voterId] = (currentPendingDeltas[voterId] || 0) + 1;
+      currentPendingDeltas[votedForId] = (currentPendingDeltas[votedForId] || 0) - 1;
     }
 
     if (allFooledGuessed) {
+      // Flush all pending score deltas and pending stats to player documents
+      for (const p of players) {
+        const sDelta = currentPendingDeltas[p.id] || 0;
+        const tfDelta = (sealedData.pendingTimesFooled?.[p.id]) || 0;
+        const pdDelta = (sealedData.pendingPlayersDeceived?.[p.id]) || 0;
+
+        if (sDelta !== 0 || tfDelta !== 0 || pdDelta !== 0) {
+          const pRef = roomRef.collection("players").doc(p.id);
+          transaction.update(pRef, {
+            totalScore: FieldValue.increment(sDelta),
+            timesFooled: FieldValue.increment(tfDelta),
+            playersDeceived: FieldValue.increment(pdDelta)
+          });
+        }
+      }
+
+      transaction.update(sealedRef, {
+        pendingScoreDeltas: FieldValue.delete(),
+        pendingTimesFooled: FieldValue.delete(),
+        pendingPlayersDeceived: FieldValue.delete()
+      });
+
       const resolvedVotes: Record<string, string> = {};
       for (const [vId, optId] of Object.entries(currentCard.votes || {})) {
         resolvedVotes[vId] = answerAuthors[optId] || optId;
@@ -2083,14 +2181,17 @@ export const submitUnmaskGuess = onCall(async (request) => {
         votes: resolvedVotes,
         sabotageAnswers: sealedData.sabotageAnswers || {},
         unmaskGuesses,
-        scoreDeltas: nextScoreDeltas
+        scoreDeltas: currentPendingDeltas
       };
       nextUnmaskDeadline = 0;
     } else {
+      transaction.update(sealedRef, {
+        pendingScoreDeltas: currentPendingDeltas
+      });
+
       updatedCard = {
         ...currentCard,
-        unmaskGuesses,
-        scoreDeltas: nextScoreDeltas
+        unmaskGuesses
       };
     }
 
@@ -2100,6 +2201,95 @@ export const submitUnmaskGuess = onCall(async (request) => {
     transaction.update(roomRef, {
       cards: newCards,
       unmaskDeadline: nextUnmaskDeadline
+    });
+
+    return { success: true };
+  });
+});
+
+// 12.1 Close Unmask Window
+export const closeUnmaskWindow = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+  const callerUid = request.auth.uid;
+  const { roomCode } = request.data;
+  if (!roomCode) {
+    throw new HttpsError("invalid-argument", "roomCode is required.");
+  }
+
+  const roomRef = db.collection("rooms").doc(roomCode);
+
+  return await db.runTransaction(async (transaction) => {
+    const roomSnap = await transaction.get(roomRef);
+    if (!roomSnap.exists) {
+      throw new HttpsError("not-found", "Room not found.");
+    }
+    const room = roomSnap.data() as GameState;
+    if (room.currentPhase !== "reveal") {
+      return { success: true };
+    }
+
+    const currentCardIdx = room.cards.findIndex(c => c.targetPlayerId === room.currentReaderId);
+    if (currentCardIdx === -1) {
+      return { success: true };
+    }
+    const currentCard = room.cards[currentCardIdx];
+
+    const playersSnap = await transaction.get(roomRef.collection("players"));
+    const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
+    const callerPlayer = players.find(p => p.authUid === callerUid);
+    if (!callerPlayer) {
+      throw new HttpsError("permission-denied", "Caller is not in this room.");
+    }
+
+    const sealedRef = roomRef.collection("sealed").doc(currentCard.targetPlayerId);
+    const sealedSnap = await transaction.get(sealedRef);
+    if (!sealedSnap.exists) {
+      return { success: true };
+    }
+    const sealedData = sealedSnap.data() as any;
+    const pendingScoreDeltas = sealedData.pendingScoreDeltas;
+    const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+
+    if (pendingScoreDeltas) {
+      for (const p of players) {
+        const sDelta = pendingScoreDeltas[p.id] || 0;
+        const tfDelta = (sealedData.pendingTimesFooled?.[p.id]) || 0;
+        const pdDelta = (sealedData.pendingPlayersDeceived?.[p.id]) || 0;
+        if (sDelta !== 0 || tfDelta !== 0 || pdDelta !== 0) {
+          const pRef = roomRef.collection("players").doc(p.id);
+          transaction.update(pRef, {
+            totalScore: FieldValue.increment(sDelta),
+            timesFooled: FieldValue.increment(tfDelta),
+            playersDeceived: FieldValue.increment(pdDelta)
+          });
+        }
+      }
+
+      transaction.update(sealedRef, {
+        pendingScoreDeltas: FieldValue.delete(),
+        pendingTimesFooled: FieldValue.delete(),
+        pendingPlayersDeceived: FieldValue.delete()
+      });
+    }
+
+    const resolvedVotes: Record<string, string> = {};
+    for (const [vId, optId] of Object.entries(currentCard.votes || {})) {
+      resolvedVotes[vId] = answerAuthors[optId] || optId;
+    }
+
+    const updatedCards = [...room.cards];
+    updatedCards[currentCardIdx] = {
+      ...currentCard,
+      votes: resolvedVotes,
+      sabotageAnswers: sealedData.sabotageAnswers || {},
+      scoreDeltas: pendingScoreDeltas || currentCard.scoreDeltas || {}
+    };
+
+    transaction.update(roomRef, {
+      cards: updatedCards,
+      unmaskDeadline: 0
     });
 
     return { success: true };

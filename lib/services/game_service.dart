@@ -650,6 +650,17 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
+  Future<void> closeUnmaskWindow() async {
+    if (_gameState == null) return;
+    try {
+      await _functions.httpsCallable('closeUnmaskWindow').call({
+        'roomCode': _gameState!.roomCode,
+      });
+    } catch (e) {
+      debugPrint('Error calling closeUnmaskWindow: $e');
+    }
+  }
+
   // --- SIMULATION HELPERS (DEBUG ONLY) ---
 
   /// Programmatically fills the lobby with 9 bots for E2E stress testing.

@@ -88,7 +88,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
         if (state != null && state.unmaskDeadline != null && state.unmaskDeadline! > 0 && now >= state.unmaskDeadline!) {
           if (gs.currentPlayer?.isHost == true && !_hasClosedUnmaskWindow) {
             _hasClosedUnmaskWindow = true;
-            gs.forceAdvance();
+            gs.closeUnmaskWindow();
           }
         }
         setState(() {});
