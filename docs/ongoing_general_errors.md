@@ -40,6 +40,12 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
+**All eleven selections are made (August 27, 2026), and Wave P is specced in `agent_execution_guide.md`.** Ten took Option A; **Issue 131 took Option C** (both the done key *and* a pinned submit button). Build order and the reasoning behind it live in the guide — the short version is **P1 first** because the battery is red, and **P2 before P3** because a ten-minute presence window produces more placeholder cards and P2 is what stops them stranding a round.
+
+**One thing found while speccing, which changes how Issue 124 must be built.** Option A said "publish the deltas when the unmask window closes" — but **the window has no server-side close.** `submitUnmaskGuess` zeroes the deadline only when *every* fooled player guesses (`functions/src/index.ts:2015`); when nobody guesses, the deadline simply passes and each client decides the window is over on its own wall clock (`lib/screens/phase4_reveal.dart:60–68`). A naive "publish on close" would therefore render an **empty points tray** in every round that times out, silently undoing Issue 113. Wave P adds a `closeUnmaskWindow` callable — any room member may call it, the server verifies the deadline has actually passed, and it is idempotent — so the close becomes a real server event. That also fixes a latent inconsistency where clients could disagree about when the window ended.
+
+---
+
 **Issues 122–125 are Wave O fallout** — found by verifying the nine commits against a running emulator. **Issues 126–132 are the user's build-4/5 playtest requests.**
 
 ---
@@ -63,7 +69,7 @@ This matters beyond the red light: the test's actual subject — that a timeout 
   - *Pros*: Immediate green battery, zero effort.
   - *Cons*: The O4 tests assert the *guard*; none of them assert that a timeout actually fills `sabotageAnswers` with the placeholder in the first place, so this silently drops real coverage of the mechanism every other placeholder test depends on. **Deleting a test to turn a gate green is how a gate stops meaning anything.**
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -99,7 +105,7 @@ Net effect: the effective presence window is `min(client constant, anything the 
   - *Pros*: Removes the "every client calls `handleDisconnect` on every snapshot" chatter, which is currently N clients × every players-collection update and is pure billed invocations; makes presence a property of the data rather than of whoever is watching.
   - *Cons*: The largest change of the three — eviction latency becomes "whenever someone acts", which is fine mid-round but leaves an idle lobby holding ghosts indefinitely; needs a new pruning path tested against every phase; more than one commit's worth of work.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -132,7 +138,7 @@ The branch at `index.ts:1610` deliberately sets `sabotageAnswers: {}` and rewrit
   - *Pros*: Structurally impossible to leak another player's delta; reuses a pattern already proven in this codebase for exactly this class of secret.
   - *Cons*: The points tray is explicitly a *shared* readout — it names every player and their gain — so this would either delete a feature the reveal screen has today or need N callable round-trips per client per card; the tray is the thing Issue 113 was filed to make correct.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -162,7 +168,7 @@ This is rare — it needs a whole table silent for both the truth and the forger
   - *Pros*: The whole class disappears; every card always has at least one real option, so the O4 skip path becomes unreachable and the vote screen can assume a reader.
   - *Cons*: Puts words in an absent player's mouth, which is exactly what `THE SOUL IS SILENT` was introduced (Issue 72) to stop; a seeded "truth" could win the round for someone who never played, which corrupts scoring in a way the placeholder deliberately does not.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -183,7 +189,7 @@ Your selection: _____
   - *Pros*: Zero spoiler risk; the description lives in `prompt_decks.ts` with the rest of the deck's metadata, which is exactly where the deck refactor says deck facts belong; smallest change and it also improves the carousel for everyone, not just people who tap.
   - *Cons*: Does not answer the request as asked — the user asked to see the prompts; a description is written once and can drift from the deck's actual contents as prompts are edited.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -204,7 +210,7 @@ It follows the player across screens because there is exactly one `ScaffoldMesse
   - *Pros*: Guarantees no craft-screen message ever appears on the vote or waiting screen, which is the specific complaint; a cheap belt-and-braces on top of Option A.
   - *Cons*: `dispose()` cannot safely use `context` for an inherited lookup, so the messenger must be captured earlier (in `didChangeDependencies`), which is a subtle pattern that reads as a mistake to the next person; would also swallow a legitimate error snackbar raised during submission just as the screen tears down.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -225,7 +231,7 @@ The client already has the raw material: `_players` is diffed on every snapshot,
   - *Pros*: Non-interrupting, and it puts the information exactly where the player is already looking when they notice someone missing; no snackbar queue to manage.
   - *Cons*: The player document is deleted server-side, so the client must retain a tombstone locally and time it out — new state to manage in `GameService` that has no other purpose; easy to miss entirely on the phases where the roster is not on screen.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -247,7 +253,7 @@ Your selection: _____
   - *Pros*: Explains the arc of a round as a whole, which no per-screen line can; dismissed once and never seen again, so it costs returning players nothing; a natural home for the scoring rules, which are currently explained nowhere.
   - *Cons*: A wall of text before the game starts is the thing party-game players skip; needs `SharedPreferences` persistence and therefore a decision about whether "seen" is per-device or per-room; delays the first round, which is when a new table's attention is highest.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -270,7 +276,7 @@ Two changes are being asked for, and they are independent: flipping the default,
 
 **All three options share the same default flip:** `isTimerDisabled` becomes `true` at all four declaration sites, so a new room starts untimed and the duration setting only appears once the host turns timers on.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -291,7 +297,7 @@ The trade-off is real: `maxLines: 3` exists so a 100-character answer is visible
   - *Pros*: Fastest for players who press return, reachable for players who look for the button; no single point of failure if an IME ignores the requested action.
   - *Cons*: Two changes to the most-used screen in one wave, doubling the surface to validate; the pinned bar's value drops a lot once return works, so most of the cost buys little.
 
-Your selection: _____
+Your selection: Proceed with Option C.
 
 ---
 
@@ -310,7 +316,7 @@ Your selection: _____
   - *Pros*: Eliminates the problem definitionally; no affordance needed because there is nothing below the fold.
   - *Cons*: Directly fights Issue 119 — tiles that shrink to fit six options on a 320 pt screen force the 100-character text below its readable floor, which is the truncation complaint that has now been filed twice; trades a discoverability bug for a legibility bug.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
