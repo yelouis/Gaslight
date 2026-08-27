@@ -577,8 +577,12 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                                     await gs.rerollMyPrompt();
                                     _answerController.clear();
                                     if (mounted) {
+                                      ScaffoldMessenger.of(context).clearSnackBars();
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Prompt re-rolled successfully!')),
+                                        const SnackBar(
+                                          content: Text('Prompt re-rolled successfully!'),
+                                          duration: Duration(milliseconds: 1200),
+                                        ),
                                       );
                                     }
                                   } catch (e) {

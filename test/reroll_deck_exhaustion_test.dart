@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import '../lib/screens/phase2_craft.dart';
-import '../lib/services/game_service.dart';
-import '../lib/models/game_state.dart';
-import '../lib/models/player_state.dart';
-import '../lib/models/card_model.dart';
-import '../lib/widgets/dealt_card_overlay.dart';
+import 'package:gaslight/screens/phase2_craft.dart';
+import 'package:gaslight/services/game_service.dart';
+import 'package:gaslight/models/game_state.dart';
+import 'package:gaslight/models/player_state.dart';
+import 'package:gaslight/models/card_model.dart';
+import 'package:gaslight/widgets/dealt_card_overlay.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart';
 
@@ -190,6 +190,183 @@ void main() {
       // Assert no raw exception string is displayed
       expect(find.textContaining('Internal server error'), findsNothing);
       expect(find.textContaining('FirebaseFunctionsException'), findsNothing);
+    });
+
+    testWidgets('Issue 127 (P6): successive re-rolls clear previous snackbars and show exactly one SnackBar', (WidgetTester tester) async {
+      final me = PlayerState(
+        id: 'p_host',
+        name: 'Alice',
+        totalScore: 0,
+        role: PlayerRole.target,
+        isHost: true,
+        colorValue: 0,
+        avatarIndex: 0,
+        lastSeen: DateTime.now().millisecondsSinceEpoch,
+      );
+
+      final card = CardModel(
+        targetPlayerId: 'p_host',
+        promptText: 'Original Prompt',
+      );
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.truth,
+        totalPlayers: 2,
+        sabotageAnswersCount: 1,
+        isTimerDisabled: true,
+        selectedDeckId: 'cah_dark_humor',
+        currentRotationIndex: 0,
+        cards: [card],
+        currentCardAssignments: {'p_host': 'p_host'},
+        currentReaderId: null,
+        rotationPlan: {},
+        readyPlayers: {},
+        endTime: null,
+        resolutionOrder: ['p_host'],
+      );
+
+      final gameService = GameService(
+        db: db,
+        functions: fakeFunctions,
+      );
+      gameService.debugSetState(gameState, [me], me.id);
+
+      fakeFunctions.overrideCallable('rerollPrompt', (params) async {
+        return {'prompt': 'New Prompt ${DateTime.now().millisecondsSinceEpoch}'};
+      });
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(size: Size(360, 640), accessibleNavigation: true),
+              child: const Phase2CraftScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      if (find.byType(DealtCardOverlay).evaluate().isNotEmpty) {
+        await tester.tap(find.byType(DealtCardOverlay), warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+
+      final rerollBtn = find.ancestor(of: find.text('RE-ROLL PROMPT'), matching: find.byType(ElevatedButton));
+      expect(rerollBtn, findsOneWidget);
+
+      // Tap re-roll 5 times in succession
+      for (int i = 0; i < 5; i++) {
+        final buttonWidget = tester.widget<ElevatedButton>(rerollBtn);
+        expect(buttonWidget.onPressed, isNotNull);
+        buttonWidget.onPressed!();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      // Assert exactly ONE SnackBar is in the tree
+      expect(find.byType(SnackBar), findsOneWidget);
+    });
+
+    testWidgets('Issue 127 (P6): cross-screen navigation clears snackbar queue after re-rolls', (WidgetTester tester) async {
+      final me = PlayerState(
+        id: 'p_host',
+        name: 'Alice',
+        totalScore: 0,
+        role: PlayerRole.target,
+        isHost: true,
+        colorValue: 0,
+        avatarIndex: 0,
+        lastSeen: DateTime.now().millisecondsSinceEpoch,
+      );
+
+      final card = CardModel(
+        targetPlayerId: 'p_host',
+        promptText: 'Original Prompt',
+      );
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.truth,
+        totalPlayers: 2,
+        sabotageAnswersCount: 1,
+        isTimerDisabled: true,
+        selectedDeckId: 'cah_dark_humor',
+        currentRotationIndex: 0,
+        cards: [card],
+        currentCardAssignments: {'p_host': 'p_host'},
+        currentReaderId: null,
+        rotationPlan: {},
+        readyPlayers: {},
+        endTime: null,
+        resolutionOrder: ['p_host'],
+      );
+
+      final gameService = GameService(
+        db: db,
+        functions: fakeFunctions,
+      );
+      gameService.debugSetState(gameState, [me], me.id);
+
+      fakeFunctions.overrideCallable('rerollPrompt', (params) async {
+        return {'prompt': 'New Prompt'};
+      });
+
+      final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: MaterialApp(
+            scaffoldMessengerKey: scaffoldMessengerKey,
+            home: Builder(
+              builder: (context) => ElevatedButton(
+                key: const ValueKey('nav_btn'),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const Phase2CraftScreen()),
+                  );
+                },
+                child: const Text('Go To Craft'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Navigate to Craft
+      await tester.tap(find.byKey(const ValueKey('nav_btn')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      if (find.byType(DealtCardOverlay).evaluate().isNotEmpty) {
+        await tester.tap(find.byType(DealtCardOverlay), warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+
+      final rerollBtn = find.ancestor(of: find.text('RE-ROLL PROMPT'), matching: find.byType(ElevatedButton));
+      expect(rerollBtn, findsOneWidget);
+
+      // Tap 3 times
+      for (int i = 0; i < 3; i++) {
+        final buttonWidget = tester.widget<ElevatedButton>(rerollBtn);
+        buttonWidget.onPressed!();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.byType(SnackBar), findsOneWidget);
+
+      // Advance frames past the 1200ms duration and dismiss animation
+      for (int i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      // Assert zero SnackBars remain in tree
+      expect(find.byType(SnackBar), findsNothing);
     });
   });
 }
