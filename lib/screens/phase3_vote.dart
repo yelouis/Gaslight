@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:ui' show FontFeature;
-import 'dart:async';
 import 'package:provider/provider.dart';
 import '../services/audio_service.dart';
-import 'dart:math';
 import '../services/game_service.dart';
 import '../models/game_state.dart';
 import '../models/player_state.dart';
@@ -19,7 +17,6 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_motion.dart';
 import '../widgets/gaslight_route.dart';
 import '../widgets/waiting_indicator.dart';
-import '../widgets/flipping_card.dart';
 import '../widgets/blinking_eye.dart';
 import '../widgets/lamp_loading.dart';
 import '../widgets/raven_mascot.dart';
@@ -339,115 +336,130 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
       constraints: const BoxConstraints(maxWidth: 500),
       child: Column(
         children: [
-          if (isTarget) ...[
-            PlayerAvatar(player: me, size: 50),
-            const SizedBox(height: 8),
-            Text(
-              'THEY ARE VOTING ON YOUR TRUTH',
-              style: TextStyle(
-                color: theme.colorScheme.secondary,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                letterSpacing: 2,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Keep a straight face while the parlor deliberates.',
-              style: TextStyle(
-                color: theme.colorScheme.onSurface.withOpacity(0.75),
-                fontSize: 13,
-                fontStyle: FontStyle.italic,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ] else if (targetPlayer != null) ...[
-            Text(
-              'VOTING ON',
-              style: TextStyle(
-                color: theme.colorScheme.secondary.withOpacity(0.7),
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 3,
-              ),
-            ),
-            const SizedBox(height: 8),
-            PlayerAvatar(player: targetPlayer, size: 50),
-            const SizedBox(height: 10),
-            Text(
-              "One of these is ${targetPlayer.name}'s truth.",
-              style: TextStyle(
-                color: theme.colorScheme.onSurface.withOpacity(0.75),
-                fontSize: 13,
-                fontStyle: FontStyle.italic,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'WHICH ONE IS THE TRUTH?',
-              style: TextStyle(
-                color: theme.colorScheme.secondary,
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-                letterSpacing: 2,
-              ),
-            ),
-          ] else ...[
-            PlayerAvatar(player: me, size: 50),
-            const SizedBox(height: 16),
-            Text(
-              'WHICH ONE IS THE TRUTH?',
-              style: TextStyle(
-                color: theme.colorScheme.secondary,
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-                letterSpacing: 2,
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          ParchmentCard(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Column(
-              children: [
-                Text(
-                  'Prompt:',
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  currentCard.promptText,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
-                    fontFamily: 'Lora',
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
           Expanded(
             child: SingleChildScrollView(
-              child: CardGrid(
-                answers: gridAnswers,
-                selectedAuthorId: isTarget ? null : _localSelectedAuthorId,
-                currentPlayerId: me.id,
-                myOptionIdForThisCard: myOptionId,
-                isTarget: isTarget,
-                onSelect: isTarget ? (_) {} : (authorId) {
-                  setState(() {
-                    _localSelectedAuthorId = authorId;
-                  });
-                },
+              child: Column(
+                children: [
+                  if (isTarget) ...[
+                    PlayerAvatar(player: me, size: 50),
+                    const SizedBox(height: 8),
+                    Text(
+                      'THEY ARE VOTING ON YOUR TRUTH',
+                      style: TextStyle(
+                        color: theme.colorScheme.secondary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        letterSpacing: 2,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Keep a straight face while the parlor deliberates.',
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.75),
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ] else if (targetPlayer != null) ...[
+                    Text(
+                      'VOTING ON',
+                      style: TextStyle(
+                        color: theme.colorScheme.secondary.withOpacity(0.7),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    PlayerAvatar(player: targetPlayer, size: 50),
+                    const SizedBox(height: 10),
+                    Text(
+                      "One of these is ${targetPlayer.name}'s truth.",
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.75),
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'WHICH ONE IS THE TRUTH?',
+                      style: TextStyle(
+                        color: theme.colorScheme.secondary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ] else ...[
+                    PlayerAvatar(player: me, size: 50),
+                    const SizedBox(height: 16),
+                    Text(
+                      'WHICH ONE IS THE TRUTH?',
+                      style: TextStyle(
+                        color: theme.colorScheme.secondary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  ParchmentCard(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Prompt:',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          currentCard.promptText,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                            fontFamily: 'Lora',
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Talk it out — discussion is part of the game.',
+                    style: TextStyle(
+                      fontFamily: 'Lora',
+                      fontStyle: FontStyle.italic,
+                      color: AppColors.ivory.withOpacity(0.7),
+                      fontSize: 13,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  CardGrid(
+                    answers: gridAnswers,
+                    selectedAuthorId: isTarget ? null : _localSelectedAuthorId,
+                    currentPlayerId: me.id,
+                    myOptionIdForThisCard: myOptionId,
+                    isTarget: isTarget,
+                    onSelect: isTarget ? (_) {} : (authorId) {
+                      setState(() {
+                        _localSelectedAuthorId = authorId;
+                      });
+                    },
+                  ),
+                ],
               ),
             ),
           ),

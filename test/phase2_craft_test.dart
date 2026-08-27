@@ -194,7 +194,9 @@ void main() {
       );
 
       await tester.tap(find.text('INSPECT'));
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 50));
 
       final tooLong = 'z' * 120;
       await tester.enterText(find.byType(TextField), tooLong);
@@ -214,7 +216,10 @@ void main() {
         reason: 'an over-length answer must never reach the server',
       );
 
-      // Trimming to the bound lets it through.
+      // Dismiss snackbar so bottom button is unobstructed and trimming lets it through.
+      ScaffoldMessenger.of(tester.element(find.byType(Scaffold))).clearSnackBars();
+      await tester.pump();
+
       await tester.enterText(find.byType(TextField), 'z' * 100);
       await tester.pump();
       await tester.tap(find.text('SUBMIT DOSSIER'));
@@ -237,7 +242,9 @@ void main() {
 
         // Dismiss dealt card overlay first
         await tester.tap(find.text('INSPECT'));
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 250));
+        await tester.pump(const Duration(milliseconds: 50));
 
         // 1. Verify pinned target name is visible and styled in CormorantGaramond
         final targetText = find.text('GUESTPLAYER');
@@ -322,14 +329,19 @@ void main() {
             ),
           ),
         );
-        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 900));
 
         // Dismiss dealt overlay
         await tester.tap(find.text('DISMISS'));
-        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 250));
+        await tester.pump(const Duration(milliseconds: 50));
 
         // Tap RE-ROLL PROMPT
         expect(find.text('RE-ROLL PROMPT'), findsOneWidget);
+        await tester.ensureVisible(find.text('RE-ROLL PROMPT'));
+        await tester.pump(const Duration(milliseconds: 100));
         await tester.tap(find.text('RE-ROLL PROMPT'));
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 300));

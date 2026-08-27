@@ -7,7 +7,6 @@ import 'package:gaslight/models/game_state.dart';
 import 'package:gaslight/models/player_state.dart';
 import 'package:gaslight/screens/game_over_screen.dart';
 import 'package:gaslight/screens/lobby_screen.dart';
-import 'package:gaslight/utils/prompt_decks.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart';
 

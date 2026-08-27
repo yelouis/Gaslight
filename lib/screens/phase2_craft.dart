@@ -12,7 +12,6 @@ import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../widgets/auto_advance_timer.dart';
-import '../utils/prompt_decks.dart';
 import '../utils/text_similarity.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -418,8 +417,22 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     String? targetId = isTruthRound ? me.id : state.currentCardAssignments[me.id];
     if (targetId == null) return const Text('Error: No target assigned');
 
-    CardModel targetCard = state.cards.firstWhere((c) => c.targetPlayerId == targetId);
+    final CardModel targetCard = state.cards.firstWhere((c) => c.targetPlayerId == targetId);
     final targetPlayer = gs.players.firstWhere((p) => p.id == targetId, orElse: () => me);
+
+    final String targetName;
+    if (isTruthRound) {
+      targetName = me.name;
+    } else {
+      final assignedPlayer = gs.players.where((p) => p.id == targetId).firstOrNull;
+      targetName = (assignedPlayer != null && assignedPlayer.name.trim().isNotEmpty)
+          ? assignedPlayer.name
+          : 'them';
+    }
+
+    final String instructionText = isTruthRound
+        ? 'Write something true about you — the more surprising, the better. Others must be able to believe it.'
+        : 'You are writing as $targetName. Make it sound like something they would say, so people pick yours.';
 
     return Column(
       children: [
@@ -508,7 +521,18 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 8),
+                        Text(
+                          instructionText,
+                          style: TextStyle(
+                            fontFamily: 'Lora',
+                            fontStyle: FontStyle.italic,
+                            color: AppColors.ink.withOpacity(0.7),
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
                         TextField(
                           key: const ValueKey('answer_field'),
                           controller: _answerController,

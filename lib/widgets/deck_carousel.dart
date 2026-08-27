@@ -9,7 +9,6 @@ import '../utils/prompt_decks.dart';
 import '../services/game_service.dart';
 import '../models/player_state.dart';
 import 'deck_peek_sheet.dart';
-import 'shared_ui.dart';
 
 class DeckCarousel extends StatefulWidget {
   final String selectedDeckId;
@@ -349,8 +348,6 @@ class _FolderCard extends StatelessWidget {
     final deck = PromptDecks.getDeck(deckId);
     final name = PromptDecks.getDeckName(deckId);
     final size = PromptDecks.getDeckSize(deckId);
-    final prompts = size > 0 ? PromptDecks.drawPrompts(deckId, 1) : const <String>[];
-    final firstPrompt = prompts.isNotEmpty ? prompts.first : '';
 
     // Seal comes from the deck's declared rating. Adding a deck to
     // functions/src/prompt_decks.ts and regenerating is all that is needed —

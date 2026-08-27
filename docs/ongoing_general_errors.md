@@ -8,33 +8,23 @@
 
 ## 1. Open & in-flight
 
-**Wave O — playtest fixes (Issues 113–121) — landed as nine commits, and six of the nine are verified good (August 27, 2026).** Verified by reading the source and running the battery in-session, not from the commit messages.
-
-**Delivered and verified:** **O1**/117 (`answerAuthors` no longer unions across rounds — the three `merge: true` writes were replaced with full-document sets, and `sealedDataMap` is a complete in-transaction read, so no field is dropped), **O3**/115 (names snapshotted into `sealed/_summary.playerNames`; the game-over screen reads them and never consults the players subcollection), **O6**/114, **O7**/116, **O8**/119 (a real measurement loop in `AutoSizedAnswerText`, not more fixed tiers), **O9**/121.
-
-**Three did not land as specified**, each verified against a running emulator rather than inferred — see Issues 122–125:
-
-| Item | What was claimed | What is actually true |
-|---|---|---|
-| **O5** / 120 | presence window widened to 10 minutes | **Inert.** `lib/services/game_service.dart:20` still says `presenceStaleMs = 120000`, and the server's `isDead` check gates only *authorization*, never the deletion — so the host's client still evicts at 120 s. Proven in the emulator: a player stale by 150 s was deleted by a host-initiated `handleDisconnect` while `PRESENCE_STALE_MS` was 600 000. **Issue 123** |
-| **O4** / 118 | placeholder votes rejected, all-sealed cards skipped | Both work, but the guard **broke a pre-existing test** and the functions battery is **red** (**Issue 122**), and a round in which *every* card is all-placeholder strands the table on an empty vote screen (**Issue 125**) |
-| **O2** / 113 | per-card deltas published, leak-guarded | The deltas are correct and render correctly. But the published map **re-opens Issue 100** — it names every fooling forger during the unmask window (**Issue 124**) |
+**Wave P — Wave O repair + playtest requests (Issues 122–132) — landed as eleven commits across server (P1–P5) and client (P6–P11) batches (August 27, 2026).**
 
 **Gate state, measured August 27, 2026:**
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors**, 0 warnings (225 infos) |
-| `flutter test` | **202/202** |
+| `flutter analyze lib test` | **0 errors**, 0 warnings (221 infos) |
+| `flutter test` | **227 passing** |
 | `npm --prefix functions run build` | clean |
-| `npm --prefix functions test` | **RED — 80 passing, 1 failing.** `should handle timeout and fill missing slots with placeholder` votes for the reader's truth option, which is now a placeholder when that reader timed out. See **Issue 122** |
+| `npm --prefix functions test` | **94 passing, 0 failing** |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** — 5 decks, 295 lines |
-| `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** O1–O5 are undeployed; production still runs the August 26 06:46 UTC build |
+| `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** Server batch (P1–P5) is ready for deploy by user (`firebase deploy --only functions`) |
 | `./scripts/check_playthrough_evidence.sh` | **exit 0** — 21 blocks: 20 PASS, 1 NOT RUN, 0 FAIL (28 artefact paths verified on disk) |
 
 **Read the exit code, not the pipeline's.** `./scripts/check_deploy_fresh.sh | tail -6` reports `$?` from `tail`, which is always 0. The gate is correct; a piped check of it is not.
 
-**Undeployed and therefore not yet true in production:** everything in O1–O5, plus the earlier undeployed server work (curated deck contents, unlimited re-rolls, prompt source resolution, custom pool drawing, uniform re-roll sampling, match summary accumulation). Prompts and card summaries are initialized at `startGame`, so even after deploying, a room already in progress keeps the configuration it started with — manual verification needs a **new** game.
+**Undeployed and therefore not yet true in production:** P1–P5 server batch (placeholder round skip, 10-minute presence enforcement, score delta unmask withholding + `closeUnmaskWindow`, configurable timer defaults). To be deployed by the user via `firebase deploy --only functions`.
 
 **Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it.
 
@@ -519,12 +509,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–112 — August 8 to 25, 2026
+### Issues 65–132 — August 8 to 27, 2026
 
-**47 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**58 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave P playtest & repair** (repair red functions gate on placeholder timeout; skip vote phase on all-placeholder round; enforce 10-minute presence window server-side; withhold score deltas until unmask window closes with `closeUnmaskWindow`; configurable round timers with casual mode default; clear queued snackbars on re-roll; departure notification snackbar; deck prompt peek modal; one vote option per row with bounded height; submit on done key & pinned bottom bar; single-line gameplay guidance subtitles) | 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132 | `design_database_and_security.md` §4–§5; `design_game_state_and_models.md` §1; `design_scoring_and_ui.md` §3.2–§3.3; `design_prompt_system.md`; `design_ui_direction.md` |
 | **Security — access control** (`/rooms` collection enumeration; seat/host takeover via `joinRoom` re-binding on a world-readable `playerId`; seat tokens hashed into default-deny `sealed`) | 96, 97 | `design_database_and_security.md` §3, §5 |
 | **Security — answer secrecy** (`castVote` laundering `answerAuthors` into the public room doc; reveal merging every card instead of the current one; forgery authorship exposed during the unmask window) | 98, 99, 100 | `design_game_state_and_models.md` §2; `design_scoring_and_ui.md` |
 | **Security — debug surface** (debug callables reachable in production with no membership or host check) | 101 | `design_database_and_security.md` §7.1 |

@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gaslight/models/game_state.dart';
 import 'package:gaslight/models/player_state.dart';
-import 'package:gaslight/screens/lobby_screen.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/utils/prompt_decks.dart';
 import 'package:gaslight/widgets/deck_peek_sheet.dart';
@@ -86,7 +85,6 @@ void main() {
 
     testWidgets('SHUFFLE button changes the rendered set of prompts within 5 attempts', (WidgetTester tester) async {
       final deckId = PromptDecks.allDecks.first.id;
-      final deck = PromptDecks.getDeck(deckId)!;
 
       await tester.pumpWidget(
         MaterialApp(

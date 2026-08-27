@@ -2,9 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_icons.dart';
-import '../theme/app_text_styles.dart';
 import '../utils/prompt_decks.dart';
-import 'shared_ui.dart';
 
 class DeckPeekSheet extends StatefulWidget {
   final String deckId;
@@ -57,9 +55,8 @@ class _DeckPeekSheetState extends State<DeckPeekSheet> {
     }
 
     final rating = deck.rating;
-    final bool hasSeal = rating != null;
-    final String? sealLabel = rating == null ? null : AppColors.sealLabelFor(rating);
-    final Color sealColor = rating == null ? AppColors.oxblood : AppColors.sealColorFor(rating);
+    final String sealLabel = AppColors.sealLabelFor(rating);
+    final Color sealColor = AppColors.sealColorFor(rating);
 
     return SafeArea(
       child: ConstrainedBox(
@@ -88,14 +85,12 @@ class _DeckPeekSheetState extends State<DeckPeekSheet> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (hasSeal) ...[
-                    WaxSealBadge(
-                      size: 32,
-                      color: sealColor,
-                      label: sealLabel,
-                    ),
-                    const SizedBox(width: 12),
-                  ],
+                  WaxSealBadge(
+                    size: 32,
+                    color: sealColor,
+                    label: sealLabel,
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
