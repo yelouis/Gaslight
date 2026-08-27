@@ -30,6 +30,58 @@ double answerFontSizeFor(int length) {
   return 12;
 }
 
+class AutoSizedAnswerText extends StatelessWidget {
+  final String text;
+  final TextStyle style;
+  final double minFontSize;
+  final double maxFontSize;
+  final TextAlign textAlign;
+  final int maxLines;
+
+  const AutoSizedAnswerText({
+    super.key,
+    required this.text,
+    required this.style,
+    this.minFontSize = 9.5,
+    this.maxFontSize = 16.0,
+    this.textAlign = TextAlign.center,
+    this.maxLines = 8,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textScaler = MediaQuery.textScalerOf(context);
+        double optimalFontSize = minFontSize;
+        for (double size = maxFontSize; size >= minFontSize; size -= 0.5) {
+          final testStyle = style.copyWith(fontSize: size);
+          final textPainter = TextPainter(
+            text: TextSpan(text: text, style: testStyle),
+            textAlign: textAlign,
+            textDirection: TextDirection.ltr,
+            textScaler: textScaler,
+            maxLines: maxLines,
+          );
+          textPainter.layout(maxWidth: constraints.maxWidth);
+          if (!textPainter.didExceedMaxLines && textPainter.height <= constraints.maxHeight) {
+            optimalFontSize = size;
+            break;
+          }
+        }
+
+        return Text(
+          text,
+          style: style.copyWith(fontSize: optimalFontSize),
+          textAlign: textAlign,
+          maxLines: maxLines,
+          overflow: TextOverflow.ellipsis,
+        );
+      },
+    );
+  }
+}
+
 class CardGrid extends StatelessWidget {
   final List<VotingAnswer> answers;
   final String? selectedAuthorId;
@@ -142,37 +194,35 @@ class CardGrid extends StatelessWidget {
                     ),
                   // Card Content
                   Padding(
-                    padding: const EdgeInsets.all(12.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Expanded(
                             child: Center(
-                              child: Text(
-                                ans.text,
+                              child: AutoSizedAnswerText(
+                                text: ans.text,
                                 style: TextStyle(
                                   color: isSelfAnswer 
                                       ? theme.colorScheme.onSurface.withOpacity(0.4) 
                                       : theme.colorScheme.onSurface,
-                                  fontSize: answerFontSizeFor(ans.text.length),
                                   fontWeight: FontWeight.bold,
                                   fontFamily: 'Lora',
-                                  height: 1.3,
+                                  height: 1.25,
                                 ),
-                                textAlign: TextAlign.center,
-                                maxLines: 7,
-                                overflow: TextOverflow.ellipsis,
+                                maxFontSize: 16,
+                                minFontSize: 9.5,
                               ),
                             ),
                           ),
                           if (isSelfAnswer) ...[
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 2),
                             Text(
                               '(Your Forgery)',
                               style: TextStyle(
                                 color: theme.colorScheme.onSurface.withOpacity(0.4),
-                                fontSize: 11,
+                                fontSize: 10,
                                 fontStyle: FontStyle.italic,
                               ),
                             ),

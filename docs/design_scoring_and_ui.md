@@ -108,6 +108,7 @@ To allow seamless recovery from app restarts, device sleep, or connection losses
 
 * **Placeholder answers sealed and unvotable** (Issue 118, August 2026). If a player departs and leaves placeholder answers (`THE SOUL IS SILENT`), `castVote` rejects votes for placeholders with `invalid-argument`. The voting screen disables and stamps placeholder options with `SEALED` for all players, and `advancePhaseInternal`/`advanceToNextResolution` skips cards where all options are placeholders.
 * **Raven Mascot on Sealed Ballot Waiting Screen** (Issue 116, August 2026). Once a player submits their vote, `_buildWaitingUI` renders the `RavenMascot` widget positioned above the candle flame indicator and `"YOUR BALLOT IS SEALED"` plaque, providing consistent mascot presence across all game waiting states.
+* **Dynamic Option Font Sizing (`AutoSizedAnswerText`)** (Issue 119, August 2026). Rather than fixed character-length tiers, `CardGrid` uses a dynamic measurement loop in `AutoSizedAnswerText` that measures text height and line count against available box constraints and `MediaQuery.textScalerOf(context)`, dynamically stepping down from 16 pt to a 9.5 pt floor so 100-character options fit without clipping or overflow on narrow devices (320–375 px) and under accessibility text scaling.
 
 ### 3. Phase 4 (Reveal Phase)
 * **Voter Chip Wrap**: Uses Flutter's `Wrap` widget to display player avatars who voted for each option, preventing UI overflow.

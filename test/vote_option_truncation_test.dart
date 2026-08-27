@@ -141,4 +141,47 @@ void main() {
     expect(answerFontSizeFor(71), 12);
     expect(answerFontSizeFor(kMaxAnswerLength), 12);
   });
+
+  testWidgets('O8: 100-character answer renders in full across 320px, 360px, 375px widths and 1.3 text scale (Issue 119)', (tester) async {
+    const answer =
+        'I once told my entire team the deadline had moved and then quietly moved it back before anyone check';
+    expect(answer.length, kMaxAnswerLength);
+
+    for (final width in [320.0, 360.0, 375.0]) {
+      for (final scale in [1.0, 1.3]) {
+        final customSurface = Size(width, 700);
+        await tester.binding.setSurfaceSize(customSurface);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(
+                size: customSurface,
+                textScaler: TextScaler.linear(scale),
+                accessibleNavigation: true,
+              ),
+              child: Scaffold(
+                body: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: SingleChildScrollView(
+                    child: CardGrid(
+                      answers: [
+                        VotingAnswer(authorId: 'a1', text: answer),
+                        VotingAnswer(authorId: 'a2', text: 'short one'),
+                      ],
+                      selectedAuthorId: null,
+                      currentPlayerId: 'me',
+                      onSelect: (_) {},
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expectNoTruncation(tester, answer);
+      }
+    }
+  });
 }

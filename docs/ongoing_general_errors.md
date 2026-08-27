@@ -63,24 +63,7 @@ Your selection: Proceed with Option B.
 
 
 
-### Issue 119: Vote options are still truncated on smaller phones
-**Status**: ⚠️ Confirmed Unresolved — Reported across phones of different sizes. The card was tuned in Wave K to fit **100 characters at 375 pt wide** with a length-tiered font (`card_grid.dart`), and that is verified by test at that width — but the tiers are **fixed numbers validated at one width**, so a narrower device or a larger accessibility text size still clips. Requirement stands: nothing up to 100 characters should ever truncate.
 
-**Option A (recommended)**: **Size the text to the space rather than to a table** — measure the available box and scale the font down until 100 characters fit, with a readable floor.
-  - *Pros*: Correct at every width and every text-scale setting by construction, instead of at the widths someone remembered to test. Removes the tier table, which is a guess that has now been wrong twice.
-  - *Cons*: Text size varies between cards, which looks less uniform. Needs a floor, and a decision about what happens below it.
-
-**Option B**: **Add more tiers and test at the narrowest supported device.**
-  - *Pros*: Small, predictable change; keeps uniform sizing within a tier.
-  - *Cons*: Still a fixed table validated at chosen widths, and still ignores accessibility text scaling — the same failure will recur on the next device that is a little smaller.
-
-**Option C**: **Make the option card scrollable or tappable-to-expand.**
-  - *Pros*: Any length fits, including beyond 100 characters.
-  - *Cons*: Voters compare options at a glance; hiding text behind interaction changes the game, not just the layout.
-
-Your selection: Proceed with Option A.
-
----
 
 
 
@@ -315,7 +298,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 | **Reveal & unmask** — who may accuse vs who may be accused; the five-beat reveal and its deadline; server-published per-card `scoreDeltas` including unmask ±1 (Wave O / O2) | 79, 80, 113 | `design_scoring_and_ui.md` §3.3; `functions/src/index.ts` |
 | **Prompts & decks** — per-player `seenPrompts` in `sealed`; exhaustion boundary and the `resource-exhausted` → SnackBar mapping whose fall-through is the failure mode | 67, 68, 69, 83, 88 | `design_prompt_system.md` §5 |
 | **Answer integrity** — spurious `THE SOUL IS SILENT` placeholder; forgery author key derived server-side; forgery defaults and the 3-player floor as an independent guard; placeholder votes rejected and all-placeholder cards skipped server-side with sealed placeholder UI (72, 76, 118 / O4) | 72, 76, 118 | `design_game_state_and_models.md` §1–§2; `functions/src/index.ts`; `lib/widgets/card_grid.dart` |
-| **UI surfaces** — dialog contrast (ratio-asserted, not string-asserted); error surfaces mapped on `e.code` and never interpolating the exception; busy states as a correctness guard because `createRoom` is not idempotent; flex/ellipsis on MATCH HIGHLIGHTS and Lobby custom prompts badge pills to prevent narrow-device clipping (84, 93, 95, 114 / O6); Raven mascot displayed on ballot-sealed waiting screen (116 / O7) | 84, 93, 95, 114, 116 | `design_ui_direction.md` §6; `design_scoring_and_ui.md` §3.2, §4; `lib/screens/game_over_screen.dart`; `lib/screens/lobby_screen.dart`; `lib/screens/phase3_vote.dart` |
+| **UI surfaces** — dialog contrast (ratio-asserted, not string-asserted); error surfaces mapped on `e.code` and never interpolating the exception; busy states as a correctness guard because `createRoom` is not idempotent; flex/ellipsis on MATCH HIGHLIGHTS and Lobby custom prompts badge pills to prevent narrow-device clipping (84, 93, 95, 114 / O6); Raven mascot displayed on ballot-sealed waiting screen (116 / O7); dynamic text scaling in CardGrid (`AutoSizedAnswerText`) fitting 100-character answers across narrow viewports and accessibility text scales without truncation (119 / O8) | 84, 93, 95, 114, 116, 119 | `design_ui_direction.md` §6; `design_scoring_and_ui.md` §3.2, §4; `lib/widgets/card_grid.dart`; `lib/screens/game_over_screen.dart`; `lib/screens/lobby_screen.dart`; `lib/screens/phase3_vote.dart` |
 | **Debug controls & dead fields** — host debug controls cleaned up; reaction medallions removed with `lastReaction`/`lastReactionAt` deliberately retained in the model and rules to avoid a migration | 73, 74 | `design_database_and_security.md` §3 |
 | **Standings & honors** — tabular-figure alignment; honors metrics | 75 | `design_scoring_and_ui.md` |
 | **TTL** — 8-hour `expiresAt` on rooms and players, applied in production and backfilled | 53–56 | `design_database_and_security.md` §6 |
