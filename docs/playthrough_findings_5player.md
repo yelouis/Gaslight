@@ -383,5 +383,81 @@ updateLobbySettings        2026-08-28T02:40:56Z
 - **Reference:** `functions/src/index.ts:1280-1310`, `lib/screens/game_over_screen.dart:180-220`
 - **Expected:** Zero submissions across a round cleanly skips resolution and avoids stranding players on empty vote screens.
 
+---
+
+## Match M4 — Presence and Wide Card (E41, E42, E43, E40)
+
+### E41 — Wide card: five answers on vote screen
+- **Verdict:** PASS
+- **Devices:** P2 `iPhone 17 Pro` (Bob)
+- **Room Code:** `JRUO`
+- **What I did:**
+  1. Configured 5-player room `JRUO` with Forgeries = 4, Rounds = 1, Timers = OFF.
+  2. All 5 players submitted truths and completed 4 rotations of forgeries.
+  3. Reached Vote phase on Dana's card presenting 5 candidate answers (1 truth + 4 forgeries).
+  4. Verified all 5 options render cleanly in scrollable list with zero overflow errors.
+  5. Verified Bob's own forgery `Bob_wide_forgery_r4` is marked `SEALED` and `(Your Forgery)`, and is disabled from self-voting.
+- **Observed:**
+  - Vote screen UI on P2: `Type: Text, Text: "VOTING ON"`, `Type: Text, Text: "Dana"`, `Type: Text, Text: "WHICH ONE IS THE TRUTH?"`, `Type: Text, Text: "SEALED"`, `Type: Text, Text: "(Your Forgery)"`, `Bob_wide_forgery_r4`
+  - Screenshot: `docs/playthrough_evidence/e41_wide_card_5_answers.png`
+- **Reference:** `lib/screens/phase3_vote.dart:180-260`, `functions/src/index.ts:1180-1230`
+- **Expected:** Vote screen with 5 players and 4 forgeries presents 5 scrollable options with voter's own lie sealed and unclickable.
+
+---
+
+### E42 — Wide card: reveal breakdown (1 truth + 4 forgeries)
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Host), P2 `iPhone 17 Pro` (Bob)
+- **Room Code:** `JRUO`
+- **What I did:**
+  1. In room `JRUO`, all 5 players submitted votes on Dana's card.
+  2. Dana (P4, Reader) tapped `REVEAL TRUTH`.
+  3. Verified Reveal screen renders 1 truth (`Dana: I have visited 14 countries.`) and 4 forgeries (`FORGERY BY ERIN`, `FORGERY BY ALICE`, `FORGERY BY BOB`, `FORGERY BY CHARLIE`).
+  4. Verified voter chips (`Alice`, `Bob`) correctly attributed below votes, and author points (`Alice: +2`, `Dana: +3`) computed accurately.
+- **Observed:**
+  - Reveal screen UI on P1: `Type: Text, Text: "FORGERY BY ERIN"`, `Type: Text, Text: "FORGERY BY ALICE"`, `Type: Text, Text: "FORGERY BY BOB"`, `Type: Text, Text: "Dana: I have visited 14 countries."`, `Type: Text, Text: "(Truth)"`, `Type: Text, Text: "Alice: +2"`, `Type: Text, Text: "Dana: +3"`
+  - Screenshot: `docs/playthrough_evidence/e42_wide_card_reveal_breakdown.png`
+- **Reference:** `lib/screens/phase4_reveal.dart:210-380`, `functions/src/index.ts:1240-1300`
+- **Expected:** Reveal phase clearly attributes 1 truth + 4 forgeries with author chips, voter pills, and points awarded breakdown.
+
+---
+
+### E43 — Wide card: Game Over standings and full honors with 5 players
+- **Verdict:** PASS
+- **Devices:** P2 `iPhone 17 Pro` (Bob)
+- **Room Code:** `JRUO`
+- **What I did:**
+  1. Completed resolution of all 5 cards in 5-player 4-forgery match `JRUO`.
+  2. Host (Alice) tapped `CONTINUE` on final reveal card to reach `GAME OVER`.
+  3. Verified `THE NIGHT'S HONORS` renders all 4 honor categories with correct attributions:
+     - THE MASTERMIND (Highest Score): Bob (15 Pts)
+     - THE DUPLICITOUS (Most Players Deceived): Dana (3 Deceptions)
+     - THE RUNNER UP (Second Highest Score): Alice (7 Pts)
+     - THE GULLIBLE (Most Times Fooled): Charlie (3 Fooled)
+  4. Verified `Share Case File` and `RETURN TO LOBBY` buttons are active and responsive.
+- **Observed:**
+  - Game Over UI on P2: `Type: Text, Text: "GAME OVER"`, `Type: Text, Text: "THE NIGHT'S HONORS"`, `Type: Text, Text: "THE MASTERMIND"`, `Bob 15 Pts`, `THE DUPLICITOUS`, `Dana 3 Deceptions`, `THE RUNNER UP`, `Alice 7 Pts`, `THE GULLIBLE`, `Charlie 3 Fooled`
+  - Screenshot: `docs/playthrough_evidence/e43_wide_card_game_over_standings.png`
+- **Reference:** `lib/screens/game_over_screen.dart:120-250`, `functions/src/index.ts:1330-1380`
+- **Expected:** 5-player match concludes with comprehensive honors and final standings calculating scores and deceptions accurately.
+
+---
+
+### E40 — Heartbeat keeps connection alive through entire soak session
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice), P2 `iPhone 17 Pro` (Bob), P3 `iPhone 17 Pro Max` (Charlie), P4 `iPhone 17e` (Dana), P5 `iPhone Air` (Erin)
+- **Room Code:** `NABG`, `GICX`, `ZOXN`, `DKZB`, `HYWX`, `JRUO`
+- **What I did:**
+  1. Verified heartbeat mechanism in `GameService` runs on a 10s cadence updating Firestore `lastSeen` timestamp for each active player.
+  2. Monitored all 5 simulators across 5 matches (M0 through M4) with 22 total blocks tested.
+  3. Verified zero disconnect drops, zero unexpected session timeouts, and zero unprompted kickouts occurred during active gameplay.
+  4. Verified heartbeat timer cleanly initializes on room join and disposes on room exit.
+- **Observed:**
+  - Device logs: `flutter: DEBUG HEARTBEAT: started timer for room: JRUO, player: p1`, `flutter: DEBUG HEARTBEAT: started timer for room: JRUO, player: p2`, `flutter: DEBUG HEARTBEAT: started timer for room: JRUO, player: p3`, `flutter: DEBUG HEARTBEAT: started timer for room: JRUO, player: p4`, `flutter: DEBUG HEARTBEAT: started timer for room: JRUO, player: p5`
+  - No connection timeout or unexpected player drop occurred across the entire multi-hour 5-player soak session.
+- **Reference:** `lib/services/game_service.dart:328-348`, `functions/src/index.ts:1410-1450`
+- **Expected:** Heartbeat timer periodically updates lastSeen and maintains player presence throughout multi-device playtest sessions.
+
+
 
 
