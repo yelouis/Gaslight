@@ -1,10 +1,12 @@
-# Agent Execution Guide — Active Build: Wave Q — Q1 done; Q2 (five-player soak) blocked on deploy — August 27, 2026
+# Agent Execution Guide — Active Build: Wave Q — Q2: run the five-player soak — August 28, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**Q1 is COMPLETE and verified — do not rebuild it (§2, §3 are kept as the record of what was built and why).**
+**Q1 is COMPLETE, verified and falsified — do not rebuild it.** §2 and §3 are kept as the record of what was built and why.
 
-**Q2 cannot start until the user deploys.** `./scripts/check_deploy_fresh.sh` currently exits **1**: Q1's server guard is in the tree and not in production. The soak runs against production, so starting it now would certify a server that does not have the fix.
+**Q2 is now UNBLOCKED and is the active item.** The user deployed on **2026-08-28T02:40–02:41Z**; `./scripts/check_deploy_fresh.sh` exits **0** — 16 Cloud Functions, all newer than the last `functions/src` commit. Q1's deadline guard is live in production, which is the precondition the soak was waiting on.
+
+**Issue 134 → Option A: run the full soak, M0–M4, all 22 blocks.** Not a reduced set. The user chose the complete run with the time cost stated.
 
 | # | Item | Issue → choice | Side | Deploy |
 |---|---|---|---|---|
@@ -14,11 +16,17 @@
 
 **Do not run `firebase deploy` yourself** — that call is the user's, and it is what makes the server half of Q1 real.
 
-### Ordering: Q1 (done) → **the user deploys** → Q2. This is not optional.
+### Before you start: re-confirm the deploy yourself
 
-Q2 exercises the unmask window and the points tray. **Q1's guard is in the tree and not in production**, so a soak run today would certify a server that still lets any player end the unmask window early. **The soak runs against production** (`USE_EMULATOR=false`), so what matters is the deployed server, not the local tree — **`./scripts/check_deploy_fresh.sh` must exit 0 before Q2 starts.** It exits 1 right now. **Stop and tell the user rather than starting anyway.**
+**The soak runs against production** (`USE_EMULATOR=false`), so what matters is the deployed server, not the local tree. It was fresh when this guide was written, but **do not take that on trust — run it bare and read the exit code**:
 
-**Q3 is independent of both** and may be done at any time; it needs no deploy.
+```bash
+./scripts/check_deploy_fresh.sh
+```
+
+**It must exit 0.** If it exits 1, someone has committed server code since the deploy: **stop and tell the user.** A soak against a stale server certifies nothing, and you will not find out until the report is written.
+
+**Q3 is independent** and may be done at any time; it needs no deploy and no simulators.
 
 **Every number and literal string below is a decision, not a suggestion.** Implement as written. If a value is impossible, keep the intent, deviate minimally, and say so in the commit body.
 
@@ -191,7 +199,7 @@ At five players the following become reachable for the first time, and all of th
 
 ### 4.2 Prerequisites — do these in order, and prove each one
 
-1. **Add two more Marionette servers.** `.agents/mcp_config.json` currently declares `marionette-p1` … `p3`. Add `marionette-p4` and `marionette-p5` with the same `command` and empty `args`. **The MCP client must be restarted to see them** — confirm all five respond before booting anything, and if the harness only exposes three, **stop and tell the user**; do not silently run a 3-player soak and label it five.
+1. **Five Marionette servers must be responding.** `.agents/mcp_config.json` already declares `marionette-p1` … `marionette-p5` (committed in `68e4bac`). **The MCP client must have been restarted since that commit to see p4 and p5** — confirm all five respond before booting anything. If the harness only exposes three, **stop and tell the user**; do not silently run a 3-player soak and label it five.
 2. **Five booted simulators, five distinct device models.** Record each `udid` and DDS port in the report header. The existing convention is p1→8182, p2→8282, p3→8382; continue it as **p4→8482, p5→8582**.
 3. **`.env` must contain `USE_EMULATOR=false`.** It is a bundled asset — changing it after the build has no effect.
 4. **Uninstall the app on every one of the five simulators** before installing, so no stale room is restored from `SharedPreferences`. A resumed room from a previous run is the single most common way these soaks produce nonsense.
@@ -202,6 +210,21 @@ At five players the following become reachable for the first time, and all of th
 6. **Install to one device at a time.** Concurrent builds corrupt `build/`.
 7. **Paste `flutter --version` into the header** rather than recalling it.
 8. **Confirm `./scripts/check_deploy_fresh.sh` exits 0** and paste the function count and timestamp. The soak hits production; a stale server invalidates every server-side assertion in it.
+9. **Run the five-player emulator pre-flight (§4.5) and confirm it passes.** Do this before booting a single simulator.
+
+**A workable device sequence.** Adapt models to what this Mac has; the requirement is five distinct, booted devices, not these exact ones:
+
+```bash
+xcrun simctl list devices available          # pick five, record the UDIDs
+xcrun simctl boot <udid>                     # one per device
+xcrun simctl uninstall <udid> com.whylabs.gaslight   # MUST run on all five
+flutter build ios --simulator                # ONCE, before any install
+xcrun simctl install <udid> build/ios/iphonesimulator/Runner.app
+```
+
+**`uninstall` is the step people skip and then lose an hour to.** `SharedPreferences` survives a reinstall-over-the-top, so a device that played a previous room will silently rejoin it instead of showing `THE GUEST LEDGER`, and the first two blocks will make no sense.
+
+**Never run two `flutter build` invocations at once.** Build once, install five times.
 
 ### 4.3 Where the report goes, and the evidence contract
 
@@ -235,13 +258,46 @@ Every block takes this shape. The gate parses it mechanically:
 - **Name the field `Observed:`.** A renamed variant is what let a bad block through a human review once already.
 
 **And a rule the gate cannot enforce, which matters more than the ones it can:** **open the screenshot and look at it.** A path satisfies R5; it does not prove the image shows what the prose claims. Three separate defects in this project's history survived because nobody did.
-### 4.4 Pre-flight: prove five players works in the emulator FIRST
+### 4.4 Driving reference — target keys, not pixel bounds
+
+Earlier reports recorded taps by `bounds: {"x":4.0,"y":66.0,…}`. **Do not drive that way.** Bounds differ across five device models, and a soak that hits the right pixel on an iPhone 17 Pro hits the wrong widget on an iPhone SE. Every control the soak needs either has a `ValueKey` or unique text. Use those.
+
+| What you need to do | Target |
+|---|---|
+| Enter a display name | key `player_name_field` |
+| Enter / re-enter a room code | key `room_code_field` |
+| Create a room | text `CREATE ROOM` |
+| Select a deck in the carousel | key `deck_<deckId>` — e.g. `deck_hypotheticals`, `deck_rated_r_nsfw` |
+| Open the deck preview | key `peek_inside_<deckId>`, label `PEEK INSIDE` |
+| Read a previewed prompt | keys `peek_prompt_0` … `peek_prompt_7` |
+| Re-draw the preview sample | key `deck_peek_shuffle`, label `SHUFFLE` |
+| Set forgeries per card | key `forgeries_<n>` — at five players `forgeries_1` … `forgeries_4` |
+| Set round count | key `rounds_<n>` |
+| Set timer length | key `timer_seconds_field` |
+| Toggle timers | the `Disable Game Timers` switch (host-only) |
+| Kick a player | key `kick_<playerId>`, then `REMOVE` |
+| Start the match | text `START GAME` |
+| Write a truth or forgery | key `answer_field` |
+| Submit an answer | text `SUBMIT DOSSIER`, or send the keyboard **done** action (E28) |
+| Re-roll a prompt | text `RE-ROLL PROMPT` |
+| Cast a vote | tap the option row, then text `CONFIRM VOTE` |
+| Leave mid-game (truth / forgery / vote / reveal) | the `Leave game` IconButton in the AppBar leading slot, then `LEAVE GAME` in the dialog |
+| Leave **from the lobby** | a **different control**: the `Leave room` IconButton (`lobby_screen.dart:595`), then **`CLOSE ROOM`** if host, **`LEAVE`** if guest — *not* `LEAVE GAME`, which does not exist on that screen |
+| Return to lobby after a match | text `RETURN TO LOBBY` (bar keyed `game_over_bottom_bar`) |
+
+**Deck ids come from the catalogue, never from a guess:** `hypotheticals`, `real_life`, `unhinged_quirks`, `love_life`, `rated_r_nsfw` (`functions/src/prompt_decks.ts`). `hypotheticals` is the fallback and has 50 prompts — use it unless a block says otherwise.
+
+**E23 becomes mechanical with these keys:** assert `peek_prompt_0` through `peek_prompt_7` exist and **`peek_prompt_8` does not**. That is a far stronger assertion than counting rows in a screenshot, and it is the one that would catch an off-by-one in the sampler.
+
+**If a control you need has no key and no unique text, add a `ValueKey` for it** — that is a legitimate, tiny production change, and it is the only production change Q2 may make. Note it in the commit body.
+
+### 4.5 Pre-flight: prove five players works in the emulator FIRST
 
 **Do this before booting a single simulator.** The emulator suite's largest game is **four** players (`p_g3`/"Dave", `game_e2e.spec.ts:2431`). **Five players has never been exercised anywhere in this project** — not in a test, not on a device. The rotation plan at five players with four forgeries is therefore unproven, and a rotation bug found after an hour of device driving costs an hour.
 
 Write one throwaway emulator test: five players, `forgeriesPerCard` at its default, one full round to `gameOver`. Assert only that it completes and that every card ends with **five options** and a distinct author per option. **If this fails, stop and file it** — a device soak on a broken rotation produces nothing but noise. Keep the test; it is worth having regardless.
 
-### 4.5 Match configuration, and the constraint that shapes it
+### 4.6 Match configuration, and the constraint that shapes it
 
 **⚠️ The 3-player floor caps every match at three departures.** `handleDisconnect` ends the match when the remaining active count drops below 3 (`index.ts:1321`). From five that means: lose one → 4 (continues), lose two → 3 (continues), **lose three → 2 → `gameOver`.** You cannot run every departure block in one match, and you must not plan to.
 
@@ -265,7 +321,7 @@ Write one throwaway emulator test: five players, `forgeriesPerCard` at its defau
 
 **Timers now default OFF** (Issue 130), so the old reports' "timers ON as a deliberate deviation" note is **inverted** — turning them *on* is now the deviation. Record it wherever you do.
 
-### 4.6 The blocks
+### 4.7 The blocks
 
 Each entry gives the setup, the action, and **what must be true afterwards**. Assert the stated post-condition on **every** device named, not just the one that acted — a departure that looks right to the leaver and wrong to everyone else is the failure mode.
 
@@ -277,7 +333,7 @@ Each entry gives the setup, the action, and **what must be true afterwards**. As
 - **E23 — Peek inside a deck before choosing.** On P1, tap `PEEK INSIDE` on the centred deck card. **Assert:** exactly **8** prompt rows under `A TASTE OF WHAT'S INSIDE`; `SHUFFLE` changes the visible set; dismissing leaves the selected deck unchanged (the carousel still shows the same deck name). *(Issue 126.)*
 - **E24 — Timers default to off; the duration field appears only when they are on.** **Assert:** `Disable Game Timers` is **on** by default; toggling it off reveals `Seconds per round` defaulting to **60** with helper text `15–300 seconds. Voting gets 75% of this.`; entering `10` and `301` are both refused. *(Issue 130.)*
 - **E25 — Host kicks a guest in the lobby.** Alice kicks Erin. **Assert:** Erin's device returns to `THE GUEST LEDGER`; the other four rosters show four players. Erin rejoins afterwards.
-- **E26 — Host leaving the lobby closes the room for everyone.** Run this **last in M0**, because it destroys the room. Alice leaves from the lobby. **Assert on all five:** every device returns to `THE GUEST LEDGER`. **Then prove the room is really gone the only way the UI can:** have Bob type that same room code into the join field and assert the **room-not-found error surface** appears. **Reference:** `index.ts:1213` (`roomClosed: true`).
+- **E26 — Host leaving the lobby closes the room for everyone.** Run this **last in M0**, because it destroys the room. Alice taps the `Leave room` IconButton — **not `Leave game`; that control does not exist in the lobby.** **Assert the warning first:** the dialog reads `Close this room?` with body `You are the host. Leaving will close the room for everyone.` and offers `STAY` / `CLOSE ROOM`. Confirm with `CLOSE ROOM`. **Assert on all five:** every device returns to `THE GUEST LEDGER`. **Then prove the room is really gone the only way the UI can:** have Bob type that same room code into `room_code_field` and assert the **room-not-found error surface** appears. **Reference:** `index.ts:1213` (`roomClosed: true`). *(A guest doing the same sees `Leave this room?` and `LEAVE`, and the room survives — worth a second, cheap assertion while you are here.)*
 
 #### M1 — writing-phase departures
 
@@ -308,7 +364,7 @@ Each entry gives the setup, the action, and **what must be true afterwards**. As
 - **E43 — The unmask window withholds the deltas, then publishes them.** On a card where someone was fooled: **assert during the 20-second window** that no per-player points are shown; **assert after it closes** that `POINTS AWARDED THIS CARD` appears with correct values including the unmask ±1, and the standings badges update. **Then assert it still works with the host absent** — have the host leave before the window expires and confirm the tray still fills on the remaining devices. *(Issues 124 and 133. That last sentence is the entire point of Q1's client change and cannot be tested any other way.)*
 - **E40 — The presence window really is ten minutes.** ⚠️ **~12 minutes of wall clock. Run it last.** **Timers must be OFF for this block** — with timers on, phases auto-advance during the wait and the match state changes underneath the assertion. Force-quit P5 (`xcrun simctl terminate`) mid-match, **do not relaunch**, and note the time. **Assert at ~2 minutes: P5 is still in the roster on every other device** — this is the whole point, because before Issue 123 they were evicted at exactly this mark. **Assert at ~11 minutes: P5 is gone from the roster.** Record both wall-clock timestamps. **Reference:** `index.ts:179`. **No unit test can cover this** — fake timers do not suspend an isolate. *(Issue 123.)*
 
-### 4.7 Reporting
+### 4.8 Reporting
 
 - One block per assertion, in the shape of §4.3, with a screenshot for anything visual.
 - **A block you did not run is `NOT RUN` with a `Reason:`** — never omitted, and never quietly folded into a neighbouring block. An omitted assertion reads as though it passed.
@@ -316,18 +372,35 @@ Each entry gives the setup, the action, and **what must be true afterwards**. As
 - Close with a **What the harness could not see** section. Known entries before you start: real network jitter; App Store ingestion; anything gated on `kDebugMode`, since Marionette can only attach to a debug build and the release gating is therefore invisible to it.
 - **Every defect found is filed, not fixed** — `ongoing_general_errors.md`, options, Pros/Cons, one `(recommended)`, blank selection line.
 
-### 4.8 Definition of Done for Q2
+**Screenshot naming.** Into `docs/playthrough_evidence/`, as `e<block>_p<device>_<what>.png` — the convention already in use there (`e10_p1_gameover.png`, `e16_d3_deck_too_small_warning.png`). Cite the path only **after** the file is written; Rule R5 checks it exists, and a cited-but-absent artefact fails the gate.
 
-- [ ] **The five-player emulator pre-flight (§4.4) passed** before any simulator was booted.
+**Write the report as you go, not at the end.** This run is hours long across five simulators. Append each block to `docs/playthrough_findings_5player.md` as it completes, and **run the evidence gate after each match**:
+
+```bash
+./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md
+```
+
+Catching a malformed block after M0 costs a minute; catching it after M4 means re-reading four hours of work. **Check the block count it reports against the number you have written** — a gate that parsed fewer blocks than exist has told you nothing (lesson 2.21).
+
+**Commit per match, not once at the end.** Five commits — `test(playthrough): M0 lobby blocks (E22-E26)` and so on — so a crash or a context limit costs one match, not the whole soak. This is the one place the one-item-one-commit rule bends, and it bends deliberately: the item is a report, and a half-written report that exists beats a complete one that was lost.
+
+**If a block fails, finish the match you are in, then stop.** File the defect with options and report. Do not start the next match: every later block would be running against a build you already know is wrong, and those results would have to be discarded anyway.
+
+### 4.9 Definition of Done for Q2
+
+- [ ] **The five-player emulator pre-flight (§4.5) passed** before any simulator was booted.
 - [ ] Five Marionette servers responding, five simulators, five distinct models, ports recorded.
 - [ ] `.env` `USE_EMULATOR=false`; app uninstalled on all five before install; binary-newer-than-source proof pasted.
 - [ ] `./scripts/check_deploy_fresh.sh` exited **0** before the soak began, with Q1 deployed.
 - [ ] `docs/playthrough_findings_5player.md` exists with blocks **E22–E43**, each PASS/FAIL/NOT RUN.
 - [ ] `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` exits **0**, and the count of blocks it reports **matches the number you wrote** — a gate that parsed fewer blocks than exist has told you nothing.
 - [ ] **Every cited screenshot was opened and looked at**, not merely written and referenced.
-- [ ] The five matches **M0–M4** were run as laid out in §4.5, and **no match was planned around more than three departures**.
+- [ ] The five matches **M0–M4** were run as laid out in §4.6, and **no match was planned around more than three departures**.
 - [ ] E31 (forgery chain re-link), E33 (reader departs mid-vote), E40 (ten-minute presence) and E43 (unmask window without the host) are all genuinely attempted — **these four are the reason the soak exists**; a run that marks them NOT RUN has not delivered Q2.
 - [ ] Every defect found is filed with options; **none is fixed in this commit**.
+- [ ] **All 22 blocks attempted** — Issue 134 selected **Option A**, the full run. A reduced set is not this item.
+- [ ] Controls were driven **by key or unique text, never by pixel bounds** (§4.4). Any `ValueKey` added to make that possible is noted in the commit body.
+- [ ] The report was committed **per match**, so no single failure cost more than one match's work.
 
 ---
 

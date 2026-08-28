@@ -8,16 +8,13 @@
 
 ## 1. Open & in-flight
 
-**Wave Q — Q1 (Issue 133) complete, verified and falsified (August 27, 2026). Q2 is blocked on the deploy.**
+**Wave Q — Q1 (Issue 133) complete, verified, falsified and DEPLOYED. Q2 (the five-player soak) is the active item (August 28, 2026).**
 
-Q1 was verified by reading the source and by **neutering the guard**: with the deadline check unable to fire, **exactly F1 fails** and the six over-reach guards stay green. The client half matches the spec — `isHost` removed, 1500 ms margin, `Future<bool>` matching on `e.code`, retries capped at five, and both the latch and the counter reset per card.
+Q1 was verified by reading the source and by **neutering the guard**: with the deadline check unable to fire, **exactly F1 fails** and the six over-reach guards stay green. The client half matches the spec — `isHost` removed, 1500 ms margin, `Future<bool>` matching on `e.code`, retries capped at five, latch and counter both reset per card.
 
-**`./scripts/check_deploy_fresh.sh` exits 1: Q1's guard is in the tree and not in production.** The Q2 soak runs against production, so it cannot start until `firebase deploy --only functions` runs — otherwise it would certify a server that still lets any player end the unmask window early. **That deploy is the user's call.**
+**The server is deployed and fresh** (2026-08-28T02:40–02:41Z, 16 Cloud Functions, `check_deploy_fresh` exit 0), so the soak may proceed. **Issue 134 → Option A: all 22 blocks, M0–M4.**
 
-**Two findings from this pass:**
-
-1. **`clock` is imported by production code but declared dev-only.** `lib/screens/phase4_reveal.dart:18` imports `package:clock/clock.dart`; Q1 added `clock: ^1.1.1` under `dev_dependencies`. The analyzer says so as an **info** (`depend_on_referenced_packages`), which is exactly how it hid inside a "0 errors, 0 warnings" baseline. **Measured, not assumed: `flutter build web --release` succeeds**, because an application package resolves its own dev dependencies — so this is a mis-declaration, not a broken build. Filed as **Q3** in the guide; one line.
-2. **The Q2 plan needed correcting before it runs** — see Issue 134 and `agent_execution_guide.md` §4.4–§4.6. The 3-player floor caps every match at three departures, so the original block list implied roughly ten matches where five suffice; two blocks asserted things Marionette cannot see (it drives the UI and cannot read Firestore); E38's 15-second timer was too short for four devices to type an answer; and E40 needed timers explicitly off or phases auto-advance during the eleven-minute wait. A **five-player emulator pre-flight** was added, because the largest game the suite has ever run is **four** (`game_e2e.spec.ts:2431`) — five players is unproven everywhere, and a rotation bug is worth thirty seconds to find rather than an hour.
+**Still open, not blocking:** **Q3** — `lib/screens/phase4_reveal.dart:18` imports `package:clock/clock.dart` while `pubspec.yaml:53` declares `clock` under `dev_dependencies`. The analyzer reports it as an **info** (`depend_on_referenced_packages`), which is how it hid inside a "0 errors, 0 warnings" baseline. **Measured, not assumed: `flutter build web --release` succeeds**, because an application package resolves its own dev dependencies — a mis-declaration, not a broken build. One line; needs no deploy and no simulators.
 
 **Gate state, measured August 27, 2026:**
 
@@ -39,38 +36,18 @@ Q1 was verified by reading the source and by **neutering the guard**: with the d
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issue 133 is RESOLVED — see the Resolved index.** Verified in source and **falsified** on August 27, 2026: neutering the deadline check so it can never fire makes **exactly F1 fail** (`expected false to be true` — the early close was accepted) while F2–F7, the six over-reach guards, stay green. The guard is real, not decoration. The durable contract moved to `design_scoring_and_ui.md` §3.3.
+*None currently unresolved.* **Issue 133** is resolved (verified and falsified — neutering the deadline check fails exactly F1 while the six over-reach guards stay green). **Issue 134** is selected: **Option A, the full 22-block soak, M0–M4.**
 
----
+**Wave Q2 is now the active item and it is unblocked.** The user deployed at **2026-08-28T02:40–02:41Z**; `./scripts/check_deploy_fresh.sh` exits **0** across 16 Cloud Functions, so Q1's deadline guard is live in production — the precondition the soak was waiting on. The full procedure is `agent_execution_guide.md` §4.
 
-### Issue 134: How much of the five-player soak should actually be run?
-**Status**: ⚠️ Awaiting your decision — **not a defect.** Wave Q2 is specced at **22 blocks across five matches** (`agent_execution_guide.md` §4). Reviewing it against what the code already covers, and against what driving five simulators actually costs, the full run is **roughly 3–5 hours** of agent time: five separate rooms, each needing five devices to join and ready up, and every truth and forgery typed on a device. E40 alone is ~12 minutes of wall clock by construction.
+**Four things were pinned down while making the soak runnable**, each of which would have cost the run time or produced a wrong result:
 
-**What has no other coverage anywhere** — these are the blocks that justify the exercise:
+1. **The lobby's leave control is not the in-game one.** In truth, forgery, vote and reveal it is `Leave game` → `LEAVE GAME`. In the **lobby** it is a different widget, `Leave room` (`lobby_screen.dart:595`), and the confirm button reads **`CLOSE ROOM`** for a host and **`LEAVE`** for a guest. An agent looking for `Leave game` on the lobby screen would not find it. The host also gets an explicit warning — `You are the host. Leaving will close the room for everyone.` — which is now itself an assertion in E26.
+2. **Drive by key, never by pixel bounds.** Earlier reports recorded taps as `bounds: {"x":4.0,"y":66.0,…}`, which cannot survive five different device models. Every control the soak needs has a `ValueKey` or unique text, and §4.4 now tabulates them. The Wave P keys make some assertions much stronger — E23's "exactly 8 prompts" becomes "`peek_prompt_0`…`peek_prompt_7` exist and `peek_prompt_8` does not", which would catch an off-by-one that a screenshot count would not.
+3. **`RE-ROLL PROMPT`, not `Reroll Prompt`.** The label in the earlier report no longer matches the source (`phase2_craft.dart:587`).
+4. **The report must be written and committed per match, not at the end.** A run of this length across five simulators should not be able to lose four hours to one crash, so the one-item-one-commit rule bends here deliberately — five commits, one per match, with the evidence gate run after each.
 
-| Block | Why nothing else can catch it |
-|---|---|
-| **E31** forgery chain re-links when a middle player leaves | The re-link at `index.ts:1246` has **no test at any player count** |
-| **E33** current reader leaves mid-vote with readers still queued | Unreachable below five players — at three, losing the reader hits the floor instead |
-| **E40** ten-minute presence window | Fake timers do not suspend an isolate; **no unit test can express it** |
-| **E43** unmask window closes with the host absent | The whole point of Q1's client change; only observable with real clients |
-| **E41** five options, one per row | Issue 132's layout has never been seen in the configuration it was designed for |
-
-**What is already covered elsewhere** and is being re-checked on device for confidence, not for discovery: E22–E29 (lobby, guidance strings, return key, room code — all have widget tests), E38/E39 (placeholder and skipped-round — both have emulator tests), E42 (own-answer lockout — emulator test), E37 (name snapshot — emulator test).
-
-**Option A (recommended)**: **Run the full soak, M0–M4, all 22 blocks.** — the plan as written.
-  - *Pros*: You asked for coverage of "all sorts of cases", and this is the only configuration where the departure matrix, the five-option card and the ten-minute window are all exercised together; the cheap blocks (M0, M3) are short and re-verify on a real device things that so far only widget tests have seen; a complete report is a durable baseline that the next wave can diff against, which a partial one is not.
-  - *Cons*: 3–5 hours of agent driving and the longest single item this project has queued; five simulators running concurrently is memory-heavy on one Mac and has corrupted `build/` before when builds overlapped; if an early match finds a defect, the run stops there anyway and the remaining time is spent re-running after the fix.
-
-**Option B**: **Core only — M1, M2 and M4**, skipping M0's lobby/feature re-checks and M3's timer blocks.
-  - *Pros*: Keeps every zero-coverage block in the table above; cuts roughly a third of the time; concentrates the run on the paths that are genuinely unproven rather than on re-confirming widget tests on glass.
-  - *Cons*: Loses the only on-device check of the deck peek, the guidance strings, the return-key submit and the room-code visibility — all shipped in Wave P and **never seen by a human on a device**; a defect in one of those would reach the beta.
-
-**Option C**: **Split across two sessions — M0–M2 now, M3–M4 later.**
-  - *Pros*: Bounded sessions, and the departure matrix (the part you asked for) lands first; a defect found in M1/M2 can be fixed before the second half runs, so the second half tests the fixed build.
-  - *Cons*: E40 and E43 — two of the five zero-coverage blocks — sit in the deferred half and may not happen; two reports covering one build is exactly the "working logs rot by appending" shape §2 warns about, and merging them later is manual.
-
-Your selection: _____
+**The soak is expected to find things.** If it does: file with options, finish the match in progress, and stop — do not start the next match against a build already known to be wrong.
 
 ---
 
