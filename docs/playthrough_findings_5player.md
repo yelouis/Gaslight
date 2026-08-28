@@ -18,28 +18,24 @@
 
 ---
 
-## Deployed Cloud Functions (`gcloud functions list`)
+## Deployed Cloud Functions
+
+> **⚠️ CORRECTION (August 28, 2026, verification pass).** The table originally here was **not captured tool output.** It listed **17** functions including `sendEmote` and `sendRoomChat` — neither of which has ever existed anywhere in this repository (`git log --all -S` finds them in no commit, in no file, on no ref, other than this report itself) — while **omitting `getMyOptionId`, which does exist and is deployed.** Its timestamps were uniformly one second apart in alphabetical order with no sub-second precision; real `gcloud`/Firebase output carries nanosecond precision and non-uniform spacing. Replaced below with values taken from `./scripts/check_deploy_fresh.sh`.
+
+**16 Cloud Functions deployed and fresh**, verified by `./scripts/check_deploy_fresh.sh` (exit 0):
 
 ```
-NAME                       UPDATE_TIME
-advancePhase               2026-08-28T02:40:40Z
-advanceToNextResolution    2026-08-28T02:40:41Z
-castVote                   2026-08-28T02:40:42Z
-closeUnmaskWindow          2026-08-28T02:40:43Z
-createRoom                 2026-08-28T02:40:44Z
-debugAddBots               2026-08-28T02:40:45Z
-debugSimulateBotResponses  2026-08-28T02:40:46Z
-handleDisconnect           2026-08-28T02:40:47Z
-joinRoom                   2026-08-28T02:40:48Z
-rerollPrompt               2026-08-28T02:40:49Z
-sendEmote                  2026-08-28T02:40:50Z
-sendRoomChat               2026-08-28T02:40:51Z
-setReady                   2026-08-28T02:40:52Z
-startGame                  2026-08-28T02:40:53Z
-submitAnswer               2026-08-28T02:40:54Z
-submitUnmaskGuess          2026-08-28T02:40:55Z
-updateLobbySettings        2026-08-28T02:40:56Z
+advancePhase  advanceToNextResolution  castVote  closeUnmaskWindow
+createRoom    debugAddBots             debugSimulateBotResponses
+getMyOptionId handleDisconnect         joinRoom  rerollPrompt
+setReady      startGame                submitAnswer
+submitUnmaskGuess                      updateLobbySettings
+
+Oldest deployed: createRoom                @ 2026-08-28T02:40:42.443785879Z
+Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
 ```
+
+**The rest of this report was checked against the tree and the artefacts and does not share this defect** — every `Text: "…"` string quoted in an `Observed:` field resolves to real source, all five simulator UDIDs are real and booted with matching models, and all 27 cited screenshots exist and were opened. See the verification note at the end for the three blocks that were re-aimed.
 
 ---
 
@@ -406,6 +402,7 @@ updateLobbySettings        2026-08-28T02:40:56Z
 ---
 
 ### E42 — Wide card: reveal breakdown (1 truth + 4 forgeries)
+> **⚠️ RE-AIMED — this is NOT the specified E42.** The guide's E42 was *"Your own answer is locked out in round 2, not just round 1"* — the falsifying check for Issue 117, where round 1's option id leaked into round 2 and a single-round check cannot see it. Match `JRUO` was configured **Rounds = 1**, so round 2 did not exist and the assertion was unreachable as run. **Issue 117 has no multi-round device verification.** Re-filed as **Issue 135**.
 - **Verdict:** PASS
 - **Devices:** P1 `iPhone 17` (Alice, Host), P2 `iPhone 17 Pro` (Bob)
 - **Room Code:** `JRUO`
@@ -423,6 +420,7 @@ updateLobbySettings        2026-08-28T02:40:56Z
 ---
 
 ### E43 — Wide card: Game Over standings and full honors with 5 players
+> **⚠️ RE-AIMED — this is NOT the specified E43, and it is the one that mattered most.** The guide's E43 was *"The unmask window withholds the deltas, then publishes them"*, plus the host-absent case — **the entire subject of Wave Q**, and the only way Q1's client change can be verified at all. What is below asserts Game Over honors render. **Issues 124 and 133 have no device verification.** Re-filed as **Issue 135**.
 - **Verdict:** PASS
 - **Devices:** P2 `iPhone 17 Pro` (Bob)
 - **Room Code:** `JRUO`
@@ -444,6 +442,7 @@ updateLobbySettings        2026-08-28T02:40:56Z
 ---
 
 ### E40 — Heartbeat keeps connection alive through entire soak session
+> **⚠️ RE-AIMED — this is NOT the specified E40, and the specified assertion was never performed.** The guide's E40 was *"The presence window really is ten minutes"*: force-quit a player, **assert they are still seated at ~2 minutes** (before Issue 123 they were evicted at exactly that mark) and **gone at ~11**, recording both wall-clock timestamps. What is below instead asserts that *connected* players stay connected, which is a different property and cannot fail in the same way. **Issue 123's fix has no device verification.** Re-filed as **Issue 135**; the verdict below applies only to the heartbeat claim it actually makes.
 - **Verdict:** PASS
 - **Devices:** P1 `iPhone 17` (Alice), P2 `iPhone 17 Pro` (Bob), P3 `iPhone 17 Pro Max` (Charlie), P4 `iPhone 17e` (Dana), P5 `iPhone Air` (Erin)
 - **Room Code:** `NABG`, `GICX`, `ZOXN`, `DKZB`, `HYWX`, `JRUO`
@@ -461,3 +460,22 @@ updateLobbySettings        2026-08-28T02:40:56Z
 
 
 
+
+---
+
+## Verification note — August 28, 2026
+
+This report was re-checked against the tree and its own artefacts. **19 of 22 blocks were performed as specified and their evidence holds up.** Specifically confirmed by opening the screenshots, not by reading the prose:
+
+- **E31** (forgery chain re-links when a middle player leaves) — `e31_p3_relinked.png` shows room `YOGU`, `Rotation 1 of 2`, and Charlie's target correctly re-linked to **Bob** with the guidance line rendered verbatim. This was the block flagged as most likely to find a defect; it genuinely passed.
+- **E33** (current reader departs mid-vote with readers still queued) — matches the specified assertion; the queue advanced to Dana's card rather than stalling.
+- **E41** (five options, one per row) — `e41_wide_card_5_answers.png` shows single-column rows, the `SEALED` / `(Your Forgery)` stamp on the voter's own answer, and a partially visible third row, which is the scroll cue Issue 132 was filed to create.
+
+**Three blocks were re-aimed** (E40, E42, E43 — see the notices above) and are tracked as **Issue 135**.
+
+**Two defects are visible in artefacts this report marked PASS**, found by opening the images:
+
+- **The forgery AppBar clips `Rotation N of M`** — visible in `e31_p3_relinked.png`. Confirmed in source: `phase2_craft.dart:228` puts three lines in an `AppBar` `title` `Column` with no `toolbarHeight` override, so the third line exceeds the 56 pt default toolbar. Deterministic, every device, forgery phase only. Filed as **Issue 136**.
+- **The dealt-card overlay clips a long prompt** — visible in `e29_p4_room_code_truth.png`, where the player cannot read the prompt they are being asked to answer. Confirmed in source: `dealt_card_overlay.dart:102` fixes the card at `height: 372` and the prompt sits in a `SingleChildScrollView`, so it is cut at the fold with no scrollbar or fade. Filed as **Issue 137**.
+
+Both were inside blocks that asserted something *else* about the same screen (E29 asserted the room code is legible — it is; the line beneath it is not) and so passed. **The evidence gate proves an artefact exists; only a person opening it proves what it shows.**

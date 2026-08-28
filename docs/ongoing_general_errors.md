@@ -8,46 +8,109 @@
 
 ## 1. Open & in-flight
 
-**Wave Q — Q1 (Issue 133) complete, verified, falsified and DEPLOYED. Q2 (the five-player soak) is the active item (August 28, 2026).**
+**Wave Q complete: Q1, Q3 and the Q2 five-player soak all landed. The soak ran, and its result needs qualifying (August 28, 2026).**
 
-Q1 was verified by reading the source and by **neutering the guard**: with the deadline check unable to fire, **exactly F1 fails** and the six over-reach guards stay green. The client half matches the spec — `isHost` removed, 1500 ms margin, `Future<bool>` matching on `e.code`, retries capped at five, latch and counter both reset per card.
+**Q1** (Issue 133) is verified, falsified and deployed. **Q3** (`clock` moved to `dependencies`) landed in `eee5437`. **Q2** ran as five per-match commits plus a five-player emulator pre-flight (`dfac7de`), producing `docs/playthrough_findings_5player.md` — **22 blocks, 22 PASS**.
 
-**The server is deployed and fresh** (2026-08-28T02:40–02:41Z, 16 Cloud Functions, `check_deploy_fresh` exit 0), so the soak may proceed. **Issue 134 → Option A: all 22 blocks, M0–M4.**
+**19 of those 22 are genuine and their evidence holds.** Confirmed by opening the artefacts, not by reading the prose: **E31** (the forgery chain re-links when a middle player leaves — the block flagged as most likely to find a defect) passed with a screenshot that shows room `YOGU`, `Rotation 1 of 2` and Charlie correctly re-linked to Bob; **E33** (reader departs mid-vote with readers still queued, a case unreachable below five players) passed; **E41** showed one option per row with the voter's own answer `SEALED`. All five simulator UDIDs are real and booted, and every `Text: "…"` string quoted in the report resolves to real source.
 
-**Still open, not blocking:** **Q3** — `lib/screens/phase4_reveal.dart:18` imports `package:clock/clock.dart` while `pubspec.yaml:53` declares `clock` under `dev_dependencies`. The analyzer reports it as an **info** (`depend_on_referenced_packages`), which is how it hid inside a "0 errors, 0 warnings" baseline. **Measured, not assumed: `flutter build web --release` succeeds**, because an application package resolves its own dev dependencies — a mis-declaration, not a broken build. One line; needs no deploy and no simulators.
+**Three were re-aimed and are tracked as Issue 135** — E40, E42, E43, which between them were the only device verification planned for **Issues 123, 117, 124 and 133**. See §2.33.
 
-**Gate state, measured August 27, 2026:**
+**The report's deployed-functions table was not captured output** and has been corrected in place. It listed 17 functions including `sendEmote` and `sendRoomChat` — **neither has ever existed anywhere in this repository**; `git log --all -S` finds them in no commit, no file and no ref other than that report — while omitting the real `getMyOptionId`. Its timestamps were uniformly one second apart in alphabetical order with no sub-second precision. **There is no removed chat/emote feature to reflect in the design**; nothing was deleted, the entries were never real.
+
+**Two user-facing defects were found by opening screenshots the soak marked PASS** — filed as **Issue 136** (the forgery AppBar clips `Rotation N of M` on every device) and **Issue 137** (the dealt-card overlay silently clips a long prompt, so the player cannot read what they are answering). Both sat inside blocks that asserted something *else* about the same screen and so passed.
+
+**Gate state, measured August 28, 2026:**
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors**, 0 warnings (221 infos) |
-| `flutter test` | **234 passing** (227 baseline + 7 Q1 W1–W7) |
+| `flutter analyze lib test` | **0 errors**, 0 warnings |
+| `flutter test` | **234 passing** |
 | `npm --prefix functions run build` | clean |
-| `npm --prefix functions test` | **101 passing, 0 failing** (94 baseline + 7 Q1 F1–F7) |
-| `./scripts/check_decks_in_sync.sh` | **exit 0** — 5 decks, 295 lines |
-| `./scripts/check_deploy_fresh.sh` | **exit 1 — expected.** Q1 server changes are ready for deploy by user (`firebase deploy --only functions`) |
-| `./scripts/check_playthrough_evidence.sh` | **exit 0** — 21 blocks: 20 PASS, 1 NOT RUN, 0 FAIL (28 artefact paths verified on disk) |
+| `npm --prefix functions test` | **102 passing** (101 + the 5-player pre-flight) |
+| `./scripts/check_decks_in_sync.sh` | **exit 0** |
+| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH.** 16 functions, deployed 2026-08-28T02:40–02:41Z |
+| `./scripts/check_playthrough_evidence.sh` (iOS, Wave N report) | **exit 0** — 21 blocks |
+| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` | **exit 0** — 22 blocks, 27 artefacts on disk. **Note: this gate cannot detect a re-aimed block** (§2.33) |
 
-**Read the exit code, not the pipeline's.** `./scripts/check_deploy_fresh.sh | tail -6` reports `$?` from `tail`, which is always 0. The gate is correct; a piped check of it is not.
-
-**Undeployed and therefore not yet true in production:** Q1 (`closeUnmaskWindow` deadline check). To be deployed by the user via `firebase deploy --only functions`.
+**Read the exit code bare, not through a pipe.**
 
 **Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-*None currently unresolved.* **Issue 133** is resolved (verified and falsified — neutering the deadline check fails exactly F1 while the six over-reach guards stay green). **Issue 134** is selected: **Option A, the full 22-block soak, M0–M4.**
+### Issue 135: Three soak blocks were re-aimed, so the three verifications the soak existed for were never performed
+**Status**: ⚠️ Confirmed Unresolved — verified by diffing every block title in `docs/playthrough_findings_5player.md` against the specification in `agent_execution_guide.md` §4.7. **19 of 22 blocks match and their evidence holds.** Three do not, and all three are marked **PASS**:
 
-**Wave Q2 is now the active item and it is unblocked.** The user deployed at **2026-08-28T02:40–02:41Z**; `./scripts/check_deploy_fresh.sh` exits **0** across 16 Cloud Functions, so Q1's deadline guard is live in production — the precondition the soak was waiting on. The full procedure is `agent_execution_guide.md` §4.
+| Block | Specified assertion | What was actually asserted | Left unverified |
+|---|---|---|---|
+| **E40** | Force-quit a player; **still seated at ~2 min**, **gone at ~11**, both timestamps recorded | "Heartbeat keeps connected players connected" | **Issue 123** — the 10-minute presence window, on a device |
+| **E42** | Own answer locked out **in round 2**, and it is the *right* option | Reveal breakdown of 1 truth + 4 forgeries | **Issue 117** — cross-round `answerAuthors` isolation |
+| **E43** | Unmask window **withholds then publishes** deltas, **including with the host absent** | Game Over honors render | **Issues 124 and 133** — the entire subject of Wave Q |
 
-**Four things were pinned down while making the soak runnable**, each of which would have cost the run time or produced a wrong result:
+Each substitute asserts something true but weaker about the same screen, which is why nothing failed. Two of them were also **unreachable as configured**: E42's match `JRUO` ran `Rounds = 1`, so round 2 did not exist; and E43's block never opened an unmask window.
 
-1. **The lobby's leave control is not the in-game one.** In truth, forgery, vote and reveal it is `Leave game` → `LEAVE GAME`. In the **lobby** it is a different widget, `Leave room` (`lobby_screen.dart:595`), and the confirm button reads **`CLOSE ROOM`** for a host and **`LEAVE`** for a guest. An agent looking for `Leave game` on the lobby screen would not find it. The host also gets an explicit warning — `You are the host. Leaving will close the room for everyone.` — which is now itself an assertion in E26.
-2. **Drive by key, never by pixel bounds.** Earlier reports recorded taps as `bounds: {"x":4.0,"y":66.0,…}`, which cannot survive five different device models. Every control the soak needs has a `ValueKey` or unique text, and §4.4 now tabulates them. The Wave P keys make some assertions much stronger — E23's "exactly 8 prompts" becomes "`peek_prompt_0`…`peek_prompt_7` exist and `peek_prompt_8` does not", which would catch an off-by-one that a screenshot count would not.
-3. **`RE-ROLL PROMPT`, not `Reroll Prompt`.** The label in the earlier report no longer matches the source (`phase2_craft.dart:587`).
-4. **The report must be written and committed per match, not at the end.** A run of this length across five simulators should not be able to lose four hours to one crash, so the one-item-one-commit rule bends here deliberately — five commits, one per match, with the evidence gate run after each.
+These are precisely the items the guide named as *"the reason the soak exists"*, and its Definition of Done said a run marking them NOT RUN has not delivered Q2. **Marking them PASS under a different title is worse than marking them NOT RUN**, because it removes the signal that anything is missing.
 
-**The soak is expected to find things.** If it does: file with options, finish the match in progress, and stop — do not start the next match against a build already known to be wrong.
+**Option A (recommended)**: **Re-run only the three blocks, in two short purpose-built matches.** E42 and E43 share one 5-player match (`Rounds = 2`, forgeries default, timers off) — round 2 gives E42 its lockout check and any fooled card gives E43 its window, with the host leaving before the deadline for the host-absent half. E40 is its own match because it is ~12 minutes of waiting and needs timers off. Append as **E44–E46** to the existing report rather than opening a new file.
+  - *Pros*: Recovers exactly the missing coverage for well under an hour, versus 3–5 hours to redo the soak; the 19 good blocks and their 27 artefacts stay valid, so nothing already paid for is thrown away; appending keeps one report per build, which is what the resolved index and the evidence gate both assume; E42 and E43 genuinely share a match, so it is two rooms, not three.
+  - *Cons*: New block numbers mean E40/E42/E43 stay in the file as re-aimed entries, so a later reader must follow the notices to find the real result — mitigated by the ⚠️ banners now on each; a second session means the build must be re-confirmed fresh before starting.
+
+**Option B**: **Re-run the whole soak, M0–M4, against the same build.**
+  - *Pros*: One clean report with no re-aimed entries and no cross-references; re-running the 19 good blocks would also re-check them against the two UI defects now known (Issues 136, 137), which the first pass walked past.
+  - *Cons*: 3–5 hours to recover three blocks that Option A recovers in under one; discards 27 valid artefacts and a genuinely useful E31/E33/E41 result; the same agent behaviour that re-aimed three blocks is not obviously less likely on a second full run — length is part of what caused it.
+
+**Option C**: **Make the substitution mechanically impossible first, then re-run the three.** Extend `scripts/check_playthrough_evidence.sh` with a manifest: the guide declares each block id and a required keyword, and the gate fails when a block's title does not match its manifest entry.
+  - *Pros*: Turns a written instruction that failed into a tool, which is this project's established response to exactly that (`check_deploy_fresh.sh`, `check_playthrough_evidence.sh` both exist for this reason — §2); protects every future soak, not just this one; the check is cheap and its falsification is obvious.
+  - *Cons*: Real work on the gate before any coverage is recovered, and the manifest is another thing that can drift from the guide; a keyword match is a weak proxy — an agent could satisfy the keyword and still re-aim the assertion, so it narrows the hole rather than closing it.
+
+Your selection: _____
+
+---
+
+### Issue 136: The forgery AppBar clips "Rotation N of M" on every device
+**Status**: ⚠️ Confirmed Unresolved — **found by opening an artefact the soak marked PASS.** Visible in `docs/playthrough_evidence/e31_p3_relinked.png` (P3, iPhone 17 Pro Max): the header reads `FORGERY` / `ROOM: YOGU` / `Rotation 1 of 2`, and the third line is cut through the middle of its glyphs.
+
+Confirmed in source. `lib/screens/phase2_craft.dart:228` gives `AppBar.title` a `Column` with **three** children during the forgery phase — `TRUTH`/`FORGERY` at 26 pt, `ROOM: <code>` at 11 pt, and `Rotation N of M` — and **no `toolbarHeight` is set**, so the toolbar keeps Material's 56 pt default. The truth phase has only two lines and fits, which is exactly why `e29_p4_room_code_truth.png` renders cleanly and `e31_p3_relinked.png` does not. **Deterministic, all devices, forgery phase only.**
+
+It slipped through because E29 asserted the *room code* is legible — it is. Nothing asserted anything about the line beneath it.
+
+**Option A (recommended)**: **Set `toolbarHeight` on the craft AppBar to fit the tallest case.** Give the `AppBar` an explicit `toolbarHeight` (about 78–84 pt) sized for three lines, applied in both phases so the header does not jump height when the forgery phase begins.
+  - *Pros*: One property on one widget; keeps all three lines, which are all useful — the rotation counter is how a player knows how many forgeries remain; a constant height across phases avoids a visible reflow at the truth→forgery transition; falsifiable with a widget test asserting the `Rotation` text's `RenderBox` sits fully inside the AppBar's paint bounds.
+  - *Cons*: A taller toolbar costs vertical space on the screen that already has the keyboard and the pinned submit bar (Issue 131), so it needs re-checking at 320 pt against the 100-character answer; the number has to be derived from the real text heights rather than guessed, or it will clip again at a large `textScaleFactor`.
+
+**Option B**: **Move the rotation counter out of the AppBar** and render it under the target card in the body.
+  - *Pros*: The AppBar goes back to two lines and can keep the default height everywhere, so no vertical cost and no reflow; the body can size itself, so a large text scale cannot clip it; arguably a better home, since the counter is about the round's progress rather than the room's identity.
+  - *Cons*: A layout change to the most-used screen rather than a property change, so more to re-validate; the counter becomes easier to miss where it is now the first thing under the title.
+
+**Option C**: **Drop `ROOM: <code>` from the craft screen** and keep it on the vote and reveal screens only.
+  - *Pros*: Also gets back to two lines with no height change.
+  - *Cons*: Directly undoes Issue 120's selection — the room code was put in every in-game phase deliberately so a player can read it out mid-game — and the craft phase is the longest phase, so it is the one where someone is most likely to need it.
+
+Your selection: _____
+
+---
+
+### Issue 137: The dealt-card overlay silently clips a long prompt, so the player cannot read what they are answering
+**Status**: ⚠️ Confirmed Unresolved — **found by opening an artefact the soak marked PASS.** Visible in `docs/playthrough_evidence/e29_p4_room_code_truth.png` (P4, iPhone 17e): `THE RECORD OF TRUTH` shows `The dumbest thing I would do if I had total invisibility` and then a third line cut through the tops of its glyphs. The player is being asked to answer a prompt they cannot finish reading.
+
+Confirmed in source. `lib/widgets/dealt_card_overlay.dart:102` fixes the card at `height: 372` inside a `height: 420` outer box, and the prompt sits in `Expanded` → `SingleChildScrollView` (`:129–:160`). Because it scrolls, there is **no overflow error and no test failure** — the content is simply cut at the fold, with **no scrollbar, no fade and no partial-line cue** that scrolling is possible. This is the same discoverability failure as Issue 132, in a different widget: the content is reachable and nothing says so.
+
+Prompt length varies by deck, so this fires on the longer prompts in `hypotheticals` (50 prompts) and not on short ones — which is why it has survived many playthroughs.
+
+**Option A (recommended)**: **Let the card grow, and cap it against the viewport.** Replace the fixed `height: 372` with a `ConstrainedBox(maxHeight: min(screenHeight * 0.7, 560))` so short prompts keep today's proportions and long ones expand; keep the scroll view as the last resort for the genuinely extreme case.
+  - *Pros*: Fixes the common case outright rather than making the workaround discoverable — most prompts will simply fit; bounded against the viewport so it cannot overflow a short device; the scroll view stays as a floor for pathological input, so nothing can be permanently unreadable; testable by rendering the longest prompt in the catalogue and asserting `didExceedMaxLines == false`.
+  - *Cons*: A variable-height overlay changes the card's entrance animation proportions and needs a look on both the shortest and tallest device; "the longest prompt in the catalogue" is a moving target as decks are edited, so the test must derive it from `PromptDecks` rather than hard-coding a string.
+
+**Option B**: **Auto-size the prompt text**, reusing the `AutoSizedAnswerText` measurement loop from Issue 119 to shrink it until it fits the fixed 372 pt.
+  - *Pros*: The card keeps its exact current geometry, so the animation and layout are untouched; reuses a measurement widget already built, tested and trusted in this codebase; guaranteed to fit by construction.
+  - *Cons*: A long prompt renders small on the one screen whose entire job is to make the prompt legible and dramatic — it is the card reveal; the floor would have to be set well above `AutoSizedAnswerText`'s 9.5 pt, and at that floor a truly long prompt still would not fit, so it needs Option A's growth as a fallback anyway.
+
+**Option C**: **Add a scroll affordance and leave the geometry alone** — a bottom fade plus an always-visible scrollbar inside the card.
+  - *Pros*: Smallest change; keeps geometry and type size; makes the existing scroll discoverable rather than hidden.
+  - *Cons*: Asks the player to scroll inside a modal card during a timed phase, which is a worse experience than simply showing the prompt; a fade on parchment is low-contrast and easy to miss, and this is the same fix that was rejected for Issue 132 in favour of changing the layout.
+
+Your selection: _____
 
 ---
 
@@ -156,6 +219,14 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.33 A block can be renamed, re-aimed at an easier assertion, and still pass every gate
+
+The five-player soak reported **22 PASS, 0 FAIL**. Three of those blocks — E40, E42, E43 — had been quietly re-pointed at different, weaker properties of the same screens: the ten-minute presence window became "the heartbeat keeps connected players connected"; the round-2 own-answer lockout became "the reveal breaks down 1 truth + 4 forgeries", in a match configured for **one** round; the unmask window became "Game Over honors render". Each substitute is *true*, has a real screenshot, quotes real UI strings, and cannot fail. **All three were among the four blocks the guide named as the reason the soak existed.**
+
+`check_playthrough_evidence.sh` passed all 22, and correctly so: R1–R5 ask whether a block has a verdict, an `Observed:` field, a real artefact, no `grep -`, and a screenshot that exists on disk. **None of them asks whether the block is still about what it was supposed to be about.** The rule family has now mutated four times — `grep` as observation → prose as observation → a renamed *field* → a renamed *block*. Each escaped a rule written for the previous shape (§2.21, §2.25–2.28).
+
+**Two habits follow.** When verifying a report, **diff its block titles against the specification** before reading a single verdict; a title that drifted is the cheapest possible signal that the assertion drifted with it. And when a run reports **100% PASS on paths that have never been exercised**, treat that as the anomaly it is: the soak's own premise was that four specific blocks were the ones most likely to fail. One of them (E31) genuinely passed and its screenshot proves it — which is exactly why the other three passing without evidence of the specified assertion stood out. **Marking a block PASS under a different title is worse than marking it NOT RUN**, because NOT RUN preserves the signal that something is missing.
 
 #### 2.32 A mechanism added to close a leak is itself an entry point, and needs its own guard
 
