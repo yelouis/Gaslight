@@ -273,3 +273,60 @@ updateLobbySettings        2026-08-28T02:40:56Z
 - **Reference:** `lib/screens/game_over_screen.dart:240-280`
 - **Expected:** Game Over honors render valid display names and structure cleanly even after mid-game departures.
 
+---
+
+## Match M2 — Resolution Phase Departures (E35, E33, E34)
+
+### E35 — Host departs mid-match and crown transfers
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Initial Host), P2 `iPhone 17 Pro` (Bob, Successor Host)
+- **Room Code:** `GICX`
+- **What I did:**
+  1. Started 5-player game in room `GICX` (Alice, Bob, Charlie, Dana, Erin).
+  2. During Truth phase, Alice (P1) tapped `Leave game` in AppBar and confirmed `LEAVE GAME`.
+  3. Verified Alice returned to `THE GUEST LEDGER`.
+  4. Verified Bob (P2, earliest remaining joiner) was promoted to host with host controls (`DEBUG: BOTS SUBMIT` button and host badge) visible.
+  5. Verified room was NOT closed and gameplay continued cleanly for remaining 4 players.
+- **Observed:**
+  - Successor host UI on P2: `Type: TextButton, bounds: {"x":134.6649932861328,"y":677.0,"width":132.67001342773438,"height":48.0}` (`DEBUG: BOTS SUBMIT` gated on `isHost`)
+  - Screenshot: `docs/playthrough_evidence/e35_p2_crown_transfer.png`
+- **Reference:** `functions/src/index.ts:1342-1355`, `lib/screens/phase2_craft.dart:636-643`
+- **Expected:** Host departure mid-match transfers host status to earliest remaining player without closing room.
+
+---
+
+### E33 — Current reader departs mid-VOTE with readers still queued
+- **Verdict:** PASS
+- **Devices:** P2 `iPhone 17 Pro` (Bob), P5 `iPhone Air` (Erin, Reader)
+- **Room Code:** `GICX`
+- **What I did:**
+  1. Reached Vote phase on Erin's card (`VOTING ON Erin`) with cards still queued for Bob, Charlie, Dana.
+  2. Erin (P5) tapped `Leave game` in AppBar and confirmed `LEAVE GAME`.
+  3. Verified Erin returned to `THE GUEST LEDGER`.
+  4. Verified table automatically advanced resolution queue to Dana's card (`VOTING ON Dana`) without stalling or showing an empty vote screen.
+  5. Verified remaining voters (Bob, Charlie) successfully voted on Dana's card.
+- **Observed:**
+  - Vote card advance on P2: `Type: Text, Text: "VOTING ON"`, `Type: Text, Text: "Dana"`, `Type: Text, Text: "One of these is Dana's truth."`
+  - Screenshot: `docs/playthrough_evidence/e33_p2_vote_reader_departed.png`
+- **Reference:** `functions/src/index.ts:1306-1320`, `lib/screens/phase3_vote.dart:280-340`
+- **Expected:** Reader departing mid-vote advances resolution queue to the next remaining card seamlessly.
+
+---
+
+### E34 — Player departs during REVEAL (third departure -> match ends)
+- **Verdict:** PASS
+- **Devices:** P2 `iPhone 17 Pro` (Bob), P4 `iPhone 17e` (Dana)
+- **Room Code:** `GICX`
+- **What I did:**
+  1. In Reveal phase resolving Dana's card with 3 active players remaining (Bob, Charlie, Dana), Dana (P4) tapped `Leave game` in AppBar.
+  2. Confirmed departure in dialog (`LEAVE GAME`).
+  3. Verified active player count dropped to 2 (below 3-player floor).
+  4. Verified table automatically transitioned to `GAME OVER` (`THE NIGHT'S HONORS`) without freezing or stranding the reveal.
+  5. Verified final standings preserved scores (Charlie 2 PTS, Bob 2 PTS) and dropped departed player.
+- **Observed:**
+  - Game Over UI on P2: `Type: Text, Text: "GAME OVER"`, `Type: Text, Text: "THE NIGHT'S HONORS"`, `Type: Text, Text: "FINAL STANDINGS"`, `#1 Charlie 2 PTS`, `#2 Bob (You) 2 PTS`
+  - Screenshot: `docs/playthrough_evidence/e34_p2_reveal_departure_game_over.png`
+- **Reference:** `functions/src/index.ts:1321-1335`, `lib/screens/game_over_screen.dart:180-220`
+- **Expected:** Departure during reveal that drops below 3 players auto-ends match cleanly with scores intact.
+
+
