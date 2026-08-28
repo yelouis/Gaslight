@@ -8,7 +8,16 @@
 
 ## 1. Open & in-flight
 
-**Wave Q — Q1 (Issue 133) complete and verified in code and tests (August 27, 2026).** Awaiting user server deployment (`firebase deploy --only functions`) before proceeding to Q2 five-player soak.
+**Wave Q — Q1 (Issue 133) complete, verified and falsified (August 27, 2026). Q2 is blocked on the deploy.**
+
+Q1 was verified by reading the source and by **neutering the guard**: with the deadline check unable to fire, **exactly F1 fails** and the six over-reach guards stay green. The client half matches the spec — `isHost` removed, 1500 ms margin, `Future<bool>` matching on `e.code`, retries capped at five, and both the latch and the counter reset per card.
+
+**`./scripts/check_deploy_fresh.sh` exits 1: Q1's guard is in the tree and not in production.** The Q2 soak runs against production, so it cannot start until `firebase deploy --only functions` runs — otherwise it would certify a server that still lets any player end the unmask window early. **That deploy is the user's call.**
+
+**Two findings from this pass:**
+
+1. **`clock` is imported by production code but declared dev-only.** `lib/screens/phase4_reveal.dart:18` imports `package:clock/clock.dart`; Q1 added `clock: ^1.1.1` under `dev_dependencies`. The analyzer says so as an **info** (`depend_on_referenced_packages`), which is exactly how it hid inside a "0 errors, 0 warnings" baseline. **Measured, not assumed: `flutter build web --release` succeeds**, because an application package resolves its own dev dependencies — so this is a mis-declaration, not a broken build. Filed as **Q3** in the guide; one line.
+2. **The Q2 plan needed correcting before it runs** — see Issue 134 and `agent_execution_guide.md` §4.4–§4.6. The 3-player floor caps every match at three departures, so the original block list implied roughly ten matches where five suffice; two blocks asserted things Marionette cannot see (it drives the UI and cannot read Firestore); E38's 15-second timer was too short for four devices to type an answer; and E40 needed timers explicitly off or phases auto-advance during the eleven-minute wait. A **five-player emulator pre-flight** was added, because the largest game the suite has ever run is **four** (`game_e2e.spec.ts:2431`) — five players is unproven everywhere, and a rotation bug is worth thirty seconds to find rather than an hour.
 
 **Gate state, measured August 27, 2026:**
 
@@ -30,56 +39,38 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issue 133 is selected (Option A) and specced as Wave Q in `agent_execution_guide.md`.** One item, one commit, server + client together — the deadline guard alone leaves the empty-tray path, and the client-trigger change alone widens who can exploit the missing guard.
-
-**A second Wave Q item, Q2, is a five-player Marionette soak** — the user asked for E2E coverage at five players including mid-game departures. It is **test-only**: it writes `docs/playthrough_findings_5player.md` with blocks **E22–E43** and files what it finds, but changes no production code. **It runs after Q1 is deployed**, because it certifies the unmask window and the points tray, and running it against the current server would test a path with a known hole.
-
-Five is not an arbitrary number. It is the smallest table where `forgeriesPerCard` defaults to 4 (`index.ts:640`), so a card carries **five options** — the configuration Issue 132's one-per-row layout was designed for and has never been seen in; where a table can lose **two** players and still play, so the 3-player floor is reached by attrition rather than immediately; where the forgery **assignment chain** has enough links to re-link non-trivially when someone in the middle leaves (`index.ts:1246`); and where the **current reader** can leave mid-vote with other readers still queued (`index.ts:1306`) instead of collapsing straight to game over. Four blocks — E31, E33, E40 and E43 — are the reason the soak exists; the guide states that a run marking those NOT RUN has not delivered Q2.
-
-**The soak needs `.agents/mcp_config.json` extended to five Marionette servers** (it currently declares three) and five booted simulators. The guide tells the agent to stop and say so rather than quietly running three and labelling it five.
-
-**Two details found while speccing that the option text did not cover:**
-
-1. **`unmaskDeadline` is not a boolean.** It holds `null` (no window — nobody was fooled), `0` (already closed), a future timestamp (open) or a past one (expired). A naive truthy guard gets `null` and `0` wrong, so the spec carries a four-state table and requires explicit comparisons rather than a falsy check (lesson 2.1).
-2. **The reveal screen's timer ticks every 200 ms** (`lib/screens/phase4_reveal.dart:83`), which makes the client half genuinely delicate. Clearing the retry latch on failure would produce ~25 rejected calls per card per player on a fast clock; never clearing it would mean that if *every* client's clock runs ahead of the server's, no client ever closes the window and the points tray stays empty — the exact regression this issue exists to remove. Wave Q therefore specifies a **1500 ms safety margin plus a hard cap of five retries per card**. The bounded failure mode is safe: `pendingScoreDeltas` is flushed at **three** sites, not one, so if the close never happens the scores are still applied when the host advances — one card's tray stays empty, and nothing is lost or double-applied.
+**Issue 133 is RESOLVED — see the Resolved index.** Verified in source and **falsified** on August 27, 2026: neutering the deadline check so it can never fire makes **exactly F1 fail** (`expected false to be true` — the early close was accepted) while F2–F7, the six over-reach guards, stay green. The guard is real, not decoration. The durable contract moved to `design_scoring_and_ui.md` §3.3.
 
 ---
 
-### Issue 133: `closeUnmaskWindow` has no deadline guard — any player can end the unmask window early and read the forger
-**Status**: ⚠️ Confirmed Unresolved — **verified against a running emulator, and live in production** (the callable deployed 2026-08-27T16:02:43Z).
+### Issue 134: How much of the five-player soak should actually be run?
+**Status**: ⚠️ Awaiting your decision — **not a defect.** Wave Q2 is specced at **22 blocks across five matches** (`agent_execution_guide.md` §4). Reviewing it against what the code already covers, and against what driving five simulators actually costs, the full run is **roughly 3–5 hours** of agent time: five separate rooms, each needing five devices to join and ready up, and every truth and forgery typed on a device. E40 alone is ~12 minutes of wall clock by construction.
 
-P4 correctly stopped publishing `scoreDeltas` while the unmask window is open, and added `closeUnmaskWindow` (`functions/src/index.ts:2241`) to close the window on the timeout path. The Wave P spec required that callable to **verify the deadline had actually passed** before acting, citing the standing invariant *"never let a client bound exceed the server's."* **That check was not implemented.** The function validates the phase, the current card, room membership and the sealed document — and never reads `room.unmaskDeadline`.
+**What has no other coverage anywhere** — these are the blocks that justify the exercise:
 
-Probe output. The voter who was fooled — the player who is *supposed* to be guessing — ends the window and reads the answer:
+| Block | Why nothing else can catch it |
+|---|---|
+| **E31** forgery chain re-links when a middle player leaves | The re-link at `index.ts:1246` has **no test at any player count** |
+| **E33** current reader leaves mid-vote with readers still queued | Unreachable below five players — at three, losing the reader hits the floor instead |
+| **E40** ten-minute presence window | Fake timers do not suspend an isolate; **no unit test can express it** |
+| **E43** unmask window closes with the host absent | The whole point of Q1's client change; only observable with real clients |
+| **E41** five options, one per row | Issue 132's layout has never been seen in the configuration it was designed for |
 
-```
-PROBE unmaskDeadline       = 1787846904973
-PROBE window open?         = true
-PROBE scoreDeltas at reveal= undefined          <- P4's core fix works
-PROBE early close returned = {"success":true}   <- should have been failed-precondition
-PROBE unmaskDeadline after = 0                  <- window ended for the WHOLE table
-PROBE scoreDeltas after    = {"p_host":3,"p_g1":1}
-PROBE actual forgerId      = p_host  target = p_g1
-PROBE forger identified?   = true  via ["p_host"]
-```
+**What is already covered elsewhere** and is being re-checked on device for confidence, not for discovery: E22–E29 (lobby, guidance strings, return key, room code — all have widget tests), E38/E39 (placeholder and skipped-round — both have emulator tests), E42 (own-answer lockout — emulator test), E37 (name snapshot — emulator test).
 
-Two distinct harms: it **re-opens Issue 100** by a new route, and it lets any single player **abort the guessing window for everyone**, which is a griefing vector the original leak did not have.
+**Option A (recommended)**: **Run the full soak, M0–M4, all 22 blocks.** — the plan as written.
+  - *Pros*: You asked for coverage of "all sorts of cases", and this is the only configuration where the departure matrix, the five-option card and the ten-minute window are all exercised together; the cheap blocks (M0, M3) are short and re-verify on a real device things that so far only widget tests have seen; a complete report is a durable baseline that the next wave can diff against, which a partial one is not.
+  - *Cons*: 3–5 hours of agent driving and the longest single item this project has queued; five simulators running concurrently is memory-heavy on one Mac and has corrupted `build/` before when builds overlapped; if an early match finds a defect, the run stops there anyway and the remaining time is spent re-running after the fix.
 
-**A second, independent gap in the same item.** The client only calls `closeUnmaskWindow` when the caller `isHost` (`lib/screens/phase4_reveal.dart:89`). The spec said *any room member*, deliberately, to avoid host-dependency. As written, if the host has left or backgrounded the app, **nobody closes the window**, `scoreDeltas` is never published, and the points tray and standings deltas stay empty for the rest of the card — the exact regression the spec's ⚠️ box was written to prevent, in a narrower case. Both halves must be fixed together; fixing only the guard leaves the empty-tray path, and fixing only the trigger widens who can exploit the missing guard.
+**Option B**: **Core only — M1, M2 and M4**, skipping M0's lobby/feature re-checks and M3's timer blocks.
+  - *Pros*: Keeps every zero-coverage block in the table above; cuts roughly a third of the time; concentrates the run on the paths that are genuinely unproven rather than on re-confirming widget tests on glass.
+  - *Cons*: Loses the only on-device check of the deck peek, the guidance strings, the return-key submit and the room-code visibility — all shipped in Wave P and **never seen by a human on a device**; a defect in one of those would reach the beta.
 
-**Option A (recommended)**: **Add the deadline guard and open the trigger to any room member** — in `closeUnmaskWindow`, if `room.unmaskDeadline` is truthy and `Date.now() <= room.unmaskDeadline`, throw `failed-precondition`; keep the existing early-return-success paths so it stays idempotent. On the client, drop the `isHost` condition at `phase4_reveal.dart:89` and keep the existing per-card `_hasClosedUnmaskWindow` latch so each client calls at most once per card.
-  - *Pros*: Restores exactly what the spec specified, so no new design surface; the server bound becomes real and is directly falsifiable with the probe above (`early close` must throw); removing the host condition removes the empty-tray dead end without adding any new mechanism; several clients racing is already safe — the transaction re-reads and `pendingScoreDeltas` has been deleted, so the second call is a no-op.
-  - *Cons*: Every non-host client now fires one extra callable per card at the moment the window expires, which is N−1 mostly-wasted invocations per card (small, but real and billed); clients whose clocks run fast will call slightly early and receive a `failed-precondition` they must swallow quietly, so the client wrapper must not surface it as an error.
+**Option C**: **Split across two sessions — M0–M2 now, M3–M4 later.**
+  - *Pros*: Bounded sessions, and the departure matrix (the part you asked for) lands first; a defect found in M1/M2 can be fixed before the second half runs, so the second half tests the fixed build.
+  - *Cons*: E40 and E43 — two of the five zero-coverage blocks — sit in the deferred half and may not happen; two reports covering one build is exactly the "working logs rot by appending" shape §2 warns about, and merging them later is manual.
 
-**Option B**: **Guard the deadline, keep the host-only trigger, and add a server-side sweep as backup** — as Option A's server change, but the client trigger stays host-only and any callable that touches a room in the reveal phase closes an expired window as a side effect.
-  - *Pros*: Only one client calls in the common case, so no extra invocations; the sweep covers the absent-host case without trusting more clients; a lazy server-side close is robust to any client misbehaving.
-  - *Cons*: The sweep fires only when *something else* happens, and during a reveal nothing may happen for the rest of the card — so the tray can still stay empty until the host advances, which is after the beat that needed it; adds an implicit side effect to unrelated callables, which is the kind of hidden coupling that makes later changes surprising.
-
-**Option C**: **Remove the callable and have the server stamp the close when the deadline is written** — schedule the transition at reveal time (a Cloud Task or a `deadline`-keyed field a scheduled function sweeps) so no client is involved at all.
-  - *Pros*: No client can influence the window at all, early or late; the close becomes genuinely authoritative and time-driven; eliminates the whole class rather than guarding it.
-  - *Cons*: Introduces scheduled infrastructure this project does not currently use, with its own deploy, IAM and emulator-testing story; a 20-second timer is at the low end of what task scheduling handles reliably; substantially more than one commit, for a case Option A already covers.
-
-Your selection: Proceed with Option A.
+Your selection: _____
 
 ---
 
