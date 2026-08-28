@@ -5280,8 +5280,170 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         expect(forgerDoc?.data().totalScore).to.equal(3);
       });
     });
+
+    describe('Wave Q2 — 5-Player Emulator Pre-Flight (§4.4)', () => {
+      it('should complete a 5-player match with default 4 forgeries per card and 5 options per card', async () => {
+        const p1 = await createAnonUser();
+        const p2 = await createAnonUser();
+        const p3 = await createAnonUser();
+        const p4 = await createAnonUser();
+        const p5 = await createAnonUser();
+
+        const users = [
+          { id: 'p1', name: 'Alice', user: p1 },
+          { id: 'p2', name: 'Bob', user: p2 },
+          { id: 'p3', name: 'Charlie', user: p3 },
+          { id: 'p4', name: 'Dana', user: p4 },
+          { id: 'p5', name: 'Erin', user: p5 }
+        ];
+
+        const createRes = await callFn('createRoom', p1.idToken, {
+          playerName: 'Alice',
+          playerId: 'p1',
+          totalRounds: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        for (let i = 1; i < users.length; i++) {
+          await callFn('joinRoom', users[i].user.idToken, {
+            roomCode,
+            playerName: users[i].name,
+            playerId: users[i].id
+          });
+          await roomRef.collection('players').doc(users[i].id).update({ lobbyReady: true });
+        }
+
+        await callFn('updateLobbySettings', p1.idToken, {
+          roomCode,
+          selectedDeckId: FALLBACK_DECK
+        });
+
+        await callFn('startGame', p1.idToken, {
+          roomCode,
+          selectedDeckId: FALLBACK_DECK
+        });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('truth');
+        expect(roomSnap.data()?.forgeriesPerCard).to.equal(4);
+
+        // 1. Submit Truths
+        const truths: Record<string, string> = {
+          p1: 'Alice baked fresh sourdough bread',
+          p2: 'Bob climbed Mount Everest in winter',
+          p3: 'Charlie sailed across Atlantic Ocean',
+          p4: 'Dana played cello in symphony orchestra',
+          p5: 'Erin won the national marathon championship'
+        };
+        for (const u of users) {
+          await callFn('submitAnswer', u.user.idToken, {
+            roomCode,
+            targetCardId: u.id,
+            authorId: u.id,
+            text: truths[u.id],
+            isTruth: true
+          });
+        }
+
+        // 2. Submit 4 rotations of Forgeries
+        const forgeries: Record<string, string[]> = {
+          p1: ['wrestled grizzly bear', 'discovered ancient ruins', 'painted Mona Lisa', 'drank molten lava'],
+          p2: ['ate ghost peppers', 'skydived without parachute', 'trained wild falcons', 'swallowed fiery swords'],
+          p3: ['jumped over canyons', 'dug underground tunnel', 'rode giant whales', 'caught falling meteors'],
+          p4: ['tamed golden eagles', 'built wooden rocket', 'drank ocean water', 'flew supersonic jets'],
+          p5: ['mined shiny diamonds', 'danced with wolves', 'survived volcanic eruption', 'walked across Antarctica']
+        };
+
+        for (let rotation = 0; rotation < 4; rotation++) {
+          roomSnap = await roomRef.get();
+          expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+          const assignments = roomSnap.data()?.currentCardAssignments as Record<string, string>;
+          expect(Object.keys(assignments)).to.have.lengthOf(5);
+
+          for (const u of users) {
+            const targetId = assignments[u.id];
+            expect(targetId).to.be.ok;
+            expect(targetId).to.not.equal(u.id);
+            await callFn('submitAnswer', u.user.idToken, {
+              roomCode,
+              targetCardId: targetId,
+              authorId: u.id,
+              text: forgeries[u.id][rotation],
+              isTruth: false
+            });
+          }
+        }
+
+        // 3. Resolution rounds
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+        const resolutionOrder = roomSnap.data()?.resolutionOrder as string[];
+        expect(resolutionOrder).to.have.lengthOf(5);
+
+        for (let cardIdx = 0; cardIdx < resolutionOrder.length; cardIdx++) {
+          roomSnap = await roomRef.get();
+          expect(roomSnap.data()?.currentPhase).to.equal('vote');
+          const currentReader = roomSnap.data()?.currentReaderId as string;
+          expect(currentReader).to.equal(resolutionOrder[cardIdx]);
+
+          const card = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+          expect(card.options).to.have.lengthOf(5);
+
+          const sealedSnap = await roomRef.collection('sealed').doc(currentReader).get();
+          const answerAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+
+          // All non-reader players vote for an option they did not author
+          const voters = users.filter(u => u.id !== currentReader);
+          for (const v of voters) {
+            const validOption = card.options.find((opt: any) => answerAuthors[opt.id] !== v.id);
+            await callFn('castVote', v.user.idToken, {
+              roomCode,
+              targetCardId: currentReader,
+              voterId: v.id,
+              votedForId: validOption.id
+            });
+          }
+
+          // Reader readies up
+          const readerUser = users.find(u => u.id === currentReader)!;
+          await callFn('setReady', readerUser.user.idToken, {
+            roomCode,
+            playerId: currentReader,
+            ready: true
+          });
+
+          roomSnap = await roomRef.get();
+          expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+
+          // Advance resolution
+          await callFn('advanceToNextResolution', p1.idToken, { roomCode });
+        }
+
+        // 4. Verify GameOver and Card author uniqueness
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('gameOver');
+
+        const finalCards = roomSnap.data()?.cards as any[];
+        expect(finalCards).to.have.lengthOf(5);
+
+        for (const card of finalCards) {
+          expect(card.options).to.have.lengthOf(5);
+          const sealedSnap = await roomRef.collection('sealed').doc(card.targetPlayerId).get();
+          const answerAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+          const authors = card.options.map((opt: any) => answerAuthors[opt.id]);
+          const uniqueAuthors = new Set(authors);
+          expect(uniqueAuthors.size).to.equal(5);
+          for (const u of users) {
+            expect(uniqueAuthors.has(u.id)).to.be.true;
+          }
+        }
+      });
+    });
   });
 });
+
 
 
 
