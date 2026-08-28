@@ -146,3 +146,130 @@ updateLobbySettings        2026-08-28T02:40:56Z
     - `docs/playthrough_evidence/e26_p2_room_not_found.png`
 - **Reference:** `lib/screens/lobby_screen.dart:100-120,427-437`, `functions/src/index.ts:488-492`
 - **Expected:** Host leaving destroys lobby, closes room for all members, and subsequent join attempts fail.
+
+---
+
+## Match M1 — Writing Phase Departures (E27 — E31, E36 — E37)
+
+### E27 — Phase guidance lines
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Host), P4 `iPhone 17e` (Dana)
+- **Room Code:** `YOGU`
+- **What I did:**
+  1. Observed guidance text rendered below the prompt on P1 in Truth phase.
+  2. Observed guidance text rendered on P1 in Forgery phase.
+  3. Observed guidance text rendered on P1 in Vote phase.
+- **Observed:**
+  - Truth phase widget on P1: `Type: Text, Text: "Write something true about you — the more surprising, the better. Others must be able to believe it."`
+  - Forgery phase widget on P1: `Type: Text, Text: "You are writing as Charlie. Make it sound like something they would say, so people pick yours."`
+  - Vote phase widget on P1: `Type: Text, Text: "Talk it out — discussion is part of the game."`
+  - All 3 guidance lines match the exact specification strings.
+- **Reference:** `lib/screens/phase2_craft.dart:514-530`, `lib/screens/phase3_vote.dart:366-372`
+- **Expected:** Each phase renders its distinct contextual guidance instruction.
+
+---
+
+### E28 — Answer field submission and length enforcement
+- **Verdict:** PASS
+- **Devices:** P2 `iPhone 17 Pro` (Bob), P3 `iPhone 17 Pro Max` (Charlie)
+- **Room Code:** `YOGU`
+- **What I did:**
+  1. On P2, entered valid truth and submitted via `SUBMIT DOSSIER` / `textInputAction: done`.
+  2. On P3, entered 101 characters (`1234567890...`) and tapped `SUBMIT DOSSIER`.
+  3. Verified 101-character submission was blocked and remained on screen with `answer_field` intact.
+  4. On P3, entered valid truth `"CCC: I broke a vase and blamed it on a ghost."` and submitted.
+- **Observed:**
+  - Over-length submission blocked: `TextField, Key: "answer_field", Text: "1234567890..."` (101 characters)
+  - Valid submission accepted: P3 transitioned to waiting screen `THE INK DRIES…`.
+  - Screenshot: `docs/playthrough_evidence/e28_p3_overlength_snackbar.png`
+- **Reference:** `lib/screens/phase2_craft.dart:73-86`, `lib/widgets/card_grid.dart:22`
+- **Expected:** Inputs exceeding `kMaxAnswerLength` (100 characters) are rejected; legal answers submit smoothly.
+
+---
+
+### E29 — Room code in AppBar
+- **Verdict:** PASS
+- **Devices:** P4 `iPhone 17e` (Dana)
+- **Room Code:** `YOGU`
+- **What I did:**
+  1. Started game in room `YOGU`.
+  2. Inspected in-game phase AppBar across Truth and Forgery phases on P4.
+- **Observed:**
+  - In-game phase AppBar: `Type: Text, Text: "ROOM: YOGU"` below `TRUTH` title.
+  - Screenshot: `docs/playthrough_evidence/e29_p4_room_code_truth.png`
+- **Reference:** `lib/screens/phase2_craft.dart:235-242`, `lib/screens/phase3_vote.dart:288-294`
+- **Expected:** Room code is persistently visible in the AppBar throughout gameplay phases.
+
+---
+
+### E30 — Guest departs during TRUTH (5 -> 4)
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Host), P4 `iPhone 17e` (Dana)
+- **Room Code:** `YOGU`
+- **What I did:**
+  1. During Truth phase, Dana (P4) tapped `Leave game` in AppBar.
+  2. Confirmed departure in dialog (`LEAVE GAME`).
+  3. Verified Dana returned to `THE GUEST LEDGER`.
+  4. Verified remaining players (P1, P2, P3, P5) continued gameplay with active player count updated to 4.
+- **Observed:**
+  - Dana returned to ledger: `Type: Text, Text: "THE GUEST LEDGER"`
+  - Remaining players in Truth phase: `Type: Text, Text: "TRUTH"`, `Type: Text, Text: "ROOM: YOGU"`
+  - Screenshots:
+    - `docs/playthrough_evidence/e30_p4_left.png`
+    - `docs/playthrough_evidence/e30_p1_snackbar.png`
+- **Reference:** `lib/screens/phase2_craft.dart:220-227,290-330`, `functions/src/index.ts:1300-1340`
+- **Expected:** Player leaves during Truth cleanly without breaking game flow for remaining 4 players.
+
+---
+
+### E31 — Guest departs during FORGERY (4 -> 3) and chain re-links
+- **Verdict:** PASS
+- **Devices:** P3 `iPhone 17 Pro Max` (Charlie), P5 `iPhone Air` (Erin)
+- **Room Code:** `YOGU`
+- **What I did:**
+  1. In Forgery phase Rotation 1, observed initial target assignments: Alice -> Charlie, Bob -> Alice, Charlie -> Erin, Erin -> Bob.
+  2. Erin (P5) tapped `Leave game` in AppBar and confirmed `LEAVE GAME`.
+  3. Verified Erin returned to `THE GUEST LEDGER`.
+  4. Verified Charlie's screen (who had been targeting Erin) immediately re-linked to Bob (`You are writing as Bob.`) without blanks or raw IDs.
+- **Observed:**
+  - Erin returned to ledger: `Type: Text, Text: "THE GUEST LEDGER"`
+  - Charlie re-linked target: `Type: Text, Text: "You are writing as Bob. Make it sound like something they would say, so people pick yours."`, `Type: Text, Text: "BOB"`
+  - Screenshots:
+    - `docs/playthrough_evidence/e31_p5_left.png`
+    - `docs/playthrough_evidence/e31_p3_relinked.png`
+- **Reference:** `lib/screens/phase2_craft.dart:514-530`, `functions/src/index.ts:1320-1360`
+- **Expected:** Departing player removes their card and causes writing assignments to cleanly re-link to active players.
+
+---
+
+### E36 — Dropping below three players auto-ends match
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Host), P3 `iPhone 17 Pro Max` (Charlie)
+- **Room Code:** `YOGU`
+- **What I did:**
+  1. With Dana and Erin already departed (3 active players remaining), Charlie (P3) tapped `Leave game` during Vote phase.
+  2. Verified active player count dropped to 2 (below 3-player minimum floor).
+  3. Verified match automatically transitioned to `GAME OVER` on remaining devices (Alice on P1, Bob on P2).
+  4. Verified final standings and scores were preserved.
+- **Observed:**
+  - Game Over screen: `Type: Text, Text: "GAME OVER"`, `Type: Text, Text: "THE NIGHT'S HONORS"`, `Type: Text, Text: "FINAL STANDINGS"`
+  - Scores intact: Bob 0 PTS, Alice 0 PTS
+  - Screenshot: `docs/playthrough_evidence/e36_game_over_scores.png`
+- **Reference:** `functions/src/index.ts:1321-1335`, `lib/screens/game_over_screen.dart:180-220`
+- **Expected:** If active player count falls below 3, match auto-ends and shows final standings with scores intact.
+
+---
+
+### E37 — Departed player in honors / match highlights
+- **Verdict:** PASS
+- **Devices:** P2 `iPhone 17 Pro` (Bob)
+- **Room Code:** `YOGU`
+- **What I did:**
+  1. Inspected `THE NIGHT'S HONORS` on P2 after match auto-ended due to third departure.
+  2. Verified all displayed names are friendly display names (never raw UUIDs).
+- **Observed:**
+  - Honors list: `THE MASTERMIND` -> `Bob`, `THE DUPLICITOUS` -> `Alice`
+  - Screenshot: `docs/playthrough_evidence/e37_departed_in_honors.png`
+- **Reference:** `lib/screens/game_over_screen.dart:240-280`
+- **Expected:** Game Over honors render valid display names and structure cleanly even after mid-game departures.
+
