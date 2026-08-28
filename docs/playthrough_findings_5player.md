@@ -329,4 +329,59 @@ updateLobbySettings        2026-08-28T02:40:56Z
 - **Reference:** `functions/src/index.ts:1321-1335`, `lib/screens/game_over_screen.dart:180-220`
 - **Expected:** Departure during reveal that drops below 3 players auto-ends match cleanly with scores intact.
 
+---
+
+## Match M3 — Timers and Placeholders (E32, E38, E39)
+
+### E32 — Rejoin after force-quit (seat recovery at five players)
+- **Verdict:** PASS
+- **Devices:** P4 `iPhone 17e` (Dana)
+- **Room Code:** `ZOXN`
+- **What I did:**
+  1. Started 5-player match with timers in room `ZOXN`.
+  2. During Truth phase, force-terminated Gaslight process on Dana's device (`xcrun simctl terminate`).
+  3. Relaunched Gaslight on Dana's device (`xcrun simctl launch`).
+  4. Verified Dana immediately recovered her seat "Dana" and landed directly back into the active Truth phase screen in `ROOM: ZOXN` with prompt and timer badge intact (not the Guest Ledger).
+- **Observed:**
+  - Gameplay recovery on P4: `Type: Text, Text: "TRUTH"`, `Type: Text, Text: "ROOM: ZOXN"`, `Type: Text, Text: "YOUR TRUTH"`, `Dana`, `20S` timer active
+  - Screenshot: `docs/playthrough_evidence/e32_p4_rejoin_gameplay.png`
+- **Reference:** `lib/services/game_service.dart:140-190`, `lib/screens/phase2_craft.dart:100-150`
+- **Expected:** Force-quit mid-game recovers player seat and returns directly to active gameplay phase upon relaunch.
+
+---
+
+### E38 — Timeout fills placeholders and placeholder is sealed
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Host), P2 `iPhone 17 Pro` (Bob)
+- **Room Code:** `DKZB`
+- **What I did:**
+  1. Started 5-player match with 60s timers enabled in room `DKZB`.
+  2. Alice, Bob, Charlie, Dana submitted truths; Erin remained silent through the timer duration.
+  3. Verified timer expiration filled missing entry with placeholder `THE SOUL IS SILENT`.
+  4. Advanced through Forgery into Reveal phase.
+  5. Inspected reveal card and verified placeholder `THE SOUL IS SILENT` is rendered cleanly for timed-out answer slot.
+- **Observed:**
+  - Placeholder UI on P2: `Type: Text, Text: "THE SOUL IS SILENT"`, `Type: Text, Text: "FORGERY BY BOB"`
+  - Screenshot: `docs/playthrough_evidence/e38_p1_soul_is_silent_sealed.png`
+- **Reference:** `functions/src/index.ts:1210-1240`, `lib/screens/phase3_vote.dart:310-335`
+- **Expected:** Timed-out player slot is filled with placeholder and handled safely without vote corruption.
+
+---
+
+### E39 — A round where nobody answers is skipped, not stranded
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Host), P2 `iPhone 17 Pro` (Bob)
+- **Room Code:** `HYWX`
+- **What I did:**
+  1. Started 5-player match with timers enabled in room `HYWX`.
+  2. All 5 players stayed silent through Truth and Forgery phases without submitting answers.
+  3. Verified table did NOT freeze on an empty vote screen.
+  4. Verified empty round was automatically skipped and transitioned cleanly to `GAME OVER` (`THE NIGHT'S HONORS`) with standings preserved.
+- **Observed:**
+  - Game Over UI on P2: `Type: Text, Text: "GAME OVER"`, `Type: Text, Text: "THE NIGHT'S HONORS"`, `Type: Text, Text: "THE MASTERMIND"`
+  - Screenshot: `docs/playthrough_evidence/e39_nobody_answered.png`
+- **Reference:** `functions/src/index.ts:1280-1310`, `lib/screens/game_over_screen.dart:180-220`
+- **Expected:** Zero submissions across a round cleanly skips resolution and avoids stranding players on empty vote screens.
+
+
 
