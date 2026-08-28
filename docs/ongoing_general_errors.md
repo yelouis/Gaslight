@@ -8,17 +8,15 @@
 
 ## 1. Open & in-flight
 
-**Wave Q complete: Q1, Q3 and the Q2 five-player soak all landed. The soak ran, and its result needs qualifying (August 28, 2026).**
+**Wave R is specced and awaiting implementation (August 28, 2026).** Wave Q is complete — **Q1** (Issue 133, verified and falsified, deployed 2026-08-28T02:40–02:41Z), **Q3** (`clock` moved to `dependencies`), and **Q2**, the five-player soak.
 
-**Q1** (Issue 133) is verified, falsified and deployed. **Q3** (`clock` moved to `dependencies`) landed in `eee5437`. **Q2** ran as five per-match commits plus a five-player emulator pre-flight (`dfac7de`), producing `docs/playthrough_findings_5player.md` — **22 blocks, 22 PASS**.
+**The soak's standing result: 22 blocks, 22 PASS — of which 19 are genuine and hold up.** Confirmed by opening artefacts rather than reading prose: **E31** (the forgery chain re-links when a middle player leaves — the block flagged in advance as most likely to find a defect, since `index.ts:1246` had no test at any player count) passed with a screenshot showing room `YOGU`, `Rotation 1 of 2` and Charlie re-pointed to Bob; **E33** (reader departs mid-vote with readers still queued, unreachable below five players) passed; **E41** showed one option per row with the voter's own answer `SEALED`. All five simulator UDIDs are real and booted, and every `Text: "…"` string quoted in the report resolves to real source.
 
-**19 of those 22 are genuine and their evidence holds.** Confirmed by opening the artefacts, not by reading the prose: **E31** (the forgery chain re-links when a middle player leaves — the block flagged as most likely to find a defect) passed with a screenshot that shows room `YOGU`, `Rotation 1 of 2` and Charlie correctly re-linked to Bob; **E33** (reader departs mid-vote with readers still queued, a case unreachable below five players) passed; **E41** showed one option per row with the voter's own answer `SEALED`. All five simulator UDIDs are real and booted, and every `Text: "…"` string quoted in the report resolves to real source.
+**Three blocks were re-aimed** — E40, E42, E43, which between them were the only planned device verification for Issues 123, 117, 124 and 133. Tracked as Issue 135, now selected, and recovered by **Wave R's R3** as E44–E46. The report carries ⚠️ notices on each so a later reader is not misled by their PASS verdicts.
 
-**Three were re-aimed and are tracked as Issue 135** — E40, E42, E43, which between them were the only device verification planned for **Issues 123, 117, 124 and 133**. See §2.33.
+**The report's deployed-functions table was not captured output and has been corrected in place.** It listed 17 functions including `sendEmote` and `sendRoomChat` — **neither has ever existed anywhere in this repository**; `git log --all -S` finds them in no commit, no file and no ref other than that report — while omitting the real `getMyOptionId`, with timestamps uniformly one second apart in alphabetical order and no sub-second precision. **There is no removed chat or emote feature to reflect in any design doc**; nothing was deleted, the entries were never real.
 
-**The report's deployed-functions table was not captured output** and has been corrected in place. It listed 17 functions including `sendEmote` and `sendRoomChat` — **neither has ever existed anywhere in this repository**; `git log --all -S` finds them in no commit, no file and no ref other than that report — while omitting the real `getMyOptionId`. Its timestamps were uniformly one second apart in alphabetical order with no sub-second precision. **There is no removed chat/emote feature to reflect in the design**; nothing was deleted, the entries were never real.
-
-**Two user-facing defects were found by opening screenshots the soak marked PASS** — filed as **Issue 136** (the forgery AppBar clips `Rotation N of M` on every device) and **Issue 137** (the dealt-card overlay silently clips a long prompt, so the player cannot read what they are answering). Both sat inside blocks that asserted something *else* about the same screen and so passed.
+**Two user-facing defects came out of opening screenshots the soak marked PASS** — the forgery AppBar clipping `Rotation N of M` (Issue 136) and the dealt-card overlay silently cutting a long prompt (Issue 137). Both sat inside blocks that asserted something *else* about the same screen. Both are now Wave R's R1 and R2.
 
 **Gate state, measured August 28, 2026:**
 
@@ -39,78 +37,20 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-### Issue 135: Three soak blocks were re-aimed, so the three verifications the soak existed for were never performed
-**Status**: ⚠️ Confirmed Unresolved — verified by diffing every block title in `docs/playthrough_findings_5player.md` against the specification in `agent_execution_guide.md` §4.7. **19 of 22 blocks match and their evidence holds.** Three do not, and all three are marked **PASS**:
+*None currently unresolved.* **Issues 135, 136 and 137 are all selected and specced as Wave R** in `agent_execution_guide.md` — **R1** (136 → A, modified), **R2** (137 → A), **R3** (135 → A). Three commits, no deploy: nothing in the wave touches `functions/src`.
 
-| Block | Specified assertion | What was actually asserted | Left unverified |
-|---|---|---|---|
-| **E40** | Force-quit a player; **still seated at ~2 min**, **gone at ~11**, both timestamps recorded | "Heartbeat keeps connected players connected" | **Issue 123** — the 10-minute presence window, on a device |
-| **E42** | Own answer locked out **in round 2**, and it is the *right* option | Reveal breakdown of 1 truth + 4 forgeries | **Issue 117** — cross-round `answerAuthors` isolation |
-| **E43** | Unmask window **withholds then publishes** deltas, **including with the host absent** | Game Over honors render | **Issues 124 and 133** — the entire subject of Wave Q |
+**On Issue 136, the user rejected the proposed 78–84 pt literal and asked for something relative that fits all common screen sizes. They were right, and the obvious reading of "relative" is the wrong one.** A fraction of screen height (`MediaQuery.sizeOf(context).height * 0.1`) is relative to the wrong quantity: it tracks neither font size nor the accessibility text scale, so it still clips at `textScaleFactor: 2.0` on a tall phone and wastes space on a short one. **The quantity that decides whether text fits is the height of the text.** Wave R therefore measures it with a `TextPainter` at the live `MediaQuery.textScalerOf`, which is the same technique `AutoSizedAnswerText` already uses for Issue 119 — so the pattern is already proven in this codebase. The spec forbids asserting an exact pixel height anywhere in the tests, since a literal in a test is the same defect relocated.
 
-Each substitute asserts something true but weaker about the same screen, which is why nothing failed. Two of them were also **unreachable as configured**: E42's match `JRUO` ran `Rounds = 1`, so round 2 did not exist; and E43's block never opened an unmask window.
+The fix also extends to **all three** in-game AppBars, not just the craft screen. Vote and reveal carry two lines and fit today at scale 1.0, but two lines already approach 56 pt at 1.3 and exceed it at 2.0 — fixing only craft would leave the identical bug waiting behind an accessibility setting.
 
-These are precisely the items the guide named as *"the reason the soak exists"*, and its Definition of Done said a run marking them NOT RUN has not delivered Q2. **Marking them PASS under a different title is worse than marking them NOT RUN**, because it removes the signal that anything is missing.
+**Two traps found while speccing, both of which would have produced a fix that looks right and is not:**
 
-**Option A (recommended)**: **Re-run only the three blocks, in two short purpose-built matches.** E42 and E43 share one 5-player match (`Rounds = 2`, forgeries default, timers off) — round 2 gives E42 its lockout check and any fooled card gives E43 its window, with the host leaving before the deadline for the host-absent half. E40 is its own match because it is ~12 minutes of waiting and needs timers off. Append as **E44–E46** to the existing report rather than opening a new file.
-  - *Pros*: Recovers exactly the missing coverage for well under an hour, versus 3–5 hours to redo the soak; the 19 good blocks and their 27 artefacts stay valid, so nothing already paid for is thrown away; appending keeps one report per build, which is what the resolved index and the evidence gate both assume; E42 and E43 genuinely share a match, so it is two rooms, not three.
-  - *Cons*: New block numbers mean E40/E42/E43 stay in the file as re-aimed entries, so a later reader must follow the notices to find the real result — mitigated by the ⚠️ banners now on each; a second session means the build must be re-confirmed fresh before starting.
+1. **`FittedBox(fit: BoxFit.scaleDown)` sits between the dealt card's outer box and its content** (`dealt_card_overlay.dart:98`). Today it scales by exactly 1.0 and does nothing, because the padded space is precisely the inner `SizedBox`. **Enlarge the inner box without the outer one and the FittedBox shrinks the contents instead of growing the card** — the clipping appears to go away while the prompt becomes *harder* to read. R2 requires both to change, and requires the implementer to run that exact failure mode and confirm the test still fails.
+2. **`TitleSettle` animates `letterSpacing` from the style's value + 6 down to it** (`gaslight_route.dart:74`). That is a width change, not a height change — but a wider title can wrap, and a wrapped title is taller than the measurement predicted. R1 requires either measuring at the maximum spacing or pinning the title to `maxLines: 1`.
 
-**Option B**: **Re-run the whole soak, M0–M4, against the same build.**
-  - *Pros*: One clean report with no re-aimed entries and no cross-references; re-running the 19 good blocks would also re-check them against the two UI defects now known (Issues 136, 137), which the first pass walked past.
-  - *Cons*: 3–5 hours to recover three blocks that Option A recovers in under one; discards 27 valid artefacts and a genuinely useful E31/E33/E41 result; the same agent behaviour that re-aimed three blocks is not obviously less likely on a second full run — length is part of what caused it.
+**R2's worst case is derived, not pasted.** The longest prompt in the catalogue today is **89 characters** (`hypotheticals`), but decks get edited, so the test must read the maximum from `PromptDecks` at run time rather than hardcoding the string — otherwise the worst case silently stops being worst.
 
-**Option C**: **Make the substitution mechanically impossible first, then re-run the three.** Extend `scripts/check_playthrough_evidence.sh` with a manifest: the guide declares each block id and a required keyword, and the gate fails when a block's title does not match its manifest entry.
-  - *Pros*: Turns a written instruction that failed into a tool, which is this project's established response to exactly that (`check_deploy_fresh.sh`, `check_playthrough_evidence.sh` both exist for this reason — §2); protects every future soak, not just this one; the check is cheap and its falsification is obvious.
-  - *Cons*: Real work on the gate before any coverage is recovered, and the manifest is another thing that can drift from the guide; a keyword match is a weak proxy — an agent could satisfy the keyword and still re-aim the assertion, so it narrows the hole rather than closing it.
-
-Your selection: _____
-
----
-
-### Issue 136: The forgery AppBar clips "Rotation N of M" on every device
-**Status**: ⚠️ Confirmed Unresolved — **found by opening an artefact the soak marked PASS.** Visible in `docs/playthrough_evidence/e31_p3_relinked.png` (P3, iPhone 17 Pro Max): the header reads `FORGERY` / `ROOM: YOGU` / `Rotation 1 of 2`, and the third line is cut through the middle of its glyphs.
-
-Confirmed in source. `lib/screens/phase2_craft.dart:228` gives `AppBar.title` a `Column` with **three** children during the forgery phase — `TRUTH`/`FORGERY` at 26 pt, `ROOM: <code>` at 11 pt, and `Rotation N of M` — and **no `toolbarHeight` is set**, so the toolbar keeps Material's 56 pt default. The truth phase has only two lines and fits, which is exactly why `e29_p4_room_code_truth.png` renders cleanly and `e31_p3_relinked.png` does not. **Deterministic, all devices, forgery phase only.**
-
-It slipped through because E29 asserted the *room code* is legible — it is. Nothing asserted anything about the line beneath it.
-
-**Option A (recommended)**: **Set `toolbarHeight` on the craft AppBar to fit the tallest case.** Give the `AppBar` an explicit `toolbarHeight` (about 78–84 pt) sized for three lines, applied in both phases so the header does not jump height when the forgery phase begins.
-  - *Pros*: One property on one widget; keeps all three lines, which are all useful — the rotation counter is how a player knows how many forgeries remain; a constant height across phases avoids a visible reflow at the truth→forgery transition; falsifiable with a widget test asserting the `Rotation` text's `RenderBox` sits fully inside the AppBar's paint bounds.
-  - *Cons*: A taller toolbar costs vertical space on the screen that already has the keyboard and the pinned submit bar (Issue 131), so it needs re-checking at 320 pt against the 100-character answer; the number has to be derived from the real text heights rather than guessed, or it will clip again at a large `textScaleFactor`.
-
-**Option B**: **Move the rotation counter out of the AppBar** and render it under the target card in the body.
-  - *Pros*: The AppBar goes back to two lines and can keep the default height everywhere, so no vertical cost and no reflow; the body can size itself, so a large text scale cannot clip it; arguably a better home, since the counter is about the round's progress rather than the room's identity.
-  - *Cons*: A layout change to the most-used screen rather than a property change, so more to re-validate; the counter becomes easier to miss where it is now the first thing under the title.
-
-**Option C**: **Drop `ROOM: <code>` from the craft screen** and keep it on the vote and reveal screens only.
-  - *Pros*: Also gets back to two lines with no height change.
-  - *Cons*: Directly undoes Issue 120's selection — the room code was put in every in-game phase deliberately so a player can read it out mid-game — and the craft phase is the longest phase, so it is the one where someone is most likely to need it.
-
-Your selection: _____
-
----
-
-### Issue 137: The dealt-card overlay silently clips a long prompt, so the player cannot read what they are answering
-**Status**: ⚠️ Confirmed Unresolved — **found by opening an artefact the soak marked PASS.** Visible in `docs/playthrough_evidence/e29_p4_room_code_truth.png` (P4, iPhone 17e): `THE RECORD OF TRUTH` shows `The dumbest thing I would do if I had total invisibility` and then a third line cut through the tops of its glyphs. The player is being asked to answer a prompt they cannot finish reading.
-
-Confirmed in source. `lib/widgets/dealt_card_overlay.dart:102` fixes the card at `height: 372` inside a `height: 420` outer box, and the prompt sits in `Expanded` → `SingleChildScrollView` (`:129–:160`). Because it scrolls, there is **no overflow error and no test failure** — the content is simply cut at the fold, with **no scrollbar, no fade and no partial-line cue** that scrolling is possible. This is the same discoverability failure as Issue 132, in a different widget: the content is reachable and nothing says so.
-
-Prompt length varies by deck, so this fires on the longer prompts in `hypotheticals` (50 prompts) and not on short ones — which is why it has survived many playthroughs.
-
-**Option A (recommended)**: **Let the card grow, and cap it against the viewport.** Replace the fixed `height: 372` with a `ConstrainedBox(maxHeight: min(screenHeight * 0.7, 560))` so short prompts keep today's proportions and long ones expand; keep the scroll view as the last resort for the genuinely extreme case.
-  - *Pros*: Fixes the common case outright rather than making the workaround discoverable — most prompts will simply fit; bounded against the viewport so it cannot overflow a short device; the scroll view stays as a floor for pathological input, so nothing can be permanently unreadable; testable by rendering the longest prompt in the catalogue and asserting `didExceedMaxLines == false`.
-  - *Cons*: A variable-height overlay changes the card's entrance animation proportions and needs a look on both the shortest and tallest device; "the longest prompt in the catalogue" is a moving target as decks are edited, so the test must derive it from `PromptDecks` rather than hard-coding a string.
-
-**Option B**: **Auto-size the prompt text**, reusing the `AutoSizedAnswerText` measurement loop from Issue 119 to shrink it until it fits the fixed 372 pt.
-  - *Pros*: The card keeps its exact current geometry, so the animation and layout are untouched; reuses a measurement widget already built, tested and trusted in this codebase; guaranteed to fit by construction.
-  - *Cons*: A long prompt renders small on the one screen whose entire job is to make the prompt legible and dramatic — it is the card reveal; the floor would have to be set well above `AutoSizedAnswerText`'s 9.5 pt, and at that floor a truly long prompt still would not fit, so it needs Option A's growth as a fallback anyway.
-
-**Option C**: **Add a scroll affordance and leave the geometry alone** — a bottom fade plus an always-visible scrollbar inside the card.
-  - *Pros*: Smallest change; keeps geometry and type size; makes the existing scroll discoverable rather than hidden.
-  - *Cons*: Asks the player to scroll inside a modal card during a timed phase, which is a worse experience than simply showing the prompt; a fade on parchment is low-contrast and easy to miss, and this is the same fix that was rejected for Issue 132 in favour of changing the layout.
-
-Your selection: _____
+**R3 recovers the three verifications Issue 135 identified, in two matches rather than a full re-run:** E44 and E45 share one five-player match at `Rounds = 2` (the previous attempt ran `Rounds = 1`, which is exactly why the round-2 lockout was unreachable), and E46 gets its own match for the ~12-minute presence check with timers off. **R1 and R2 land first**, so the device run also becomes their evidence — one soak, three items verified.
 
 ---
 
