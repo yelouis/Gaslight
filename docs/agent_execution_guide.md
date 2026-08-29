@@ -1,18 +1,19 @@
-# Agent Execution Guide — Active Build: Wave R — two header/overlay fixes, then recover the three missing verifications — August 28, 2026
+# Agent Execution Guide — Active Build: Wave R — stop the background, fix two clipped surfaces, then recover the three missing verifications — August 28, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**All three selections are made.** Build exactly these, in this order.
+**All four selections are made.** Build exactly these, in this order.
 
 | # | Item | Issue → choice | Side | Deploy |
 |---|---|---|---|---|
+| **R0** | Reduce Motion actually stops the in-game background | **138 → B** | client | — |
 | **R1** | The in-game AppBar sizes itself to its text — no magic numbers | **136 → A**, modified | client | — |
 | **R2** | The dealt-card overlay grows so a long prompt is readable | **137 → A** | client | — |
 | **R3** | Re-run the three re-aimed soak blocks as **E44–E46** | **135 → A** | test only | — |
 
 **No deploy is needed for any of this wave.** Nothing here touches `functions/src`. `./scripts/check_deploy_fresh.sh` should stay at exit 0 throughout; if it goes red, you have changed something you should not have.
 
-**One item = one commit** — three commits.
+**One item = one commit** — four commits.
 
 **Every number, formula and literal string below is a decision, not a suggestion.**
 
@@ -20,7 +21,13 @@
 
 ## 0. Ordering, and why it is not negotiable
 
-**R1 → R2 → R3.**
+**R0 → R1 → R2 → R3.**
+
+**R0 goes first because it removes the trap that stalled this wave once already.** `AnimatedThinkingBackground` roots craft, vote and reveal and never stops animating, which is both the accessibility defect Issue 138 records *and* the reason `pumpAndSettle` hangs on those screens (§1.1). R1 and R2 are the two items whose tests mount exactly those screens. Landing R0 first means the rest of the wave is written against a tree that can actually reach a resting state.
+
+**It also gets device-verified for free.** R3 photographs all three of those screens, so R0's visual change — the particle layer absent under Reduce Motion — is observable in the same soak that certifies R1 and R2. Turn Reduce Motion on for one of the five devices and the soak covers both states at once.
+
+**One thing R0 does not change: `pump(Duration)` stays the standing convention** (§1.1). R0 makes `pumpAndSettle` *safe* on those three screens rather than *required*, and the existing tests that already use `pump(Duration)` are correct before and after. Do not churn passing tests to switch style.
 
 R3 is a device run that photographs the craft screen, the vote screen and the reveal screen. R1 and R2 change how two of those screens lay out. **Running R3 first would produce a report full of screenshots showing the old, clipped UI**, and every one of them would have to be retaken. Land the fixes, then certify them.
 
@@ -38,7 +45,142 @@ There is a second reason, and it is the better one: R3's whole purpose is to rec
 - **Never hand-edit `lib/utils/prompt_decks.dart`** — it is generated.
 - **R3 finds defects; it does not fix them.** File and stop.
 - **A block performed differently is `NOT RUN` with a `Reason:`, never `PASS` under a new title** (lesson 2.33). This is the rule the last soak broke.
+- **⚠️ Never call `tester.pumpAndSettle()` on the craft, vote or reveal screen — it will hang the run.** See §1.1. This wave's widget tests all target those three screens, so this is not a footnote.
 - **Do not touch anything in §6 or §7.**
+
+### 1.1 ⚠️ The `pumpAndSettle` hang — read this before writing a single widget test
+
+**Every widget test in this wave mounts an animated screen, and the obvious way to pump it deadlocks the runner.**
+
+`Phase2CraftScreen`, `Phase3VoteScreen` and `Phase4RevealScreen` each return an `AnimatedThinkingBackground` as their root — `lib/screens/phase2_craft.dart:216`, `lib/screens/phase3_vote.dart:137`, `lib/screens/phase4_reveal.dart:313`. That widget starts an **unguarded infinite animation** in `initState`:
+
+```dart
+// lib/widgets/thinking_background.dart:21
+_controller = AnimationController(vsync: this, duration: const Duration(seconds: 10))..repeat();
+```
+
+`pumpAndSettle` returns only when the tree has no pending frames. This tree **always** has one. So it spins until its **10-minute default timeout — per test**. A 13-test file therefore appears to hang for over two hours, and because the reporter prints a test's name when it *starts*, the run emits the test name and then **nothing at all**. It reads exactly like an infinite loop in the code under test. It is not.
+
+**Do this instead** — the convention the passing tests already use:
+
+```dart
+await tester.pump();                                    // build
+await tester.pump(const Duration(milliseconds: 1000));  // advance past entry animations
+```
+
+See `test/phase2_craft_test.dart:96` and `test/debug_buttons_gating_test.dart:106-107`, both of which mount these screens and pass in milliseconds.
+
+**Two traps inside the trap:**
+
+1. **`accessibleNavigation: true` does not save you here.** The project's motion-reduction convention is `AppMotion.reduce(context)`, which does read `MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`) — and `lobby_background.dart`, `raven_mascot.dart`, `waiting_indicator.dart` and the rest all honour it. **`AnimatedThinkingBackground` never consults it at all** — it is the one animated widget whose motion a Reduce Motion user cannot switch off. Setting the flag is still correct and still required for the other animations; it simply does not stop this one. **This is what R0 fixes, and R0 lands first** — see §R0. After R0, `pumpAndSettle` becomes safe on craft, vote and reveal; it does not become *required*, and `pump(Duration)` remains the convention everywhere. (Issue 138 also notes that `game_over_screen.dart:900` keeps an unconditional ticker running even though its `build` correctly swaps to a static painter — so `pumpAndSettle` would hang there too, latently, since no test currently calls it on that screen. **That is deliberately out of R0's scope; see §R0.6.**)
+2. **Never `await` a fake callable directly inside `testWidgets`** — that is a separate FakeAsync deadlock (lesson 2.7). Wrap it in `tester.runAsync`.
+
+**Triage, if a run ever hangs again:** `flutter test --reporter expanded`; the last test name printed **without a result** is the one stuck. To distinguish "not settling" from "genuinely slow", pass an explicit short timeout — `await tester.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 5))` — and a non-settling tree fails in 5 s with `pumpAndSettle timed out` instead of blocking for 10 minutes.
+
+---
+
+## R0 — Reduce Motion actually stops the in-game background (138 → B)
+
+**What this means for the user:** a player who turns on **Reduce Motion** in iOS Settings still gets fifteen glyph particles drifting up the screen throughout craft, vote and reveal — the three screens where they spend nearly the whole match. Every other animation in the app already goes still for them. After this, these do too.
+
+### R0.1 The gap
+
+`lib/widgets/thinking_background.dart:21` starts the ticker unconditionally in `initState`:
+
+```dart
+_controller = AnimationController(vsync: this, duration: const Duration(seconds: 10))..repeat();
+```
+
+`grep -c AppMotion lib/widgets/thinking_background.dart` returns **0** — the file has no motion guard of any kind. It is the root of all three in-game screens (`phase2_craft.dart:216`, `phase3_vote.dart:137`, `phase4_reveal.dart:313`).
+
+**The selected option is B: skip the particle layer entirely under Reduce Motion** — the background becomes the radial gradient plus the screen content, with no `CustomPaint` and no ticker.
+
+### R0.2 Implementation
+
+**Step 1 — take the start decision out of `initState`.**
+
+- **Remove `..repeat()` from `:21`**, leaving a plain `AnimationController` construction. `MediaQuery` is not available in `initState`, so the decision cannot be made there; starting it and stopping it a moment later would work but leaves a frame of motion for the exact user who asked for none.
+- **Keep the particle seeding loop at `:24–26` exactly as it is.** Under Reduce Motion those fifteen objects are unused — but if the user toggles the setting *off* mid-match, the animated branch must find a populated field. Making the seeding conditional creates an empty-background bug that only appears on toggle, which is the hardest kind to see. Fifteen allocations once per screen is not worth optimising.
+
+**Step 2 — let `didChangeDependencies` own the ticker.**
+
+```dart
+@override
+void didChangeDependencies() {
+  super.didChangeDependencies();
+  if (AppMotion.reduce(context)) {
+    _controller.stop();
+  } else if (!_controller.isAnimating) {
+    _controller.repeat();
+  }
+}
+```
+
+- This mirrors `lib/widgets/lobby_background.dart:30–38`, which is the house pattern.
+- **One deliberate difference from that pattern: do NOT add a `_controller.value = …` line.** `lobby_background` sets it because its build *reads* `_breathingController.value` (`:55`). Here the value is **never read** — positions are mutated inside the `AnimatedBuilder` builder (`:72–78`) and the controller is a bare repaint ticker. Setting `value` would be cargo-culting a line whose purpose does not exist in this widget.
+- `didChangeDependencies` fires on first mount **and** on every `MediaQuery` change, so toggling Reduce Motion in iOS Settings takes effect mid-match without relaunching. An `initState`-only read would not.
+- **Add `import '../theme/app_motion.dart';`** — the file currently has no reference to it.
+
+**Step 3 — skip the particle layer in `build`.**
+
+- When `AppMotion.reduce(context)` is true, return the `Stack` with **only** the gradient `Container` and `widget.child`; omit the `AnimatedBuilder` (`:68–86`) entirely.
+- **Hoist the gradient `Container` (`:54–67`) into one source** — a private `Widget get _gradient` or a `static const` — and use it in both branches. **Do not copy-paste it.** Two copies of a nine-line `RadialGradient` will drift the first time someone touches the palette, and the drift will only be visible to Reduce Motion users, who are the least likely to report it.
+- **Keep the `Stack` in both branches.** Do not collapse the reduced branch to `Container(child: widget.child)`. `Stack` sizes and positions `widget.child` in a specific way, and changing the parent widget type would change the layout of every in-game screen for exactly the users who cannot easily be asked to check.
+
+### R0.3 ⚠️ The trap: Step 3 without Step 2 looks completely correct
+
+**Skipping the paint while leaving the ticker running produces a screen that is visually perfect and a test suite that hangs forever.** Reduce Motion appears honoured — no particles move, because nothing paints them — but `_controller` is still repeating, the tree still never reaches a resting state, and `pumpAndSettle` still spins to its ten-minute default with no output.
+
+This is not hypothetical: it is exactly the state `game_over_screen.dart` is in today (§R0.6).
+
+**Steps 2 and 3 are one change. Landing either alone is a defect.** The validation below is written as a *settle* test rather than a "no particles painted" test precisely so that Step 3 alone cannot pass it.
+
+### R0.4 Validation
+
+**New file: `test/thinking_background_reduce_motion_test.dart`.** No test covers this widget today — `ls test/ | grep -i thinking` is empty.
+
+**⚠️ Every `pumpAndSettle` in this file must pass an explicit short timeout:**
+
+```dart
+await tester.pumpAndSettle(
+  const Duration(milliseconds: 100),
+  EnginePhase.sendSemanticsUpdate,
+  const Duration(seconds: 5),
+);
+```
+
+The default is **ten minutes**. With the default, a red test is indistinguishable from a hung runner — which is the whole failure this item exists to end. Five seconds is generous for a tree that settles in one frame.
+
+1. **The falsifying test — the widget settles under Reduce Motion.** Mount `AnimatedThinkingBackground` with `accessibleNavigation: true` and assert the `pumpAndSettle` above **completes**. **Run it against current code and observe it fail with `pumpAndSettle timed out`.** Paste that line into the commit body.
+2. **The three real screens settle.** The same assertion mounting `Phase2CraftScreen`, `Phase3VoteScreen` and `Phase4RevealScreen` with `accessibleNavigation: true`. This is the assertion that retires §1.1 for those screens, and it is the one that will catch a future widget re-introducing an unguarded ticker anywhere in their subtree.
+3. **Over-reach guard — the motion still exists when it was not asked to stop.** With `accessibleNavigation: false`, assert the particle layer **is** in the tree:
+   ```dart
+   expect(
+     find.descendant(
+       of: find.byType(AnimatedThinkingBackground),
+       matching: find.byType(AnimatedBuilder),
+     ),
+     findsOneWidget,
+   );
+   ```
+   and that it is **absent** under `accessibleNavigation: true`. Scope the finder with `find.descendant` as shown — `MaterialApp` contains `AnimatedBuilder`s of its own and an unscoped finder will match them. **Without this guard, deleting the animation outright passes every other test in this file.**
+4. **The live toggle works.** Pump with `accessibleNavigation: false`, then pump the same tree with `true`, and assert it now settles *and* the `AnimatedBuilder` is gone; then back to `false` and assert it returns. **This is the assertion that distinguishes `didChangeDependencies` from an `initState`-only read**, and it is the reason Step 2 specifies that method rather than the constructor.
+5. **The content always renders.** In both modes, assert the `child` passed to the widget is found. A reduced branch that drops the screen content would otherwise pass tests 1–4.
+6. **Falsify both halves separately, and record both runs:**
+   - Revert **Step 2** only (ticker repeating, paint skipped) → tests **1 and 2 must fail** with `pumpAndSettle timed out`. This is the §R0.3 trap; confirming it is what proves the test suite can see it.
+   - Revert **Step 3** only (ticker stopped, paint kept) → test **3 must fail** on the reduce-motion branch.
+
+**Regression watch — one existing file changes shape.** `test/phase3_vote_test.dart` is the only test that parameterizes this flag: it drives `Phase3VoteScreen` at `reduceMotion: true` (`:109`, `:174`) and `false` (`:132`, `:149`). The two `true` cases will now build a tree with no particle layer. It uses `pump()`, so it cannot hang either way — but **re-run that file specifically and confirm all four cases still pass** before running the full battery.
+
+### R0.5 Blast radius
+
+`lib/widgets/thinking_background.dart` · the new widget test · **`docs/design_ui_direction.md`** — record that the in-game background honours Reduce Motion by **omitting the particle layer entirely** (Option B), that the radial gradient is retained so the screens keep their ground colour, and that this differs from the game-over screen, which keeps a static ember field instead.
+
+### R0.6 Explicitly NOT in scope — do not widen this
+
+`game_over_screen.dart:900` (`EmberBackdrop`) has the **same** unconditional `..repeat()` in `initState`. **Its accessibility behaviour is already correct** — `build` checks `AppMotion.reduce` and returns a `_StaticEmberPainter` instead of the `AnimatedBuilder` (`:924–938`). But its ticker never stops, so it is a live example of the §R0.3 trap and `pumpAndSettle` on the game-over screen would hang. It is latent only because `game_over_screen_test.dart` and `badge_pills_overflow_test.dart` both use `pump()`.
+
+**Issue 138's selection covers `AnimatedThinkingBackground` only. Do not fix `EmberBackdrop` inside R0.** If you think it should be fixed, **file it with options, Pros/Cons and a blank selection line, and carry on** — that is the standing rule in §1, and it applies here even though the fix is three lines. Note also that test 2 above deliberately does **not** cover the game-over screen; adding it there would fail against the current code and turn R0 red for a reason R0 is not allowed to fix.
 
 ---
 
@@ -76,6 +218,24 @@ The issue text proposed a literal, and the user rejected it — correctly. **But
 4. **⚠️ `TitleSettle` animates `letterSpacing` from the style's value + 6 down to the value** (`lib/widgets/gaslight_route.dart:74`). That changes the title's **width**, not its height — but a wider title can **wrap**, and a wrapped title is taller. Measure the title line at the **maximum** letter spacing (base + 6), or give the title `maxLines: 1` with `TextOverflow.ellipsis` so it can never wrap. **State which you chose in the commit body.**
 
 ### 2.4 Validation
+
+**⚠️ Every test below mounts craft, vote or reveal.** **R0 lands before this item and makes those screens settleable**, so `pumpAndSettle` is no longer a hazard here — but **`pump(Duration)` remains the convention** (§1.1), the existing test file already uses it, and there is nothing to gain by changing it. If you are working on R1 before R0 is committed, `pump(Duration)` is mandatory: a run that stops emitting output has hit the §1.1 trap and is not a logic bug in your fix.
+
+**⚠️ A partial test file for this item already exists on disk, untracked: `test/in_game_app_bar_test.dart` (13 tests).** It was written before the trap was understood, and **it is the reason the suite currently hangs.** It is otherwise sound — correct fixtures, the nine-way matrix, the over-reach guards, and `accessibleNavigation: true` already set. **Start from it rather than rewriting it.** Changing its single `await tester.pumpAndSettle();` (line 100) to `await tester.pump(const Duration(milliseconds: 1000));` is sufficient to make it run.
+
+**Its post-fix baseline is already known — this is your falsification, so do not re-derive it:** with that one line changed and R1 **not** implemented, the file produces **13 failures in seconds**, of the exact shape the item predicts:
+
+```
+Expected: a value less than or equal to <56.0>
+  Actual: <60.5>
+Reveal screen at scale 2.0: roomCodeBottom (60.5) <= appBarBottom (56.0)
+```
+
+`56.0` is Material's untouched `kToolbarHeight` — the gap in §2.1, observed rather than argued. **Paste this into the commit body as the falsifying evidence.**
+
+**All 13 fail, including the truth-phase over-reach guard** — that one asserts `truthHeight < forgeryHeight`, and today both are the same untouched 56.0, so it cannot pass until the helper exists. **13/13 red is the correct pre-fix baseline; 13/13 green is the bar.**
+
+**Note also that this failure fires on the *reveal* screen at scale 2.0** — confirming §2.3 step 3: the bug is not craft-only, and a craft-only fix leaves it live behind an accessibility setting.
 
 - **The falsifying test.** Widget test on the craft screen in the **forgery** phase: find the `Rotation N of M` `Text`, take its `RenderBox`, and assert its bottom edge is **inside** the AppBar's paint bounds. **Run it against the current code and watch it fail** — paste the failing geometry into the commit body.
 - **The matrix.** Assert the same at widths **320, 375 and 430 pt** and at `textScaleFactor` **1.0, 1.3 and 2.0** — nine combinations. The whole point of the derived height is that it survives all of them; a fix validated at one size is the bug that produced this issue.
@@ -123,6 +283,8 @@ The available space inside the padding is exactly `300 − 40 = 260` wide by `42
 
 ### 3.4 Validation
 
+**⚠️ Mount `DealtCardOverlay` standalone in a `Scaffold`, as `test/dealt_card_overlay_test.dart:12-29` does.** Mounted that way it settles, and `pumpAndSettle()` is safe — those tests pass today. **But if you mount it inside `Phase2CraftScreen` to exercise the real dealt-card flow, you inherit the §1.1 hang** and the run will stop dead with no output. In that case switch to `pump(Duration)`.
+
 - **The falsifying test.** Render the overlay with the **longest prompt in the catalogue, obtained from `PromptDecks` at test time** — iterate `allDecks` and take the maximum-length prompt; **do not paste the string into the test**, because decks are edited and a hardcoded worst case silently stops being the worst case. Assert the prompt's `RenderParagraph.didExceedMaxLines == false` **and** that its `RenderBox` sits fully inside the card's bounds. **Run it against the current code and watch it fail.**
 - **Load the real Lora and CormorantGaramond fonts via `FontLoader`**, as `test/vote_option_truncation_test.dart:23` does. `flutter test` otherwise substitutes a square-glyph fallback whose metrics are wrong in both directions, and a card tuned against it will be wrong on a device.
 - **The cap holds.** At a short viewport (e.g. 320 × 568), assert the card's height does **not** exceed `screenHeight * 0.7` and the card is fully on screen.
@@ -160,7 +322,8 @@ Same as the original soak, and **all of them still apply**:
 4. **Uninstall on all five before installing.** `SharedPreferences` survives an install-over-the-top, so a device that played a previous room silently rejoins it.
 5. Build once, install five times; prove the binary is newer than the source and paste both lines.
 6. **`./scripts/check_deploy_fresh.sh` must exit 0.** No server change is in this wave, so it should already be green — if it is not, something is wrong and you should stop.
-7. **This build must contain R1 and R2.** Note their commit SHAs in the block headers; the screenshots double as those items' device evidence.
+7. **This build must contain R0, R1 and R2.** Note their commit SHAs in the block headers; the screenshots double as those items' device evidence.
+8. **Enable Reduce Motion on exactly one of the five devices** (Settings → Accessibility → Motion → Reduce Motion) and record which UDID. R0's visible result — the drifting glyph particles absent on craft, vote and reveal while the radial gradient and all content remain — is then covered by the same screenshots that certify R1 and R2, and the other four devices continue to show the animated background as the control. **Say in each block which device had it on.**
 
 **Drive by `ValueKey` or unique text, never by pixel bounds** — five device models, five different coordinate systems. The keys are `player_name_field`, `room_code_field`, `deck_<id>`, `forgeries_<n>`, `rounds_<n>`, `timer_seconds_field`, `answer_field`, `peek_inside_<id>`, `peek_prompt_<idx>`, `deck_peek_shuffle`, `kick_<playerId>`, `game_over_bottom_bar`; labels are `CREATE ROOM`, `START GAME`, `SUBMIT DOSSIER`, `RE-ROLL PROMPT`, `CONFIRM VOTE`, `RETURN TO LOBBY`, `Leave game` → `LEAVE GAME` in game, and **`Leave room` → `CLOSE ROOM`/`LEAVE` in the lobby** (a different control).
 
@@ -211,6 +374,16 @@ Same as the original soak, and **all of them still apply**:
 
 ## 5. Definition of Done
 
+**R0**
+- [ ] `AnimatedThinkingBackground` **settles** under `accessibleNavigation: true`, and so do **craft, vote and reveal**, each asserted with an explicit 5-second `pumpAndSettle` timeout.
+- [ ] The falsifying test was run against the current code and **observed to fail** with `pumpAndSettle timed out`, with that line in the commit body.
+- [ ] **Both halves falsified separately**: Step 2 reverted fails the settle tests; Step 3 reverted fails the layer-present guard. Both runs recorded.
+- [ ] Under `accessibleNavigation: false` the particle layer is **still present** (scoped `find.descendant`) — the animation was guarded, not deleted.
+- [ ] Toggling the flag on a mounted tree takes effect **both ways**, proving `didChangeDependencies` rather than an `initState`-only read.
+- [ ] The gradient exists in **one** place in the source, not copy-pasted into two branches.
+- [ ] `test/phase3_vote_test.dart` still passes all four `reduceMotion` cases.
+- [ ] **`EmberBackdrop` was not touched** (§R0.6). If it was worth fixing, it was *filed*, not folded in.
+
 **R1**
 - [ ] The `Rotation N of M` `RenderBox` is fully inside the AppBar bounds at **320/375/430 pt × textScale 1.0/1.3/2.0** — all nine.
 - [ ] The falsifying test was run against the current code and **observed to fail**, with the geometry in the commit body.
@@ -218,6 +391,7 @@ Same as the original soak, and **all of them still apply**:
 - [ ] Applied to **craft, vote and reveal**; vote and reveal still render correctly at scale 2.0.
 - [ ] The `TitleSettle` letter-spacing/wrapping decision is stated in the commit body.
 - [ ] **No test asserts an exact pixel height.**
+- [ ] **No test in this wave calls `pumpAndSettle()` on craft, vote or reveal** (§1.1), and the full `flutter test` run **completes** rather than hanging.
 
 **R2**
 - [ ] The longest prompt **obtained from `PromptDecks` at test time** renders with `didExceedMaxLines == false` and inside the card bounds, with the **real fonts loaded**.
@@ -237,7 +411,7 @@ Same as the original soak, and **all of them still apply**:
 
 **Across the wave**
 - [ ] Battery at or above baseline: **0 errors** · **≥234** client · clean functions build · **≥102** functions · deck sync PASS · both evidence gates exit 0 · **deploy still exit 0** (nothing here touches the server).
-- [ ] Issues 135, 136 and 137 moved into the **single** existing Resolved heading, and `design_ui_direction.md` updated for R1 and R2.
+- [ ] Issues **135, 136, 137 and 138** moved into the **single** existing Resolved heading, and `design_ui_direction.md` updated for **R0**, R1 and R2.
 
 ---
 
@@ -277,7 +451,7 @@ Same as the original soak, and **all of them still apply**:
 
 **The deck catalogue is data and lives in exactly one file.** `functions/src/prompt_decks.ts` is the source of truth; `lib/utils/prompt_decks.dart` is generated. **No file outside the catalogue may branch on a deck id.**
 
-**Assessed and rejected — do NOT re-propose:** room codes from `Math.random()`; `authUid` exposure in player documents; a scheduled-task close for the unmask window (133 C); a host-only close trigger with a server sweep (133 B); distinguishing *why* a player left (128 B); per-phase timer durations (130 B); re-running the whole soak to recover three blocks (135 B); **a screen-height fraction for the AppBar (136, explicitly rejected by the user in favour of measured text)**; auto-shrinking the dealt-card prompt (137 B). **And there is no chat or emote feature** — `sendEmote` and `sendRoomChat` appeared only in a fabricated table in the soak report and have never existed in this repository.
+**Assessed and rejected — do NOT re-propose:** room codes from `Math.random()`; `authUid` exposure in player documents; a scheduled-task close for the unmask window (133 C); a host-only close trigger with a server sweep (133 B); distinguishing *why* a player left (128 B); per-phase timer durations (130 B); re-running the whole soak to recover three blocks (135 B); **a screen-height fraction for the AppBar (136, explicitly rejected by the user in favour of measured text)**; auto-shrinking the dealt-card prompt (137 B); **freezing the thinking-background particles in place rather than removing the layer (138 A), and leaving the background unguarded on the grounds that the drift is sub-threshold ambience (138 C)** — the user selected B, which removes the particle layer entirely under Reduce Motion. **And there is no chat or emote feature** — `sendEmote` and `sendRoomChat` appeared only in a fabricated table in the soak report and have never existed in this repository.
 
 ---
 
@@ -320,6 +494,8 @@ Same as the original soak, and **all of them still apply**:
 
 - **The user rejected a magic number, and was right.** The issue text offered "about 78–84 pt", which would have been correct today and wrong the first time someone changed a font size or turned up accessibility text. **When a spec reaches for a literal to describe a layout, that is a signal the measurement was skipped** — the codebase already had the right tool in `AutoSizedAnswerText`.
 - **Two of this wave's three items came from opening a screenshot**, not from a gate, a test, or a bug report. That is now three separate occasions.
+- **A test-harness trap turned out to be a user-facing accessibility defect wearing a disguise.** The hang was investigated as a tooling problem; the cause was a widget ignoring Reduce Motion on the three screens players use most. **R0 exists because the fix for the test problem and the fix for the accessibility problem are the same change** — which is worth remembering the next time a suite misbehaves for a reason that looks purely mechanical.
+- **The wave's first hang was misdiagnosed from a lesson that did not apply.** The handoff blamed a missing `accessibleNavigation: true`; the file already had it. The real cause was one widget that ignores the flag everything else honours (§1.1). **A convention is only worth trusting once you have checked the specific widget obeys it** — `grep` for the repeating animation, not for the guard.
 - **The re-aimed blocks were the last three of twenty-two.** Length is a failure mode; R3 is deliberately two short matches rather than a re-run, and it commits per match.
 
 ---

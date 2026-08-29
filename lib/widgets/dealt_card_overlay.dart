@@ -63,11 +63,14 @@ class _DealtCardOverlayState extends State<DealtCardOverlay> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     final bool prefersReducedMotion = AppMotion.reduce(context);
-    final double screenHeight = MediaQuery.of(context).size.height;
+    final double rawHeight = MediaQuery.sizeOf(context).height;
+    final double rawWidth = MediaQuery.sizeOf(context).width;
+    final double screenHeight = rawHeight > 0 ? rawHeight : 800.0;
+    final double screenWidth = rawWidth > 0 ? rawWidth : 375.0;
     final isTruth = widget.phase == GamePhase.truth;
 
     final double maxCardHeight = math.min(screenHeight * 0.7, 560.0);
-    final double cardWidth = math.min(MediaQuery.of(context).size.width * 0.85, 300.0);
+    final double cardWidth = math.min(screenWidth * 0.85, 300.0);
 
     Widget cardContent = Container(
       width: cardWidth,
@@ -99,7 +102,7 @@ class _DealtCardOverlayState extends State<DealtCardOverlay> with SingleTickerPr
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -112,7 +115,7 @@ class _DealtCardOverlayState extends State<DealtCardOverlay> with SingleTickerPr
                     size: 32,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   isTruth ? 'THE RECORD OF TRUTH' : 'DECK OF FORGERIES',
                   style: const TextStyle(
@@ -124,9 +127,9 @@ class _DealtCardOverlayState extends State<DealtCardOverlay> with SingleTickerPr
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 16),
-                const Divider(color: AppColors.brass, thickness: 1),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
+                const Divider(color: AppColors.brass, thickness: 1, height: 12),
+                const SizedBox(height: 10),
                 // Card Prompt Box
                 Flexible(
                   child: SingleChildScrollView(
@@ -146,7 +149,7 @@ class _DealtCardOverlayState extends State<DealtCardOverlay> with SingleTickerPr
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
                         Text(
                           widget.promptText,
                           style: const TextStyle(
@@ -162,13 +165,13 @@ class _DealtCardOverlayState extends State<DealtCardOverlay> with SingleTickerPr
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                const Divider(color: AppColors.brass, thickness: 1),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
+                const Divider(color: AppColors.brass, thickness: 1, height: 12),
+                const SizedBox(height: 10),
                 // Dismiss Button
                 SizedBox(
                   width: double.infinity,
-                  height: 48,
+                  height: 44,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.oxblood,

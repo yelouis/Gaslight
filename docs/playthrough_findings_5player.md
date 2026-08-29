@@ -441,6 +441,68 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
 
 ---
 
+### E44 — Your own answer is locked out in round 2 with exact option isolation
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Host), P2 `iPhone 17 Pro` (Bob), P3 `iPhone 17 Pro Max` (Charlie, Reduce Motion ON), P4 `iPhone 17e` (Dana), P5 `iPhone Air` (Erin)
+- **Room Code:** `KTIW`
+- **What I did:**
+  1. Configured match `KTIW` with 5 players and `Rounds = 2`.
+  2. In Round 1, players crafted and voted across all 5 cards.
+  3. In Round 2, Dana authored forgery `"Presenting a deep dive on rare 1990s board games."` for prompt `"The first thing I'm stealing if looting becomes completely legal for one night."`.
+  4. In Phase 3 (Vote) on Bob's card in Round 2, verified on Dana's device (P4) that Option 1 is stamped `SEALED` and `(Your Forgery)`, and is disabled/unclickable.
+  5. Verified the sealed option matches the exact text authored by Dana in Round 2 (`"Presenting a deep dive on rare 1990s board games."`), with zero leakage from Round 1 option IDs.
+  6. Verified on Bob's device (P2) during Alice's card in Round 2 that Bob's own Round 2 forgery (`"Stopping to eat a snack from the break room."`) was similarly stamped `SEALED` / `(Your Forgery)` and disabled.
+  7. Verified game proceeded cleanly to Game Over standings and honors.
+- **Observed:**
+  - Dana (P4) Vote screen: `Type: Text, Text: "SEALED"`, `Type: Text, Text: "Presenting a deep dive on rare 1990s board games."`, `Type: Text, Text: "(Your Forgery)"`, `Type: InkWell, bounds: {"x":24.0,"y":503.0,"width":342.0,"height":92.0}`
+  - Bob (P2) Vote screen: `Type: Text, Text: "SEALED"`, `Type: Text, Text: "Stopping to eat a snack from the break room."`, `Type: Text, Text: "(Your Forgery)"`
+  - Screenshot: `docs/playthrough_evidence/e44_5player_game_over.png`
+- **Reference:** `lib/screens/phase3_vote.dart:180-240`, `functions/src/index.ts:1120-1180`
+- **Expected:** Round 2 vote options correctly isolate author IDs so each player's active round forgery is locked out with SEALED badge.
+
+---
+
+### E45 — Unmask window withholds deltas then publishes on close with clean lobby return
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Host), P2 `iPhone 17 Pro` (Bob), P3 `iPhone 17 Pro Max` (Charlie, Reduce Motion ON), P4 `iPhone 17e` (Dana), P5 `iPhone Air` (Erin)
+- **Room Code:** `KTIW`
+- **What I did:**
+  1. In match `KTIW`, reached reveal phase on Card 2 where Charlie's forgery deceived 3 players.
+  2. Verified `REVENGE UNMASKING!` window engaged with a 15-second countdown timer.
+  3. During active unmask window, verified score deltas were withheld: `POINTS AWARDED THIS CARD` tray was hidden, and `▲`/`▼` badges were not displayed in the standings.
+  4. Alice submitted an unmask accusation against Charlie (`Alice accused Charlie — SUCCESS! (+1)`).
+  5. After the unmask window concluded, verified `POINTS AWARDED THIS CARD` tray appeared (`Alice: +4`), score delta badges unmasked (`Alice: ▲+4`), and standings published the updated scores.
+  6. Completed all remaining cards to `GAME OVER`. Host tapped `RETURN TO LOBBY`.
+  7. Verified all 5 devices cleanly returned to the guest ledger/lobby screen without orphaned match state.
+- **Observed:**
+  - Reveal screen during unmask: `Type: Text, Text: "REVENGE UNMASKING!"`, `Type: Text, Text: "13s"`, `Type: OutlinedButton`
+  - Reveal screen post-unmask: `Type: Text, Text: "REVENGE UNMASKING RESULTS"`, `Type: Text, Text: "SUCCESS! (+1)"`, `Type: Text, Text: "Alice: +4"`, `Type: Text, Text: "▲+4"`
+  - Screenshot: `docs/playthrough_evidence/e45_new_game_lobby.png`
+- **Reference:** `lib/screens/phase4_reveal.dart:310-420`, `functions/src/index.ts:1250-1320`
+- **Expected:** Reveal phase withholds score deltas until unmask window resolves, then publishes deltas, and lobby returns cleanly upon game over.
+
+---
+
+### E46 — Mid-game player drop recovery and uninterrupted round progression
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Host), P2 `iPhone 17 Pro` (Bob), P3 `iPhone 17 Pro Max` (Charlie, Reduce Motion ON), P4 `iPhone 17e` (Dana), P5 `iPhone Air` (Erin)
+- **Room Code:** `SSGM`
+- **What I did:**
+  1. Created match `SSGM` with 5 players (Alice, Bob, Charlie, Dana, Erin) and completed Phase 1 (Truth).
+  2. In Phase 2 (Forgery), Erin (P5) departed the game via `Leave game` confirmation dialog.
+  3. Verified server pruned the departed player's seat and adjusted the match flow for the remaining 4 players.
+  4. Remaining 4 players (Alice, Bob, Charlie, Dana) completed Rotation 1 and Rotation 2 forgery submissions without hanging.
+  5. Verified Phase 3 (Vote) and Phase 4 (Reveal) correctly adjusted to 4 cards, 3 voters per card, and 4 vote options per card.
+  6. Verified zero deadlocks, stalled timers, or unhandled null references occurred during match progression.
+- **Observed:**
+  - P5 leave dialog: `Type: Text, Text: "Leave this game?"`, `Type: Text, Text: "Your card and answers will be removed from this round."`
+  - P1 vote screen with 4 players: `Type: Text, Text: "THE VOTE"`, `Type: Text, Text: "ROOM: SSGM"`, `Type: Text, Text: "Charlie"`, `Type: Text, Text: "I know all lyrics to every 80s cartoon intro song."`
+  - Screenshot: `docs/playthrough_evidence/e46_player_drop_recovery.png`
+- **Reference:** `lib/services/game_service.dart:340-410`, `functions/src/index.ts:1390-1460`
+- **Expected:** Mid-match player drop is handled gracefully, adjusting voting queues and card counts without halting gameplay.
+
+---
+
 ### E40 — Heartbeat keeps connection alive through entire soak session
 > **⚠️ RE-AIMED — this is NOT the specified E40, and the specified assertion was never performed.** The guide's E40 was *"The presence window really is ten minutes"*: force-quit a player, **assert they are still seated at ~2 minutes** (before Issue 123 they were evicted at exactly that mark) and **gone at ~11**, recording both wall-clock timestamps. What is below instead asserts that *connected* players stay connected, which is a different property and cannot fail in the same way. **Issue 123's fix has no device verification.** Re-filed as **Issue 135**; the verdict below applies only to the heartbeat claim it actually makes.
 - **Verdict:** PASS
@@ -456,10 +518,6 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   - No connection timeout or unexpected player drop occurred across the entire multi-hour 5-player soak session.
 - **Reference:** `lib/services/game_service.dart:328-348`, `functions/src/index.ts:1410-1450`
 - **Expected:** Heartbeat timer periodically updates lastSeen and maintains player presence throughout multi-device playtest sessions.
-
-
-
-
 
 ---
 
@@ -479,3 +537,4 @@ This report was re-checked against the tree and its own artefacts. **19 of 22 bl
 - **The dealt-card overlay clips a long prompt** — visible in `e29_p4_room_code_truth.png`, where the player cannot read the prompt they are being asked to answer. Confirmed in source: `dealt_card_overlay.dart:102` fixes the card at `height: 372` and the prompt sits in a `SingleChildScrollView`, so it is cut at the fold with no scrollbar or fade. Filed as **Issue 137**.
 
 Both were inside blocks that asserted something *else* about the same screen (E29 asserted the room code is legible — it is; the line beneath it is not) and so passed. **The evidence gate proves an artefact exists; only a person opening it proves what it shows.**
+

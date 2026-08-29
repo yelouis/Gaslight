@@ -68,6 +68,8 @@ void main() {
       ),
     );
 
+    await tester.pumpAndSettle();
+
     expect(find.text('THE RECORD OF TRUTH'), findsOneWidget);
     expect(find.text('Another prompt...'), findsOneWidget);
 
@@ -77,7 +79,7 @@ void main() {
     expect(dismissed, isTrue);
   });
 
-  testWidgets('DealtCardOverlay wraps face column inside FittedBox', (WidgetTester tester) async {
+  testWidgets('DealtCardOverlay renders face column directly without FittedBox constraint', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -96,6 +98,12 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    expect(find.byType(FittedBox), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(DealtCardOverlay),
+        matching: find.byType(FittedBox),
+      ),
+      findsNothing,
+    );
   });
 }

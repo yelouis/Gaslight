@@ -123,6 +123,10 @@ Your selection (motif intensity): Option A
 
 **Reveal (`phase4_reveal.dart`).** This is the money screen — give it the most craft: staggered vote-chip landing, Truth revealed last in verdigris with a **stamped "THE TRUTH" seal**, forgery cards **flip to unmask** authors, and a **"Best Forgery of the Round"** banner. (Ties directly to the honor-stats work selected in `design_scoring_and_ui.md` Clarification 2.)
 
+**In-game header sizing — shipped Wave R (Issue 136, Option A modified), August 2026.** In-game screen AppBars across Craft (`Phase2CraftScreen`), Vote (`Phase3VoteScreen`), and Reveal (`Phase4RevealScreen`) derive their `toolbarHeight` dynamically via `inGameAppBarHeight` from measured text (`TextPainter.layout`) scaled by live `MediaQuery.textScalerOf(context)` constrained to the title box, rather than using arbitrary literals or screen-height fractions. A minimum floor of `kToolbarHeight` (56.0) is enforced. Forgery phase multi-line headers (`FORGERY`, `ROOM: XXXX`, `Rotation N of M`) fit cleanly across all viewport widths and accessibility text scaling settings without clipping.
+
+**Dealt-card overlay sizing — shipped Wave R (Issue 137, Option A), August 2026.** `DealtCardOverlay` scales responsively to accommodate long catalog prompts without silent truncation at the fold. Outer card height is bounded dynamically by `min(screenHeight * 0.7, 560)` with an inner width-constrained `Column` that takes intrinsic height for short prompts while expanding smoothly for long prompts. `SingleChildScrollView` is retained as a safety floor.
+
 **Game Over (`game_over_screen.dart`).** Present honors as **framed portraits on a parlor wall** (brass frames, engraved plaques) rather than flat cards. The stubbed "Share to Instagram" becomes an exportable **"Case Closed" dossier card** (see Proposal P6).
 
 ---

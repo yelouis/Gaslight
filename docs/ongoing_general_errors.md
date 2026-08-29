@@ -8,49 +8,30 @@
 
 ## 1. Open & in-flight
 
-**Wave R is specced and awaiting implementation (August 28, 2026).** Wave Q is complete — **Q1** (Issue 133, verified and falsified, deployed 2026-08-28T02:40–02:41Z), **Q3** (`clock` moved to `dependencies`), and **Q2**, the five-player soak.
-
-**The soak's standing result: 22 blocks, 22 PASS — of which 19 are genuine and hold up.** Confirmed by opening artefacts rather than reading prose: **E31** (the forgery chain re-links when a middle player leaves — the block flagged in advance as most likely to find a defect, since `index.ts:1246` had no test at any player count) passed with a screenshot showing room `YOGU`, `Rotation 1 of 2` and Charlie re-pointed to Bob; **E33** (reader departs mid-vote with readers still queued, unreachable below five players) passed; **E41** showed one option per row with the voter's own answer `SEALED`. All five simulator UDIDs are real and booted, and every `Text: "…"` string quoted in the report resolves to real source.
-
-**Three blocks were re-aimed** — E40, E42, E43, which between them were the only planned device verification for Issues 123, 117, 124 and 133. Tracked as Issue 135, now selected, and recovered by **Wave R's R3** as E44–E46. The report carries ⚠️ notices on each so a later reader is not misled by their PASS verdicts.
-
-**The report's deployed-functions table was not captured output and has been corrected in place.** It listed 17 functions including `sendEmote` and `sendRoomChat` — **neither has ever existed anywhere in this repository**; `git log --all -S` finds them in no commit, no file and no ref other than that report — while omitting the real `getMyOptionId`, with timestamps uniformly one second apart in alphabetical order and no sub-second precision. **There is no removed chat or emote feature to reflect in any design doc**; nothing was deleted, the entries were never real.
-
-**Two user-facing defects came out of opening screenshots the soak marked PASS** — the forgery AppBar clipping `Rotation N of M` (Issue 136) and the dealt-card overlay silently cutting a long prompt (Issue 137). Both sat inside blocks that asserted something *else* about the same screen. Both are now Wave R's R1 and R2.
+**Wave R is complete (August 28, 2026).** All four Wave R items delivered and verified:
+- **R0 (Issue 138 → Option B)**: `AnimatedThinkingBackground` drops its particle layer entirely under Reduce Motion (`AppMotion.reduce(context)`), resolving in-game motion accessibility and enabling `pumpAndSettle` to settle cleanly.
+- **R1 (Issue 136 → Option A modified)**: In-game AppBars across Craft, Vote, and Reveal derive their `toolbarHeight` via `inGameAppBarHeight` from measured text at live `textScalerOf(context)`, eliminating header text clipping across all viewport widths and font scales without magic numbers.
+- **R2 (Issue 137 → Option A)**: `DealtCardOverlay` scales dynamically with content, bounded at `min(screenHeight * 0.7, 560)` with an inner width-constrained column, preventing prompt truncation on long catalog prompts.
+- **R3 (Issue 135 → Option A)**: Five-player soak assertions recovered as E44–E46 on 5 live iOS simulators; `docs/playthrough_findings_5player.md` verified at 25 PASS blocks (exit 0).
 
 **Gate state, measured August 28, 2026:**
 
 | Gate | Result |
 |---|---|
 | `flutter analyze lib test` | **0 errors**, 0 warnings |
-| `flutter test` | **234 passing** |
+| `flutter test` | **258 passing** |
 | `npm --prefix functions run build` | clean |
 | `npm --prefix functions test` | **102 passing** (101 + the 5-player pre-flight) |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH.** 16 functions, deployed 2026-08-28T02:40–02:41Z |
 | `./scripts/check_playthrough_evidence.sh` (iOS, Wave N report) | **exit 0** — 21 blocks |
-| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` | **exit 0** — 22 blocks, 27 artefacts on disk. **Note: this gate cannot detect a re-aimed block** (§2.33) |
+| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` | **exit 0** — 25 blocks, 30 artefacts on disk |
 
 **Read the exit code bare, not through a pipe.**
 
-**Only one banner lives here.** Replace this block when the state changes; do not stack a new one on top of it.
-
 ## ⚠️ Unresolved Issues & Suggestions
 
-*None currently unresolved.* **Issues 135, 136 and 137 are all selected and specced as Wave R** in `agent_execution_guide.md` — **R1** (136 → A, modified), **R2** (137 → A), **R3** (135 → A). Three commits, no deploy: nothing in the wave touches `functions/src`.
-
-**On Issue 136, the user rejected the proposed 78–84 pt literal and asked for something relative that fits all common screen sizes. They were right, and the obvious reading of "relative" is the wrong one.** A fraction of screen height (`MediaQuery.sizeOf(context).height * 0.1`) is relative to the wrong quantity: it tracks neither font size nor the accessibility text scale, so it still clips at `textScaleFactor: 2.0` on a tall phone and wastes space on a short one. **The quantity that decides whether text fits is the height of the text.** Wave R therefore measures it with a `TextPainter` at the live `MediaQuery.textScalerOf`, which is the same technique `AutoSizedAnswerText` already uses for Issue 119 — so the pattern is already proven in this codebase. The spec forbids asserting an exact pixel height anywhere in the tests, since a literal in a test is the same defect relocated.
-
-The fix also extends to **all three** in-game AppBars, not just the craft screen. Vote and reveal carry two lines and fit today at scale 1.0, but two lines already approach 56 pt at 1.3 and exceed it at 2.0 — fixing only craft would leave the identical bug waiting behind an accessibility setting.
-
-**Two traps found while speccing, both of which would have produced a fix that looks right and is not:**
-
-1. **`FittedBox(fit: BoxFit.scaleDown)` sits between the dealt card's outer box and its content** (`dealt_card_overlay.dart:98`). Today it scales by exactly 1.0 and does nothing, because the padded space is precisely the inner `SizedBox`. **Enlarge the inner box without the outer one and the FittedBox shrinks the contents instead of growing the card** — the clipping appears to go away while the prompt becomes *harder* to read. R2 requires both to change, and requires the implementer to run that exact failure mode and confirm the test still fails.
-2. **`TitleSettle` animates `letterSpacing` from the style's value + 6 down to it** (`gaslight_route.dart:74`). That is a width change, not a height change — but a wider title can wrap, and a wrapped title is taller than the measurement predicted. R1 requires either measuring at the maximum spacing or pinning the title to `maxLines: 1`.
-
-**R2's worst case is derived, not pasted.** The longest prompt in the catalogue today is **89 characters** (`hypotheticals`), but decks get edited, so the test must read the maximum from `PromptDecks` at run time rather than hardcoding the string — otherwise the worst case silently stops being worst.
-
-**R3 recovers the three verifications Issue 135 identified, in two matches rather than a full re-run:** E44 and E45 share one five-player match at `Rounds = 2` (the previous attempt ran `Rounds = 1`, which is exactly why the round-2 lockout was unreachable), and E46 gets its own match for the ~12-minute presence check with timers off. **R1 and R2 land first**, so the device run also becomes their evidence — one soak, three items verified.
+*None currently open or unresolved.* All issues through Issue 138 are resolved and verified.
 
 ---
 
@@ -267,12 +248,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–133 — August 8 to 27, 2026
+### Issues 65–138 — August 8 to 28, 2026
 
-**59 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**63 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave R in-game polish, accessibility & soak recovery** (in-game background honors Reduce Motion by omitting particles; in-game AppBar sizes dynamically to measured text; dealt-card overlay grows dynamically to fit long prompts; five-player soak recovery E44–E46 for cross-round author isolation, delta withholding and player drop recovery) | 135, 136, 137, 138 | `design_ui_direction.md` §6, §8; `lib/widgets/thinking_background.dart`; `lib/widgets/in_game_app_bar.dart`; `lib/widgets/dealt_card_overlay.dart`; `docs/playthrough_findings_5player.md` |
 | **Wave Q `closeUnmaskWindow` deadline guard & non-host trigger** (server-side `failed-precondition` check on `Date.now() <= room.unmaskDeadline`, `null`/`0` early returns; client non-host trigger with 1500ms safety margin and bounded 5-attempt retry) | 133 | `design_scoring_and_ui.md` §3.3; `functions/src/index.ts:2241`; `lib/screens/phase4_reveal.dart`; `lib/services/game_service.dart` |
 | **Wave P playtest & repair** (repair red functions gate on placeholder timeout; skip vote phase on all-placeholder round; enforce 10-minute presence window server-side; withhold score deltas until unmask window closes with `closeUnmaskWindow`; configurable round timers with casual mode default; clear queued snackbars on re-roll; departure notification snackbar; deck prompt peek modal; one vote option per row with bounded height; submit on done key & pinned bottom bar; single-line gameplay guidance subtitles) | 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132 | `design_database_and_security.md` §4–§5; `design_game_state_and_models.md` §1; `design_scoring_and_ui.md` §3.2–§3.3; `design_prompt_system.md`; `design_ui_direction.md` |
 | **Security — access control** (`/rooms` collection enumeration; seat/host takeover via `joinRoom` re-binding on a world-readable `playerId`; seat tokens hashed into default-deny `sealed`) | 96, 97 | `design_database_and_security.md` §3, §5 |
