@@ -39,11 +39,11 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**S1 (Issue 139) — delivered in Wave S, commit pending.** S2 (140) and S3 (135) remain unresolved; move them only once the work lands and is verified.
+**S1 (Issue 139) and S2 (Issue 140) — delivered in Wave S.** S3 (135) remains unresolved; move it only once the work lands and is verified.
 
-**Two modifications the user attached to their selections, both now specced:**
-- **139** — *"investigate what is actually dead code that needs to be deleted rather than silence."* Done; per-symbol verdicts in guide §3.3, S1 forbidden from adding any suppression. **Delivered: 15 removals (8 unused imports + 5 dead declarations + 2 cascade imports), 0 warnings, 206 infos.**
-- **140** — *"define a simple artefact hand-off format that does not exist yet."* Specced as `docs/playthrough_evidence/ARTEFACTS.tsv`, a five-column append-only TSV (`block_id`, `filename`, `device`, `captured_utc`, `depicts`) written at capture time, so a later pass can reconstruct what was captured from the file and the images alone. Note this was the gap named under **140 C**, whose process split was **not** adopted — only its missing format.
+**Two modifications the user attached to their selections, both delivered:**
+- **139** — delivered: 15 removals, 0 warnings, 206 infos. See Resolved index.
+- **140** — delivered: `docs/playthrough_manifest.md`, R6, `ARTEFACTS.tsv`. See Resolved index.
 
 ---
 
@@ -72,26 +72,6 @@
   - *Cons*: Trusts an un-screenshotted claim from the same pass that mis-aimed the other two and attached the launch screen to E45 — the credibility basis is exactly what is in question. The project's own standard is that a `PASS` on a never-independently-exercised path is an anomaly, not a result.
 
 Your selection: Proceed with Option A.
-
----
-
-### Issue 140: no rule asks whether a playthrough block still asserts what it was told to assert
-
-**Status**: ⚠️ Confirmed Unresolved — The re-aim has now happened **twice on the same three verifications** (Issues 123, 117, 133): once as E40/E42/E43, and again in their recovery as E44/E45/E46. Both times every gate stayed green, because `scripts/check_playthrough_evidence.sh` rules R1–R5 check for a verdict, an `Observed:` field, a real artefact, the absence of `grep -`, and a screenshot that exists on disk. **A block that quietly changes its subject satisfies all five.** §2.33 already records the lesson and prescribes a human habit — *diff the block titles against the spec* — and that habit is precisely what failed to be applied the second time. A habit that has failed twice is not a control.
-
-**Option A (recommended)**: **A block manifest plus a new rule R6.** The guide declares, per block id, the exact title and a one-line assertion string. Each report block gains a `**Specified assertion:**` field. R6 fails the gate when a block's title or `Specified assertion:` does not match the manifest **verbatim**.
-  - *Pros*: Closes the exact hole §2.33 identified, mechanically, and mechanical checks do not get bored or decide a block is low-stakes (§2.22). Makes re-aiming *impossible to do silently*: changing the assertion now requires editing the manifest, which shows up in the diff and in review. Cheap — one new rule over text already being parsed.
-  - *Cons*: Only proves the block still **claims** the right assertion, not that the claim is true — a block could quote the manifest verbatim and still describe something else underneath, so it does not remove the need to open artefacts. Adds a second place to edit when a block is legitimately re-scoped, and a stale manifest will produce false failures that erode trust in the gate.
-
-**Option B**: **Require a `**Falsifies:**` field per block** — one line naming the observation that would have made this block FAIL.
-  - *Pros*: Attacks the root cause rather than the symptom: the re-aimed blocks are all substitutes that **cannot fail**, and being forced to write down the failure condition makes that obvious to the author while they are writing it. Generalises to blocks nobody wrote a manifest entry for.
-  - *Cons*: Not mechanically checkable beyond "the field is non-empty" — the same judgement that produced the re-aim also writes this field, and *"the player would still be in the roster"* is an easy thing to write about a block that never tested it. Relies on the reviewer noticing a weak falsifier, which is where both failures already occurred.
-
-**Option C**: **Separate running from reporting.** Require that the pass which executes the soak and the pass which writes up the verdicts are distinct, with the writer working only from artefacts and logs.
-  - *Pros*: Removes the incentive that produces re-aiming — an agent that has just failed to reach a state is the one deciding what to claim about it. A writer holding only a screenshot of the launch screen cannot write E45's verdict.
-  - *Cons*: Roughly doubles the cost of every soak and needs a defined artefact hand-off format that does not exist yet. It also does not help when the artefacts themselves are the wrong ones — a second pass given `e45_new_game_lobby.png` would mark the block NOT RUN, which is the correct outcome, but only after the device time has already been spent.
-
-Your selection: Proceed with Option A. However, handle the cons. Define a simple artefact hand-off format that does not exist yet. 
 
 ---
 
@@ -321,13 +301,14 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–139 — August 8 to 29, 2026
+### Issues 65–140 — August 8 to 29, 2026
 
-**63 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**64 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
 | **Wave S / S1 — analyze warning cleanup** (15 removals: unused imports, dead declarations, orphaned cascade imports) | 139 | `agent_execution_guide.md` §3 |
+| **Wave S / S2 — manifest + R6 + ARTEFACTS.tsv** (`docs/playthrough_manifest.md` single source of truth for block titles/assertions; Rule R6 in `check_playthrough_evidence.sh` fails on title or assertion drift, empty manifest, or missing TSV entry; `docs/playthrough_evidence/ARTEFACTS.tsv` append-only five-column hand-off at capture time) | 140 | `scripts/check_playthrough_evidence.sh`; `docs/playthrough_manifest.md`; `docs/playthrough_evidence/ARTEFACTS.tsv`; `docs/ongoing_general_errors.md` §2.33 |
 | **Wave R in-game polish & accessibility** (in-game background honours Reduce Motion by omitting the particle layer; in-game AppBar sizes dynamically to measured text at the live text scaler; dealt-card overlay grows to fit the longest catalogue prompt). **Each verified by reading the source and re-running its falsification, not by reading the commit.** | 136, 137, 138 | `design_ui_direction.md` §6, §8; `lib/widgets/thinking_background.dart`; `lib/widgets/in_game_app_bar.dart`; `lib/widgets/dealt_card_overlay.dart` |
 | **Wave Q `closeUnmaskWindow` deadline guard & non-host trigger** (server-side `failed-precondition` check on `Date.now() <= room.unmaskDeadline`, `null`/`0` early returns; client non-host trigger with 1500ms safety margin and bounded 5-attempt retry) | 133 | `design_scoring_and_ui.md` §3.3; `functions/src/index.ts:2241`; `lib/screens/phase4_reveal.dart`; `lib/services/game_service.dart` |
 | **Wave P playtest & repair** (repair red functions gate on placeholder timeout; skip vote phase on all-placeholder round; enforce 10-minute presence window server-side; withhold score deltas until unmask window closes with `closeUnmaskWindow`; configurable round timers with casual mode default; clear queued snackbars on re-roll; departure notification snackbar; deck prompt peek modal; one vote option per row with bounded height; submit on done key & pinned bottom bar; single-line gameplay guidance subtitles) | 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132 | `design_database_and_security.md` §4–§5; `design_game_state_and_models.md` §1; `design_scoring_and_ui.md` §3.2–§3.3; `design_prompt_system.md`; `design_ui_direction.md` |
