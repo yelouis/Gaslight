@@ -20,8 +20,7 @@ import '../widgets/waiting_indicator.dart';
 import '../widgets/dealt_card_overlay.dart';
 import '../widgets/lamp_loading.dart';
 import '../widgets/raven_mascot.dart';
-
-
+import '../widgets/in_game_app_bar.dart';
 import '../theme/app_icons.dart';
 
 class Phase2CraftScreen extends StatefulWidget {
@@ -213,10 +212,38 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
       _isNavigating = false;
     }
 
+    final titleStyle = AppTextStyles.phaseTitle.copyWith(fontSize: 26);
+    final roomCodeStyle = AppTextStyles.sectionLabel.copyWith(
+      letterSpacing: 1.5,
+      fontSize: 11,
+      color: theme.colorScheme.secondary.withOpacity(0.8),
+    );
+    final rotationStyle = AppTextStyles.sectionLabel;
+
+    final List<TextSpan> appBarLines = [
+      TextSpan(
+        text: state.currentPhase == GamePhase.truth ? 'TRUTH' : 'FORGERY',
+        style: titleStyle.copyWith(
+          letterSpacing: (titleStyle.letterSpacing ?? 3.0) + 6.0,
+        ),
+      ),
+      TextSpan(
+        text: 'ROOM: ${state.roomCode}',
+        style: roomCodeStyle,
+      ),
+      if (state.currentPhase == GamePhase.forgery)
+        TextSpan(
+          text: 'Rotation ${state.currentRotationIndex} of ${state.sabotageAnswersCount}',
+          style: rotationStyle,
+        ),
+    ];
+    final double computedAppBarHeight = inGameAppBarHeight(context, lines: appBarLines);
+
     return AnimatedThinkingBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
+          toolbarHeight: computedAppBarHeight,
           leading: IconButton(
             icon: ThematicIcon(
               type: ThematicIconType.depart,
@@ -226,26 +253,23 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
             tooltip: 'Leave game',
           ),
           title: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               TitleSettle(
                 text: state.currentPhase == GamePhase.truth ? 'TRUTH' : 'FORGERY',
-                style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
+                style: titleStyle,
               ),
               const SizedBox(height: 2),
               Text(
                 'ROOM: ${state.roomCode}',
-                style: AppTextStyles.sectionLabel.copyWith(
-                  letterSpacing: 1.5,
-                  fontSize: 11,
-                  color: theme.colorScheme.secondary.withOpacity(0.8),
-                ),
+                style: roomCodeStyle,
               ),
               if (state.currentPhase == GamePhase.forgery)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     'Rotation ${state.currentRotationIndex} of ${state.sabotageAnswersCount}',
-                    style: AppTextStyles.sectionLabel,
+                    style: rotationStyle,
                   ),
                 ),
             ],
@@ -417,7 +441,10 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
     String? targetId = isTruthRound ? me.id : state.currentCardAssignments[me.id];
     if (targetId == null) return const Text('Error: No target assigned');
 
-    final CardModel targetCard = state.cards.firstWhere((c) => c.targetPlayerId == targetId);
+    final CardModel targetCard = state.cards.firstWhere(
+      (c) => c.targetPlayerId == targetId,
+      orElse: () => state.cards.isNotEmpty ? state.cards.first : CardModel(targetPlayerId: '', promptText: ''),
+    );
     final targetPlayer = gs.players.firstWhere((p) => p.id == targetId, orElse: () => me);
 
     final String targetName;

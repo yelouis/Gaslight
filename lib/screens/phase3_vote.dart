@@ -21,8 +21,7 @@ import '../widgets/blinking_eye.dart';
 import '../widgets/lamp_loading.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
-
-
+import '../widgets/in_game_app_bar.dart';
 import '../theme/app_icons.dart';
 
 class Phase3VoteScreen extends StatefulWidget {
@@ -134,10 +133,32 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
       } catch (_) {}
     }
 
+    final titleStyle = AppTextStyles.phaseTitle.copyWith(fontSize: 26);
+    final roomCodeStyle = AppTextStyles.sectionLabel.copyWith(
+      letterSpacing: 1.5,
+      fontSize: 11,
+      color: theme.colorScheme.secondary.withOpacity(0.8),
+    );
+
+    final List<TextSpan> appBarLines = [
+      TextSpan(
+        text: 'THE VOTE',
+        style: titleStyle.copyWith(
+          letterSpacing: (titleStyle.letterSpacing ?? 3.0) + 6.0,
+        ),
+      ),
+      TextSpan(
+        text: 'ROOM: ${state.roomCode}',
+        style: roomCodeStyle,
+      ),
+    ];
+    final double computedAppBarHeight = inGameAppBarHeight(context, lines: appBarLines);
+
     return AnimatedThinkingBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
+          toolbarHeight: computedAppBarHeight,
           leading: IconButton(
             icon: ThematicIcon(
               type: ThematicIconType.depart,
@@ -147,19 +168,16 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
             tooltip: 'Leave game',
           ),
           title: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               TitleSettle(
                 text: 'THE VOTE',
-                style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
+                style: titleStyle,
               ),
               const SizedBox(height: 2),
               Text(
                 'ROOM: ${state.roomCode}',
-                style: AppTextStyles.sectionLabel.copyWith(
-                  letterSpacing: 1.5,
-                  fontSize: 11,
-                  color: theme.colorScheme.secondary.withOpacity(0.8),
-                ),
+                style: roomCodeStyle,
               ),
             ],
           ),

@@ -84,7 +84,12 @@ class TitleSettle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (AppMotion.reduce(context)) {
-      return Text(text, style: style);
+      return Text(
+        text,
+        style: style,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
     }
 
     final baseStyle = style ?? AppTextStyles.phaseTitle;
@@ -103,6 +108,8 @@ class TitleSettle extends StatelessWidget {
             style: baseStyle.copyWith(
               letterSpacing: baseLetterSpacing + 6.0 * (1.0 - t),
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         );
       },

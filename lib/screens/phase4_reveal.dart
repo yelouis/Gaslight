@@ -19,6 +19,7 @@ import 'package:clock/clock.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
 import '../widgets/lamp_loading.dart';
+import '../widgets/in_game_app_bar.dart';
 
 class Phase4RevealScreen extends StatefulWidget {
   const Phase4RevealScreen({super.key});
@@ -310,10 +311,32 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
       }
     }
 
+    final titleStyle = AppTextStyles.phaseTitle.copyWith(fontSize: 26);
+    final roomCodeStyle = AppTextStyles.sectionLabel.copyWith(
+      letterSpacing: 1.5,
+      fontSize: 11,
+      color: theme.colorScheme.secondary.withOpacity(0.8),
+    );
+
+    final List<TextSpan> appBarLines = [
+      TextSpan(
+        text: 'THE REVEAL',
+        style: titleStyle.copyWith(
+          letterSpacing: (titleStyle.letterSpacing ?? 3.0) + 6.0,
+        ),
+      ),
+      TextSpan(
+        text: 'ROOM: ${state.roomCode}',
+        style: roomCodeStyle,
+      ),
+    ];
+    final double computedAppBarHeight = inGameAppBarHeight(context, lines: appBarLines);
+
     return AnimatedThinkingBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
+          toolbarHeight: computedAppBarHeight,
           leading: IconButton(
             icon: ThematicIcon(
               type: ThematicIconType.depart,
@@ -323,19 +346,16 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
             tooltip: 'Leave game',
           ),
           title: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               TitleSettle(
                 text: 'THE REVEAL',
-                style: AppTextStyles.phaseTitle.copyWith(fontSize: 26),
+                style: titleStyle,
               ),
               const SizedBox(height: 2),
               Text(
                 'ROOM: ${state.roomCode}',
-                style: AppTextStyles.sectionLabel.copyWith(
-                  letterSpacing: 1.5,
-                  fontSize: 11,
-                  color: theme.colorScheme.secondary.withOpacity(0.8),
-                ),
+                style: roomCodeStyle,
               ),
             ],
           ),
@@ -924,10 +944,14 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      () {
-                        final bool isRevealed = isTruth ? revealStage >= 2 : revealStage >= 4;
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        () {
+                          final bool isRevealed = isTruth ? revealStage >= 2 : revealStage >= 4;
 
                         return FlippingRevealCard(
                           isRevealed: isRevealed,
@@ -1019,6 +1043,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                       }(),
                     ],
                   ),
+                ),
                   const SizedBox(height: 8),
                   Text(
                     text, 
