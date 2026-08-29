@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
 
 class AnimatedThinkingBackground extends StatefulWidget {
   final Widget child;
@@ -26,6 +27,16 @@ class _AnimatedThinkingBackgroundState extends State<AnimatedThinkingBackground>
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (AppMotion.reduce(context)) {
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
+
   _ThoughtParticle _generateParticle({bool initial = false}) {
     const symbols = ['?', '⚹', '¿'];
     return _ThoughtParticle(
@@ -46,25 +57,35 @@ class _AnimatedThinkingBackgroundState extends State<AnimatedThinkingBackground>
     super.dispose();
   }
 
+  Widget get _gradient => Container(
+    decoration: const BoxDecoration(
+      gradient: RadialGradient(
+        center: Alignment(0, -0.6),
+        radius: 1.5,
+        colors: [
+          Color(0xFF5E2E18),
+          AppColors.ground,
+          Color(0xFF090807),
+        ],
+        stops: [0.0, 0.6, 1.0],
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
+    if (AppMotion.reduce(context)) {
+      return Stack(
+        children: [
+          _gradient,
+          widget.child,
+        ],
+      );
+    }
+
     return Stack(
       children: [
-        // Base dark gradient
-        Container(
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              center: Alignment(0, -0.6),
-              radius: 1.5,
-              colors: [
-                Color(0xFF5E2E18),
-                AppColors.ground,
-                Color(0xFF090807),
-              ],
-              stops: [0.0, 0.6, 1.0],
-            ),
-          ),
-        ),
+        _gradient,
         AnimatedBuilder(
           animation: _controller,
           builder: (context, child) {
@@ -84,8 +105,6 @@ class _AnimatedThinkingBackgroundState extends State<AnimatedThinkingBackground>
             );
           },
         ),
-        
-        // Placed above the particles
         widget.child,
       ],
     );

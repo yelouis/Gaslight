@@ -173,6 +173,7 @@ The current app has nice entrance tweens; the risk is *scattered* motion reading
 - **Lamp flicker** on low timer and on phase transitions (a brief dim-then-brighten as the "scene changes").
 - Optional, high-impact: a few **bundled sounds** — quill scratch on submit, a wax *thunk* on vote, a low string swell on the Truth reveal — plus **haptics** on commit/reveal. Sound is the cheapest way to make a party game feel expensive. (Needs asset licensing; gate behind a mute toggle.)
 - Respect reduced-motion / provide a "reduce motion" setting for App Store accessibility.
+- **In-game background and Reduce Motion (Wave R / R0 / Issue 138, Option B):** The in-game background (`AnimatedThinkingBackground`, rooting Craft, Vote, and Reveal) honours Reduce Motion (`AppMotion.reduce(context)`) by **omitting the particle layer entirely**. The radial gradient is retained so the screens keep their warm soot ground colour. This differs from the game-over screen, which keeps a static ember field instead.
 
 ---
 
