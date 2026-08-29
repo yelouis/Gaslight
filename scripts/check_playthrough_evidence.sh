@@ -33,6 +33,27 @@
 #      $ ./scripts/check_playthrough_evidence.sh -> exit 0 (14 PASS, 1 NOT RUN, 0 FAIL; 14 artefact file paths verified on disk)
 #   3. Over-reach guard: E9 (NOT RUN with no PNG) is not flagged by R5.
 #   4. Non-zero match assertion: 14 artefacts verified on iOS, 37 on Web.
+#
+# Rule R6 — manifest-driven verbatim assertion check:
+#   Reads docs/playthrough_manifest.md. For every block listed there, R6 checks:
+#     (a) The block exists in the report.
+#     (b) The block's heading title matches the manifest Title column verbatim
+#         (after normalising surrounding whitespace only).
+#     (c) The block contains a **Specified assertion:** field matching the manifest
+#         Specified assertion column verbatim.
+#     (d) Every PNG the block cites is accompanied by a non-empty **Artefact depicts:**
+#         field, and appears in docs/playthrough_evidence/ARTEFACTS.tsv.
+#   R6 fails if the manifest file exists but parses to zero rows.
+#   Blocks NOT listed in the manifest are unaffected by R6 — legacy blocks are untouched.
+#
+#   What R6 does NOT prove: that the assertion is true, or that a cited artefact shows
+#   what its Artefact depicts: field claims. R6 proves only that the block still carries
+#   the assertion it was originally given. Opening every cited artefact and asking what
+#   it shows remains a standing human obligation (see agent_execution_guide.md §9).
+#
+# Falsification record for R6:
+#   (Recorded in the S2 commit body — three runs: unmodified exit 0, one-word title
+#    change exit 1, one-word assertion change exit 1.)
 
 
 set -euo pipefail
@@ -205,13 +226,165 @@ for block in blocks:
 if total_blocks > 0 and (pass_count + fail_count) > 0 and total_pngs_checked == 0 and any(b["id"].startswith("W") for b in blocks):
     violations.append(f"FATAL: Rule R5 evaluated 0 cited PNG artefacts across {total_blocks} blocks.")
 
+# -------------------------------------------------------------------------
+# Rule R6: Manifest-driven verbatim assertion check
+# -------------------------------------------------------------------------
+manifest_path = os.path.join(repo_root, "docs", "playthrough_manifest.md")
+r6_checked = 0
+r6_summary = ""
+
+if os.path.isfile(manifest_path):
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as mf:
+            manifest_content = mf.read()
+    except Exception as e:
+        violations.append(f"R6 FATAL: Could not read manifest {manifest_path}: {e}")
+        manifest_content = ""
+
+    # Parse TSV-style pipe table rows (skip header and separator rows)
+    # Format: | Block | Title | Specified assertion | Artefact must depict |
+    table_row_regex = re.compile(
+        r'^\|\s*([EW]\d+)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|$',
+        re.MULTILINE
+    )
+    manifest_rows = []
+    for m in table_row_regex.finditer(manifest_content):
+        block_id = m.group(1).strip()
+        title = m.group(2).strip()
+        assertion = m.group(3).strip()
+        depicts = m.group(4).strip()
+        if block_id and title and assertion:
+            manifest_rows.append({
+                "id": block_id,
+                "title": title,
+                "assertion": assertion,
+                "depicts": depicts,
+            })
+
+    if len(manifest_rows) == 0:
+        violations.append(
+            f"R6 FATAL: Manifest file exists at {manifest_path} but parsed to zero rows. "
+            f"Either the file is empty, the table body is empty, or the parser failed. "
+            f"Edit docs/playthrough_manifest.md to add rows, or remove the file if no blocks are governed."
+        )
+    else:
+        # Build a lookup of blocks by id
+        block_by_id = {b["id"]: b for b in blocks}
+
+        # Load ARTEFACTS.tsv for cross-check
+        tsv_path = os.path.join(repo_root, "docs", "playthrough_evidence", "ARTEFACTS.tsv")
+        tsv_entries = set()  # set of (block_id, filename) tuples with non-empty depicts
+        if os.path.isfile(tsv_path):
+            try:
+                with open(tsv_path, "r", encoding="utf-8") as tf:
+                    for line_num, line in enumerate(tf):
+                        if line_num == 0:
+                            continue  # skip header
+                        parts = line.rstrip("\n").split("\t")
+                        if len(parts) >= 5 and parts[0].strip() and parts[1].strip() and parts[4].strip():
+                            tsv_entries.add((parts[0].strip(), parts[1].strip()))
+            except Exception as e:
+                violations.append(f"R6 WARNING: Could not read ARTEFACTS.tsv: {e}")
+
+        # Also find the Artefact depicts: field regex
+        artefact_depicts_regex = re.compile(r'(?m)^\s*[-*]*\s*\*\*Artefact depicts:\*\*\s*(.+)$')
+
+        for row in manifest_rows:
+            r6_checked += 1
+            bid = row["id"]
+            expected_title = row["title"]
+            expected_assertion = row["assertion"]
+
+            if bid not in block_by_id:
+                violations.append(
+                    f"[{bid}] R6 violation: Block is listed in docs/playthrough_manifest.md "
+                    f"but does not exist in {report_path}. "
+                    f"Edit the manifest row at docs/playthrough_manifest.md if the block id changed."
+                )
+                continue
+
+            block = block_by_id[bid]
+            # Normalise: strip surrounding whitespace from heading after the 'ID — ' prefix
+            heading = block["heading"]
+            # heading looks like "E47 — Own answer is sealed in round 2, ..."
+            heading_title_match = re.match(r'^[EW]\d+\s+[-—]\s+(.+)$', heading)
+            if heading_title_match:
+                actual_title = heading_title_match.group(1).strip()
+            else:
+                actual_title = heading.strip()
+
+            if actual_title != expected_title:
+                violations.append(
+                    f"[{bid}] R6 violation: Block title does not match manifest verbatim.\n"
+                    f"      Manifest (docs/playthrough_manifest.md): \"{expected_title}\"\n"
+                    f"      Report heading:                          \"{actual_title}\"\n"
+                    f"      To fix a legitimate re-scope, update the manifest row in the same commit."
+                )
+
+            # Check Specified assertion: field
+            body = block["body"]
+            spec_assertion_regex = re.compile(r'(?m)^\s*[-*]*\s*\*\*Specified assertion:\*\*\s*(.+)$')
+            sa_match = spec_assertion_regex.search(body)
+            if not sa_match:
+                violations.append(
+                    f"[{bid}] R6 violation: Block has no **Specified assertion:** field. "
+                    f"Add one quoting the manifest assertion verbatim: \"{expected_assertion}\""
+                )
+            else:
+                actual_assertion = sa_match.group(1).strip()
+                if actual_assertion != expected_assertion:
+                    violations.append(
+                        f"[{bid}] R6 violation: **Specified assertion:** does not match manifest verbatim.\n"
+                        f"      Manifest (docs/playthrough_manifest.md): \"{expected_assertion}\"\n"
+                        f"      Report field:                             \"{actual_assertion}\"\n"
+                        f"      To fix a legitimate re-scope, update the manifest row in the same commit."
+                    )
+
+            # Check every cited PNG has a non-empty Artefact depicts: field
+            # and appears in ARTEFACTS.tsv
+            obs_matches_r6 = list(observed_header_regex.finditer(body))
+            if obs_matches_r6:
+                obs_match_r6 = obs_matches_r6[0]
+                obs_start_r6 = obs_match_r6.end()
+                same_line_r6 = obs_match_r6.group(2).strip()
+                remaining_r6 = body[obs_start_r6:]
+                next_field_r6 = field_header_regex.search(remaining_r6)
+                obs_body_r6 = remaining_r6[:next_field_r6.start()] if next_field_r6 else remaining_r6
+                if same_line_r6:
+                    obs_body_r6 = same_line_r6 + "\n" + obs_body_r6
+
+                cited_pngs_r6 = artefact_png_regex.findall(obs_body_r6)
+                for png_path in cited_pngs_r6:
+                    png_basename = os.path.basename(png_path)
+                    # Check Artefact depicts: field is non-empty (at least one instance in the block)
+                    depicts_matches = artefact_depicts_regex.findall(body)
+                    if not depicts_matches or not any(d.strip() for d in depicts_matches):
+                        violations.append(
+                            f"[{bid}] R6 violation: Block cites PNG '{png_basename}' but has no non-empty "
+                            f"**Artefact depicts:** field. Add one describing what the screenshot shows."
+                        )
+                    # Check ARTEFACTS.tsv has an entry for this PNG
+                    if os.path.isfile(tsv_path):
+                        if (bid, png_basename) not in tsv_entries:
+                            violations.append(
+                                f"[{bid}] R6 violation: PNG '{png_basename}' is cited in the report but has no entry "
+                                f"in docs/playthrough_evidence/ARTEFACTS.tsv with matching block_id='{bid}' and filename='{png_basename}'. "
+                                f"Log it in ARTEFACTS.tsv at capture time."
+                            )
+
+        r6_summary = f" R6: {r6_checked} of {r6_checked} manifest entries checked."
+else:
+    r6_summary = " R6: manifest not present (no governed blocks)."
+
+# -------------------------------------------------------------------------
+
 if violations:
     print(f"FAIL: {len(violations)} violation(s) found across {total_blocks} blocks:")
     for v in violations:
         print(f"  {v}")
     sys.exit(1)
 
-print(f"PASS: Checked {total_blocks} blocks ({total_pngs_checked} artefact file paths verified on disk) in {report_path}: {pass_count} PASS, {not_run_count} NOT RUN, {fail_count} FAIL.")
+print(f"PASS: Checked {total_blocks} blocks ({total_pngs_checked} artefact file paths verified on disk) in {report_path}: {pass_count} PASS, {not_run_count} NOT RUN, {fail_count} FAIL.{r6_summary}")
 print("All assertion blocks satisfy playthrough evidence rules R1-R5.")
 sys.exit(0)
 EOF
