@@ -8,10 +8,6 @@ import '../models/player_state.dart';
 import 'dart:math';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../utils/prompt_decks.dart';
-import '../utils/rotation_engine.dart';
-import '../models/card_model.dart';
-import '../utils/scoring_logic.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:uuid/uuid.dart';
@@ -140,12 +136,6 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  String _currentStateKey() {
-    final state = _gameState;
-    if (state == null) return '';
-    return '${state.roomCode}_${state.currentPhase.name}_${state.currentRotationIndex}_${state.currentReaderId}';
-  }
-
   // Gem colors for dark fantasy poker chips
   static const List<int> _playerColors = [
     0xFFB71C1C, // Ruby
@@ -163,13 +153,6 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
   ];
 
   static const String kMissingAnswerPlaceholder = "(The ink ran dry...)";
-
-  // Generate 4 letter room code
-  String _generateRoomCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    var rng = Random();
-    return String.fromCharCodes(Iterable.generate(4, (_) => chars.codeUnitAt(rng.nextInt(chars.length))));
-  }
 
   int _getRandomColor() {
     final rng = Random();

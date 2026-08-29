@@ -6,7 +6,6 @@ import '../theme/app_icons.dart';
 import '../models/game_state.dart';
 import '../models/player_state.dart';
 import '../models/card_model.dart';
-import '../utils/scoring_logic.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
@@ -33,7 +32,6 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
   bool _isSubmittingUnmask = false;
   
   late final int _mountTime;
-  int _lastReactionSentTime = 0;
 
   int _revealStartTime = 0;
   String? _previousTargetId;

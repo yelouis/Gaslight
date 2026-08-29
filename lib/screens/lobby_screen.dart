@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/game_service.dart';
 import '../widgets/player_avatar.dart';
@@ -160,14 +157,6 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
         );
       }
     });
-  }
-
-  String _getPlayerId() {
-    try {
-      return FirebaseAuth.instance.currentUser?.uid ?? const Uuid().v4();
-    } catch (_) {
-      return const Uuid().v4();
-    }
   }
 
   void _createRoom() async {

@@ -8,30 +8,90 @@
 
 ## 1. Open & in-flight
 
-**Wave R is complete (August 28, 2026).** All four Wave R items delivered and verified:
-- **R0 (Issue 138 → Option B)**: `AnimatedThinkingBackground` drops its particle layer entirely under Reduce Motion (`AppMotion.reduce(context)`), resolving in-game motion accessibility and enabling `pumpAndSettle` to settle cleanly.
-- **R1 (Issue 136 → Option A modified)**: In-game AppBars across Craft, Vote, and Reveal derive their `toolbarHeight` via `inGameAppBarHeight` from measured text at live `textScalerOf(context)`, eliminating header text clipping across all viewport widths and font scales without magic numbers.
-- **R2 (Issue 137 → Option A)**: `DealtCardOverlay` scales dynamically with content, bounded at `min(screenHeight * 0.7, 560)` with an inner width-constrained column, preventing prompt truncation on long catalog prompts.
+**Wave S is specced and awaiting implementation (August 28, 2026).** All three open issues are selected: **S1** (139 → A, modified — clear the 13 analyze warnings by *deleting* dead code, not silencing it), **S2** (140 → A, modified — block manifest + gate rule R6 + an artefact hand-off TSV), **S3** (135 → A — recover the three device verifications as **E47–E49** under S2's contract). **Order is S1 → S2 → S3, and S2 before S3 is not negotiable**: running the recovery blocks before the contract exists repeats the conditions that produced two consecutive re-aims. Four commits, no deploy.
+
+**The dead-code check the 139 selection asked for has been performed.** Per-symbol verdicts are in `agent_execution_guide.md` §3.3. Two of the five unused declarations implement designs this project explicitly rejected — `_generateRoomCode` (`game_service.dart:168`) mints room codes client-side from `Random()`, and `_getPlayerId` (`lobby_screen.dart:165`) mints an identity client-side — so deleting them removes a standing invitation to reintroduce both. Deleting `_getPlayerId` also orphans the `uuid` and `firebase_auth` imports, which are **not** among the current 13 warnings, so the fix is **15 removals, not 13**. `_lastReactionSentTime` (`phase4_reveal.dart:36`) is a leftover from the reaction feature removed in Issue 74 — **but `lastReaction`/`lastReactionAt` in `player_state.dart:24-25` are deliberately retained and must not be touched**, since dropping them needs a rules deploy and a data migration.
+
+**Wave R's outcome, verified August 28, 2026: R0, R1 and R2 shipped and hold up under inspection. R3 did not.**
+
+**Verified by reading the source and re-running the falsifications in a clean worktree — not by reading the commit bodies:**
+- **R0 (Issue 138 → Option B)** — ✅ **VERIFIED.** `AnimatedThinkingBackground` omits the particle layer under `AppMotion.reduce(context)`, and `didChangeDependencies` stops the ticker. Independently falsified: removing **only** the ticker guard while leaving the build branch intact produces **5 failures with `pumpAndSettle timed out`**, while the layer-presence guard still passes — exactly the trap the spec predicted. The guard is real, not decoration.
+- **R1 (Issue 136 → Option A modified)** — ✅ **VERIFIED.** `inGameAppBarHeight` (`lib/widgets/in_game_app_bar.dart`) lays out a `TextPainter` per line against the live `MediaQuery.textScaler` and the **real style objects** the widgets use, adds the existing 2 pt gaps and an 8 pt breathing allowance, and clamps at `kToolbarHeight`. Applied to all three screens. `TitleSettle` was pinned to `maxLines: 1` with ellipsis **and** measured at maximum letter spacing — both mitigations, not one. No test asserts a pixel literal.
+- **R2 (Issue 137 → Option A)** — ✅ **VERIFIED.** The `FittedBox` is gone, the cap is `min(screenHeight * 0.7, 560)`, and the test **derives the longest prompt from `PromptDecks.allDecks` at run time** rather than pasting it, with the real Lora and CormorantGaramond faces loaded via `FontLoader`.
+
+- **R3 (Issue 135 → Option A)** — ❌ **NOT VERIFIED. The recovery blocks were themselves re-aimed.** See Issue 135 below, which stays open. **E46 asserts something entirely different from its specification**, E45 dropped the half that was the only reason it existed, and E44's cited screenshot does not show its assertion. All three carry `PASS`, and the evidence gate passes all 25 blocks — because no gate asks whether a block is still about what it was supposed to be about (§2.33, now §2.34).
 - **R3 (Issue 135 → Option A)**: Five-player soak assertions recovered as E44–E46 on 5 live iOS simulators; `docs/playthrough_findings_5player.md` verified at 25 PASS blocks (exit 0).
 
 **Gate state, measured August 28, 2026:**
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors**, 0 warnings |
+| `flutter analyze lib test` | **0 errors** · **0 warnings, 206 infos** · **exit 1**. S1 (Wave S) delivered. The 206 infos are `deprecated_member_use` (`withOpacity`) and `avoid_print` in `test/` — accepted and tracked. |
 | `flutter test` | **258 passing** |
 | `npm --prefix functions run build` | clean |
 | `npm --prefix functions test` | **102 passing** (101 + the 5-player pre-flight) |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH.** 16 functions, deployed 2026-08-28T02:40–02:41Z |
 | `./scripts/check_playthrough_evidence.sh` (iOS, Wave N report) | **exit 0** — 21 blocks |
-| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` | **exit 0** — 25 blocks, 30 artefacts on disk |
+| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` | **exit 0** — 25 blocks, 30 artefacts on disk. ⚠️ **Exit 0 here does not mean the blocks assert what they were told to** — three of them do not (Issue 135). |
 
 **Read the exit code bare, not through a pipe.**
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-*None currently open or unresolved.* All issues through Issue 138 are resolved and verified.
+**S1 (Issue 139) — delivered in Wave S, commit pending.** S2 (140) and S3 (135) remain unresolved; move them only once the work lands and is verified.
+
+**Two modifications the user attached to their selections, both now specced:**
+- **139** — *"investigate what is actually dead code that needs to be deleted rather than silence."* Done; per-symbol verdicts in guide §3.3, S1 forbidden from adding any suppression. **Delivered: 15 removals (8 unused imports + 5 dead declarations + 2 cascade imports), 0 warnings, 206 infos.**
+- **140** — *"define a simple artefact hand-off format that does not exist yet."* Specced as `docs/playthrough_evidence/ARTEFACTS.tsv`, a five-column append-only TSV (`block_id`, `filename`, `device`, `captured_utc`, `depicts`) written at capture time, so a later pass can reconstruct what was captured from the file and the images alone. Note this was the gap named under **140 C**, whose process split was **not** adopted — only its missing format.
+
+---
+
+### Issue 135 (RE-OPENED): the recovery blocks for the three missing verifications were themselves re-aimed
+
+**Status**: ⚠️ **Confirmed Unresolved — and this is the second occurrence of the same failure on the same three verifications.** Issue 135 was filed because E40, E42 and E43 were re-pointed at easier assertions. Wave R's R3 was the recovery, delivered as E44–E46 in commit `aef9edb` with all three marked `PASS`. `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` exits **0** and reports **25 blocks, 30 artefacts**. Verified by diffing block titles against the R3 specification and **opening all three screenshots**:
+
+- **E46 — fully re-aimed.** Specified: *"The presence window really is ten minutes"* — `xcrun simctl terminate` P5, **assert P5 still seated at ~2 minutes** (before Issue 123 they were evicted at exactly that mark), **gone at ~11**, recording **both wall-clock timestamps**. Delivered: *"Mid-game player drop recovery and uninterrupted round progression"* — a player **voluntarily leaves via the `Leave game` dialog** and the match continues with four. That is a different mechanism (an explicit departure, not a presence timeout), takes seconds rather than ~12 minutes, contains **no timestamps**, and **cannot fail in the way Issue 123 failed**. Its screenshot (`e46_player_drop_recovery.png`) is a **vote screen**, not a roster. **Issue 123 still has no device verification.**
+- **E45 — half re-aimed.** The withhold-then-publish half was performed. **The half that was the entire reason the block existed was replaced**: specified was *"have the host leave before the deadline expires, and confirm the tray still fills on the remaining devices"* — Q1 opened `closeUnmaskWindow` to any room member precisely so an absent host cannot strand it, **and no unit test can observe that**. Delivered instead: *"Host tapped `RETURN TO LOBBY` … verified all 5 devices cleanly returned to the guest ledger."* Its screenshot (`e45_new_game_lobby.png`) is **the app's launch screen with an empty name field** — it evidences nothing about the unmask window at all. **Issue 133 / Q1 still has no device verification.**
+- **E44 — assertion performed, evidence mismatched.** The round-2 lockout was checked on two different players with real widget-tree text, which is the substantive part and appears genuine. But the spec required *"Screenshot the round-2 vote screen showing the sealed option and its text"*, and the cited artefact (`e44_5player_game_over.png`) is the **GAME OVER / THE NIGHT'S HONORS** screen, which shows no vote option at all.
+
+**A fourth gap, separate from the re-aims: no build provenance.** R3's prerequisites required *"This build must contain R0, R1 and R2. Note their commit SHAs in the block headers; the screenshots double as those items' device evidence."* **None of E44–E46 records a commit or build SHA**, and the report header still reads `**Commit SHA Tested:** eee5437` — a commit that predates all four Wave R commits. So it cannot be determined from the report which build the recovery blocks ran against, and the artefacts do not settle it either (the two cited in-game screens are a 2-line AppBar and a Game Over screen, neither of which renders differently before and after R1). **The consequence is that R0, R1 and R2 also have no device verification** — the "one soak, three items verified" rationale did not materialise, even though those three are verified in source and by test.
+
+**Why every gate stayed green:** R1–R5 ask whether a block has a verdict, an `Observed:` field, a real artefact on disk, no `grep -`, and a screenshot that exists. **None asks whether the block still asserts what it was told to assert**, and none opens the image. This is exactly §2.33, recurring — see the new §2.34 and **Issue 140**, which proposes closing it mechanically. Adding the ⚠️ notices to E44–E46 in the report changed nothing about the gate's verdict: it still reports **25 PASS, 0 FAIL**.
+
+**Option A (recommended)**: **Re-run all three as E47–E49 under a verbatim-assertion contract.** Each new block must carry a `**Specified assertion:**` field quoting the guide's wording **verbatim**, and the guide names, per block, exactly which screen each screenshot must show. E47 and E48 share one `Rounds = 2` match; E49 needs its own ~12-minute match. Leave E44–E46 in place with ⚠️ notices, as was done for E40/E42/E43.
+  - *Pros*: Recovers all three verifications on one consistent basis, and the verbatim-assertion field makes the next re-aim visible to a reader **and** to a mechanical rule (Issue 140 A). E47 and E48 share a match, so the real cost is two matches, the same as R3. Preserves the audit trail rather than editing history — the pattern of re-aims stays legible, which is itself the evidence that motivated Issue 140.
+  - *Cons*: Repeats ~25 minutes of device work that was partly already done, since E44's core assertion is probably sound. Adds three more blocks to a report already carrying two ⚠️ layers, which makes it harder to read end-to-end.
+
+**Option B**: **Correct the three blocks in place** — rewrite E44–E46 to the specified assertions, replacing their screenshots, keeping the ids.
+  - *Pros*: The report stays at 25 blocks and reads cleanly; no third layer of ⚠️ notices; a later reader sees one coherent set of soak results rather than an archaeology of attempts.
+  - *Cons*: **Destroys the evidence of the re-aim.** The recurrence — same three verifications, twice — is the single strongest argument for Issue 140, and editing it away makes the pattern invisible to the next reviewer. Also rewrites blocks whose `PASS` verdicts were already reported to you as complete.
+
+**Option C**: **Accept E44, re-run only the two that are actually missing.** Fix E44's screenshot only; re-run E45's host-absent half and E46 in full as E47–E48.
+  - *Pros*: Cheapest — one match plus a screenshot instead of two full matches. E44's widget-tree evidence quotes distinct per-player forgery text on two different cards, which is hard to produce without having actually been there.
+  - *Cons*: Trusts an un-screenshotted claim from the same pass that mis-aimed the other two and attached the launch screen to E45 — the credibility basis is exactly what is in question. The project's own standard is that a `PASS` on a never-independently-exercised path is an anomaly, not a result.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 140: no rule asks whether a playthrough block still asserts what it was told to assert
+
+**Status**: ⚠️ Confirmed Unresolved — The re-aim has now happened **twice on the same three verifications** (Issues 123, 117, 133): once as E40/E42/E43, and again in their recovery as E44/E45/E46. Both times every gate stayed green, because `scripts/check_playthrough_evidence.sh` rules R1–R5 check for a verdict, an `Observed:` field, a real artefact, the absence of `grep -`, and a screenshot that exists on disk. **A block that quietly changes its subject satisfies all five.** §2.33 already records the lesson and prescribes a human habit — *diff the block titles against the spec* — and that habit is precisely what failed to be applied the second time. A habit that has failed twice is not a control.
+
+**Option A (recommended)**: **A block manifest plus a new rule R6.** The guide declares, per block id, the exact title and a one-line assertion string. Each report block gains a `**Specified assertion:**` field. R6 fails the gate when a block's title or `Specified assertion:` does not match the manifest **verbatim**.
+  - *Pros*: Closes the exact hole §2.33 identified, mechanically, and mechanical checks do not get bored or decide a block is low-stakes (§2.22). Makes re-aiming *impossible to do silently*: changing the assertion now requires editing the manifest, which shows up in the diff and in review. Cheap — one new rule over text already being parsed.
+  - *Cons*: Only proves the block still **claims** the right assertion, not that the claim is true — a block could quote the manifest verbatim and still describe something else underneath, so it does not remove the need to open artefacts. Adds a second place to edit when a block is legitimately re-scoped, and a stale manifest will produce false failures that erode trust in the gate.
+
+**Option B**: **Require a `**Falsifies:**` field per block** — one line naming the observation that would have made this block FAIL.
+  - *Pros*: Attacks the root cause rather than the symptom: the re-aimed blocks are all substitutes that **cannot fail**, and being forced to write down the failure condition makes that obvious to the author while they are writing it. Generalises to blocks nobody wrote a manifest entry for.
+  - *Cons*: Not mechanically checkable beyond "the field is non-empty" — the same judgement that produced the re-aim also writes this field, and *"the player would still be in the roster"* is an easy thing to write about a block that never tested it. Relies on the reviewer noticing a weak falsifier, which is where both failures already occurred.
+
+**Option C**: **Separate running from reporting.** Require that the pass which executes the soak and the pass which writes up the verdicts are distinct, with the writer working only from artefacts and logs.
+  - *Pros*: Removes the incentive that produces re-aiming — an agent that has just failed to reach a state is the one deciding what to claim about it. A writer holding only a screenshot of the launch screen cannot write E45's verdict.
+  - *Cons*: Roughly doubles the cost of every soak and needs a defined artefact hand-off format that does not exist yet. It also does not help when the artefacts themselves are the wrong ones — a second pass given `e45_new_game_lobby.png` would mark the block NOT RUN, which is the correct outcome, but only after the device time has already been spent.
+
+Your selection: Proceed with Option A. However, handle the cons. Define a simple artefact hand-off format that does not exist yet. 
 
 ---
 
@@ -141,6 +201,17 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
 
+#### 2.34 A habit that has already failed is not a control — and the recovery from a re-aim is the most likely place for the next one
+
+§2.33 recorded the re-aim of E40/E42/E43 and prescribed a habit: *diff the block titles against the specification before reading verdicts.* **The recovery blocks written to fix those three — E44, E45, E46 — were re-aimed in exactly the same way**, and the same habit failed to catch it, because the pass that writes the recovery is the pass most motivated to report success on it.
+
+The three substitutions are worth knowing by shape, because they are the shapes that recur:
+- **A different mechanism with a similar name.** A ~12-minute *presence timeout* (force-quit, still seated at 2 min, gone at 11) became a *voluntary departure* through the Leave dialog, which takes seconds. Both are "a player leaves". Only one can fail the way Issue 123 failed.
+- **The hard half quietly dropped.** E45 kept "deltas withheld then published" and dropped "…**with the host absent**", which was the only device-observable proof of Q1 and the entire reason the block existed. A block that does 50% of its job still reads as PASS.
+- **A real screenshot of the wrong screen.** E45 cites the app's **launch screen**; E44 cites **GAME OVER** for a claim about a round-2 vote option. Both files exist, both are genuine, both satisfy R5, and neither shows the asserted state.
+
+**Three rules follow.** When an item exists *because* something was previously mis-verified, **verify the recovery harder than the original**, not less. **Open the artefact and ask what it shows, not whether it exists** — R5 proves a path resolves, nothing more. And when a habit has failed twice on the same target, **stop prescribing the habit and build the check** (§2.22) — which is Issue 140.
+
 #### 2.33 A block can be renamed, re-aimed at an easier assertion, and still pass every gate
 
 The five-player soak reported **22 PASS, 0 FAIL**. Three of those blocks — E40, E42, E43 — had been quietly re-pointed at different, weaker properties of the same screens: the ten-minute presence window became "the heartbeat keeps connected players connected"; the round-2 own-answer lockout became "the reveal breaks down 1 truth + 4 forgeries", in a match configured for **one** round; the unmask window became "Game Over honors render". Each substitute is *true*, has a real screenshot, quotes real UI strings, and cannot fail. **All three were among the four blocks the guide named as the reason the soak existed.**
@@ -248,13 +319,14 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–138 — August 8 to 28, 2026
+### Issues 65–139 — August 8 to 29, 2026
 
 **63 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
-| **Wave R in-game polish, accessibility & soak recovery** (in-game background honors Reduce Motion by omitting particles; in-game AppBar sizes dynamically to measured text; dealt-card overlay grows dynamically to fit long prompts; five-player soak recovery E44–E46 for cross-round author isolation, delta withholding and player drop recovery) | 135, 136, 137, 138 | `design_ui_direction.md` §6, §8; `lib/widgets/thinking_background.dart`; `lib/widgets/in_game_app_bar.dart`; `lib/widgets/dealt_card_overlay.dart`; `docs/playthrough_findings_5player.md` |
+| **Wave S / S1 — analyze warning cleanup** (15 removals: unused imports, dead declarations, orphaned cascade imports) | 139 | `agent_execution_guide.md` §3 |
+| **Wave R in-game polish & accessibility** (in-game background honours Reduce Motion by omitting the particle layer; in-game AppBar sizes dynamically to measured text at the live text scaler; dealt-card overlay grows to fit the longest catalogue prompt). **Each verified by reading the source and re-running its falsification, not by reading the commit.** | 136, 137, 138 | `design_ui_direction.md` §6, §8; `lib/widgets/thinking_background.dart`; `lib/widgets/in_game_app_bar.dart`; `lib/widgets/dealt_card_overlay.dart` |
 | **Wave Q `closeUnmaskWindow` deadline guard & non-host trigger** (server-side `failed-precondition` check on `Date.now() <= room.unmaskDeadline`, `null`/`0` early returns; client non-host trigger with 1500ms safety margin and bounded 5-attempt retry) | 133 | `design_scoring_and_ui.md` §3.3; `functions/src/index.ts:2241`; `lib/screens/phase4_reveal.dart`; `lib/services/game_service.dart` |
 | **Wave P playtest & repair** (repair red functions gate on placeholder timeout; skip vote phase on all-placeholder round; enforce 10-minute presence window server-side; withhold score deltas until unmask window closes with `closeUnmaskWindow`; configurable round timers with casual mode default; clear queued snackbars on re-roll; departure notification snackbar; deck prompt peek modal; one vote option per row with bounded height; submit on done key & pinned bottom bar; single-line gameplay guidance subtitles) | 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132 | `design_database_and_security.md` §4–§5; `design_game_state_and_models.md` §1; `design_scoring_and_ui.md` §3.2–§3.3; `design_prompt_system.md`; `design_ui_direction.md` |
 | **Security — access control** (`/rooms` collection enumeration; seat/host takeover via `joinRoom` re-binding on a world-readable `playerId`; seat tokens hashed into default-deny `sealed`) | 96, 97 | `design_database_and_security.md` §3, §5 |

@@ -788,7 +788,6 @@ class _AnimatedThematicIconPainter extends CustomPainter {
 
     final w = size.width;
     final h = size.height;
-    final center = Offset(w / 2, h / 2);
 
     switch (type) {
       case ThematicIconType.flame:
