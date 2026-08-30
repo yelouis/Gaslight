@@ -1,5 +1,7 @@
 # Agent Execution Guide — Active Build: Wave S — make the soak contract enforceable, then recover the three verifications — August 28, 2026
 
+**Status as of August 29, 2026: S1 and S2 are done and committed. S3 is partial — E47 and E48 landed as Match N1 and are committed; E49 (Match N2) is stopped, not started, pending a decision on newly-filed Issue 141 (found while gathering S3's own R0 device-evidence prerequisite — see `docs/ongoing_general_errors.md`).** The queue is not empty; do not start Match N2 until Issue 141 has a selection.
+
 **You are an engineering agent with no memory of this project.**
 
 **All three selections are made.** Build exactly these, in this order.
@@ -358,38 +360,38 @@ Reach an active phase, then `xcrun simctl terminate` P5 and **do not relaunch it
 
 ## 6. Definition of Done
 
-**S1**
-- [ ] `flutter analyze lib test` reports **0 warnings**; the info count is still exactly **207**; errors still **0**.
-- [ ] Before/after analyze summary lines are in the commit body.
-- [ ] **No suppressions added** — `git diff -- analysis_options.yaml` is empty and no `// ignore:` was introduced.
-- [ ] All five dead declarations deleted, **plus** the `uuid` and `firebase_auth` imports orphaned by removing `_getPlayerId`.
-- [ ] **`lastReaction` / `lastReactionAt` still present in `lib/models/player_state.dart`.**
-- [ ] `flutter test` ≥ **258**, `npm --prefix functions test` ≥ **102** — unchanged.
-- [ ] The `_currentStateKey` note is in the commit body.
+**S1** — ✅ done (commit `8bef4bf`)
+- [x] `flutter analyze lib test` reports **0 warnings**; the info count is **206** (207 − 1: the `prefer_final_fields` info on `_lastReactionSentTime` vanished with the deleted field); errors still **0**.
+- [x] Before/after analyze summary lines are in the commit body.
+- [x] **No suppressions added** — `git diff -- analysis_options.yaml` is empty and no `// ignore:` was introduced.
+- [x] All five dead declarations deleted, **plus** the `uuid` and `firebase_auth` imports orphaned by removing `_getPlayerId`.
+- [x] **`lastReaction` / `lastReactionAt` still present in `lib/models/player_state.dart`.**
+- [x] `flutter test` ≥ **258**, `npm --prefix functions test` ≥ **102** — unchanged.
+- [x] The `_currentStateKey` note is in the commit body.
 
-**S2**
-- [ ] `docs/playthrough_manifest.md` exists and is the single source of the assertion text.
-- [ ] R6 fails on a one-word title change **and** on a one-word assertion change; both messages name the block and the manifest row. **All three runs' exit codes are in the commit body.**
-- [ ] R6 **fails** on an empty manifest rather than passing vacuously.
-- [ ] The summary line reports how many manifest entries were matched.
-- [ ] The 22 legacy blocks are unaffected.
-- [ ] `docs/playthrough_evidence/ARTEFACTS.tsv` exists with the five-column header, and the gate fails if a cited PNG has no row.
-- [ ] The script's header comment states **what R6 does not prove**.
+**S2** — ✅ done (commits `6119b9f`, `6b6bb97`)
+- [x] `docs/playthrough_manifest.md` exists and is the single source of the assertion text.
+- [x] R6 fails on a one-word title change **and** on a one-word assertion change; both messages name the block and the manifest row. **All three runs' exit codes are in the commit body.**
+- [x] R6 **fails** on an empty manifest rather than passing vacuously.
+- [x] The summary line reports how many manifest entries were matched.
+- [x] The 22 legacy blocks are unaffected.
+- [x] `docs/playthrough_evidence/ARTEFACTS.tsv` exists with the five-column header, and the gate fails if a cited PNG has no row.
+- [x] The script's header comment states **what R6 does not prove**.
 
-**S3**
-- [ ] `docs/playthrough_findings_5player.md` carries **E47, E48, E49**; the gate exits **0**, reports **28 blocks**, and **R6 matched 3 of 3**.
-- [ ] **E47** asserts the sealed option in **round 2** is the one authored *that round*, on two different players' cards, with both rounds' text quoted.
-- [ ] **E48** asserts deltas absent during the window, present after, **and** that the tray fills with the **host absent** — or is `NOT RUN` with a `Reason:`.
-- [ ] **E49** records **both** wall-clock timestamps, P5 present at ~2 min and gone at ~11 — or is `NOT RUN` with a `Reason:`.
-- [ ] Every block records its **Commit SHA Tested**, and the report header no longer says `eee5437`.
-- [ ] One device ran with **Reduce Motion on**, and a screenshot shows the in-game background with **no particles** — R0's missing device evidence.
-- [ ] Every cited screenshot was **opened** and matches its `Artefact depicts:`.
-- [ ] E44–E46 were **left in place** with their notices.
-- [ ] Nothing was renamed.
+**S3** — ⚠️ partial: **E47/E48 done (Match N1); E49 not run — stopped on Issue 141**
+- [x] `docs/playthrough_findings_5player.md` carries **E47, E48, E49**; the gate exits **0**, reports **28 blocks**, and **R6 matched 3 of 3**.
+- [x] **E47** asserts the sealed option in **round 2** is the one authored *that round*, on two different players' cards (Bob, Charlie), with both rounds' text quoted.
+- [x] **E48** asserts deltas absent during the window, present after, **and** that the tray fills with the **host absent**.
+- [ ] **E49** records **both** wall-clock timestamps, P5 present at ~2 min and gone at ~11 — **is `NOT RUN`**, `Reason:` given (Match N2 not started; see Issue 141).
+- [x] Every block records its **Commit SHA Tested**, and the report header no longer says only `eee5437` (both the original-pass SHA and the Match N1 SHA are now recorded).
+- [ ] One device ran with **Reduce Motion on**, and a screenshot shows the in-game background with **no particles** — **still missing, and now understood why**: Reduce Motion does not gate `AppMotion.reduce()` on this Flutter/iOS combination at all (Issue 141). No screenshot can show the intended effect until that is resolved.
+- [x] Every cited screenshot was **opened** and matches its `Artefact depicts:`.
+- [x] E44–E46 were **left in place** with their notices.
+- [x] Nothing was renamed.
 
 **Across the wave**
-- [ ] **0 errors · 0 warnings · 206 infos** · `flutter test` ≥ 258 · clean functions build · ≥ 102 functions · deck sync exit 0 · both evidence gates exit 0 · **deploy still exit 0**.
-- [ ] Issues **135, 139 and 140** moved into the **single** existing Resolved heading.
+- [x] **0 errors · 0 warnings · 206 infos** · `flutter test` ≥ 258 (258) · clean functions build · ≥ 102 functions (102) · deck sync exit 0 · both evidence gates exit 0 · **deploy still exit 0**.
+- [ ] Issues **135, 139 and 140** moved into the **single** existing Resolved heading — **139 and 140 done; 135 stays open** (E49/Issue 123 still unverified) and **141 is newly filed, open**.
 
 ---
 

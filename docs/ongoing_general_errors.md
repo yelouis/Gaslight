@@ -39,7 +39,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**S1 (Issue 139) and S2 (Issue 140) — delivered in Wave S.** S3 (135) remains unresolved; move it only once the work lands and is verified.
+**S1 (Issue 139) and S2 (Issue 140) — delivered in Wave S.** S3 (135) is partially recovered: **E47 and E48 landed as Match N1**, verified under S2's manifest/R6 contract; **E49 (Match N2) is stopped pending Issue 141**, found while gathering R0's device evidence mid-soak — see below, and see §5.6 of `agent_execution_guide.md` for why the soak stops here rather than starting a second match.
 
 **Two modifications the user attached to their selections, both delivered:**
 - **139** — delivered: 15 removals, 0 warnings, 206 infos. See Resolved index.
@@ -72,6 +72,34 @@
   - *Cons*: Trusts an un-screenshotted claim from the same pass that mis-aimed the other two and attached the launch screen to E45 — the credibility basis is exactly what is in question. The project's own standard is that a `PASS` on a never-independently-exercised path is an anomaly, not a result.
 
 Your selection: Proceed with Option A.
+
+---
+
+### Issue 141: `AppMotion.reduce()` does not detect real iOS "Reduce Motion" — R0 (Issue 138) only helps VoiceOver/Switch Control users
+
+**Status**: ⚠️ Confirmed Unresolved — found while obtaining S3's R0 device evidence (§5.2 item 8 of `agent_execution_guide.md`), which Wave R never captured. `AppMotion.reduce(c) => MediaQuery.of(c).accessibleNavigation` (`lib/theme/app_motion.dart:11`) is the single gate `AnimatedThinkingBackground` (`lib/widgets/thinking_background.dart`) checks to decide whether to omit its particle layer, and it is also read directly in `auto_advance_timer.dart:90` (noted as an accepted style inconsistency in §8 of the guide, not a behavioural one — this issue shows it is not behaviourally equivalent either).
+
+**The device test that exposed it**: `iPhone 17 Pro Max` (P3, Charlie) had **Settings → Accessibility → Motion → Reduce Motion** enabled (confirmed via `xcrun simctl spawn <udid> defaults read com.apple.Accessibility ReduceMotionEnabled` → `1`) for the entire S3 soak. Every reveal/vote/craft screenshot taken from that device during the match (e.g. `docs/playthrough_evidence/e47_p3_charlie_round2_sealed.png`) still shows the drifting `?`/`⚹`/`¿` glyph particles — the exact effect R0 claims to suppress.
+
+**Root cause, traced through the Flutter iOS embedder** (`AccessibilityFeatures.swift` in the bundled engine, Flutter 3.44.6): `accessibleNavigation` is set **only** from `UIAccessibility.isVoiceOverRunning || UIAccessibility.isSwitchControlRunning`. `isReduceMotionEnabled()` instead sets a **separate** bit, `reduceMotion`, exposed on `dart:ui`'s `PlatformDispatcher.accessibilityFeatures.reduceMotion` — but the stable `package:flutter` `MediaQueryData` in this SDK version does **not** surface that bit at all; its only animation-related field, `MediaQueryData.disableAnimations`, reads a *third*, still-different bit (`disableAnimations`) that this iOS embedder **never sets** on any code path. So on iOS, `MediaQueryData.disableAnimations` is permanently `false` and `MediaQueryData.accessibleNavigation` tracks VoiceOver/Switch Control, not Reduce Motion — there is currently no `MediaQuery`-level flag in this Flutter version that reflects real Reduce Motion on iOS.
+
+**Why R0's own tests didn't catch this**: they set `accessibleNavigation: true` directly on a fake `MediaQueryData` (the same injection pattern lesson §2.7 documents, originally adopted to stop widget tests from hanging on `AnimationController.repeat()`). That correctly proves the *build branch* omits the particle layer when the flag is true; it cannot prove the flag ever becomes true from a real user turning on Reduce Motion, because it never becomes true that way on a device.
+
+**Practical impact**: Issue 138 was filed to "honour Reduce Motion." On a real device, an end user who turns on Reduce Motion gets no change at all — the particle animation keeps running. Only a user running VoiceOver or Switch Control incidentally gets the suppression, as an unintended side effect.
+
+**Option A (recommended)**: **Read `PlatformDispatcher.instance.accessibilityFeatures.reduceMotion` directly (`dart:ui`), OR'd with the existing `accessibleNavigation` check**, in `AppMotion.reduce()`, and have call sites rebuild on `WidgetsBindingObserver.didChangeAccessibilityFeatures` rather than relying solely on `didChangeDependencies` (which only fires on `MediaQuery` ancestor changes, and `PlatformDispatcher` reads bypass `MediaQuery` entirely).
+  - *Pros*: Fixes the defect on iOS for actual Reduce Motion users without breaking the existing `MediaQueryData(accessibleNavigation: true)` widget-test injection pattern relied on elsewhere (§2.7) — the OR keeps every current test passing. Fixes every current and future `AppMotion.reduce()` call site at once, including `auto_advance_timer.dart`.
+  - *Cons*: `AppMotion.reduce()` can no longer be a pure function of `BuildContext` alone if call sites need live updates outside of a `MediaQuery` rebuild; each `StatefulWidget` using it needs a `WidgetsBindingObserver` override added (currently only `thinking_background.dart` has one, for the ticker). Touches more than one file.
+
+**Option B**: **Leave the code as-is; correct the documentation instead** — rename Issue 138 / R0's intent from "Reduce Motion" to "reduced motion for accessibility navigation (VoiceOver / Switch Control)," and change this guide's §5.2 item 8 device-test instruction from "enable Reduce Motion" to "enable VoiceOver."
+  - *Pros*: Zero code risk; matches the convention this codebase already uses everywhere else (`auto_advance_timer.dart` reads the same flag directly); no new widget-test surface to cover.
+  - *Cons*: Ships nothing for the accessibility population the issue was actually filed for. A user who enables Reduce Motion — the far more common accessibility setting — sees no change. The feature's name continues to promise something the code does not deliver.
+
+**Option C**: **Add the `reduceMotion` check narrowly, only inside `AnimatedThinkingBackground`**, leaving `AppMotion.reduce()` and `auto_advance_timer.dart` untouched.
+  - *Pros*: Smallest possible change; fixes exactly the widget Issue 138 named.
+  - *Cons*: Leaves `AppMotion.reduce()` itself still wrong for any future caller who reasonably expects it to mean real Reduce Motion; produces two different "reduce motion" checks in the codebase reading two different signals, which is the same inconsistency §2.7 warns against propagating.
+
+Your selection: _____
 
 ---
 
