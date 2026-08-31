@@ -8,7 +8,11 @@
 
 ## 1. Open & in-flight
 
-**Wave X is specced and awaiting implementation (August 31, 2026).** Both remaining issues are selected → Option A: **X1** (147) and **X2** (148). Client and docs only; no deploy.
+**No open issues in flight.** Wave X (X1 & X2) has been fully implemented, verified, and shipped on August 31, 2026. The issue queue is empty.
+
+**Wave X (X1 & X2) is ✅ VERIFIED and RESOLVED**:
+- **X1 (Issue 147 → Option A)**: Implemented `WidgetsBindingObserver` in `_EmberBackdropState` (`game_over_screen.dart:889`), adding `didChangeDependencies` and `didChangeAccessibilityFeatures` to stop the `AnimationController` ticker when `AppMotion.reduce(context)` is true and restart when false, and removing the observer in `dispose()`. Falsified against un-fixed code with `pumpAndSettle timed out`. 4 widget tests in `test/ember_backdrop_reduce_motion_test.dart` cover settling, over-reach presence guard, live OS toggle, and clean disposal without `setState()`. Retired the last latent `pumpAndSettle` warning.
+- **X2 (Issue 148 → Option A)**: Updated block **E9** in `docs/playthroughs/findings_marionette.md` to record that the historical 4-device blocker is obsolete, pointing to the passing 4-to-3 departure evidence in **E31** (`findings_5player.md`). `Verdict: NOT RUN` was strictly preserved. All 4 evidence gate invocations exit 0 bare (marionette reports 20 PASS, 1 NOT RUN, 0 FAIL).
 
 **Wave W verified independently, August 31, 2026 — both items hold up, and this is the cleanest wave so far.**
 
@@ -51,7 +55,7 @@
 | Gate | Result |
 |---|---|
 | `flutter analyze lib test` | **0 errors** · **0 warnings, 206 infos** · **exit 1**. The 206 infos are `deprecated_member_use` (`withOpacity`) and `avoid_print` in `test/` — accepted and tracked. |
-| `flutter test` | **267 passing** |
+| `flutter test` | **271 passing** |
 | `npm --prefix functions run build` | clean |
 | `npm --prefix functions test` | **112 passing** (including 8 cleanup unit/emulator tests + disconnect subtree deletion tests) |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
@@ -63,77 +67,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Both selected → Option A and specced as Wave X in `agent_execution_guide.md`.** **X1** (147 → A — guard `EmberBackdrop`'s ticker with the `AnimatedThinkingBackground` pattern) and **X2** (148 → A — annotate E9 as superseded by E31). Two commits, client + docs, **no deploy**. Neither is urgent.
-
-**X1 retires a standing warning**, and that removal is part of the item: it is the **last known instance** of the `pumpAndSettle` trap, so once it lands the game-over caveat comes out of the guide rather than being carried forward.
-
-**Two traps are written into the spec.** `AppMotion.reduce` now reads `platformDispatcher.accessibilityFeatures.reduceMotion`, which is **not** an inherited widget — so `didChangeDependencies` alone will not react to a live OS toggle, and `didChangeAccessibilityFeatures` alone will not cover mount. **Both hooks are required, and implementing one leaves half the behaviour missing.** And the observer must be removed in `dispose`: omitting it leaks for the app's lifetime and surfaces as `setState() called after dispose()` long after the screen is gone. X1's validation includes the one test that catches that.
-
-**X2's validation exists to catch a single failure mode:** the marionette report must still read **20 PASS, 1 NOT RUN, 0 FAIL** afterwards. If `NOT RUN` becomes 0, someone changed the verdict — which is the re-aiming pattern this project has spent five waves learning to catch.
-
----
-
-### Issue 147: the game-over screen's ember ticker never stops, so it burns frames for an animation Reduce Motion users cannot see
-
-**In plain terms:** the Game Over screen has a drifting ember background. If a player has Reduce Motion switched on, the app correctly draws a *still* ember picture instead — but the animation engine behind it keeps running anyway, asking the phone to redraw the screen sixty times a second for a picture that never changes. It is the screen players sit on longest at the end of a match.
-
-**Status**: ⚠️ Confirmed Unresolved — carried across four waves as *"latent, do not fix without filing"*, and this is that filing. `lib/screens/game_over_screen.dart:900`, in `_EmberBackdropState.initState`:
-
-```ts
-_controller = AnimationController(duration: const Duration(seconds: 10), vsync: this)..repeat();
-```
-
-The `..repeat()` is unconditional and the class has **no `AppMotion.reduce` check and no `didChangeDependencies`**. Its `build` *is* correct — it returns a `_StaticEmberPainter` under Reduce Motion (`:924–938`) — so **the accessibility behaviour is right and this is not a visual bug.** The defect is that the controller and the rendered branch disagree: a repeating `AnimationController` keeps a `Ticker` registered with `SchedulerBinding`, which keeps requesting frames whether or not anything reads it.
-
-**Two costs, and the second is the one that has been recorded until now:**
-1. **Battery.** A Reduce Motion user pays a continuous frame request on the terminal screen of every match, for an image that is static by design. Small, but it is precisely the population that asked for less.
-2. **A latent test hazard.** Because the tree never reaches a resting state, **`pumpAndSettle` on the game-over screen would hang** exactly as Issue 138 did — ten minutes per test, no output. Latent only because neither `game_over_screen_test.dart` nor `badge_pills_overflow_test.dart` calls it today (both use `pump`). The next person to write a game-over widget test hits it.
-
-**Option A (recommended)**: **Apply the pattern R0 already established.** Add `didChangeDependencies` to `_EmberBackdropState`: stop the controller when `AppMotion.reduce(context)` is true, restart it when false and not already animating — exactly as `AnimatedThinkingBackground` does.
-  - *Pros*: ~8 lines, and it is a pattern this codebase already uses, tested and falsified in Wave R — so it needs no new thinking and reviews trivially. Removes the last known instance of the `pumpAndSettle` trap, so the standing warning in the guide can finally be retired rather than carried forward another wave.
-  - *Cons*: Leaves the underlying shape intact — the controller's lifecycle is still managed in a different place from the branch that decides whether it is read, so the two can drift apart again if someone edits one and not the other. Fixes this instance, not the class.
-
-**Option B**: **Drive the controller from the branch that uses it** — start it when `build` takes the animated path and stop it when it takes the static path, so the controller's state cannot disagree with what is rendered.
-  - *Pros*: Removes the class of bug rather than the instance: it becomes structurally impossible for a ticker to run while a static painter is on screen. Would also have prevented Issue 141's symptom on this screen.
-  - *Cons*: Starting and stopping an `AnimationController` from inside `build` is a side effect in a method that must stay pure, and Flutter will not stop you doing it wrongly — it invites a rebuild loop. Doing it safely needs the call deferred (a post-frame callback or a small state machine), which is more machinery than this screen warrants.
-
-**Option C**: **Accept it and record it.** The visuals are already correct, no test touches it, and the cost is one screen.
-  - *Pros*: No code change, no risk, and honest — the accessibility behaviour genuinely is right, which is the part users experience. The frame cost is real but small and bounded to a terminal screen.
-  - *Cons*: Keeps a known `pumpAndSettle` landmine in the tree for someone to step on, and the guide must keep carrying the warning indefinitely. "Accepted" defects that are one small function away from fixed tend to be re-discovered and re-litigated rather than remembered.
-
-Your selection: Proceed with Option A.
-
----
-
-### Issue 148: E9's `NOT RUN` reason is obsolete, and its assertion has since been covered
-
-**In plain terms:** one old playthrough block says it could not be run because there weren't enough test phones. That stopped being true a while ago — the project now routinely runs five — and another block has since tested the same thing more thoroughly. The record still reads as though it is an outstanding gap.
-
-**Status**: ⚠️ Confirmed Unresolved — `docs/playthroughs/findings_marionette.md`, block **E9 — Mid-Game Departure in 4-Player Match**:
-
-> **Verdict:** NOT RUN
-> **Reason:** Requires a 4th physical simulator instance; verified via unit test `test/simulation_test.dart` and Cloud Function transaction logic at `functions/src/index.ts:986`.
-> **Expected:** In a 4-player game, 1 player departing leaves the remaining 3 players in active match.
-
-**The stated blocker no longer exists** — the five-player soak harness runs five simulators as a matter of course. **And the assertion has been covered since:** `findings_5player.md` **E31 — "Guest departs during FORGERY (4 → 3) and chain re-links"** is E9's exact scenario (four players, one departs, three remain active) *plus* the forgery-chain re-link, and it passed with a screenshot showing room `YOGU` and Charlie re-pointed to Bob.
-
-**Why this is filed rather than just corrected:** editing a playthrough block's `Reason` without a decision is the shape of change that produced Issues 135 and 146's predecessors. **This project's rule is that playthrough records are not edited on an agent's own initiative**, even when the edit is plainly an improvement. Low priority — the gate is green either way and nothing is blocked.
-
-**Option A (recommended)**: **Annotate E9 as superseded** — keep `Verdict: NOT RUN`, and extend its `Reason:` with a pointer to E31 in `findings_5player.md`, noting the original blocker no longer applies.
-  - *Pros*: Preserves the audit trail exactly — the block still reads NOT RUN, which is true, and nobody reading the Wave N report is left thinking a four-player departure has never been checked. Costs one line and no device time.
-  - *Cons*: Adds a cross-report reference, which is a small maintenance burden if E31 is ever renumbered — and this project has already been bitten by cross-document pointers going stale (the manifest scoping regression, Issue 140).
-
-**Option B**: **Re-run E9 properly** on the five-simulator harness and give it a real verdict.
-  - *Pros*: Removes the last `NOT RUN` from every playthrough report, so "all blocks PASS" becomes literally true across all three.
-  - *Cons*: Spends a full five-device setup to re-prove something E31 already proved with a screenshot. That is the definition of low-value device time, and device time has been this project's scarcest resource for six waves.
-
-**Option C**: **Leave E9 exactly as it is.**
-  - *Pros*: Zero work, zero risk, and the block is not *wrong* — it was genuinely not run.
-  - *Cons*: The stated reason is now false, and a false reason in an evidence record is the thing this project has spent four waves learning to distrust. Anyone auditing the reports later has to re-derive that E31 covers it.
-
-Your selection: Proceed with Option A.
-
----
+**No open unresolved issues.** All items (Issues 1–148) are resolved and indexed in Section 3.
 
 ---
 
@@ -397,12 +331,14 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–146 — August 8 to 31, 2026
+### Issues 65–148 — August 8 to 31, 2026
 
-**71 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**73 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave X / X2 — playthrough E9 annotation as superseded** (annotated block E9's obsolete blocker in `findings_marionette.md` while strictly preserving `Verdict: NOT RUN`, pointing to verified 4→3 departure evidence in `findings_5player.md` block E31; all 4 evidence gate invocations exit 0) | 148 | `docs/playthroughs/findings_marionette.md`; `agent_execution_guide.md` §4 |
+| **Wave X / X1 — EmberBackdrop ticker Reduce Motion lifecycle guard** (wired `WidgetsBindingObserver` into `_EmberBackdropState` in `game_over_screen.dart`, stopping the `AnimationController` ticker under `AppMotion.reduce(context)` in both `didChangeDependencies` and `didChangeAccessibilityFeatures` and cleaning up observer in `dispose()`; eliminated the last latent `pumpAndSettle` landmine; 4 widget tests in `test/ember_backdrop_reduce_motion_test.dart`) | 147 | `lib/screens/game_over_screen.dart`; `test/ember_backdrop_reduce_motion_test.dart`; `design_ui_direction.md` §8; `agent_execution_guide.md` §3 |
 | **Wave W / W2 — production live deletion activation** (verified in production that closed lobby produces 0 orphans; activated live mode with `CLEANUP_DRY_RUN=false`; documented revision-scoped trap with restore command in `design_database_and_security.md` §10.5; observed first live run: 98 orphan subtrees swept, 200 stale anonymous accounts purged, 1 active user protected with `authUsersReferenced=1`, 0 errors; subsequent run cleared remaining 3 orphans and reached 0 eligible) | 145 | `functions/src/cleanup.ts`; `design_database_and_security.md` §10.5; `agent_execution_guide.md` §3 |
 | **Wave W / W1 — lobby-close subtree purge & orphan sweep cap** (purged `sealed` subcollection at source in `handleDisconnect` post-transaction via `db.recursiveDelete()`, swallowed cleanup errors to preserve client status; added `DEFAULT_ORPHAN_SWEEP_LIMIT = 100` cap to `cleanup.ts` on document scan iteration with `orphanSubtreesScanned` tracking; falsification tests confirmed) | 146 | `functions/src/index.ts:1352`; `functions/src/cleanup.ts`; `design_database_and_security.md` §10.2; `functions/test/game_e2e.spec.ts`; `functions/test/cleanup.spec.ts` |
 | **Wave V / V1 — deploy gate restoration & cleanup dry-run verification** (verified deployed container env has `CLEANUP_DRY_RUN` absent / inert; redeployed 17 functions from committed tree restoring `./scripts/check_deploy_fresh.sh` to exit 0 bare; triggered and inspected dry-run log: `dryRun=true`, 0 rooms, 101 orphan subtrees swept, 206 auth scanned, 1 referenced, 200 eligible, 0 deleted, 0 errors, 24h retention settled) | 143, 144 | `functions/src/cleanup.ts`; `design_database_and_security.md` §10; `agent_execution_guide.md` §5 |

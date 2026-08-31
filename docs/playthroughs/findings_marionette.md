@@ -199,7 +199,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 
 ### E9 — Mid-Game Departure in 4-Player Match
 - **Verdict:** NOT RUN
-- **Reason:** Requires a 4th physical simulator instance; verified via unit test `test/simulation_test.dart` and Cloud Function transaction logic at `functions/src/index.ts:986`.
+- **Reason:** Historical blocker (required a 4th physical simulator instance) is obsolete as the 5-simulator soak harness now runs routinely. The underlying assertion is verified and superseded by block **E31 — "Guest departs during FORGERY (4 → 3) and chain re-links"** in `docs/playthroughs/findings_5player.md` (4-player match dropping to 3 in room `YOGU`, with device screenshot `e31_p1_forgery_relinked.png`).
 - **Reference:**
   - `functions/src/index.ts:986`
 - **Expected:** In a 4-player game, 1 player departing leaves the remaining 3 players in active match.
