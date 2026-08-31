@@ -8,7 +8,11 @@
 
 ## 1. Open & in-flight
 
-**No open issues in flight.** Wave X (X1 & X2) has been fully implemented, verified, and shipped on August 31, 2026. The issue queue is empty.
+**Wave X verified independently, August 31, 2026 — both items hold up. One new issue (149) is open and needs a selection; it is small.**
+
+**X1 (Issue 147) — ✅ VERIFIED and RESOLVED.** `_EmberBackdropState` carries `WidgetsBindingObserver`, registers in `initState`, keeps `..repeat()` (matching the blessed `AnimatedThinkingBackground` shape), implements **both** `didChangeDependencies` and `didChangeAccessibilityFeatures` with `setState`, and removes the observer in `dispose` before disposing the controller. **Independently falsified this session:** removing both guards makes test 1 and test 3 fail with `pumpAndSettle timed out`, while tests 2 and 4 correctly still pass — they assert the build branch and dispose safety, which are independent of the ticker. **This was the last live instance of the `pumpAndSettle` trap:** every `.repeat(` call site in `lib/` now sits in a file that consults `AppMotion.reduce`, so the standing game-over caveat has been removed from `agent_execution_guide.md` rather than carried forward.
+
+**X2 (Issue 148) — ✅ RESOLVED, with one correction applied this session.** `Verdict: NOT RUN` was correctly left untouched and the tally still reads **20 PASS, 1 NOT RUN, 0 FAIL**. **But the annotation cited a screenshot that does not exist** — `e31_p1_forgery_relinked.png`. The real artefacts are `e31_p3_relinked.png` and `e31_p5_left.png`. Corrected to the former, after opening it to confirm it shows what the annotation claims: FORGERY phase, room `YOGU`, the player writing as **BOB** — Charlie re-pointed to Bob after the 4→3 departure. **No gate caught this**, because rule R5's over-reach guard deliberately exempts `NOT RUN` blocks from artefact checks — which is now **Issue 149**.
 
 **Wave X (X1 & X2) is ✅ VERIFIED and RESOLVED**:
 - **X1 (Issue 147 → Option A)**: Implemented `WidgetsBindingObserver` in `_EmberBackdropState` (`game_over_screen.dart:889`), adding `didChangeDependencies` and `didChangeAccessibilityFeatures` to stop the `AnimationController` ticker when `AppMotion.reduce(context)` is true and restart when false, and removing the observer in `dispose()`. Falsified against un-fixed code with `pumpAndSettle timed out`. 4 widget tests in `test/ember_backdrop_reduce_motion_test.dart` cover settling, over-reach presence guard, live OS toggle, and clean disposal without `setState()`. Retired the last latent `pumpAndSettle` warning.
@@ -67,7 +71,31 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open unresolved issues.** All items (Issues 1–148) are resolved and indexed in Section 3.
+**One open, and it is small.** Issue 149 — a citation inside a `NOT RUN` block is unchecked by any rule, which produced a real fabricated filename on the first use of that shape. Everything else (Issues 1–148) is resolved and indexed in Section 3.
+
+---
+
+### Issue 149: artefact citations inside `NOT RUN` blocks are unchecked, and one was wrong on its first use
+
+**In plain terms:** the evidence gate checks that every screenshot a passing block mentions really exists on disk. It deliberately skips blocks marked "not run", because those are not supposed to have screenshots. But a *reason* can still name a file — and when one did, nobody noticed the filename was invented.
+
+**Status**: ⚠️ Confirmed Unresolved — surfaced by Wave X2. The E9 annotation added in `230ea88` cited **`e31_p1_forgery_relinked.png`**, which has never existed; the real artefacts are `e31_p3_relinked.png` and `e31_p5_left.png`. **All four gate invocations exited 0 with that citation in place.** The cause is deliberate and otherwise correct: `scripts/check_playthrough_evidence.sh` applies rules R2–R5 only to `PASS`/`FAIL` blocks, and its own header documents the over-reach guard *"NOT RUN blocks carry no required artefact check"* — a guard added on purpose so that a legitimately un-run block is not forced to invent evidence.
+
+**The gap is narrower than the guard.** *Requiring* an artefact in a `NOT RUN` block would be wrong. *Checking a path that the block chose to mention* is not the same thing — and this project's whole history is of citations drifting from reality (the fabricated functions table, `grep` as observation, E45's launch-screen screenshot). The substance of the annotation was correct; only the filename was invented, which is precisely the failure a one-line existence check catches and a human reviewer does not.
+
+**Option A (recommended)**: **Extend R5 to check any `docs/playthroughs/evidence/*.png` path cited anywhere in a block, including `NOT RUN` blocks — while still never *requiring* one.** Existence is checked if a path is present; absence of a path stays legal for `NOT RUN`.
+  - *Pros*: Closes the hole without touching the over-reach guard that matters — a `NOT RUN` block with no artefact still passes, so nothing is forced to fabricate evidence. It reuses the existing `artefact_png_regex` and the existing on-disk check, so it is a few lines in a rule that already exists and is already falsified. Catches the exact defect that just occurred, mechanically, in a project that has repeatedly proved habits do not catch it.
+  - *Cons*: Slightly widens a rule whose narrowness was itself a deliberate design decision with its own falsification record in the script header — that record would need updating so the next reader does not think the guard was weakened by accident. It also still proves only that a *file exists*, not that it shows what the prose claims, which is the failure mode that actually cost this project the most.
+
+**Option B**: **Leave the gate alone; treat it as a review obligation.** Add "open every artefact cited in any block, including `NOT RUN` ones" to the validation standard.
+  - *Pros*: No change to a gate that is currently correct and well-falsified, and no risk of weakening the over-reach guard. Honest about the limit — a human opening the file is the only thing that ever proves an artefact shows what is claimed.
+  - *Cons*: This project has established twice over that a written habit is not a control (§2.34, §2.36), and this defect is the third data point: the citation was written and reviewed in the same pass that produced it, and nothing caught it. Choosing the habit here contradicts the lesson the file already records.
+
+**Option C**: **Forbid artefact paths in `NOT RUN` blocks entirely** — a `Reason:` may reference another *block*, but not a file.
+  - *Pros*: Removes the ambiguity at source rather than checking it, and is trivially enforceable: fail if a `NOT RUN` block contains an evidence path at all. A block that was not run has no artefacts of its own, so citing one is arguably always a category error.
+  - *Cons*: Loses genuinely useful cross-references — E9's annotation is *more* helpful for naming the screenshot a reader should look at, not less. It would also fail the corrected E9 block as it now stands, so adopting this means rewriting that annotation to drop the pointer it was just given.
+
+Your selection: _____
 
 ---
 
@@ -176,6 +204,16 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.39 A deliberate exemption in a checker is still a hole, and the first thing through it will look correct
+
+`check_playthrough_evidence.sh` exempts `NOT RUN` blocks from the artefact rules, on purpose, with its own falsification record: a block that was legitimately not run must not be forced to invent evidence. That reasoning is sound and the guard should stay.
+
+**But an exemption from *requiring* evidence became an exemption from *checking* it.** Wave X2's annotation to block E9 cited `e31_p1_forgery_relinked.png` — a filename that has never existed — and **all four gate invocations exited 0**. The substance of the annotation was entirely correct: the block really is superseded, by the block named, in the room named. Only the filename was invented, which is the most plausible-looking kind of error and the least likely to be caught by reading.
+
+**Two rules follow.** When you write an exemption into a checker, **state what it exempts from as narrowly as possible** — "not required to have an artefact" and "not checked if it has one" are different rules, and the second was never intended. And when reviewing, **remember that the exempted cases are where errors accumulate**, because they are the cases nothing looks at; this one survived being written, reviewed and committed in the same pass.
+
+**The general shape:** a checker's exemption list is a map of where its guarantees stop. Read it as a list of places to look manually, not as a list of things that do not matter.
 
 #### 2.38 A prediction followed by a matching outcome is much stronger evidence than either alone
 
