@@ -179,6 +179,10 @@ The current app has nice entrance tweens; the risk is *scattered* motion reading
 - Respect reduced-motion / provide a "reduce motion" setting for App Store accessibility.
 - **In-game background and Reduce Motion (Wave R / R0 / Issue 138; Wave U / U2 / Issue 141):** The in-game background (`AnimatedThinkingBackground`, rooting Craft, Vote, and Reveal) honours Reduce Motion (`AppMotion.reduce(context)`) by **omitting the particle layer entirely** and stopping its AnimationController ticker. The radial gradient is retained so the screens keep their warm soot ground colour.
   - *Platform Signal Contract (Issue 141):* `AppMotion.reduce(context)` checks `WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.reduceMotion || MediaQuery.of(context).accessibleNavigation`. `accessibleNavigation` alone reflects only VoiceOver / Switch Control on iOS; real iOS **Settings → Accessibility → Motion → Reduce Motion** sets the `reduceMotion` bit on `accessibilityFeatures` (which is not exposed on `MediaQueryData` in Flutter stable). Stateful widgets like `AnimatedThinkingBackground` implement `WidgetsBindingObserver.didChangeAccessibilityFeatures` to rebuild live if the OS toggle changes mid-session. All motion gates across the app (including `AutoAdvanceTimer`) route through `AppMotion.reduce`.
+- **Game-over background and Reduce Motion (Wave X / X1 / Issue 147):** The Game Over screen background (`EmberBackdrop`) honours Reduce Motion in **both** its visuals and its ticker lifecycle:
+  - *Visuals:* Returns a static CustomPaint (`_StaticEmberPainter`) under `AppMotion.reduce(context)`.
+  - *Ticker Lifecycle:* Implements `WidgetsBindingObserver` to pause the `AnimationController` (`_controller.stop()`) under Reduce Motion in both `didChangeDependencies` (covering initial mount and `MediaQuery` / `accessibleNavigation` changes) and `didChangeAccessibilityFeatures` (covering live OS `reduceMotion` toggle changes with `setState`). Unpauses when Reduce Motion is off.
+  - *Disposal:* Removes the binding observer in `dispose` to prevent leaking observer registrations or firing `setState()` post-dispose.
 
 ---
 

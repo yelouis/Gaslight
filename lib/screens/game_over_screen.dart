@@ -886,7 +886,8 @@ class EmberBackdrop extends StatefulWidget {
   State<EmberBackdrop> createState() => _EmberBackdropState();
 }
 
-class _EmberBackdropState extends State<EmberBackdrop> with SingleTickerProviderStateMixin {
+class _EmberBackdropState extends State<EmberBackdrop>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _controller;
   final List<EmberParticle> _particles = [];
   final math.Random _random = math.Random();
@@ -894,6 +895,7 @@ class _EmberBackdropState extends State<EmberBackdrop> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = AnimationController(
       duration: const Duration(seconds: 10),
       vsync: this,
@@ -901,7 +903,29 @@ class _EmberBackdropState extends State<EmberBackdrop> with SingleTickerProvider
   }
 
   @override
+  void didChangeAccessibilityFeatures() {
+    super.didChangeAccessibilityFeatures();
+    if (AppMotion.reduce(context)) {
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+    setState(() {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (AppMotion.reduce(context)) {
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }
