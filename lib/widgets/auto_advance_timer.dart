@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../theme/app_icons.dart';
+import '../theme/app_motion.dart';
 
 class AutoAdvanceTimer extends StatefulWidget {
   final int? endTime;
@@ -27,49 +28,55 @@ class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> with SingleTickerPr
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 600),
     );
-    _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    _startTimer();
-  }
 
-  @override
-  void didUpdateWidget(AutoAdvanceTimer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.endTime != widget.endTime) {
-      _startTimer();
-    }
+    _updateTime();
+    _startTimer();
   }
 
   void _startTimer() {
     _timer?.cancel();
     if (widget.endTime == null) return;
 
-    _updateSeconds();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _updateSeconds();
-        });
-      }
+    _timer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!mounted) return;
+      _updateTime();
     });
   }
 
-  void _updateSeconds() {
+  void _updateTime() {
     if (widget.endTime == null) {
-      _secondsRemaining = 0;
+      if (_secondsRemaining != 0) setState(() => _secondsRemaining = 0);
       return;
     }
-    
+
     final now = DateTime.now().millisecondsSinceEpoch;
-    _secondsRemaining = ((widget.endTime! - now) / 1000).ceil();
-    
-    if (_secondsRemaining <= 0) {
-      _secondsRemaining = 0;
+    final remainingMs = widget.endTime! - now;
+    final remainingSecs = (remainingMs / 1000).ceil();
+
+    if (remainingSecs <= 0) {
+      if (_secondsRemaining != 0) {
+        setState(() => _secondsRemaining = 0);
+      }
       _timer?.cancel();
       widget.onTimerExpired?.call();
+    } else {
+      if (_secondsRemaining != remainingSecs) {
+        setState(() => _secondsRemaining = remainingSecs);
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(AutoAdvanceTimer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.endTime != widget.endTime) {
+      _updateTime();
+      _startTimer();
     }
   }
 
@@ -87,7 +94,7 @@ class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> with SingleTickerPr
     final theme = Theme.of(context);
     final isLowTime = _secondsRemaining <= 10;
 
-    final prefersReducedMotion = MediaQuery.of(context).accessibleNavigation;
+    final prefersReducedMotion = AppMotion.reduce(context);
     if (isLowTime && !prefersReducedMotion) {
       if (!_pulseController.isAnimating) {
         _pulseController.repeat(reverse: true);

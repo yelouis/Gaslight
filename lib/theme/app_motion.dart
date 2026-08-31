@@ -8,5 +8,7 @@ class AppMotion {
   static const deal     = Duration(milliseconds: 1250); // U3 interstitial total
   static const ceremonyStep = Duration(milliseconds: 900); // U6 per-honor cadence
   
-  static bool reduce(BuildContext c) => MediaQuery.of(c).accessibleNavigation;
+  static bool reduce(BuildContext c) =>
+      WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.reduceMotion ||
+      MediaQuery.of(c).accessibleNavigation;
 }

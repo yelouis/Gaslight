@@ -11,7 +11,8 @@ class AnimatedThinkingBackground extends StatefulWidget {
   State<AnimatedThinkingBackground> createState() => _AnimatedThinkingBackgroundState();
 }
 
-class _AnimatedThinkingBackgroundState extends State<AnimatedThinkingBackground> with SingleTickerProviderStateMixin {
+class _AnimatedThinkingBackgroundState extends State<AnimatedThinkingBackground>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _controller;
   final Random _random = Random();
   final List<_ThoughtParticle> _particles = [];
@@ -19,12 +20,24 @@ class _AnimatedThinkingBackgroundState extends State<AnimatedThinkingBackground>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = AnimationController(vsync: this, duration: const Duration(seconds: 10))..repeat();
     
     // Initialize particles
     for (int i = 0; i < 15; i++) {
       _particles.add(_generateParticle(initial: true));
     }
+  }
+
+  @override
+  void didChangeAccessibilityFeatures() {
+    super.didChangeAccessibilityFeatures();
+    if (AppMotion.reduce(context)) {
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+    setState(() {});
   }
 
   @override
@@ -53,6 +66,7 @@ class _AnimatedThinkingBackgroundState extends State<AnimatedThinkingBackground>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }
