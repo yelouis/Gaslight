@@ -8,7 +8,9 @@
 
 ## 1. Open & in-flight
 
-**Wave V verified independently, August 31, 2026 — V1 (Issue 144 → Option A) delivered and verified. The dry-run log it produced then exposed a real upstream leak: Issues 145 and 146 are now open and need selections.**
+**Wave W is specced and awaiting implementation (August 31, 2026).** Both open issues are selected → Option A: **W1** (146 → A — stop the lobby-close path orphaning `sealed`, and cap the orphan sweep) then **W2** (145 → A — enable live deletion once W1 is proven in production). Two commits, **both requiring a deploy**.
+
+**Wave V verified independently, August 31, 2026 — V1 (Issue 144 → Option A) delivered and verified. The dry-run log it produced then exposed a real upstream leak, now tracked as Issues 145 and 146.**
 
 **V1 was done properly, and the part that mattered most was actually done.** Step 1 read the **deployed** Cloud Run environment and pasted it verbatim rather than restating the repository default — `CLEANUP_DRY_RUN` is absent, so the job is genuinely inert. The deploy gate is back to **exit 0 — FRESH** (17 functions), confirmed bare this session, and V1 touched **no source**.
 
@@ -67,14 +69,18 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Two open, both needing a selection.**
+**Both selected → Option A, and specced as Wave W in `agent_execution_guide.md`.**
 
-| Issue | What it decides |
-|---|---|
-| **145** | Whether to enable live deletion now, after Issue 146, or partially — the sign-off Option A deferred until the first dry-run log existed |
-| **146** | How to stop the lobby-close path orphaning the `sealed` subtree, and whether to bound the uncapped orphan sweep |
+| Issue | Selection | Wave W item |
+|---|---|---|
+| **146** | → A — fix the orphan source **and** cap the sweep | **W1** (server, deploy) |
+| **145** | → A — fix 146 first, then enable deletion | **W2** (ops, deploy) |
 
-**They are ordered: 146's recommended option is a prerequisite for 145's.** Issue 145 recommends fixing 146 first, because enabling deletion while the orphan sweep is unbounded turns an unbounded loop into an unbounded *destructive* one, and because the leak would otherwise be permanently papered over by a nightly job.
+**The order is fixed and both reasons are load-bearing.** 145's selected option is literally *"fix 146 first"*: enabling deletion while the orphan sweep is unbounded would turn an unbounded loop into an unbounded **destructive** one, and enabling it while the leak still runs would make the nightly job permanent cover for a bug rather than hygiene.
+
+**W2 carries a precondition beyond "W1 is committed": W1 must be deployed and observed to work in production** — close a lobby, run the cleanup, confirm no new orphan appears — before the flag is flipped. Tests prove the code path; only that check proves the deployed system.
+
+**Two traps are written into the spec.** `recursiveDelete()` cannot run inside a transaction, and the close path is inside one (`index.ts:1158`) — so the fix is structural, and the transaction's contents must be left alone on a path that has already produced Issues 85, 87 and 123. And `CLEANUP_DRY_RUN` set via `gcloud run services update` lives on the **Cloud Run revision**: the next `firebase deploy` silently drops it and the job quietly reverts to dry-run. That fails in the safe direction, which is exactly why nobody would notice.
 
 **Everything else is resolved.** Issues 135, 139, 140, 141, 142, 143 and 144 are all in the Resolved index, each verified by reading source, re-running gates bare and opening every artefact — not by reading commit bodies. **The 24-hour anonymous retention window is settled** (user, August 31, 2026) and written up with its rationale and its `ROOM_TTL_MS` coupling invariant in **`design_database_and_security.md` §10.4**.
 
@@ -109,7 +115,7 @@ What each number means:
   - *Pros*: Acts where deletion is unambiguous (dead subtrees) while deferring the only irreversible, user-visible part. Would clear 101 orphans immediately.
   - *Cons*: **This is not a config toggle — there is only one `CLEANUP_DRY_RUN` today**, so it needs a code change to split the flag into two. That is more work than Option A for less benefit, and it still runs the uncapped sweep destructively while leaving 200 accounts in place.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -150,7 +156,7 @@ It deletes the player documents and the room document — **but not the `sealed`
   - *Pros*: Addresses the actual bug, and once the source is fixed the orphan count trends to zero, so the cap becomes largely theoretical.
   - *Cons*: The existing 101-orphan backlog still has to be cleared by an unbounded destructive loop, and any *future* orphan source — a manual console delete, a new code path — hits the same unbounded behaviour. Leaves a known spec violation in place deliberately.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
