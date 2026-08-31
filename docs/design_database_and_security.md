@@ -259,5 +259,23 @@ const lastActiveTime = Math.max(lastRefresh, lastSignIn, creation);
 
 **⚠️ The reference exclusion is the primary guard, not the age check.** Any UID present in a surviving room's `players` subcollection is skipped **regardless of age** (§10.2 step 3). This is why the ordering in §10.2 is strict: rooms are deleted *first*, so the referenced set reflects the post-cleanup world rather than protecting seats in rooms that no longer exist.
 
+### 10.5 Production Live Deletion Activation & Deploy Trap (Wave W2 / Issue 145)
+
+- **Live Mode Activation**: Enabled in production by setting `CLEANUP_DRY_RUN=false` on the Cloud Run service:
+  ```bash
+  gcloud run services update cleanupdaily --region us-central1 \
+    --update-env-vars CLEANUP_DRY_RUN=false
+  ```
+- **⚠️ Revision-Scoped Environment Variable Trap**: `CLEANUP_DRY_RUN` set via `gcloud run services update` attaches to the current Cloud Run revision. **Subsequent `firebase deploy --only functions` creates a new revision that omits this env var, silently reverting the job to dry-run (inert) mode.**
+  - **Restore Command on Function Deploy**: Whenever `cleanupDaily` is redeployed via `firebase deploy`, re-apply the env var:
+    ```bash
+    gcloud run services update cleanupdaily --region us-central1 --update-env-vars CLEANUP_DRY_RUN=false
+    ```
+- **Initial Live Run Results (August 31, 2026)**:
+  - **Run 1 (Backlog Sweep)**: `[CLEANUP] Completed run: dryRun=false, roomsScanned=0, roomsDeleted=0, orphanSubtreesScanned=100, orphanSubtreesSwept=98, authUsersScanned=208, authUsersReferenced=1, authUsersEligible=200, authUsersDeleted=200, errors=0`
+  - **Run 2 (Final Sweep)**: `[CLEANUP] Completed run: dryRun=false, roomsScanned=0, roomsDeleted=0, orphanSubtreesScanned=5, orphanSubtreesSwept=3, authUsersScanned=8, authUsersReferenced=1, authUsersEligible=0, authUsersDeleted=0, errors=0`
+  - Total: 101 orphaned subtrees and 200 stale anonymous accounts cleanly purged from production; active user reference guard preserved throughout (`authUsersReferenced=1`).
+
 ---
+
 
