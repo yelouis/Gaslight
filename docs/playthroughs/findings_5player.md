@@ -10,7 +10,7 @@
 - **Backend Environment:** Live Firebase Production (`gaslight-46368`), `USE_EMULATOR: false`
 - **Deploy Verification:** `./scripts/check_deploy_fresh.sh` exited 0. All 16 Cloud Functions deployed and verified fresh (`2026-08-28T02:40–02:41Z`).
 - **Deck Sync Verification:** `./scripts/check_decks_in_sync.sh` exited 0 (5 decks, 295 lines compared).
-- **Evidence Verification:** `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` exits 0.
+- **Evidence Verification:** `./scripts/check_playthrough_evidence.sh docs/playthroughs/findings_5player.md` exits 0.
 - **MCP Servers & Harness Configuration:**
   - `marionette-p1` -> Player 1 (Host "Alice"): iPhone 17 (`B64CA576-8CF9-48A1-BB45-09C0B0C39850`, DDS port 8182)
   - `marionette-p2` -> Player 2 (Guest "Bob"): iPhone 17 Pro (`F920EEA1-5EEB-44DA-B917-102CA0BC9364`, DDS port 8282)
@@ -58,11 +58,11 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   - P4 UI: `Type: Text, Text: "5 SUSPECTS JOINED"`, `Type: Text, Text: "NABG"`
   - P5 UI: `Type: Text, Text: "5 SUSPECTS JOINED"`, `Type: Text, Text: "NABG"`
   - Screenshots:
-    - `docs/playthrough_evidence/e22_p1_lobby.png`
-    - `docs/playthrough_evidence/e22_p2_lobby.png`
-    - `docs/playthrough_evidence/e22_p3_lobby.png`
-    - `docs/playthrough_evidence/e22_p4_lobby.png`
-    - `docs/playthrough_evidence/e22_p5_lobby.png`
+    - `docs/playthroughs/evidence/e22_p1_lobby.png`
+    - `docs/playthroughs/evidence/e22_p2_lobby.png`
+    - `docs/playthroughs/evidence/e22_p3_lobby.png`
+    - `docs/playthroughs/evidence/e22_p4_lobby.png`
+    - `docs/playthroughs/evidence/e22_p5_lobby.png`
 - **Reference:** `lib/screens/lobby_screen.dart:580-600`
 - **Expected:** All 5 players join and render 5 suspects with the room code visible on every device.
 
@@ -81,7 +81,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
 - **Observed:**
   - Deck peek dialog: `Type: Text, Text: "PEEK INSIDE: HYPOTHETICALS"`, `Type: TextButton, Key: "deck_peek_shuffle"`, `Type: TextButton, Key: "deck_peek_close"`
   - Sample prompts visible: `peek_prompt_0` through `peek_prompt_7`
-  - Screenshot: `docs/playthrough_evidence/e23_p1_deck_peek.png`
+  - Screenshot: `docs/playthroughs/evidence/e23_p1_deck_peek.png`
 - **Reference:** `lib/screens/lobby_screen.dart:630-660`, `lib/widgets/deck_carousel.dart:210-250`
 - **Expected:** Host can inspect up to 8 sample cards, shuffle them, and dismiss without resetting deck selection.
 
@@ -99,7 +99,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   5. Toggled `Disable Game Timers` back ON.
 - **Observed:**
   - Timer settings widget: `Type: SwitchListTile`, `Type: TextField, Key: "timer_seconds_field"`, `Text: "15–300 seconds. Voting gets 75% of this."`
-  - Screenshot: `docs/playthrough_evidence/e24_p1_timer_settings.png`
+  - Screenshot: `docs/playthroughs/evidence/e24_p1_timer_settings.png`
 - **Reference:** `lib/screens/lobby_screen.dart:730-770`
 - **Expected:** Timers disabled by default; enabling shows duration input bounded between 15 and 300 seconds.
 
@@ -119,7 +119,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   - P5 kicked screen: `Type: Text, Text: "THE GUEST LEDGER"`, `Text: "Erin"`, `Text: "NABG"`
   - P1 roster update: `Type: Text, Text: "4 SUSPECTS JOINED"`, `Type: Text, Text: "(0/3 Ready)"`
   - P1 roster after rejoin: `Type: Text, Text: "5 SUSPECTS JOINED"`, `Type: Text, Text: "(0/4 Ready)"`
-  - Screenshot: `docs/playthrough_evidence/e25_p5_kicked.png`
+  - Screenshot: `docs/playthroughs/evidence/e25_p5_kicked.png`
 - **Reference:** `lib/screens/lobby_screen.dart:122-143,416-426`
 - **Expected:** Host can remove guests from lobby; removed player returns to guest ledger and can rejoin by code.
 
@@ -140,8 +140,8 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   - Close room dialog: `Type: Text, Text: "Close this room?"`, `Type: Text, Text: "You are the host. Leaving will close the room for everyone."`
   - Guest Ledger: `Type: Text, Text: "THE GUEST LEDGER"`, `Type: TextField, Key: "room_code_field", Text: "NABG"`
   - Screenshots:
-    - `docs/playthrough_evidence/e26_p1_close_dialog.png`
-    - `docs/playthrough_evidence/e26_p2_room_not_found.png`
+    - `docs/playthroughs/evidence/e26_p1_close_dialog.png`
+    - `docs/playthroughs/evidence/e26_p2_room_not_found.png`
 - **Reference:** `lib/screens/lobby_screen.dart:100-120,427-437`, `functions/src/index.ts:488-492`
 - **Expected:** Host leaving destroys lobby, closes room for all members, and subsequent join attempts fail.
 
@@ -179,7 +179,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
 - **Observed:**
   - Over-length submission blocked: `TextField, Key: "answer_field", Text: "1234567890..."` (101 characters)
   - Valid submission accepted: P3 transitioned to waiting screen `THE INK DRIES…`.
-  - Screenshot: `docs/playthrough_evidence/e28_p3_overlength_snackbar.png`
+  - Screenshot: `docs/playthroughs/evidence/e28_p3_overlength_snackbar.png`
 - **Reference:** `lib/screens/phase2_craft.dart:73-86`, `lib/widgets/card_grid.dart:22`
 - **Expected:** Inputs exceeding `kMaxAnswerLength` (100 characters) are rejected; legal answers submit smoothly.
 
@@ -194,7 +194,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   2. Inspected in-game phase AppBar across Truth and Forgery phases on P4.
 - **Observed:**
   - In-game phase AppBar: `Type: Text, Text: "ROOM: YOGU"` below `TRUTH` title.
-  - Screenshot: `docs/playthrough_evidence/e29_p4_room_code_truth.png`
+  - Screenshot: `docs/playthroughs/evidence/e29_p4_room_code_truth.png`
 - **Reference:** `lib/screens/phase2_craft.dart:235-242`, `lib/screens/phase3_vote.dart:288-294`
 - **Expected:** Room code is persistently visible in the AppBar throughout gameplay phases.
 
@@ -213,8 +213,8 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   - Dana returned to ledger: `Type: Text, Text: "THE GUEST LEDGER"`
   - Remaining players in Truth phase: `Type: Text, Text: "TRUTH"`, `Type: Text, Text: "ROOM: YOGU"`
   - Screenshots:
-    - `docs/playthrough_evidence/e30_p4_left.png`
-    - `docs/playthrough_evidence/e30_p1_snackbar.png`
+    - `docs/playthroughs/evidence/e30_p4_left.png`
+    - `docs/playthroughs/evidence/e30_p1_snackbar.png`
 - **Reference:** `lib/screens/phase2_craft.dart:220-227,290-330`, `functions/src/index.ts:1300-1340`
 - **Expected:** Player leaves during Truth cleanly without breaking game flow for remaining 4 players.
 
@@ -233,8 +233,8 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   - Erin returned to ledger: `Type: Text, Text: "THE GUEST LEDGER"`
   - Charlie re-linked target: `Type: Text, Text: "You are writing as Bob. Make it sound like something they would say, so people pick yours."`, `Type: Text, Text: "BOB"`
   - Screenshots:
-    - `docs/playthrough_evidence/e31_p5_left.png`
-    - `docs/playthrough_evidence/e31_p3_relinked.png`
+    - `docs/playthroughs/evidence/e31_p5_left.png`
+    - `docs/playthroughs/evidence/e31_p3_relinked.png`
 - **Reference:** `lib/screens/phase2_craft.dart:514-530`, `functions/src/index.ts:1320-1360`
 - **Expected:** Departing player removes their card and causes writing assignments to cleanly re-link to active players.
 
@@ -252,7 +252,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
 - **Observed:**
   - Game Over screen: `Type: Text, Text: "GAME OVER"`, `Type: Text, Text: "THE NIGHT'S HONORS"`, `Type: Text, Text: "FINAL STANDINGS"`
   - Scores intact: Bob 0 PTS, Alice 0 PTS
-  - Screenshot: `docs/playthrough_evidence/e36_game_over_scores.png`
+  - Screenshot: `docs/playthroughs/evidence/e36_game_over_scores.png`
 - **Reference:** `functions/src/index.ts:1321-1335`, `lib/screens/game_over_screen.dart:180-220`
 - **Expected:** If active player count falls below 3, match auto-ends and shows final standings with scores intact.
 
@@ -267,7 +267,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   2. Verified all displayed names are friendly display names (never raw UUIDs).
 - **Observed:**
   - Honors list: `THE MASTERMIND` -> `Bob`, `THE DUPLICITOUS` -> `Alice`
-  - Screenshot: `docs/playthrough_evidence/e37_departed_in_honors.png`
+  - Screenshot: `docs/playthroughs/evidence/e37_departed_in_honors.png`
 - **Reference:** `lib/screens/game_over_screen.dart:240-280`
 - **Expected:** Game Over honors render valid display names and structure cleanly even after mid-game departures.
 
@@ -287,7 +287,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   5. Verified room was NOT closed and gameplay continued cleanly for remaining 4 players.
 - **Observed:**
   - Successor host UI on P2: `Type: TextButton, bounds: {"x":134.6649932861328,"y":677.0,"width":132.67001342773438,"height":48.0}` (`DEBUG: BOTS SUBMIT` gated on `isHost`)
-  - Screenshot: `docs/playthrough_evidence/e35_p2_crown_transfer.png`
+  - Screenshot: `docs/playthroughs/evidence/e35_p2_crown_transfer.png`
 - **Reference:** `functions/src/index.ts:1342-1355`, `lib/screens/phase2_craft.dart:636-643`
 - **Expected:** Host departure mid-match transfers host status to earliest remaining player without closing room.
 
@@ -305,7 +305,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   5. Verified remaining voters (Bob, Charlie) successfully voted on Dana's card.
 - **Observed:**
   - Vote card advance on P2: `Type: Text, Text: "VOTING ON"`, `Type: Text, Text: "Dana"`, `Type: Text, Text: "One of these is Dana's truth."`
-  - Screenshot: `docs/playthrough_evidence/e33_p2_vote_reader_departed.png`
+  - Screenshot: `docs/playthroughs/evidence/e33_p2_vote_reader_departed.png`
 - **Reference:** `functions/src/index.ts:1306-1320`, `lib/screens/phase3_vote.dart:280-340`
 - **Expected:** Reader departing mid-vote advances resolution queue to the next remaining card seamlessly.
 
@@ -323,7 +323,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   5. Verified final standings preserved scores (Charlie 2 PTS, Bob 2 PTS) and dropped departed player.
 - **Observed:**
   - Game Over UI on P2: `Type: Text, Text: "GAME OVER"`, `Type: Text, Text: "THE NIGHT'S HONORS"`, `Type: Text, Text: "FINAL STANDINGS"`, `#1 Charlie 2 PTS`, `#2 Bob (You) 2 PTS`
-  - Screenshot: `docs/playthrough_evidence/e34_p2_reveal_departure_game_over.png`
+  - Screenshot: `docs/playthroughs/evidence/e34_p2_reveal_departure_game_over.png`
 - **Reference:** `functions/src/index.ts:1321-1335`, `lib/screens/game_over_screen.dart:180-220`
 - **Expected:** Departure during reveal that drops below 3 players auto-ends match cleanly with scores intact.
 
@@ -342,7 +342,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   4. Verified Dana immediately recovered her seat "Dana" and landed directly back into the active Truth phase screen in `ROOM: ZOXN` with prompt and timer badge intact (not the Guest Ledger).
 - **Observed:**
   - Gameplay recovery on P4: `Type: Text, Text: "TRUTH"`, `Type: Text, Text: "ROOM: ZOXN"`, `Type: Text, Text: "YOUR TRUTH"`, `Dana`, `20S` timer active
-  - Screenshot: `docs/playthrough_evidence/e32_p4_rejoin_gameplay.png`
+  - Screenshot: `docs/playthroughs/evidence/e32_p4_rejoin_gameplay.png`
 - **Reference:** `lib/services/game_service.dart:140-190`, `lib/screens/phase2_craft.dart:100-150`
 - **Expected:** Force-quit mid-game recovers player seat and returns directly to active gameplay phase upon relaunch.
 
@@ -360,7 +360,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   5. Inspected reveal card and verified placeholder `THE SOUL IS SILENT` is rendered cleanly for timed-out answer slot.
 - **Observed:**
   - Placeholder UI on P2: `Type: Text, Text: "THE SOUL IS SILENT"`, `Type: Text, Text: "FORGERY BY BOB"`
-  - Screenshot: `docs/playthrough_evidence/e38_p1_soul_is_silent_sealed.png`
+  - Screenshot: `docs/playthroughs/evidence/e38_p1_soul_is_silent_sealed.png`
 - **Reference:** `functions/src/index.ts:1210-1240`, `lib/screens/phase3_vote.dart:310-335`
 - **Expected:** Timed-out player slot is filled with placeholder and handled safely without vote corruption.
 
@@ -377,7 +377,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   4. Verified empty round was automatically skipped and transitioned cleanly to `GAME OVER` (`THE NIGHT'S HONORS`) with standings preserved.
 - **Observed:**
   - Game Over UI on P2: `Type: Text, Text: "GAME OVER"`, `Type: Text, Text: "THE NIGHT'S HONORS"`, `Type: Text, Text: "THE MASTERMIND"`
-  - Screenshot: `docs/playthrough_evidence/e39_nobody_answered.png`
+  - Screenshot: `docs/playthroughs/evidence/e39_nobody_answered.png`
 - **Reference:** `functions/src/index.ts:1280-1310`, `lib/screens/game_over_screen.dart:180-220`
 - **Expected:** Zero submissions across a round cleanly skips resolution and avoids stranding players on empty vote screens.
 
@@ -397,7 +397,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   5. Verified Bob's own forgery `Bob_wide_forgery_r4` is marked `SEALED` and `(Your Forgery)`, and is disabled from self-voting.
 - **Observed:**
   - Vote screen UI on P2: `Type: Text, Text: "VOTING ON"`, `Type: Text, Text: "Dana"`, `Type: Text, Text: "WHICH ONE IS THE TRUTH?"`, `Type: Text, Text: "SEALED"`, `Type: Text, Text: "(Your Forgery)"`, `Bob_wide_forgery_r4`
-  - Screenshot: `docs/playthrough_evidence/e41_wide_card_5_answers.png`
+  - Screenshot: `docs/playthroughs/evidence/e41_wide_card_5_answers.png`
 - **Reference:** `lib/screens/phase3_vote.dart:180-260`, `functions/src/index.ts:1180-1230`
 - **Expected:** Vote screen with 5 players and 4 forgeries presents 5 scrollable options with voter's own lie sealed and unclickable.
 
@@ -415,7 +415,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   4. Verified voter chips (`Alice`, `Bob`) correctly attributed below votes, and author points (`Alice: +2`, `Dana: +3`) computed accurately.
 - **Observed:**
   - Reveal screen UI on P1: `Type: Text, Text: "FORGERY BY ERIN"`, `Type: Text, Text: "FORGERY BY ALICE"`, `Type: Text, Text: "FORGERY BY BOB"`, `Type: Text, Text: "Dana: I have visited 14 countries."`, `Type: Text, Text: "(Truth)"`, `Type: Text, Text: "Alice: +2"`, `Type: Text, Text: "Dana: +3"`
-  - Screenshot: `docs/playthrough_evidence/e42_wide_card_reveal_breakdown.png`
+  - Screenshot: `docs/playthroughs/evidence/e42_wide_card_reveal_breakdown.png`
 - **Reference:** `lib/screens/phase4_reveal.dart:210-380`, `functions/src/index.ts:1240-1300`
 - **Expected:** Reveal phase clearly attributes 1 truth + 4 forgeries with author chips, voter pills, and points awarded breakdown.
 
@@ -437,7 +437,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
   4. Verified `Share Case File` and `RETURN TO LOBBY` buttons are active and responsive.
 - **Observed:**
   - Game Over UI on P2: `Type: Text, Text: "GAME OVER"`, `Type: Text, Text: "THE NIGHT'S HONORS"`, `Type: Text, Text: "THE MASTERMIND"`, `Bob 15 Pts`, `THE DUPLICITOUS`, `Dana 3 Deceptions`, `THE RUNNER UP`, `Alice 7 Pts`, `THE GULLIBLE`, `Charlie 3 Fooled`
-  - Screenshot: `docs/playthrough_evidence/e43_wide_card_game_over_standings.png`
+  - Screenshot: `docs/playthroughs/evidence/e43_wide_card_game_over_standings.png`
 - **Reference:** `lib/screens/game_over_screen.dart:120-250`, `functions/src/index.ts:1330-1380`
 - **Expected:** 5-player match concludes with comprehensive honors and final standings calculating scores and deceptions accurately.
 
@@ -459,7 +459,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
 - **Observed:**
   - Dana (P4) Vote screen: `Type: Text, Text: "SEALED"`, `Type: Text, Text: "Presenting a deep dive on rare 1990s board games."`, `Type: Text, Text: "(Your Forgery)"`, `Type: InkWell, bounds: {"x":24.0,"y":503.0,"width":342.0,"height":92.0}`
   - Bob (P2) Vote screen: `Type: Text, Text: "SEALED"`, `Type: Text, Text: "Stopping to eat a snack from the break room."`, `Type: Text, Text: "(Your Forgery)"`
-  - Screenshot: `docs/playthrough_evidence/e44_5player_game_over.png`
+  - Screenshot: `docs/playthroughs/evidence/e44_5player_game_over.png`
 - **Reference:** `lib/screens/phase3_vote.dart:180-240`, `functions/src/index.ts:1120-1180`
 - **Expected:** Round 2 vote options correctly isolate author IDs so each player's active round forgery is locked out with SEALED badge.
 
@@ -481,7 +481,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
 - **Observed:**
   - Reveal screen during unmask: `Type: Text, Text: "REVENGE UNMASKING!"`, `Type: Text, Text: "13s"`, `Type: OutlinedButton`
   - Reveal screen post-unmask: `Type: Text, Text: "REVENGE UNMASKING RESULTS"`, `Type: Text, Text: "SUCCESS! (+1)"`, `Type: Text, Text: "Alice: +4"`, `Type: Text, Text: "▲+4"`
-  - Screenshot: `docs/playthrough_evidence/e45_new_game_lobby.png`
+  - Screenshot: `docs/playthroughs/evidence/e45_new_game_lobby.png`
 - **Reference:** `lib/screens/phase4_reveal.dart:310-420`, `functions/src/index.ts:1250-1320`
 - **Expected:** Reveal phase withholds score deltas until unmask window resolves, then publishes deltas, and lobby returns cleanly upon game over.
 
@@ -502,7 +502,7 @@ Newest deployed: debugSimulateBotResponses @ 2026-08-28T02:41:35.286549324Z
 - **Observed:**
   - P5 leave dialog: `Type: Text, Text: "Leave this game?"`, `Type: Text, Text: "Your card and answers will be removed from this round."`
   - P1 vote screen with 4 players: `Type: Text, Text: "THE VOTE"`, `Type: Text, Text: "ROOM: SSGM"`, `Type: Text, Text: "Charlie"`, `Type: Text, Text: "I know all lyrics to every 80s cartoon intro song."`
-  - Screenshot: `docs/playthrough_evidence/e46_player_drop_recovery.png`
+  - Screenshot: `docs/playthroughs/evidence/e46_player_drop_recovery.png`
 - **Reference:** `lib/services/game_service.dart:340-410`, `functions/src/index.ts:1390-1460`
 - **Expected:** Mid-match player drop is handled gracefully, adjusting voting queues and card counts without halting gameplay.
 
@@ -561,7 +561,7 @@ Both were inside blocks that asserted something *else* about the same screen (E2
 
 **Config:** 5 players (Alice/Host, Bob, Charlie, Dana, Erin) · deck `hypotheticals` · Forgeries Per Card = 2 (default at 5 active players) · **Rounds = 2** · Timers **OFF** · Room `YZQQ`. Reduce Motion was enabled on P3 (`iPhone 17 Pro Max`, Charlie) for the whole match — see the R0 finding under Issue 141 below; it did **not** suppress the background particles, which is why no R0 device-evidence screenshot is cited here.
 
-Every block below carries a `**Specified assertion:**` field quoting `docs/playthrough_manifest.md` verbatim, per S2 / Issue 140's contract. **E44–E46 are left in place above, unedited, with their ⚠️ notices** — the pattern of re-aims is the evidence that motivated Issue 140 and is not erased by this recovery.
+Every block below carries a `**Specified assertion:**` field quoting `docs/playthroughs/manifest.md` verbatim, per S2 / Issue 140's contract. **E44–E46 are left in place above, unedited, with their ⚠️ notices** — the pattern of re-aims is the evidence that motivated Issue 140 and is not erased by this recovery.
 
 ### E47 — Own answer is sealed in round 2, and it is the option authored this round
 - **Verdict:** PASS
@@ -579,8 +579,8 @@ Every block below carries a `**Specified assertion:**` field quoting `docs/playt
 - **Observed:**
   - Bob's device (P2), round-2 vote screen: `Type: Text, "SEALED"`; `Type: Text, "Being the test subject for a new energy drink flavor, no questions asked."`; `Type: Text, "(Your Forgery)"` — the round-1 text `"Meal prepping…"` does not appear on this screen at all.
   - Charlie's device (P3), same card: `Type: Text, "SEALED"`; `Type: Text, "If a company offered to double my salary to lie in every ad campaign."`; `Type: Text, "(Your Forgery)"` — the round-1 text `"Grocery shopping…"` does not appear.
-  - Screenshot: `docs/playthrough_evidence/e47_p2_bob_round2_sealed.png`
-  - Screenshot: `docs/playthrough_evidence/e47_p3_charlie_round2_sealed.png`
+  - Screenshot: `docs/playthroughs/evidence/e47_p2_bob_round2_sealed.png`
+  - Screenshot: `docs/playthroughs/evidence/e47_p3_charlie_round2_sealed.png`
 - **Artefact depicts:** Both screenshots show the round-2 vote screen for Dana's card ("The exact scenario where I would completely sell out my moral principles for cash."), with the truth option, the other player's forgery, and the viewing player's own forgery legible under a red `SEALED` / `(Your Forgery)` ribbon — `e47_p2_bob_round2_sealed.png` for Bob, `e47_p3_charlie_round2_sealed.png` for Charlie.
 - **Reference:** `functions/src/index.ts` (`castVote`, `advancePhaseInternal` — per-round `answerAuthors` keying, Issue 117), `lib/screens/phase3_vote.dart` (SEALED rendering)
 - **Expected:** In round 2, each player's own forgery is sealed with that round's text; no round-1 option id or text leaks into the round-2 lockout.
@@ -602,10 +602,10 @@ Every block below carries a `**Specified assertion:**` field quoting `docs/playt
   6. Relaunched Alice's app afterward (SharedPreferences silently rejoined the same seat/room, per the established reconnection behaviour) and continued the match to completion.
 - **Observed:**
   - During the window, Bob's device (P2) interactive-element dump: 17 elements, none matching `"POINTS AWARDED"`, `▲`, or `▼` — confirmed by direct enumeration, not by a screenshot's absence of something.
-  - Screenshot (during, no tray): `docs/playthrough_evidence/e48_p2_r2_during_no_tray.png`
+  - Screenshot (during, no tray): `docs/playthroughs/evidence/e48_p2_r2_during_no_tray.png`
   - After close, Erin's device (P5): `Type: Text, "POINTS AWARDED THIS CARD"`; `Type: Text, "Bob: +3"`; `Type: Text, "Dana: +3"`; `Type: Text, "Charlie: +3"`; `Type: Text, "Erin: +1"`; `Type: Text, "Alice: +2"`; `Type: Text, "REVENGE UNMASKING RESULTS"`; `Type: Text, "Erin accused Bob — "`; `Type: Text, "SUCCESS! (+1)"`
   - `ps aux | grep B64CA576.*Runner$` returned no process at the moment the after-close screenshot was taken — the host's app was confirmed terminated, not merely backgrounded.
-  - Screenshot (after close, host absent, revenge ±1): `docs/playthrough_evidence/e48_p5_r2_revenge_result_v2.png`
+  - Screenshot (after close, host absent, revenge ±1): `docs/playthroughs/evidence/e48_p5_r2_revenge_result_v2.png`
 - **Artefact depicts:** `e48_p2_r2_during_no_tray.png` — Bob's device on the round-2 reveal for Dana's card, forgery-author labels visible, no points tray anywhere on screen. `e48_p5_r2_revenge_result_v2.png` — Erin's device on the same card after the window closed: both forgeries, the `POINTS AWARDED THIS CARD` tray with all five deltas (Erin's `+1` is the successful-accusation bonus, Bob's forger payout already net of the `-1` he took for being correctly accused), and the `REVENGE UNMASKING RESULTS` line reading `Erin accused Bob — SUCCESS! (+1)` — captured while the host's device process was confirmed not running.
 - **Reference:** `functions/src/index.ts` (`closeUnmaskWindow` — open to any room member, Issue 133/Q1; `submitUnmaskGuess`), `lib/screens/phase4_reveal.dart` (`_buildRevengeGuessTray`, the `revealStage`-gated `POINTS AWARDED` block)
 - **Expected:** No player sees per-card points during the unmask window; once it closes (by deadline, regardless of who is connected), the tray fills with deltas including any unmask ±1, and this happens even when the host's device is gone.
@@ -619,18 +619,18 @@ Every block below carries a `**Specified assertion:**` field quoting `docs/playt
 - **Commit SHA Tested:** `7b40dd645a28f7f012086ff70a841b9bca39bcaa`
 - **Specified assertion:** After xcrun simctl terminate on P5 (no relaunch), P5 is still present in every other device's roster at approximately 2 minutes and absent at approximately 11 minutes, with both wall-clock timestamps recorded.
 - **What I did:**
-  1. Created casual match (room `VNMT`, timers disabled) with 5 players (Alice/P1 host, Bob/P2, Charlie/P3, Dana/P4, Erin/P5). Reduce Motion was enabled on P3 (`iPhone 17 Pro Max`, `ReduceMotionEnabled: 1`), confirming U2/R0 particle suppression on device with gradient background intact (`docs/playthrough_evidence/r0_u2_p3_reduce_motion.png`).
+  1. Created casual match (room `VNMT`, timers disabled) with 5 players (Alice/P1 host, Bob/P2, Charlie/P3, Dana/P4, Erin/P5). Reduce Motion was enabled on P3 (`iPhone 17 Pro Max`, `ReduceMotionEnabled: 1`), confirming U2/R0 particle suppression on device with gradient background intact (`docs/playthroughs/evidence/r0_u2_p3_reduce_motion.png`).
   2. Started game and advanced all 5 players into Phase 1 (Truth). Dismissed dealt-card overlay on all 5 devices.
   3. Alice (P1), Bob (P2), Charlie (P3), and Dana (P4) penned and submitted their dossiers, entering the waiting view (`THE INK DRIES…`, `Waiting for 1 players...`, `WaitingOnRow`). Erin (P5) remained unsubmitted.
   4. Terminated Erin's app process on P5 via `xcrun simctl terminate 2F9850F3-E4CF-496C-B507-F9454CF2BBD8 com.whylabs.gaslight` at $T_0 = \text{2026-08-31T02:05:31Z}$ (local wall-clock 19:05:31). No relaunch performed.
-  5. At approximately 2 minutes post-termination ($\text{2026-08-31T02:07:38Z}$ / 19:07:38, status-bar clock 7:07), captured P1 waiting screen (`docs/playthrough_evidence/e49_p1_presence_within_window.png`) and dumped interactive elements: Erin remained actively seated in `WaitingOnRow` across remaining devices, verifying that the 10-minute presence retention window (Issue 123) and U3's 30s heartbeat optimizations preserved her seat without premature eviction.
-  6. At approximately 11 minutes 24 seconds post-termination ($\text{2026-08-31T02:16:55Z}$ / 19:16:55, status-bar clock 7:16, ~9 minutes after the first screenshot), captured P1 waiting screen (`docs/playthrough_evidence/e49_p1_presence_after_window.png`) and dumped interactive elements: Erin was cleanly evicted from the roster (`Waiting for 0 players...`, roster showing exactly Charlie, Alice, Bob, Dana), verifying server-side presence expiry enforcement.
+  5. At approximately 2 minutes post-termination ($\text{2026-08-31T02:07:38Z}$ / 19:07:38, status-bar clock 7:07), captured P1 waiting screen (`docs/playthroughs/evidence/e49_p1_presence_within_window.png`) and dumped interactive elements: Erin remained actively seated in `WaitingOnRow` across remaining devices, verifying that the 10-minute presence retention window (Issue 123) and U3's 30s heartbeat optimizations preserved her seat without premature eviction.
+  6. At approximately 11 minutes 24 seconds post-termination ($\text{2026-08-31T02:16:55Z}$ / 19:16:55, status-bar clock 7:16, ~9 minutes after the first screenshot), captured P1 waiting screen (`docs/playthroughs/evidence/e49_p1_presence_after_window.png`) and dumped interactive elements: Erin was cleanly evicted from the roster (`Waiting for 0 players...`, roster showing exactly Charlie, Alice, Bob, Dana), verifying server-side presence expiry enforcement.
 - **Observed:**
   - Checkpoint 1 ($T_0 + \text{2 min}$, 2026-08-31T02:07:38Z, status-bar clock 7:07): P1 UI `Type: Text, Text: "Waiting for 1 players..."`, `WaitingOnRow` interactive elements: `Type: Text, Text: "Erin"`, `Type: Text, Text: "Charlie"`, `Type: Text, Text: "Alice"`, `Type: Text, Text: "Bob"`, `Type: Text, Text: "Dana"` — 5 seated players.
-  - Screenshot (within window, ~2 min): `docs/playthrough_evidence/e49_p1_presence_within_window.png`
+  - Screenshot (within window, ~2 min): `docs/playthroughs/evidence/e49_p1_presence_within_window.png`
   - Checkpoint 2 ($T_0 + \text{11 min}$, 2026-08-31T02:16:55Z, status-bar clock 7:16): P1 UI `Type: Text, Text: "Waiting for 0 players..."`, `WaitingOnRow` interactive elements: `Type: Text, Text: "Charlie"`, `Type: Text, Text: "Alice"`, `Type: Text, Text: "Bob"`, `Type: Text, Text: "Dana"` — 4 seated players, Erin absent.
-  - Screenshot (after window, ~11 min): `docs/playthrough_evidence/e49_p1_presence_after_window.png`
-  - Reduce Motion device verification (P3, Reduce Motion ON): Screenshot `docs/playthrough_evidence/r0_u2_p3_reduce_motion.png` confirms background glyph particle animation suppressed under `ReduceMotionEnabled: 1`, verifying U2 on device.
+  - Screenshot (after window, ~11 min): `docs/playthroughs/evidence/e49_p1_presence_after_window.png`
+  - Reduce Motion device verification (P3, Reduce Motion ON): Screenshot `docs/playthroughs/evidence/r0_u2_p3_reduce_motion.png` confirms background glyph particle animation suppressed under `ReduceMotionEnabled: 1`, verifying U2 on device.
 - **Artefact depicts:** `e49_p1_presence_within_window.png` — P1 waiting screen at 7:07 (2 min after P5 termination at 7:05:31) showing all 5 players seated including Erin in `WaitingOnRow`. `e49_p1_presence_after_window.png` — P1 waiting screen at 7:16 (11 min 24s after P5 termination) showing exactly 4 players seated (Charlie, Alice, Bob, Dana) with Erin absent and removed from the active roster. Clocks on both screenshots are legible and ~9 minutes apart.
 - **Reference:** `functions/src/index.ts` (`handleDisconnect`, presence cleanup, 10-minute seat window, Issue 123), `lib/services/game_service.dart` (30s heartbeat cadence, U3 / Issue 142), `lib/widgets/waiting_indicator.dart` (`WaitingOnRow`)
 - **Expected:** Terminated client remains seated through the 2-minute mark (inside the 10-minute grace window) and is pruned by ~11 minutes (past the 10-minute window).

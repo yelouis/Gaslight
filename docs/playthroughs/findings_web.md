@@ -9,7 +9,7 @@
 - **Backend Environment:** Live Firebase Production (`gaslight-46368`), `USE_EMULATOR: false`
 - **Automated Harness:** Playwright E2E Suite (`test/web_e2e/run_full_playthrough.js` + `test/web_e2e/playthrough_helpers.js`)
 - **Deploy Verification:** `./scripts/check_deploy_fresh.sh` exited 0.
-- **Evidence Verification:** `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_web.md` exited 0.
+- **Evidence Verification:** `./scripts/check_playthrough_evidence.sh docs/playthroughs/findings_web.md` exited 0.
 - **Deliberate Deviations:** Game Timers disabled (`Disable Game Timers` switched ON) in lobby to control progression deterministically across automated browsers.
 
 ---
@@ -25,8 +25,8 @@
   2. Isolated step: Launched distinct Chromium contexts (Context 2 and Context 3). Joined room `SMYG` as Bob and Charlie.
   3. Verified that Context 1, Context 2, and Context 3 maintain separate player identities and sync all 3 distinct players in the lobby roster.
 - **Observed:**
-  - Falsification Screenshot: `docs/playthrough_evidence/w1_falsify_same_tab.png`
-  - 3-Player Roster Screenshot: `docs/playthrough_evidence/w1_contexts_roster.png`
+  - Falsification Screenshot: `docs/playthroughs/evidence/w1_falsify_same_tab.png`
+  - 3-Player Roster Screenshot: `docs/playthroughs/evidence/w1_contexts_roster.png`
   - Quoted Semantics: `"ROOM CODE SMYG"`, `"MEMBERS OF THE PARLOR (3/8)"`, `"Alice"`, `"Bob"`, `"Charlie"`
 - **Reference:** `lib/services/game_service.dart:180`
 - **Expected:** Tabs sharing storage restore identical session; isolated browser contexts connect as distinct players.
@@ -41,7 +41,7 @@
   2. Loaded `http://127.0.0.1:8777`.
   3. Verified CanvasKit initial load, font rendering, raven mascot display, and entrance form controls.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w2_cold_boot.png`
+  - Screenshot: `docs/playthroughs/evidence/w2_cold_boot.png`
   - Quoted Semantics: `"GASLIGHT"`, `"THE GUEST LEDGER"`, `"Your Name"`, `"CREATE ROOM"`, `"Room Code"`, `"JOIN ROOM"`
 - **Reference:** `lib/screens/lobby_screen.dart:150`
 - **Expected:** Cold boot renders title screen and guest ledger cleanly without flash or crash.
@@ -55,7 +55,7 @@
   1. Triggered Flutter Web accessibility semantics via `flt-semantics-placeholder` / `aria-label="Enable accessibility"`.
   2. Inspected DOM for populated `flt-semantics` interactive tree nodes.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w3_semantics_dom.png`
+  - Screenshot: `docs/playthroughs/evidence/w3_semantics_dom.png`
   - Quoted DOM hit: `document.body.innerText.includes("THE GUEST LEDGER") === true`
 - **Reference:** `test/web_e2e/playthrough_helpers.js:12`
 - **Expected:** Flutter Web semantics tree activates and renders accessible DOM elements.
@@ -70,9 +70,9 @@
   1. Bob and Charlie joined room `SMYG`.
   2. Inspected player roster across all 3 client screens.
 - **Observed:**
-  - P1 Screenshot: `docs/playthrough_evidence/w4_p1_lobby.png`
-  - P2 Screenshot: `docs/playthrough_evidence/w4_p2_lobby.png`
-  - P3 Screenshot: `docs/playthrough_evidence/w4_p3_lobby.png`
+  - P1 Screenshot: `docs/playthroughs/evidence/w4_p1_lobby.png`
+  - P2 Screenshot: `docs/playthroughs/evidence/w4_p2_lobby.png`
+  - P3 Screenshot: `docs/playthroughs/evidence/w4_p3_lobby.png`
   - Quoted Semantics: `"THE PARLOR"`, `"ROOM CODE SMYG"`, `"Alice (Host)"`, `"Bob"`, `"Charlie"`
 - **Reference:** `lib/screens/lobby_screen.dart:450`
 - **Expected:** Lobby roster synchronizes real-time across host and guest screens.
@@ -89,7 +89,7 @@
   3. P2 and P3 clicked `"I'M READY"`.
   4. Observed `START GAME` button become enabled on Host P1.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w5_readiness_gate.png`
+  - Screenshot: `docs/playthroughs/evidence/w5_readiness_gate.png`
   - Quoted Semantics: `"Waiting on 2 of 2 players to ready up."`, `"Disable Game Timers"`, `"START GAME"`
 - **Reference:** `lib/screens/lobby_screen.dart:623`
 - **Expected:** Host cannot start match until all non-host players are marked ready.
@@ -105,7 +105,7 @@
   2. All three players transitioned to Truth crafting phase.
   3. Typed genuine secrets into quill textarea and clicked `SUBMIT DOSSIER`.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w6_truth_craft.png`
+  - Screenshot: `docs/playthroughs/evidence/w6_truth_craft.png`
   - Quoted Semantics: `"THE RECORD OF TRUTH"`, `"SUBMIT DOSSIER"`, `"Dip the quill…"`
 - **Reference:** `lib/screens/phase2_craft.dart:210`
 - **Expected:** Truth dossiers submit cleanly and advance all players to Forgery phase.
@@ -121,8 +121,8 @@
   2. Verified duplicate rejection error feedback in UI.
   3. Bob and Charlie submitted valid original forgeries.
 - **Observed:**
-  - Duplicate Rejection Screenshot: `docs/playthrough_evidence/w7_duplicate_reject.png`
-  - Forgery Crafting Screenshot: `docs/playthrough_evidence/w7_forgery_craft.png`
+  - Duplicate Rejection Screenshot: `docs/playthroughs/evidence/w7_duplicate_reject.png`
+  - Forgery Crafting Screenshot: `docs/playthroughs/evidence/w7_forgery_craft.png`
   - Quoted Semantics: `"DECK OF FORGERIES"`, `"SUBMIT DOSSIER"`
 - **Reference:** `lib/screens/phase2_craft.dart:340`
 - **Expected:** Submitting duplicate truth answers triggers validation rejection; unique forgeries submit successfully.
@@ -138,7 +138,7 @@
   2. Inspected card voting options on Bob (P2) and Charlie (P3).
   3. Verified own-answer lockout badge/sealing prevents voting for one's own authored forgery.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w8_vote_lockout.png`
+  - Screenshot: `docs/playthroughs/evidence/w8_vote_lockout.png`
   - Quoted Semantics: `"THE VOTE"`, `"WHICH ONE IS THE TRUTH?"`, `"SEALED THE SOUL IS SILENT (Your Forgery)"`, `"CONFIRM VOTE"`
 - **Reference:** `lib/screens/phase3_vote.dart:310`
 - **Expected:** Players cannot cast votes for their own submitted forgeries.
@@ -154,8 +154,8 @@
   2. Inspected Card 1 resolution with truth card, forgeries, and vote attribution badges.
   3. Fooled players submitted unmask accusations during the unmask window.
 - **Observed:**
-  - Card Reveal Screenshot: `docs/playthrough_evidence/w9_reveal_card.png`
-  - Unmask Window Screenshot: `docs/playthrough_evidence/w9_unmask_window.png`
+  - Card Reveal Screenshot: `docs/playthroughs/evidence/w9_reveal_card.png`
+  - Unmask Window Screenshot: `docs/playthroughs/evidence/w9_unmask_window.png`
   - Quoted Semantics: `"THE REVEAL"`, `"RESOLVING CHARLIE'S CARD"`, `"THE TRUTH"`, `"FORGERY BY BOB"`, `"POINTS AWARDED THIS CARD"`, `"REVENGE UNMASKING!"`, `"CONTINUE"`
 - **Reference:** `lib/screens/phase4_reveal.dart:420`
 - **Expected:** Reveal displays truth, forgeries, voter badges, and opens revenge unmasking tray.
@@ -170,7 +170,7 @@
   1. Advanced through card resolutions to the standings leaderboard.
   2. Inspected score calculations and point deltas for all 3 players.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w10_standings.png`
+  - Screenshot: `docs/playthroughs/evidence/w10_standings.png`
   - Quoted Semantics: `"STANDINGS"`, `"Bob 2 ▲+2"`, `"Alice 2 ▲+2"`, `"Charlie 2 ▲+2"`
 - **Reference:** `lib/screens/phase4_reveal.dart:850`
 - **Expected:** Standings leaderboard displays correct cumulative scores and point deltas.
@@ -185,7 +185,7 @@
   1. Completed the match resolution.
   2. Inspected GameOverScreen honors, final podium rankings, and case file controls.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w11_gameover.png`
+  - Screenshot: `docs/playthroughs/evidence/w11_gameover.png`
   - Quoted Semantics: `"NIGHT'S HONORS"`, `"GAME OVER"`, `"FINAL STANDINGS"`, `"Share Case File"`, `"PLAY AGAIN"`
 - **Reference:** `lib/screens/game_over_screen.dart:280`
 - **Expected:** Match completes and transitions smoothly to GameOverScreen with podium honors.
@@ -200,7 +200,7 @@
   1. Mid-match during resolution, triggered a full browser page reload on P2 (`p2.reload()`).
   2. Verified that P2 reconnected to room `SMYG` immediately without losing score or player identity.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w12_session_restored.png`
+  - Screenshot: `docs/playthroughs/evidence/w12_session_restored.png`
   - Verbatim Console log: `[P2 log] DEBUG HEARTBEAT: started timer for room: SMYG, player: 16464d22-4f45-4f52-93f0-42e6c560a74c`
 - **Reference:** `lib/services/game_service.dart:185`
 - **Expected:** Browser refresh restores player session, seat token, and active match state.
@@ -215,7 +215,7 @@
   1. In Context 1 where Alice created room `SMYG`, opened a second tab to `http://127.0.0.1:8777`.
   2. Verified that tab 2 automatically loaded the active room session.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w13_same_origin_tab.png`
+  - Screenshot: `docs/playthroughs/evidence/w13_same_origin_tab.png`
   - Quoted Semantics: `"ROOM CODE SMYG"`, `"THE PARLOR"`, `"Alice (Host)"`
 - **Reference:** `lib/services/game_service.dart:210`
 - **Expected:** Opening a second tab under the same origin automatically syncs the active room session.
@@ -231,8 +231,8 @@
   2. Observed browser download event and confirmation snackbar on web.
   3. Verified downloaded image file integrity and byte size on disk.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w14_case_file_download.png`
-  - Downloaded Image: `docs/playthrough_evidence/gaslight_case_file_xhpd.png`
+  - Screenshot: `docs/playthroughs/evidence/w14_case_file_download.png`
+  - Downloaded Image: `docs/playthroughs/evidence/gaslight_case_file_xhpd.png`
   - Quoted Semantics / UI: `"Share Case File"`, `"Case File saved to Downloads!"`
   - Download Verification: File `gaslight_case_file_xhpd.png` downloaded via Blob URL + synthetic anchor click; `file` verification reports `PNG image data, 2464 x 1510, 8-bit/color RGBA, non-interlaced` with size `629585` bytes (not 0 bytes, not HTML error page).
   - *Historical record*: W14 previously cited `w14_case_file_share.png` showing `Sharing is only supported on mobile devices.` prior to Issue 110; re-shot in Wave L (L3) with full runtime confirmation of the web Blob download pipeline.
@@ -250,7 +250,7 @@
   1. Monitored console error and warning events across all 3 player contexts during full match.
   2. Verified zero unhandled exceptions or rendering crashes.
 - **Observed:**
-  - Screenshot: `docs/playthrough_evidence/w15_console_hygiene.png`
+  - Screenshot: `docs/playthroughs/evidence/w15_console_hygiene.png`
   - Verbatim Log Summary: P1 log count: 10, P2 log count: 21, P3 log count: 10.
   - Zero `PAGE_ERROR` events logged.
 - **Reference:** `test/web_e2e/run_full_playthrough.js:45`
@@ -268,8 +268,8 @@
   3. Verified that the match automatically terminated due to falling below the 3-player floor.
   4. Verified both remaining players (P1 and P2) were routed to GameOverScreen.
 - **Observed:**
-  - P1 Screenshot: `docs/playthrough_evidence/w16_p1_gameover.png`
-  - P2 Screenshot: `docs/playthrough_evidence/w16_p2_gameover.png`
+  - P1 Screenshot: `docs/playthroughs/evidence/w16_p1_gameover.png`
+  - P2 Screenshot: `docs/playthroughs/evidence/w16_p2_gameover.png`
   - Quoted Semantics: `"GAME OVER"`, `"FINAL STANDINGS"`
 - **Reference:** `lib/services/game_service.dart:710`
 - **Expected:** When player count drops below 3 during active play, the match auto-terminates to GameOver.
@@ -283,11 +283,11 @@
   1. Loaded web application at 375x812 mobile viewport with touch emulation.
   2. Captured all key match flow screens: Lobby, Crafting, Voting, Reveal, GameOver.
 - **Observed:**
-  - Lobby: `docs/playthrough_evidence/w17_lobby.png`
-  - Crafting: `docs/playthrough_evidence/w17_craft.png`
-  - Voting: `docs/playthrough_evidence/w17_vote.png`
-  - Reveal: `docs/playthrough_evidence/w17_reveal.png`
-  - GameOver: `docs/playthrough_evidence/w17_gameover.png`
+  - Lobby: `docs/playthroughs/evidence/w17_lobby.png`
+  - Crafting: `docs/playthroughs/evidence/w17_craft.png`
+  - Voting: `docs/playthroughs/evidence/w17_vote.png`
+  - Reveal: `docs/playthroughs/evidence/w17_reveal.png`
+  - GameOver: `docs/playthroughs/evidence/w17_gameover.png`
 - **Reference:** `lib/screens/lobby_screen.dart:180`
 - **Expected:** Layout adapts responsively to mobile viewport without clipping or overflow.
 
@@ -300,11 +300,11 @@
   1. Loaded web application at 768x1024 tablet viewport.
   2. Captured all key match flow screens: Lobby, Crafting, Voting, Reveal, GameOver.
 - **Observed:**
-  - Lobby: `docs/playthrough_evidence/w18_lobby.png`
-  - Crafting: `docs/playthrough_evidence/w18_craft.png`
-  - Voting: `docs/playthrough_evidence/w18_vote.png`
-  - Reveal: `docs/playthrough_evidence/w18_reveal.png`
-  - GameOver: `docs/playthrough_evidence/w18_gameover.png`
+  - Lobby: `docs/playthroughs/evidence/w18_lobby.png`
+  - Crafting: `docs/playthroughs/evidence/w18_craft.png`
+  - Voting: `docs/playthroughs/evidence/w18_vote.png`
+  - Reveal: `docs/playthroughs/evidence/w18_reveal.png`
+  - GameOver: `docs/playthroughs/evidence/w18_gameover.png`
 - **Reference:** `lib/screens/lobby_screen.dart:180`
 - **Expected:** Layout adapts responsively to tablet viewport without clipping or overflow.
 
@@ -317,11 +317,11 @@
   1. Loaded web application at 1280x800 desktop viewport.
   2. Captured all key match flow screens: Lobby, Crafting, Voting, Reveal, GameOver.
 - **Observed:**
-  - Lobby: `docs/playthrough_evidence/w19_lobby.png`
-  - Crafting: `docs/playthrough_evidence/w19_craft.png`
-  - Voting: `docs/playthrough_evidence/w19_vote.png`
-  - Reveal: `docs/playthrough_evidence/w19_reveal.png`
-  - GameOver: `docs/playthrough_evidence/w19_gameover.png`
+  - Lobby: `docs/playthroughs/evidence/w19_lobby.png`
+  - Crafting: `docs/playthroughs/evidence/w19_craft.png`
+  - Voting: `docs/playthroughs/evidence/w19_vote.png`
+  - Reveal: `docs/playthroughs/evidence/w19_reveal.png`
+  - GameOver: `docs/playthroughs/evidence/w19_gameover.png`
 - **Reference:** `lib/screens/lobby_screen.dart:180`
 - **Expected:** Layout adapts responsively to desktop viewport without clipping or overflow.
 
@@ -343,8 +343,8 @@
      - **THE STING:** Quoting `"A time I took credit for someone else's idea."` as Deadliest prompt on the table with `2 wrong votes` badge.
   7. Verified verbatim that the quoted string in Best Lie (`"Sapphire"`) was a real player-authored forgery from this match (authored by Alice in Round 1), and NOT a placeholder (`THE SOUL IS SILENT`) or truth.
 - **Observed:**
-  - Standings & Podium: `docs/playthrough_evidence/w20_gameover_standings.png`
-  - Match Highlights (honors, standings and all three awards in one frame): `docs/playthrough_evidence/w20_match_summary.png`
+  - Standings & Podium: `docs/playthroughs/evidence/w20_gameover_standings.png`
+  - Match Highlights (honors, standings and all three awards in one frame): `docs/playthroughs/evidence/w20_match_summary.png`
   - *(Correction, August 24, 2026: this block originally also cited `w20_best_lie_detail.png` as a separate "Detail" observation. That file was **byte-identical** to `w20_match_summary.png` — the same sha — so it evidenced nothing further. It has been removed with `git rm` and the claim reduced to the two distinct frames that actually exist.)*
   - Verbatim Quoted Semantics:
     - `"MATCH HIGHLIGHTS"`

@@ -12,8 +12,8 @@
 #   1. W1 PASS with only Type: Text and no PNG:
 #      $ ./scripts/check_playthrough_evidence.sh /tmp/test_w1.md -> exit 1
 #      FAIL: 1 violation(s) found across 1 blocks:
-#        [W1] Rule R3 violation: Web PASS/FAIL block's Observed field must contain a PNG screenshot path under docs/playthrough_evidence/
-#   2. W1 PASS with docs/playthrough_evidence/w1.png:
+#        [W1] Rule R3 violation: Web PASS/FAIL block's Observed field must contain a PNG screenshot path under docs/playthroughs/evidence/
+#   2. W1 PASS with docs/playthroughs/evidence/w1.png:
 #      $ ./scripts/check_playthrough_evidence.sh /tmp/test_w1.md -> exit 0 (1 PASS)
 #   3. E1 PASS with only Type: Text (iOS):
 #      $ ./scripts/check_playthrough_evidence.sh /tmp/test_e1.md -> exit 0 (1 PASS)
@@ -24,25 +24,25 @@
 #
 # Falsification record for L1 (Rule R5 - Cited PNG artefacts must exist on disk):
 #   1. Move cited PNG aside:
-#      $ git mv docs/playthrough_evidence/e10_p1_gameover.png docs/playthrough_evidence/e10_p1_gameover.png.bak
+#      $ git mv docs/playthroughs/evidence/e10_p1_gameover.png docs/playthroughs/evidence/e10_p1_gameover.png.bak
 #      $ ./scripts/check_playthrough_evidence.sh -> exit 1
 #      FAIL: 1 violation(s) found across 15 blocks:
-#        [E10] Rule R5 violation: Cited artefact does not exist on disk: docs/playthrough_evidence/e10_p1_gameover.png
+#        [E10] Rule R5 violation: Cited artefact does not exist on disk: docs/playthroughs/evidence/e10_p1_gameover.png
 #   2. Restore cited PNG:
-#      $ git mv docs/playthrough_evidence/e10_p1_gameover.png.bak docs/playthrough_evidence/e10_p1_gameover.png
+#      $ git mv docs/playthroughs/evidence/e10_p1_gameover.png.bak docs/playthroughs/evidence/e10_p1_gameover.png
 #      $ ./scripts/check_playthrough_evidence.sh -> exit 0 (14 PASS, 1 NOT RUN, 0 FAIL; 14 artefact file paths verified on disk)
 #   3. Over-reach guard: E9 (NOT RUN with no PNG) is not flagged by R5.
 #   4. Non-zero match assertion: 14 artefacts verified on iOS, 37 on Web.
 #
 # Rule R6 — manifest-driven verbatim assertion check:
-#   Reads docs/playthrough_manifest.md. For every block listed there, R6 checks:
+#   Reads docs/playthroughs/manifest.md. For every block listed there, R6 checks:
 #     (a) The block exists in the report.
 #     (b) The block's heading title matches the manifest Title column verbatim
 #         (after normalising surrounding whitespace only).
 #     (c) The block contains a **Specified assertion:** field matching the manifest
 #         Specified assertion column verbatim.
 #     (d) Every PNG the block cites is accompanied by a non-empty **Artefact depicts:**
-#         field, and appears in docs/playthrough_evidence/ARTEFACTS.tsv.
+#         field, and appears in docs/playthroughs/evidence/ARTEFACTS.tsv.
 #   R6 fails if the manifest file exists but parses to zero rows.
 #   Blocks NOT listed in the manifest are unaffected by R6 — legacy blocks are untouched.
 #
@@ -60,7 +60,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPORT_FILE="${1:-$REPO_ROOT/docs/playthrough_findings_marionette.md}"
+REPORT_FILE="${1:-$REPO_ROOT/docs/playthroughs/findings_marionette.md}"
 
 if [[ ! -f "$REPORT_FILE" ]]; then
   echo "ERROR: Could not verify — report file does not exist: $REPORT_FILE" >&2
@@ -120,7 +120,7 @@ reason_regex = re.compile(r'(?m)^\s*[-*]*\s*\*\*Reason[^*]*:\*\*\s*(.+)$')
 observed_header_regex = re.compile(r'(?m)^\s*[-*]*\s*\*\*Observed([^*]*):\*\*\s*(.*)$')
 field_header_regex = re.compile(r'(?m)^\s*[-*]*\s*\*\*[A-Z][a-zA-Z0-9\s()_-]*:\*\*')
 
-artefact_png_regex = re.compile(r'docs/playthrough_evidence/[a-zA-Z0-9_.-]+\.png')
+artefact_png_regex = re.compile(r'docs/playthroughs/evidence/[a-zA-Z0-9_.-]+\.png')
 artefact_widget_regex = re.compile(r'Type:\s*\w+|Text:\s*"')
 artefact_log_regex = re.compile(r'flutter:\s*|flutter\s+run|plutil\s+-lint|build/ios/')
 grep_banned_regex = re.compile(r'grep\s+-')
@@ -196,10 +196,10 @@ for block in blocks:
     
     if is_w_block:
         # On web, there is no widget tree and no flutter: log.
-        # Strict requirement: Must have a PNG under docs/playthrough_evidence/
+        # Strict requirement: Must have a PNG under docs/playthroughs/evidence/
         if not has_png:
             violations.append(
-                f"[{bid}] Rule R3 violation: Web PASS/FAIL block's Observed field must contain a PNG screenshot path under docs/playthrough_evidence/\n"
+                f"[{bid}] Rule R3 violation: Web PASS/FAIL block's Observed field must contain a PNG screenshot path under docs/playthroughs/evidence/\n"
                 f"      Offending Observed content:\n        {preview}"
             )
     else:
@@ -230,7 +230,7 @@ if total_blocks > 0 and (pass_count + fail_count) > 0 and total_pngs_checked == 
 # -------------------------------------------------------------------------
 # Rule R6: Manifest-driven verbatim assertion check (scoped per report)
 # -------------------------------------------------------------------------
-manifest_path = os.path.join(repo_root, "docs", "playthrough_manifest.md")
+manifest_path = os.path.join(repo_root, "docs", "playthroughs", "manifest.md")
 r6_checked = 0
 r6_summary = ""
 
@@ -268,7 +268,7 @@ if os.path.isfile(manifest_path):
         violations.append(
             f"R6 FATAL: Manifest file exists at {manifest_path} but parsed to zero rows. "
             f"Either the file is empty, the table body is empty, or the parser failed. "
-            f"Edit docs/playthrough_manifest.md to add rows, or remove the file if no blocks are governed."
+            f"Edit docs/playthroughs/manifest.md to add rows, or remove the file if no blocks are governed."
         )
     else:
         def norm_repo_path(p):
@@ -287,7 +287,7 @@ if os.path.isfile(manifest_path):
             block_by_id = {b["id"]: b for b in blocks}
 
             # Load ARTEFACTS.tsv for cross-check
-            tsv_path = os.path.join(repo_root, "docs", "playthrough_evidence", "ARTEFACTS.tsv")
+            tsv_path = os.path.join(repo_root, "docs", "playthroughs", "evidence", "ARTEFACTS.tsv")
             tsv_entries = set()  # set of (block_id, filename) tuples with non-empty depicts
             if os.path.isfile(tsv_path):
                 try:
@@ -312,9 +312,9 @@ if os.path.isfile(manifest_path):
 
                 if bid not in block_by_id:
                     violations.append(
-                        f"[{bid}] R6 violation: Block is listed in docs/playthrough_manifest.md "
+                        f"[{bid}] R6 violation: Block is listed in docs/playthroughs/manifest.md "
                         f"but does not exist in {report_path}. "
-                        f"Edit the manifest row at docs/playthrough_manifest.md if the block id changed."
+                        f"Edit the manifest row at docs/playthroughs/manifest.md if the block id changed."
                     )
                     continue
 
@@ -331,7 +331,7 @@ if os.path.isfile(manifest_path):
                 if actual_title != expected_title:
                     violations.append(
                         f"[{bid}] R6 violation: Block title does not match manifest verbatim.\n"
-                        f"      Manifest (docs/playthrough_manifest.md): \"{expected_title}\"\n"
+                        f"      Manifest (docs/playthroughs/manifest.md): \"{expected_title}\"\n"
                         f"      Report heading:                          \"{actual_title}\"\n"
                         f"      To fix a legitimate re-scope, update the manifest row in the same commit."
                     )
@@ -350,7 +350,7 @@ if os.path.isfile(manifest_path):
                     if actual_assertion != expected_assertion:
                         violations.append(
                             f"[{bid}] R6 violation: **Specified assertion:** does not match manifest verbatim.\n"
-                            f"      Manifest (docs/playthrough_manifest.md): \"{expected_assertion}\"\n"
+                            f"      Manifest (docs/playthroughs/manifest.md): \"{expected_assertion}\"\n"
                             f"      Report field:                             \"{actual_assertion}\"\n"
                             f"      To fix a legitimate re-scope, update the manifest row in the same commit."
                         )
@@ -383,7 +383,7 @@ if os.path.isfile(manifest_path):
                             if (bid, png_basename) not in tsv_entries:
                                 violations.append(
                                     f"[{bid}] R6 violation: PNG '{png_basename}' is cited in the report but has no entry "
-                                    f"in docs/playthrough_evidence/ARTEFACTS.tsv with matching block_id='{bid}' and filename='{png_basename}'. "
+                                    f"in docs/playthroughs/evidence/ARTEFACTS.tsv with matching block_id='{bid}' and filename='{png_basename}'. "
                                     f"Log it in ARTEFACTS.tsv at capture time."
                                 )
 

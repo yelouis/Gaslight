@@ -58,7 +58,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - Voting Phase: `Type: Text, Text: "THE VOTE"`, `Text: "WHICH ONE IS THE TRUTH?"`
   - Reveal Phase: `Type: Text, Text: "THE REVEAL"`, `Text: "POINTS AWARDED THIS CARD"`, `Text: "STANDINGS"`
   - Game Over Phase: `Type: Text, Text: "GAME OVER"`, `Text: "THE NIGHT'S HONORS"`
-  - Screenshots: `docs/playthrough_evidence/e1_game_over_podium.png`
+  - Screenshots: `docs/playthroughs/evidence/e1_game_over_podium.png`
 - **Reference:**
   - `lib/screens/lobby_screen.dart:580`
   - `lib/screens/phase2_craft.dart:386`
@@ -82,7 +82,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - Truth: `Type: Text, Text: "THE TRUTH"`, `Text: "CCC: Sent a reply-all complaining about the meeting organizer"` (VOTES: Alice)
   - Forgery 1: `Type: Text, Text: "AAA: Sent my grocery shopping list to the entire company"` (VOTES: Bob)
   - Forgery 2: `Type: Text, Text: "BBB: Emailed the CEO asking if they wanted to split a pizza"` (0 votes)
-  - Screenshot: `docs/playthrough_evidence/e2_card1_reveal_p1.png`
+  - Screenshot: `docs/playthroughs/evidence/e2_card1_reveal_p1.png`
 - **Reference:**
   - `lib/screens/phase4_reveal.dart:720,826`
 - **Expected:** Every reveal accurately presents prompt, genuine truth, and authored forgeries with exact voter counts across all cards.
@@ -115,7 +115,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 - **Observed:**
   - P3 (Card author Charlie) screen: `Type: Text, Text: "THE PARLOR DELIBERATES…"`, `Text: "They are voting on your card. Keep a straight face."`, `Text: "2 of 2 ballots sealed"`.
   - P1 (Voter Alice) screen during unmasking: forgeries rendered with `Type: Text, Text: "SEALED ANSWER"` instead of author names.
-  - Screenshot: `docs/playthrough_evidence/e4_unmasking_sealed_p1.png`
+  - Screenshot: `docs/playthroughs/evidence/e4_unmasking_sealed_p1.png`
 - **Reference:**
   - `lib/screens/phase4_reveal.dart:757,935`
 - **Expected:** Author unmasks guesses in dedicated revenge window before forgery identities are revealed.
@@ -132,7 +132,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - Card 1 resolution: `Text: "POINTS AWARDED THIS CARD"`, `Text: "Alice: +3"`, `Text: "Charlie: +1"`, `Text: "🏆 BEST FORGERY OF THE ROUND - Alice's lie fooled 1 player!"`. Standings: Alice = `3` (`▲+3`), Charlie = `1` (`▲+1`), Bob = `0`.
   - Card 2 resolution: `Text: "Alice: +1"`, `Text: "Bob: +3"`, `Text: "🏆 BEST FORGERY OF THE ROUND - Bob's lie fooled 1 player!"`. Standings: Alice = `4` (`▲+1`), Bob = `3` (`▲+3`), Charlie = `1`.
   - Card 3 resolution: `Text: "Alice: +3"`, `Text: "Bob: +1"`, `Text: "🏆 BEST FORGERY OF THE ROUND - Alice's lie fooled 1 player!"`. Standings: Alice = `7` (`▲+3`), Bob = `4` (`▲+1`), Charlie = `1`.
-  - Screenshot: `docs/playthrough_evidence/e5_card1_standings_p1.png`
+  - Screenshot: `docs/playthroughs/evidence/e5_card1_standings_p1.png`
 - **Reference:**
   - `lib/screens/phase4_reveal.dart:826,890`
 - **Expected:** Points computed correctly per rule formulas (truth-finding, truth-telling, deception points).
@@ -150,7 +150,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - `Type: Text, Text: "THE TRUTH"`, `Text: "CCC: Sent a reply-all complaining about the meeting organizer"` (matches Charlie)
   - `Type: Text, Text: "FORGERY BY ALICE"`, `Text: "AAA: Sent my grocery shopping list to the entire company"` (matches Alice)
   - `Type: Text, Text: "FORGERY BY BOB"`, `Text: "BBB: Emailed the CEO asking if they wanted to split a pizza"` (matches Bob)
-  - Screenshot: `docs/playthrough_evidence/e6_card1_attribution_p1.png`
+  - Screenshot: `docs/playthroughs/evidence/e6_card1_attribution_p1.png`
 - **Reference:**
   - `lib/screens/phase4_reveal.dart:826`
 - **Expected:** Named authors match the AAA/BBB/CCC prefixed ground truth.
@@ -168,7 +168,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 - **Observed:**
   - App boot log: `flutter: DEBUG HEARTBEAT: started timer for room: GLRD, player: 2d72eff1-a1c9-4b15-9023-31de5dc5ef79`
   - P2 immediately bypassed Guest Ledger and landed directly at `/reveal` (`RESOLVING CHARLIE'S CARD`) with Bob's seat, scores, and ballot history restored.
-  - Screenshot: `docs/playthrough_evidence/e7_p2_seat_recovery.png`
+  - Screenshot: `docs/playthroughs/evidence/e7_p2_seat_recovery.png`
 - **Reference:**
   - `lib/services/game_service.dart:46`
   - `lib/screens/phase4_reveal.dart:140`
@@ -189,7 +189,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - P1 confirmation dialog: `Type: Text, Text: "Remove player?"`, `Text: "Remove Charlie from this room? They can rejoin with the room code."`, buttons `CANCEL` and `REMOVE`.
   - P3 eviction screen: Charlie was routed back to `THE GUEST LEDGER` with snackbar banner `Type: Text, Text: "The host has removed you from this room."`.
   - P1 roster updated from 3 suspects to: `Type: Text, Text: "2 SUSPECTS JOINED (1/1 Ready)"`.
-  - Screenshots: `docs/playthrough_evidence/e8_p1_lobby_kick_controls.png`, `docs/playthrough_evidence/e8_p3_kicked_notice.png`, `docs/playthrough_evidence/e8_p3_lobby.png`.
+  - Screenshots: `docs/playthroughs/evidence/e8_p1_lobby_kick_controls.png`, `docs/playthroughs/evidence/e8_p3_kicked_notice.png`, `docs/playthroughs/evidence/e8_p3_lobby.png`.
 - **Reference:**
   - `lib/screens/lobby_screen.dart:730`
   - `functions/src/index.ts:380`
@@ -221,7 +221,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - On P1: Automatically navigated to Game Over screen: `Type: Text, Text: "GAME OVER"`, `Text: "THE NIGHT'S HONORS"`, `Text: "THE MASTERMIND"`, `Text: "HIGHEST SCORE"`, `Text: "Bob"`, `Text: "0 Pts"`.
   - On P2: Automatically navigated to Game Over screen: `Type: Text, Text: "GAME OVER"`, `Text: "THE NIGHT'S HONORS"`, `Text: "THE MASTERMIND"`, `Text: "HIGHEST SCORE"`, `Text: "Bob"`, `Text: "0 Pts"`.
   - Both remaining devices reached Game Over with scores intact.
-  - Screenshots: `docs/playthrough_evidence/e10_p1_gameover.png`, `docs/playthrough_evidence/e10_p2_gameover.png`.
+  - Screenshots: `docs/playthroughs/evidence/e10_p1_gameover.png`, `docs/playthroughs/evidence/e10_p2_gameover.png`.
 - **Reference:**
   - `functions/src/index.ts:986`
   - `lib/screens/game_over_screen.dart:250`
@@ -240,7 +240,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   4. Verified compiler tree-shaking of all 7 `DEBUG:` buttons in release mode.
 - **Observed:**
   - Standalone release screen rendered only authentic game UI (`Type: Text, Text: "THE GUEST LEDGER"`, `Text: "CREATE ROOM"`, `Text: "JOIN ROOM"`, `Text: "READ MANUAL"`) with zero developer or `DEBUG:` controls.
-  - Screenshot: `docs/playthrough_evidence/e11_release_lobby.png`.
+  - Screenshot: `docs/playthroughs/evidence/e11_release_lobby.png`.
   - Verified outside Marionette session because `MarionetteBinding` is installed strictly behind `if (kDebugMode)` (`lib/main.dart:26`), which is false in release mode.
   - **Screen coverage, stated honestly:** the **lobby / Guest Ledger** was checked on the release build. The **truth/forgery** and **vote** screens were **not** reached on device — they require three players in an active match on a release build. The remaining six sites rest on the compile-time argument: `kDebugMode` is a single `const bool`, so if it tree-shakes one gated widget it tree-shakes all seven. **That is reasoning, not observation** — recorded so the limit is visible rather than implied.
 - **Reference:**
@@ -293,7 +293,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - Accolade 1: `Type: Text, Text: "THE MASTERMIND"`, `Text: "HIGHEST SCORE"`, `Text: "Alice"`, `Text: "7 Pts"`
   - Accolade 2: `Type: Text, Text: "THE DUPLICITOUS"`, `Text: "MOST PLAYERS DECEIVED"`, `Text: "Bob"`, `Text: "1 Deceptions"`
   - Accolade 3: `Type: Text, Text: "THE GULLIBLE"`, `Text: "MOST TIMES FOOLED"`, `Text: "Charlie"`, `Text: "2 Fooled"`
-  - Screenshots: `docs/playthrough_evidence/e1_game_over_podium.png`, `docs/playthrough_evidence/e14_honors.png`
+  - Screenshots: `docs/playthroughs/evidence/e1_game_over_podium.png`, `docs/playthroughs/evidence/e14_honors.png`
 - **Reference:**
   - `lib/screens/game_over_screen.dart:269`
 - **Expected:** Podium accurately computes and renders game awards with correct metrics.
@@ -332,7 +332,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - `Love Life`: `Type: Text, Text: "Love Life"`, `Text: "PG"`, seal color `0xFF7A6A3A`, prompt preview `Text: "The pettiest romantic ick that immediately turned me off."`
   - `Rated R NSFW`: `Type: Text, Text: "Rated R NSFW"`, `Text: "R"`, seal color oxblood `0xFF8B0000`, prompt preview `Text: "The most desperate public bathroom emergency I barely survived."`
   - `Custom Deck`: `Type: Text, Text: "CUSTOM DECK"`, `Text: "0 prompts from 0 players"`
-  - Screenshots: `docs/playthrough_evidence/e16_d1_d2_hypotheticals_lobby.png`, `docs/playthrough_evidence/e16_d1_d2_real_life_lobby.png`, `docs/playthrough_evidence/e16_d1_d2_unhinged_quirks_lobby.png`, `docs/playthrough_evidence/e16_d1_d2_love_life_lobby.png`, `docs/playthrough_evidence/e16_d1_d2_rated_r_nsfw_lobby.png`
+  - Screenshots: `docs/playthroughs/evidence/e16_d1_d2_hypotheticals_lobby.png`, `docs/playthroughs/evidence/e16_d1_d2_real_life_lobby.png`, `docs/playthroughs/evidence/e16_d1_d2_unhinged_quirks_lobby.png`, `docs/playthroughs/evidence/e16_d1_d2_love_life_lobby.png`, `docs/playthroughs/evidence/e16_d1_d2_rated_r_nsfw_lobby.png`
 - **Reference:**
   - `lib/utils/prompt_decks.dart:18`
   - `functions/src/prompt_decks.ts:18`
@@ -352,7 +352,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 - **Observed:**
   - Warning banner: `Type: Text, Text: "Deck too small: selected deck has 25 prompts but you need 30 prompts (3 players × 10 rounds)."`
   - Button state: `Type: ElevatedButton, enabled: "false"`
-  - Screenshot: `docs/playthrough_evidence/e16_d3_deck_too_small_warning.png`
+  - Screenshot: `docs/playthroughs/evidence/e16_d3_deck_too_small_warning.png`
 - **Reference:**
   - `lib/screens/lobby_screen.dart:510`
 - **Expected:** When players × rounds exceeds deck size, the lobby displays the exact warning naming the actual numbers and blocks starting the game.
@@ -373,7 +373,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - Automatic fallback: Selected deck automatically switched to `hypotheticals`.
   - Firestore Room Document: `ROOM_ID: GFRS selectedDeckId: hypotheticals`
   - Filter OFF: `Rated R NSFW` returned to carousel.
-  - Screenshot: `docs/playthrough_evidence/e16_d4_d5_family_friendly_on_fallback.png`
+  - Screenshot: `docs/playthroughs/evidence/e16_d4_d5_family_friendly_on_fallback.png`
 - **Reference:**
   - `lib/screens/lobby_screen.dart:366`
   - `lib/screens/lobby_screen.dart:771`
@@ -394,27 +394,27 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
     - P1: `Text: "The bizarre conspiracy theory I could probably be convinced is one hundred percent real."` (`prompt_decks.ts:64`)
     - P2: `Text: "The weird luxury I would insist on putting in my personal doomsday bunker."` (`prompt_decks.ts:57`)
     - P3: `Text: "The ridiculous contest I would challenge the devil to for my own soul."` (`prompt_decks.ts:59`)
-    - Screenshot: `docs/playthrough_evidence/e16_d6_hypotheticals_truth.png`
+    - Screenshot: `docs/playthroughs/evidence/e16_d6_hypotheticals_truth.png`
   - Deck 2 (`real_life`, Room `ZQMY`):
     - P1: `Text: "The most useless item I spent my own money on."` (`prompt_decks.ts:112`)
     - P2: `Text: "A time I got completely lost in a place I knew well."` (`prompt_decks.ts:121`)
     - P3: `Text: "A time I got completely lost in a place I knew well."` (`prompt_decks.ts:121`)
-    - Screenshot: `docs/playthrough_evidence/e16_d6_real_life_truth.png`
+    - Screenshot: `docs/playthroughs/evidence/e16_d6_real_life_truth.png`
   - Deck 3 (`unhinged_quirks`, Room `VEUS`):
     - P1: `Text: "A weird food order or modification I insist on every time."` (`prompt_decks.ts:151`)
     - P2: `Text: "The trick I use to avoid making small talk with people in public."` (`prompt_decks.ts:144`)
     - P3: `Text: "The random thing I hoard and stubbornly refuse to throw away."` (`prompt_decks.ts:138`)
-    - Screenshot: `docs/playthrough_evidence/e16_d6_unhinged_quirks_truth.png`
+    - Screenshot: `docs/playthroughs/evidence/e16_d6_unhinged_quirks_truth.png`
   - Deck 4 (`love_life`, Room `PIAV`):
     - P1: `Text: "The worst gift I've ever given or received in a relationship."` (`prompt_decks.ts:165`)
     - P2: `Text: "The quickest I have ever lost interest in someone."` (`prompt_decks.ts:186`)
     - P3: `Text: "The quickest I have ever lost interest in someone."` (`prompt_decks.ts:186`)
-    - Screenshot: `docs/playthrough_evidence/e16_d6_love_life_truth.png`
+    - Screenshot: `docs/playthroughs/evidence/e16_d6_love_life_truth.png`
   - Deck 5 (`rated_r_nsfw`, Room `HLRQ`):
     - P1: `Text: "A time an intimate or serious moment was completely ruined by an unsexy bodily noise."` (`prompt_decks.ts:218`)
     - P2: `Text: "The most embarrassing item a bag checker or TSA agent has pulled out of my luggage."` (`prompt_decks.ts:200`)
     - P3: `Text: "The pettiest reason I immediately lost attraction right before hooking up."` (`prompt_decks.ts:214`)
-    - Screenshot: `docs/playthrough_evidence/e16_d6_rated_r_nsfw_truth.png`
+    - Screenshot: `docs/playthroughs/evidence/e16_d6_rated_r_nsfw_truth.png`
 - **Reference:**
   - `functions/src/prompt_decks.ts:28-220`
 - **Correction (August 26, 2026, verification pass):** two entries above record the **same prompt on two players' cards in the same room** — `real_life`/`ZQMY` P2 and P3, and `love_life`/`PIAV` P2 and P3. **That cannot happen.** `startGame` calls `PromptDecks.drawPrompts(deckId, activePlayers.length)`, which shuffles a copy and slices without replacement, and `startingCards` maps `prompts[idx]` one-to-one onto players. These are transcription errors in this block — the same device or screen was read twice — not a product defect. The rooms had already been cleared of cards by the time this was checked, so the duplicates could not be re-observed either way; the conclusion rests on the code path, and is stated as reasoning rather than observation.
@@ -437,7 +437,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - Top-up fallback card 1: `promptText: "The fake profession I would tell a stranger next to me on a long flight."` (`prompt_decks.ts:38`, `Hypotheticals` fallback).
   - Top-up fallback card 2: `promptText: "The oddly specific task I would gladly pay someone two hundred dollars an hour to do."` (`prompt_decks.ts:37`, `Hypotheticals` fallback).
   - Room document state: `effectiveDeckId: 'hypotheticals'`
-  - Screenshot: `docs/playthrough_evidence/e16_d7_custom_deck_fallback.png`
+  - Screenshot: `docs/playthroughs/evidence/e16_d7_custom_deck_fallback.png`
 - **Reference:**
   - `functions/src/index.ts:1091`
   - `functions/src/prompt_decks.ts:37-38`
@@ -458,7 +458,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
   - Lobby previews: Each deck card displayed distinct preview prompt text.
   - Initial prompt: `Text: "The bizarre conspiracy theory I could probably be convinced is one hundred percent real."` (`prompt_decks.ts:64`)
   - Rerolled prompt: `Text: "The exact scenario where I would completely sell out my moral principles for cash."` (`prompt_decks.ts:73`)
-  - Screenshot: `docs/playthrough_evidence/e16_d8_reroll_prompt.png`
+  - Screenshot: `docs/playthroughs/evidence/e16_d8_reroll_prompt.png`
 - **Reference:**
   - `lib/widgets/deck_carousel.dart:184`
   - `functions/src/index.ts:880`

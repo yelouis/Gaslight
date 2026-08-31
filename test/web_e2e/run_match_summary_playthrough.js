@@ -237,7 +237,7 @@ async function main() {
 
   // Capture top of GameOver (Standings & Podium)
   await saveScreenshot(p1, 'w20_gameover_standings.png');
-  console.log('Saved docs/playthrough_evidence/w20_gameover_standings.png');
+  console.log('Saved docs/playthroughs/evidence/w20_gameover_standings.png');
 
   // Scroll down to reveal Match Highlights
   console.log('Scrolling down to Match Highlights...');
@@ -257,7 +257,7 @@ async function main() {
 
   // Save screenshot of Match Highlights section
   await saveScreenshot(p1, 'w20_match_summary.png');
-  console.log('Saved docs/playthrough_evidence/w20_match_summary.png');
+  console.log('Saved docs/playthroughs/evidence/w20_match_summary.png');
 
   // Drag a bit more to capture detail
   await p1.mouse.move(640, 500);
@@ -267,7 +267,7 @@ async function main() {
   await p1.waitForTimeout(1000);
   await enableSemantics(p1);
   await saveScreenshot(p1, 'w20_best_lie_detail.png');
-  console.log('Saved docs/playthrough_evidence/w20_best_lie_detail.png');
+  console.log('Saved docs/playthroughs/evidence/w20_best_lie_detail.png');
 
   console.log('\n=== MATCH SUMMARY OBSERVATION RUN FINISHED SUCCESSFULLY ===');
   await browser.close();

@@ -405,7 +405,7 @@ async function main() {
 
   if (downloadedFile) {
     const suggestedFilename = downloadedFile.suggestedFilename();
-    const downloadPath = path.join(__dirname, '../../docs/playthrough_evidence', suggestedFilename);
+    const downloadPath = path.join(__dirname, '../../docs/playthroughs/evidence', suggestedFilename);
     await downloadedFile.saveAs(downloadPath);
     console.log(`Saved downloaded file to ${downloadPath}, size: ${fs.statSync(downloadPath).size} bytes`);
   }

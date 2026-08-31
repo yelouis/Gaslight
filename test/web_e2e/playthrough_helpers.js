@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
-const EVIDENCE_DIR = path.resolve(__dirname, '../../docs/playthrough_evidence');
+const EVIDENCE_DIR = path.resolve(__dirname, '../../docs/playthroughs/evidence');
 if (!fs.existsSync(EVIDENCE_DIR)) {
   fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 }
@@ -162,7 +162,7 @@ async function saveScreenshot(page, filename) {
   const fullPath = path.join(EVIDENCE_DIR, filename);
   await page.screenshot({ path: fullPath });
   console.log(`[SCREENSHOT] Saved ${filename}`);
-  return `docs/playthrough_evidence/${filename}`;
+  return `docs/playthroughs/evidence/${filename}`;
 }
 
 module.exports = {
