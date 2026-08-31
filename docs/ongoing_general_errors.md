@@ -8,7 +8,9 @@
 
 ## 1. Open & in-flight
 
-**Wave W verified independently, August 31, 2026 — both items hold up, and this is the cleanest wave so far. Two low-priority issues (147, 148) were filed by that pass and await selection.**
+**Wave X is specced and awaiting implementation (August 31, 2026).** Both remaining issues are selected → Option A: **X1** (147) and **X2** (148). Client and docs only; no deploy.
+
+**Wave W verified independently, August 31, 2026 — both items hold up, and this is the cleanest wave so far.**
 
 **Independently reproduced this session, not taken from commit bodies:**
 - **W1's falsification.** Reverting *only* the post-commit `recursiveDelete` block yields **111 passing, 1 failing** — `AssertionError: expected false to be true` on `sealedSnap.empty` — while all three over-reach guards still pass. That is the correct shape: exactly one test catches the regression, and the guards are not false positives. The transaction's contents were genuinely left untouched (the diff is two hunks), and the sweep's `break` sits **before** the counter increment, so the `.get()` scan is bounded and not just the deletions.
@@ -61,7 +63,13 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Two open, both filed by the verification pass of August 31, 2026 now that the queue is otherwise empty. Neither is urgent.**
+**Both selected → Option A and specced as Wave X in `agent_execution_guide.md`.** **X1** (147 → A — guard `EmberBackdrop`'s ticker with the `AnimatedThinkingBackground` pattern) and **X2** (148 → A — annotate E9 as superseded by E31). Two commits, client + docs, **no deploy**. Neither is urgent.
+
+**X1 retires a standing warning**, and that removal is part of the item: it is the **last known instance** of the `pumpAndSettle` trap, so once it lands the game-over caveat comes out of the guide rather than being carried forward.
+
+**Two traps are written into the spec.** `AppMotion.reduce` now reads `platformDispatcher.accessibilityFeatures.reduceMotion`, which is **not** an inherited widget — so `didChangeDependencies` alone will not react to a live OS toggle, and `didChangeAccessibilityFeatures` alone will not cover mount. **Both hooks are required, and implementing one leaves half the behaviour missing.** And the observer must be removed in `dispose`: omitting it leaks for the app's lifetime and surfaces as `setState() called after dispose()` long after the screen is gone. X1's validation includes the one test that catches that.
+
+**X2's validation exists to catch a single failure mode:** the marionette report must still read **20 PASS, 1 NOT RUN, 0 FAIL** afterwards. If `NOT RUN` becomes 0, someone changed the verdict — which is the re-aiming pattern this project has spent five waves learning to catch.
 
 ---
 
@@ -93,7 +101,7 @@ The `..repeat()` is unconditional and the class has **no `AppMotion.reduce` chec
   - *Pros*: No code change, no risk, and honest — the accessibility behaviour genuinely is right, which is the part users experience. The frame cost is real but small and bounded to a terminal screen.
   - *Cons*: Keeps a known `pumpAndSettle` landmine in the tree for someone to step on, and the guide must keep carrying the warning indefinitely. "Accepted" defects that are one small function away from fixed tend to be re-discovered and re-litigated rather than remembered.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -123,7 +131,7 @@ Your selection: _____
   - *Pros*: Zero work, zero risk, and the block is not *wrong* — it was genuinely not run.
   - *Cons*: The stated reason is now false, and a false reason in an evidence record is the thing this project has spent four waves learning to distrust. Anyone auditing the reports later has to re-derive that E31 covers it.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 

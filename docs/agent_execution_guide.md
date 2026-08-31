@@ -1,10 +1,19 @@
-# Agent Execution Guide — Queue Blocked: two low-priority selections pending (Issues 147, 148) — August 31, 2026
+# Agent Execution Guide — Active Build: Wave X — retire the last `pumpAndSettle` landmine, and correct one stale playthrough reason — August 31, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**There is no approved queue, and nothing is broken.** Wave W is delivered and verified; every gate is green and the cleanup job is running live in production as intended. The two open issues were filed *because* the queue emptied — they are the last two known loose ends, and neither is urgent.
+**Both selections are made.** Build exactly these. Nothing here is urgent, and nothing is broken — these are the last two known loose ends.
 
-**Do not start either. Do not invent work.** The only legitimate actions today are in §4.
+| # | Item | Issue → choice | Side | Deploy |
+|---|---|---|---|---|
+| **X1** | Guard `EmberBackdrop`'s ticker so it stops under Reduce Motion | **147 → A** | client | — |
+| **X2** | Annotate E9 as superseded by E31 | **148 → A** | docs only | — |
+
+**No deploy is needed.** Nothing here touches `functions/src`; `./scripts/check_deploy_fresh.sh` must stay at exit 0.
+
+**One item = one commit.** They are independent and can be done in either order, though X1 is the substantive one.
+
+**⚠️ X1 retires a standing warning.** It is the **last known instance** of the `pumpAndSettle` trap. When it lands, delete the game-over warning from this guide rather than carrying it forward — that removal is part of the item.
 
 **Every number and literal string in this document is a decision, not a suggestion.**
 
@@ -70,26 +79,134 @@ Verified this session by reading source, re-running gates bare, re-running falsi
 
 ---
 
-## 3. The blocked queue
+## 3. X1 — Guard the ember ticker (147 → A)
 
-| Issue | What it decides | Urgency |
-|---|---|---|
-| **147** | Whether to guard `EmberBackdrop`'s ticker, restructure it, or accept it | Low — visuals are already correct; costs are a frame request on one screen and a latent `pumpAndSettle` hazard |
-| **148** | Whether to annotate E9 as superseded, re-run it, or leave it | Low — the gate is green either way |
+**What this means for the user:** on the Game Over screen, a player with Reduce Motion switched on already sees a *still* ember picture — that part is correct. But the animation engine behind it keeps running, asking the phone to redraw sixty times a second for an image that never changes. This stops it.
 
-**They are independent.** Either can be done without the other, in any order.
+### 3.1 The gap
 
-**⚠️ Issue 147 is the last known instance of the `pumpAndSettle` trap.** Until it is resolved, this warning must keep being carried: **`pumpAndSettle` on the game-over screen will hang** — ten minutes per test, no output — because `_EmberBackdropState`'s controller repeats unconditionally (`game_over_screen.dart:900`) even when `build` correctly returns the static painter. `game_over_screen_test.dart` and `badge_pills_overflow_test.dart` both use `pump()` today, which is why nobody has hit it. **If you write a game-over widget test before 147 is resolved, use `pump(Duration)`.**
+`lib/screens/game_over_screen.dart`, `_EmberBackdropState`:
 
-**The only legitimate actions until a selection appears:**
-1. Answer questions about the state of the repository.
-2. Re-run the baseline in §1 to confirm it still holds.
-3. If a gate that §1 says is green goes red, investigate and **file** it.
-4. **After any `firebase deploy --only functions`, re-apply `CLEANUP_DRY_RUN=false` and read it back** (§1). This is maintenance of an existing decision, not new work.
+```dart
+class _EmberBackdropState extends State<EmberBackdrop> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(duration: const Duration(seconds: 10), vsync: this)..repeat();
+  }
+```
+
+`..repeat()` is unconditional; the class has **no `AppMotion.reduce` check, no `didChangeDependencies`, and no observer** — even though the file already imports `app_motion.dart` (`:19`) and `build` correctly returns `_StaticEmberPainter` under Reduce Motion (`:924–938`).
+
+**So the controller and the rendered branch disagree.** A repeating `AnimationController` keeps a `Ticker` registered with `SchedulerBinding`, which keeps requesting frames whether or not anything reads it. Two costs: a continuous frame request paid by exactly the users who asked for less motion, and **the last live instance of the `pumpAndSettle` trap** — the tree never reaches a resting state, so a game-over widget test using `pumpAndSettle` would hang for ten minutes with no output.
+
+### 3.2 Implementation — mirror `AnimatedThinkingBackground` exactly
+
+**The reference is `lib/widgets/thinking_background.dart` in its current, post-U2 form.** Copy its shape; do not invent a variant.
+
+1. **Add the observer mixin:**
+   ```dart
+   class _EmberBackdropState extends State<EmberBackdrop>
+       with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+   ```
+2. **Register it in `initState`:** `WidgetsBinding.instance.addObserver(this);`
+3. **Keep `..repeat()` in `initState`.** It looks like it should go, and it must not — `didChangeDependencies` always runs after `initState` and before the first frame, so the ticker is stopped before anything renders. **This exact shape is already blessed in the accepted-equivalents list for `AnimatedThinkingBackground`**, and having the two sibling widgets differ would be worse than the micro-cleanliness gained.
+4. **Add both lifecycle hooks — and you need both:**
+   ```dart
+   @override
+   void didChangeDependencies() {
+     super.didChangeDependencies();
+     if (AppMotion.reduce(context)) { _controller.stop(); }
+     else if (!_controller.isAnimating) { _controller.repeat(); }
+   }
+
+   @override
+   void didChangeAccessibilityFeatures() {
+     super.didChangeAccessibilityFeatures();
+     if (AppMotion.reduce(context)) { _controller.stop(); }
+     else if (!_controller.isAnimating) { _controller.repeat(); }
+     setState(() {});
+   }
+   ```
+   **⚠️ Implementing only one leaves half the behaviour missing, and which half depends on which you pick.** `AppMotion.reduce` reads `platformDispatcher.accessibilityFeatures.reduceMotion` (Issue 141) — **that is not an inherited widget, so `didChangeDependencies` does not fire when the OS toggle changes.** `didChangeDependencies` covers mount and `MediaQuery` changes (the `accessibleNavigation` half of the OR); `didChangeAccessibilityFeatures` covers a live OS toggle and is the one that needs the `setState` so `build` re-picks its branch.
+5. **⚠️ Remove the observer in `dispose`, before disposing the controller:**
+   ```dart
+   @override
+   void dispose() {
+     WidgetsBinding.instance.removeObserver(this);
+     _controller.dispose();
+     super.dispose();
+   }
+   ```
+   The reference does this (`thinking_background.dart:69`). **Omitting it leaks an observer for the lifetime of the app and produces `setState() called after dispose()` the next time accessibility features change** — a crash that appears long after the screen is gone and is very hard to trace back.
+6. **Do not touch `build`.** It already branches correctly. This item is about the controller, not the visuals.
+
+### 3.3 Validation
+
+**⚠️ Every `pumpAndSettle` in these tests must pass an explicit short timeout:**
+```dart
+await tester.pumpAndSettle(
+  const Duration(milliseconds: 100),
+  EnginePhase.sendSemanticsUpdate,
+  const Duration(seconds: 5),
+);
+```
+The default is **ten minutes**, which makes a red test indistinguishable from a hung runner — the precise failure this item exists to end.
+
+1. **The falsifying test.** Mount `EmberBackdrop` (or the game-over screen) with Reduce Motion on and assert the `pumpAndSettle` above **completes**. **Run it against current code and observe `pumpAndSettle timed out`.** Paste that line into the commit body.
+2. **Over-reach guard — the animation still exists when it was not asked to stop.** With Reduce Motion **off**, assert the animated branch is present:
+   ```dart
+   expect(find.descendant(of: find.byType(EmberBackdrop), matching: find.byType(AnimatedBuilder)), findsOneWidget);
+   ```
+   and **absent** when on. Scope with `find.descendant` — `MaterialApp` has `AnimatedBuilder`s of its own. **Without this guard, deleting the ember animation outright passes every other test here.**
+3. **The live toggle works.** Flip the accessibility feature on a mounted tree and assert it settles *and* the `AnimatedBuilder` disappears; flip back and assert it returns. **This is the assertion that proves `didChangeAccessibilityFeatures` is wired rather than only `didChangeDependencies`** — without it, step 4 of §3.2 can be half-implemented and everything still passes.
+4. **The observer is removed on dispose.** Pump the widget, then pump a different tree so it is disposed, then trigger an accessibility-features change on the binding and assert **no `setState() called after dispose()`** is thrown. This is the test that catches a missing `removeObserver`, and nothing else will.
+5. **The full suite is at or above 267** plus the new tests. `flutter analyze lib test` stays at **0 errors, 0 warnings, 206 infos**.
+6. **⚠️ Retire the warning.** Once this lands, **delete the game-over `pumpAndSettle` caveat from §1 and §3 of this guide and from the invariants list.** Carrying a warning about a fixed defect is how a guide starts lying to the next agent. Confirm it is the last one by grepping `lib/` for `..repeat()` and checking each hit is guarded.
+
+**Blast radius:** `lib/screens/game_over_screen.dart` · a new or extended widget test · **`docs/design_ui_direction.md` §8** — record that `EmberBackdrop` now honours Reduce Motion in **both** its visuals and its ticker, and that the two are managed by different mechanisms for the reason in §3.2 step 4.
 
 ---
 
-## 4. Invariants & intentional decisions — do NOT change
+## 4. X2 — Annotate E9 as superseded (148 → A)
+
+**What this means for the user:** an old playthrough block reads as an outstanding gap when it is not one. This corrects the record without pretending the block was run.
+
+### 4.1 The change
+
+In `docs/playthroughs/findings_marionette.md`, block **E9 — Mid-Game Departure in 4-Player Match**:
+
+- **Keep `- **Verdict:** NOT RUN` exactly as it is.** It is true — the block was never run.
+- **Extend the `Reason:`** to record that the original blocker no longer applies (the harness runs five simulators as a matter of course) and that the assertion is covered by **E31 — "Guest departs during FORGERY (4 → 3) and chain re-links"** in `docs/playthroughs/findings_5player.md`, which passed with a screenshot showing room `YOGU` and Charlie re-pointed to Bob.
+
+### 4.2 What NOT to do
+
+- **⚠️ Do not change the Verdict to PASS.** E9 was not run. Marking it PASS on the strength of a different block is precisely the re-aiming pattern that produced Issues 135 and 146's predecessors, and it is the single most damaging edit available in this file.
+- **Do not add a screenshot or an `Observed:` field.** A `NOT RUN` block carries no artefact, and rule R5's over-reach guard exists specifically so that stays true.
+- **Do not renumber or retitle the block.**
+
+### 4.3 Validation
+
+- **All four evidence-gate invocations exit 0**, read bare.
+- **The marionette report must still report exactly `20 PASS, 1 NOT RUN, 0 FAIL`.** ⚠️ **If `NOT RUN` becomes 0, the verdict was changed** — that is the failure this assertion exists to catch, and it is the whole reason X2 has validation at all for a one-line documentation edit.
+- E9 is **not** manifest-governed, so R6 does not apply to it. Do not add it to the manifest; the manifest governs blocks with specified assertions, and E9 has none to hold it to.
+
+**Blast radius:** `docs/playthroughs/findings_marionette.md` only.
+
+---
+
+## 5. Definition of Done
+
+**X1** — [ ] falsifying test observed to fail first with `pumpAndSettle timed out`, pasted into the commit body · [ ] both `didChangeDependencies` **and** `didChangeAccessibilityFeatures` implemented · [ ] `removeObserver` in `dispose`, with the test that catches its absence · [ ] over-reach guard: the animation is still present when Reduce Motion is off · [ ] live toggle proven in both directions · [ ] `build` untouched · [ ] suite ≥ 267 + new tests; analyze unchanged · [ ] **the game-over `pumpAndSettle` warning deleted from this guide**, having confirmed no other unguarded `..repeat()` remains.
+
+**X2** — [ ] `Verdict: NOT RUN` unchanged · [ ] `Reason:` points at E31 and notes the blocker is obsolete · [ ] no artefact added · [ ] all four gates exit 0 · [ ] marionette still reports **20 PASS, 1 NOT RUN, 0 FAIL**.
+
+**Across the wave** — [ ] **0 errors · 0 warnings · 206 infos** · `flutter test` ≥ 267 · functions **112** · decks exit 0 · all four evidence gates exit 0 · **deploy still exit 0 (nothing here touches the server)** · [ ] Issues **147 and 148** moved into the **single** existing Resolved heading, `design_ui_direction.md` updated for X1.
+
+---
+
+## 6. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.**
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty.
@@ -125,7 +242,7 @@ Verified this session by reading source, re-running gates bare, re-running falsi
 
 ---
 
-## 5. Where the contracts live
+## 7. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -141,7 +258,7 @@ Verified this session by reading source, re-running gates bare, re-running falsi
 
 ---
 
-## 6. Validation standard
+## 8. Validation standard
 
 **A prediction followed by a matching outcome beats either alone.** Wave V's dry run forecast 101 orphans and 200 accounts; Wave W's live runs delivered exactly that. Neither number would have proved much on its own — a rehearsal is a claim about what code *would* do, and a live run is the same code reporting on itself.
 
@@ -191,4 +308,4 @@ Verified this session by reading source, re-running gates bare, re-running falsi
      SINGLE existing Resolved heading and update the relevant design doc.
 ```
 
-**The queue is empty until Issues 147 or 148 are selected. Do not invent work.**
+**After X1 and X2, the queue is empty. Report the state and stop. Do not invent work.**
