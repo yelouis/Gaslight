@@ -218,3 +218,25 @@ The script's contract, which any replacement must preserve:
 The original design had `firestore.rules` restricting room writes to the host while every client wrote the room directly — a contradiction that made non-host multiplayer non-functional (Issue 1). The clarification offered host-authoritative (A), server relay (B), and loosened rules (C); the user directed us to the industry standard, recorded as **Option D: server-authoritative Cloud Functions**, which is the architecture described above.
 
 ---
+
+## 10. Data Retention, Subtree Sweep & Scheduled Cleanup (Wave U / Issue 143)
+
+Scheduled off-peak daily via Cloud Scheduler (`cleanupDaily` in `functions/src/cleanup.ts`, `onSchedule("every day 04:00")`).
+
+### 10.1 Retention Windows & Scopes
+- **Rooms**: Expired rooms where `expiresAt <= Timestamp.now()` (`ROOM_TTL_MS = 8 * 60 * 60 * 1000`, 8 hours from last activity).
+- **Subcollections**: Firestore does not natively cascade document deletions to subcollections; `db.recursiveDelete()` is used to purge all subcollections (`players`, `sealed`, `embeddings`) alongside parent rooms.
+- **Anonymous Auth Users**: Anonymous accounts (`providerData.length === 0`) with no activity for $\ge 24\text{ hours}$ (`DEFAULT_AUTH_RETENTION_MS = 24 * 60 * 60 * 1000`).
+
+### 10.2 Strict Execution Ordering
+1. **Expired Rooms Deletion**: Query `where('expiresAt', '<=', now)` capped at `MAX_ROOMS_PER_RUN = 100` and invoke `db.recursiveDelete(roomRef)`.
+2. **Orphan Subtree Sweep**: Sweep `rooms.listDocuments()` for any missing parent documents that still retain un-deleted subcollections (`players`, `sealed`, `embeddings`) and invoke `db.recursiveDelete(roomRef)`.
+3. **Anonymous Auth Users Purge**: Run strictly *after* steps 1 and 2. Build `activeAuthUids` from all surviving room `players` subcollections. Any anonymous user older than 24h whose UID is in `activeAuthUids` is excluded from deletion. Unreferenced stale anonymous users are batched in groups of $\le 1000$ and purged via `admin.auth().deleteUsers()`.
+
+### 10.3 Operational Safety Rails
+- **`DRY_RUN` Default**: Defaults to `true` (controlled via `CLEANUP_DRY_RUN=false`). When `true`, scans and reports eligible deletions in structured logs without performing mutations.
+- **Per-Run Caps**: Bounded at 100 rooms and 500 auth users per run, ensuring backlog drains smoothly inside free tier allocations.
+- **Structured Logging**: Emits counts of `roomsScanned`, `roomsDeleted`, `orphanSubtreesSwept`, `authUsersScanned`, `authUsersReferenced` (skipped), `authUsersEligible`, and `authUsersDeleted`.
+
+---
+

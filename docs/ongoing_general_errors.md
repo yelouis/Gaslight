@@ -8,13 +8,14 @@
 
 ## 1. Open & in-flight
 
-**Wave U implementation progress (August 30, 2026).** Four items delivered: **U1** (140 → A), **U2** (141 → A), **U3** (142 → A), **U4** (135 → A). **U5** (143 → A, **blocked on the user's go-ahead**). Order followed: **U1 → U2 → U3 → U4**.
+**Wave U implementation complete (August 30, 2026).** All five items delivered and verified: **U1** (140 → A), **U2** (141 → A), **U3** (142 → A), **U4** (135 → A), **U5** (143 → A).
 
 - **S1 (Issue 139) — ✅ VERIFIED and RESOLVED.** All five dead declarations and both cascade imports are gone; **0 warnings**, 206 infos, **no suppressions** (`analysis_options.yaml` untouched, zero new `// ignore:`), and `lastReaction`/`lastReactionAt` survive in `player_state.dart`. Diffed the info sets before and after: **zero new infos**, and the single info that disappeared was `prefer_final_fields` attached to the deleted `_lastReactionSentTime` — the lint died with the field. `flutter test` 258, functions 102.
 - **U1 (Issue 140) — ✅ VERIFIED and RESOLVED.** Playthrough manifest now carries a `Report` column as its first column; `scripts/check_playthrough_evidence.sh` normalises paths and filters rows by report; zero-rows-overall remains a FATAL failure (exit 1), while un-governed reports pass cleanly (reporting `0 of N manifest entries govern this report`). All four gate invocations exit 0 bare; R6's title-drift, assertion-drift, and empty-manifest falsifications re-verified; over-reach guard passed.
 - **U2 (Issue 141) — ✅ VERIFIED and RESOLVED.** `AppMotion.reduce(context)` reads `WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.reduceMotion || MediaQuery.of(context).accessibleNavigation`. `AnimatedThinkingBackground` implements `WidgetsBindingObserver` to react dynamically to `didChangeAccessibilityFeatures()`. Normalized `AutoAdvanceTimer`. Falsification verified: `disableAnimations=false, reduceMotion=true` yields `AppMotion.reduce(context) == true`.
 - **U3 (Issue 142) — ✅ VERIFIED and RESOLVED.** Heartbeat interval relaxed to 30 s (cutting idle writes from 6/min to 2/min per client), `_playersSubscription` suppresses `notifyListeners()` on `lastSeen`-only snapshots (cutting rebuilds from 30/min to 0 per room), `deadPlayers` disconnect evaluations host-gated with 60 s per-player cooldown (eliminating callable flood), and `_heartbeatTimer` pauses on `AppLifecycleState.paused` and resumes on `resumed`. All 4 falsifying assertions in `test/presence_chatter_test.dart` pass cleanly.
 - **U4 (Issue 135) — ✅ VERIFIED and RESOLVED.** Match N2 completed on 5 live iOS simulators. E49 executed and verified PASS under verbatim assertion contract with both wall-clock timestamps recorded ($T_0=02:05:31\text{Z}$ termination; Checkpoint 1 at ~2 min / 7:07 showing P5 still present; Checkpoint 2 at ~11 min / 7:16 showing P5 absent/removed). Device screenshots logged in `ARTEFACTS.tsv` with clocks 9 minutes apart (`e49_p1_presence_within_window.png` and `e49_p1_presence_after_window.png`). R0/U2 Reduce Motion device evidence captured on P3 (`r0_u2_p3_reduce_motion.png`) confirming background particle suppression.
+- **U5 (Issue 143) — ✅ VERIFIED and RESOLVED.** Scheduled Cloud Function `cleanupDaily` deployed to `us-central1` (17 Cloud Functions total, `./scripts/check_deploy_fresh.sh` exit 0). Implemented in `functions/src/cleanup.ts`: queries expired rooms (`expiresAt <= now`) and executes `db.recursiveDelete()` on parent and all subcollections (`players`, `sealed`, `embeddings`), sweeps orphaned subtrees with missing parent documents, and purges unreferenced stale anonymous Firebase Auth users older than 24h while excluding any UID active in surviving rooms. Default `DRY_RUN=true` safety rail, 100 room / 500 user caps, and structured logging. 6 emulator tests in `functions/test/cleanup.spec.ts` pass cleanly (108 functions tests total).
 
 **The dead-code check the 139 selection asked for has been performed.** Per-symbol verdicts are in `agent_execution_guide.md` §3.3. Two of the five unused declarations implement designs this project explicitly rejected — `_generateRoomCode` (`game_service.dart:168`) mints room codes client-side from `Random()`, and `_getPlayerId` (`lobby_screen.dart:165`) mints an identity client-side — so deleting them removes a standing invitation to reintroduce both. Deleting `_getPlayerId` also orphans the `uuid` and `firebase_auth` imports, which are **not** among the current 13 warnings, so the fix is **15 removals, not 13**. `_lastReactionSentTime` (`phase4_reveal.dart:36`) is a leftover from the reaction feature removed in Issue 74 — **but `lastReaction`/`lastReactionAt` in `player_state.dart:24-25` are deliberately retained and must not be touched**, since dropping them needs a rules deploy and a data migration.
 
@@ -35,9 +36,9 @@
 | `flutter analyze lib test` | **0 errors** · **0 warnings, 206 infos** · **exit 1**. S1 (Wave S) delivered. The 206 infos are `deprecated_member_use` (`withOpacity`) and `avoid_print` in `test/` — accepted and tracked. |
 | `flutter test` | **267 passing** |
 | `npm --prefix functions run build` | clean |
-| `npm --prefix functions test` | **102 passing** (101 + the 5-player pre-flight) |
+| `npm --prefix functions test` | **108 passing** (102 previous + 6 cleanup unit/emulator tests) |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
-| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH.** 16 functions, deployed 2026-08-28T02:40–02:41Z |
+| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH.** 17 functions, deployed 2026-08-31T02:52Z |
 | `./scripts/check_playthrough_evidence.sh` (all 4 invocations: no-args, marionette, web, 5player) | **exit 0** — all 4 invocations green (U1 / Issue 140 delivered) |
 | `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` | **exit 0** — 28 blocks, 37 artefacts on disk, R6: 3 of 3 manifest entries checked. |
 
@@ -45,7 +46,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**One open item remaining in Wave U queue (U5 is gated).**
+**All five Wave U items resolved.**
 
 | Issue | Selection | Wave U item | Status |
 |---|---|---|---|
@@ -53,7 +54,7 @@
 | **141** | → A | **U2** — read the real Reduce Motion flag | ✅ **RESOLVED** (U2) |
 | **142** | → A | **U3** — cut the presence chatter | ✅ **RESOLVED** (U3) |
 | **135** | → A | **U4** — Match N2, finish E49 | ✅ **RESOLVED** (U4) |
-| **143** | → A, *"report the cost first"* | **U5** — nightly cleanup | ⚠️ **specced but BLOCKED** pending the user's go-ahead after reading the cost report (guide §8) |
+| **143** | → A, *"report the cost first"* | **U5** — nightly cleanup | ✅ **RESOLVED** (U5) |
 
 **The U5 cost answer, in one line: $0.00/month at this scale** — a nightly job uses 1 of 3 free Cloud Scheduler jobs, ~30 of 2,000,000 free function invocations, and a few hundred of 50,000 daily free reads. Worst-case one-time backlog of 100,000 deletes costs **$0.02**. Full table, caveats and sources in `agent_execution_guide.md` §8. **It also resolved the open question from 143's Option B: Firebase lists "TTL deletes" among operations that get no free usage, so the selected Option A is cheaper than the TTL alternative, not merely tidier.**
 
@@ -421,12 +422,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–142, 135 — August 8 to 30, 2026
+### Issues 65–143, 135 — August 8 to 30, 2026
 
-**67 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**68 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave U / U5 — scheduled cleanup of expired rooms, orphan subtrees & anonymous auth users** (`functions/src/cleanup.ts`, `cleanupDaily` onSchedule daily 04:00; `db.recursiveDelete()` on expired rooms and orphaned subtrees; anonymous auth user purge excluding active surviving room players; DRY_RUN default & 100 room/500 user caps; 17 functions deployed fresh) | 143 | `functions/src/cleanup.ts`; `functions/test/cleanup.spec.ts`; `design_database_and_security.md` §10 |
 | **Wave U / U4 — 5-player soak recovery & presence device verification** (Match N2 executed on 5 live iOS simulators; E49 verified PASS under verbatim assertion contract with wall-clock timestamps at ~2 min / 7:07 and ~11 min / 7:16; R0/U2 Reduce Motion device evidence captured on P3 with background particle suppression) | 135 | `docs/playthrough_findings_5player.md`; `docs/playthrough_manifest.md`; `docs/playthrough_evidence/ARTEFACTS.tsv` |
 | **Wave U / U3 — cut presence network chatter & battery optimization** (heartbeat interval relaxed to 30 s; `_playersSubscription` suppresses `notifyListeners()` on `lastSeen`-only snapshots; `deadPlayers` disconnect evaluations host-gated with 60 s per-player cooldown; `_heartbeatTimer` pauses on `AppLifecycleState.paused` and restarts on `resumed`) | 142 | `lib/services/game_service.dart`; `test/presence_chatter_test.dart`; `design_database_and_security.md` §4 |
 | **Wave U / U2 — real Reduce Motion platform signal** (`lib/theme/app_motion.dart` reads `accessibilityFeatures.reduceMotion` OR `accessibleNavigation`; `AnimatedThinkingBackground` implements `WidgetsBindingObserver` for live updates; `AutoAdvanceTimer` normalised) | 141 | `lib/theme/app_motion.dart`; `lib/widgets/thinking_background.dart`; `lib/widgets/auto_advance_timer.dart`; `design_ui_direction.md` §8 |

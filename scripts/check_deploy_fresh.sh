@@ -2,11 +2,13 @@
 set -eo pipefail
 
 PROJECT_ID="gaslight-46368"
-EXPECTED_FUNCTION_COUNT=15
+EXPECTED_FUNCTION_COUNT=17
 EXPECTED_FUNCTIONS=(
   "advancePhase"
   "advanceToNextResolution"
   "castVote"
+  "cleanupDaily"
+  "closeUnmaskWindow"
   "createRoom"
   "debugAddBots"
   "debugSimulateBotResponses"

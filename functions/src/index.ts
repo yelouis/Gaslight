@@ -7,7 +7,9 @@ import { ScoringLogic, GameState, CardModel, CardSummary, MatchSummary } from ".
 import { PromptDecks } from "./prompt_decks";
 import { isTooSimilar } from "./text_similarity";
 
-admin.initializeApp();
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 const db = admin.firestore();
 
 export function computeMatchSummary(
@@ -2520,3 +2522,5 @@ export const debugSimulateBotResponses = onCall(async (request) => {
     return { success: true };
   });
 });
+
+export { cleanupDaily, runCleanup, CleanupOptions, CleanupResult } from "./cleanup";
