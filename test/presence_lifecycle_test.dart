@@ -68,7 +68,7 @@ void main() {
       await tester.pump(Duration.zero);
     });
 
-    testWidgets('Heartbeat timer continues periodic 10s ticks after resume restart', (WidgetTester tester) async {
+    testWidgets('Heartbeat timer continues periodic 30s ticks after resume restart', (WidgetTester tester) async {
       await gameService.joinRoom('TEST', 'Alice', 'p_test', avatarIndex: 0);
       await tester.pumpAndSettle();
 
@@ -77,8 +77,8 @@ void main() {
       await tester.pump(Duration.zero);
       final resumedTimestamp = mockDb.data['rooms/TEST/players/p_test']['lastSeen'] as int;
 
-      // Advance 10 seconds to verify the periodic timer is actively ticking on its cadence
-      await tester.pump(const Duration(seconds: 10));
+      // Advance 30 seconds to verify the periodic timer is actively ticking on its cadence
+      await tester.pump(const Duration(seconds: 30));
       final tickTimestamp = mockDb.data['rooms/TEST/players/p_test']['lastSeen'] as int;
       expect(tickTimestamp, greaterThanOrEqualTo(resumedTimestamp));
 

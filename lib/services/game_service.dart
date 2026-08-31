@@ -57,6 +57,7 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
   bool _playerRemoved = false;
   bool _hasReceivedInitialPlayersSnapshot = false;
   final List<String> _departureMessages = [];
+  final Map<String, int> _lastDisconnectAttemptAt = {};
 
   bool get roomClosed => _roomClosed;
   bool get playerRemoved => _playerRemoved;
@@ -70,6 +71,42 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     final messages = List<String>.from(_departureMessages);
     _departureMessages.clear();
     return messages;
+  }
+
+  static bool _playerEqualsIgnoringLastSeen(PlayerState a, PlayerState b) {
+    if (identical(a, b)) return true;
+    if (a.id != b.id ||
+        a.name != b.name ||
+        a.totalScore != b.totalScore ||
+        a.role != b.role ||
+        a.isHost != b.isHost ||
+        a.colorValue != b.colorValue ||
+        a.avatarIndex != b.avatarIndex ||
+        a.timesFooled != b.timesFooled ||
+        a.playersDeceived != b.playersDeceived ||
+        a.joinedAt != b.joinedAt ||
+        a.lobbyReady != b.lobbyReady ||
+        a.lastReaction != b.lastReaction ||
+        a.lastReactionAt != b.lastReactionAt) {
+      return false;
+    }
+    if (a.customPrompts.length != b.customPrompts.length) return false;
+    for (int i = 0; i < a.customPrompts.length; i++) {
+      if (a.customPrompts[i] != b.customPrompts[i]) return false;
+    }
+    return true;
+  }
+
+  static bool _playersListEqualsIgnoringLastSeen(List<PlayerState> a, List<PlayerState> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    final mapA = {for (final p in a) p.id: p};
+    for (final pb in b) {
+      final pa = mapA[pb.id];
+      if (pa == null) return false;
+      if (!_playerEqualsIgnoringLastSeen(pa, pb)) return false;
+    }
+    return true;
   }
 
   @visibleForTesting
@@ -88,8 +125,11 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     } else {
       _hasReceivedInitialPlayersSnapshot = true;
     }
+    final bool onlyLastSeenChanged = _playersListEqualsIgnoringLastSeen(_players, newPlayers);
     _players = newPlayers;
-    notifyListeners();
+    if (!onlyLastSeenChanged) {
+      notifyListeners();
+    }
   }
 
   @visibleForTesting
@@ -317,7 +357,7 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     }
     print("DEBUG HEARTBEAT: started timer for room: $roomCode, player: $playerId");
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
       if (_gameState == null) {
         timer.cancel();
         return;
@@ -341,7 +381,14 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _handleAppResumed();
+    } else if (state == AppLifecycleState.paused) {
+      _handleAppPaused();
     }
+  }
+
+  void _handleAppPaused() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
   }
 
   void _handleAppResumed() {
@@ -384,6 +431,7 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     _mySubmittedByCard.clear();
     _myOptionIdByCard.clear();
     _optionIdFetchesInFlight.clear();
+    _lastDisconnectAttemptAt.clear();
 
     final prefs = await SharedPreferences.getInstance();
     final currentSavedRoom = prefs.getString('room_code');
@@ -459,6 +507,9 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     _playersSubscription = _db.collection('rooms').doc(roomCode).collection('players').snapshots().listen((snapshot) {
       final newPlayers = snapshot.docs.map((doc) => PlayerState.fromMap(doc.data(), doc.id)).toList();
 
+      final bool onlyLastSeenChanged = _hasReceivedInitialPlayersSnapshot &&
+          _playersListEqualsIgnoringLastSeen(_players, newPlayers);
+
       if (_hasReceivedInitialPlayersSnapshot) {
         if (_gameState != null &&
             _gameState!.currentPhase != GamePhase.lobby &&
@@ -476,6 +527,9 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
 
       _players = newPlayers;
       
+      final activeIds = _players.map((p) => p.id).toSet();
+      _lastDisconnectAttemptAt.removeWhere((id, _) => !activeIds.contains(id));
+
       if (_currentPlayerId != null && _gameState != null && _gameState!.currentPhase == GamePhase.lobby && !_players.any((p) => p.id == _currentPlayerId)) {
         _playerRemoved = true;
       }
@@ -483,19 +537,30 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
       final now = DateTime.now().millisecondsSinceEpoch;
       
       // Clean up inactive/dead players (60s local threshold, server enforces 10min presence window)
-      final deadPlayers = _players.where((p) {
-        if (p.id == _currentPlayerId) return false;
-        final lastSeen = p.lastSeen;
-        if (lastSeen == null) return false;
-        return (now - lastSeen) > 60000;
-      }).toList();
+      // Gated to host only with 60s cooldown per player to prevent storming callable invocations
+      if (currentPlayer?.isHost == true) {
+        final deadPlayers = _players.where((p) {
+          if (p.id == _currentPlayerId) return false;
+          final lastSeen = p.lastSeen;
+          if (lastSeen == null) return false;
+          if ((now - lastSeen) <= 60000) return false;
+          final lastAttempt = _lastDisconnectAttemptAt[p.id];
+          if (lastAttempt != null && (now - lastAttempt) < 60000) return false;
+          return true;
+        }).toList();
 
-      for (var dp in deadPlayers) {
-        _functions.httpsCallable('handleDisconnect').call({
-          'roomCode': roomCode,
-          'disconnectedPlayerId': dp.id,
-          'reason': 'presence',
-        }).then((_) {}).catchError((_) {});
+        for (var dp in deadPlayers) {
+          _lastDisconnectAttemptAt[dp.id] = now;
+          _functions.httpsCallable('handleDisconnect').call({
+            'roomCode': roomCode,
+            'disconnectedPlayerId': dp.id,
+            'reason': 'presence',
+          }).then((_) {}).catchError((_) {});
+        }
+      }
+
+      if (onlyLastSeenChanged) {
+        return;
       }
 
       notifyListeners();
@@ -506,7 +571,6 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
         if (_gameState != null && 
             _gameState!.currentPhase != GamePhase.lobby && 
             _gameState!.currentPhase != GamePhase.gameOver) {
-          final activeIds = _players.map((p) => p.id).toSet();
           final cardIds = _gameState!.cards.map((c) => c.targetPlayerId).toSet();
           final disconnected = cardIds.difference(activeIds);
           for (var dpId in disconnected) {

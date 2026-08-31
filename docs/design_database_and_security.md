@@ -62,9 +62,12 @@ The Flutter client (`GameService`) is a thin wrapper: each mutation method calls
 
 ## 4. Heartbeat, Disconnects & Host Transfer
 
-* Every client updates **only** `lastSeen` on its own player doc every 10 seconds (permitted by the rules).
-* On app resume (`AppLifecycleState.resumed`), `GameService` (via `WidgetsBindingObserver`) writes `lastSeen` immediately and restarts its 10 s periodic timer, preventing suspended timers and closing the gap after phone unlock.
-* Any client that observes a player with `lastSeen` older than a generous local interval (60s) calls the `handleDisconnect` callable with `reason: "presence"`. The server authoritatively enforces the 10-minute (`PRESENCE_STALE_MS = 600_000`) presence window before evicting. Duplicate or racing calls are safe (idempotent: if the player's card is already gone, it just deletes the doc). Client-side deletes no longer exist.
+* Every client updates **only** `lastSeen` on its own player doc every 30 seconds (permitted by the rules, Issue 142).
+* **Snapshot Listener Rebuild Suppression (Issue 142)**: The client's `_playersSubscription` performs a field-level equality check (`_playersListEqualsIgnoringLastSeen`). When incoming player subcollection snapshots contain only `lastSeen` updates, local state `_players` is updated in-place without triggering `notifyListeners()`, cutting spurious widget tree rebuilds from 30/min down to 0 during idle phases.
+* **App Lifecycle Backgrounding (Issue 142)**: `GameService` observes `AppLifecycleState`:
+  * On `paused` / backgrounded: `_heartbeatTimer` is immediately cancelled, ceasing network writes and timer ticks while the app is in the background.
+  * On `resumed`: `lastSeen` is written immediately to Firestore and the 30 s periodic timer is restarted, preventing stale presence stalls upon phone unlock.
+* **Host-Gated Presence Enforcement with Cooldown (Issue 142)**: Only the host client evaluates `deadPlayers` (> 60 s local staleness) and triggers `handleDisconnect` callable invocations with `reason: "presence"`. Non-host clients never issue background presence disconnect calls. The host applies a per-player 60-second cooldown (`_lastDisconnectAttemptAt`) to eliminate duplicate callable storms against unresponsive peers.
 * **The 10-minute presence window is authoritatively enforced server-side** (Issue 123, August 2026). `handleDisconnect` validates an explicit reason union (`"leave" | "kick" | "presence" | "reconcile"`):
   * **`"presence"`**: Enforces `(Date.now() - player.lastSeen) > PRESENCE_STALE_MS` (10 minutes). If caller is host or peer and player is still within the window, the server returns early `{ success: false, reason: "still-present" }` without evicting.
   * **`"leave"`**: Voluntary player departure (`callerPlayer.id === disconnectedPlayerId`). Unconditionally removes the player regardless of `lastSeen`.
