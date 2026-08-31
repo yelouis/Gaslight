@@ -228,15 +228,16 @@ Scheduled off-peak daily via Cloud Scheduler (`cleanupDaily` in `functions/src/c
 - **Subcollections**: Firestore does not natively cascade document deletions to subcollections; `db.recursiveDelete()` is used to purge all subcollections (`players`, `sealed`, `embeddings`) alongside parent rooms.
 - **Anonymous Auth Users**: Anonymous accounts (`providerData.length === 0`) with no activity for $\ge 24\text{ hours}$ (`DEFAULT_AUTH_RETENTION_MS = 24 * 60 * 60 * 1000`). **This window is a confirmed product decision — see §10.4 for why it is 24 hours and what would make it unsafe.**
 
-### 10.2 Strict Execution Ordering
-1. **Expired Rooms Deletion**: Query `where('expiresAt', '<=', now)` capped at `MAX_ROOMS_PER_RUN = 100` and invoke `db.recursiveDelete(roomRef)`.
-2. **Orphan Subtree Sweep**: Sweep `rooms.listDocuments()` for any missing parent documents that still retain un-deleted subcollections (`players`, `sealed`, `embeddings`) and invoke `db.recursiveDelete(roomRef)`.
+### 10.2 Strict Execution Ordering & Upstream Lifecycle
+0. **Lobby-Close Subtree Cleanup (Issue 146 / Wave W)**: When a host leaves during the `lobby` phase in `handleDisconnect`, the room document and `players` documents are deleted inside the transaction, and post-commit `db.recursiveDelete(roomRef)` is invoked to purge the `sealed` subcollection at source.
+1. **Expired Rooms Deletion**: Query `where('expiresAt', '<=', now)` capped at `DEFAULT_ROOM_EXPIRY_LIMIT = 100` (`MAX_ROOMS_PER_RUN`) and invoke `db.recursiveDelete(roomRef)`.
+2. **Orphan Subtree Sweep (Backstop)**: Sweep `rooms.listDocuments()` for any missing parent documents that still retain un-deleted subcollections (`players`, `sealed`, `embeddings`) and invoke `db.recursiveDelete(roomRef)`. Bounded by `DEFAULT_ORPHAN_SWEEP_LIMIT = 100` (`maxOrphansPerRun`) on the document get/scan iteration so read costs remain capped. Retained as an essential backstop for swallowed disconnect cleanup failures or console deletions.
 3. **Anonymous Auth Users Purge**: Run strictly *after* steps 1 and 2. Build `activeAuthUids` from all surviving room `players` subcollections. Any anonymous user older than 24h whose UID is in `activeAuthUids` is excluded from deletion. Unreferenced stale anonymous users are batched in groups of $\le 1000$ and purged via `admin.auth().deleteUsers()`.
 
 ### 10.3 Operational Safety Rails
 - **`DRY_RUN` Default**: Defaults to `true` (controlled via `CLEANUP_DRY_RUN=false`). When `true`, scans and reports eligible deletions in structured logs without performing mutations.
-- **Per-Run Caps**: Bounded at 100 rooms and 500 auth users per run, ensuring backlog drains smoothly inside free tier allocations.
-- **Structured Logging**: Emits counts of `roomsScanned`, `roomsDeleted`, `orphanSubtreesSwept`, `authUsersScanned`, `authUsersReferenced` (skipped), `authUsersEligible`, and `authUsersDeleted`.
+- **Per-Run Caps**: Bounded at 100 expired rooms (`DEFAULT_ROOM_EXPIRY_LIMIT`), 100 orphan scans/sweeps (`DEFAULT_ORPHAN_SWEEP_LIMIT`), and 500 auth users per run (`DEFAULT_AUTH_USERS_LIMIT`), ensuring backlog drains smoothly inside free tier allocations.
+- **Structured Logging**: Emits counts of `roomsScanned`, `roomsDeleted`, `orphanSubtreesScanned`, `orphanSubtreesSwept`, `authUsersScanned`, `authUsersReferenced` (skipped), `authUsersEligible`, and `authUsersDeleted`.
 
 ### 10.4 The 24-hour anonymous retention window — confirmed decision, rationale, and the invariant that keeps it safe
 

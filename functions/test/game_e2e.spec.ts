@@ -2010,12 +2010,67 @@ describe('Gaslight E2E Game Emulator Tests', () => {
 
       const roomSnap = await roomRef.get();
       const playersSnap = await roomRef.collection('players').get();
+      const sealedSnap = await roomRef.collection('sealed').get();
 
       expect(roomSnap.exists).to.be.false;
       expect(playersSnap.empty).to.be.true;
+      expect(sealedSnap.empty).to.be.true;
     });
 
-    it('transfers host instead of closing when the game is in progress', async () => {
+    it('Issue 146: non-host leaving lobby does NOT close room or delete sealed subtree (Over-reach guard)', async () => {
+      const hostUser = await createAnonUser();
+      const guestUser = await createAnonUser();
+
+      const createRes = await callFn('createRoom', hostUser.idToken, {
+        playerName: 'Alice',
+        playerId: 'p_host',
+        debugEnabled: true
+      });
+      const roomCode = createRes.roomCode;
+
+      await callFn('joinRoom', guestUser.idToken, {
+        roomCode,
+        playerName: 'Bob',
+        playerId: 'p_guest'
+      });
+
+      const roomRef = db.collection('rooms').doc(roomCode);
+
+      // Guest leaves in lobby phase
+      const disconnectRes = await callFn('handleDisconnect', guestUser.idToken, {
+        roomCode,
+        disconnectedPlayerId: 'p_guest'
+      });
+      expect(disconnectRes.roomClosed).to.be.undefined;
+
+      const roomSnap = await roomRef.get();
+      const sealedSnap = await roomRef.collection('sealed').get();
+
+      expect(roomSnap.exists).to.be.true;
+      expect(sealedSnap.size).to.be.at.least(1);
+    });
+
+    it('Issue 146: handleDisconnect swallows subtree cleanup failure and still returns roomClosed true', async () => {
+      const hostUser = await createAnonUser();
+
+      const createRes = await callFn('createRoom', hostUser.idToken, {
+        playerName: 'Alice',
+        playerId: 'p_host',
+        debugEnabled: true
+      });
+      const roomCode = createRes.roomCode;
+
+      // Host leaves in lobby phase
+      const disconnectRes = await callFn('handleDisconnect', hostUser.idToken, {
+        roomCode,
+        disconnectedPlayerId: 'p_host'
+      });
+
+      expect(disconnectRes.success).to.be.true;
+      expect(disconnectRes.roomClosed).to.be.true;
+    });
+
+    it('transfers host instead of closing when the game is in progress and preserves sealed subtree (Issue 146 Over-reach guard)', async () => {
       const hostUser = await createAnonUser();
       const guestUser = await createAnonUser();
       const guest2User = await createAnonUser();
@@ -2059,6 +2114,9 @@ describe('Gaslight E2E Game Emulator Tests', () => {
 
       const roomSnap = await roomRef.get();
       expect(roomSnap.exists).to.be.true;
+
+      const sealedSnap = await roomRef.collection('sealed').get();
+      expect(sealedSnap.size).to.be.at.least(1);
 
       const playersSnap = await roomRef.collection('players').get();
       const activePlayers = playersSnap.docs.map(d => d.data());

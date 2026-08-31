@@ -1155,7 +1155,7 @@ export const handleDisconnect = onCall(async (request) => {
   const roomRef = db.collection("rooms").doc(roomCode);
   const playerRef = roomRef.collection("players").doc(disconnectedPlayerId);
 
-  return await db.runTransaction(async (transaction) => {
+  const result = await db.runTransaction(async (transaction) => {
     const roomSnap = await transaction.get(roomRef);
     if (!roomSnap.exists) {
       return { success: false, reason: "Room not found." };
@@ -1349,6 +1349,16 @@ export const handleDisconnect = onCall(async (request) => {
 
     return { success: true };
   });
+
+  if ((result as any)?.roomClosed === true) {
+    try {
+      await db.recursiveDelete(roomRef);
+    } catch (err) {
+      console.error(`[handleDisconnect] Subtree cleanup failed for room ${roomCode}:`, err);
+    }
+  }
+
+  return result;
 });
 
 async function concludeResolutionRound(

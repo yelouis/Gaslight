@@ -3,12 +3,14 @@ import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 
 export const DEFAULT_ROOM_EXPIRY_LIMIT = 100;
+export const DEFAULT_ORPHAN_SWEEP_LIMIT = 100;
 export const DEFAULT_AUTH_USERS_LIMIT = 500;
 export const DEFAULT_AUTH_RETENTION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export interface CleanupOptions {
   dryRun?: boolean;
   maxRoomsPerRun?: number;
+  maxOrphansPerRun?: number;
   maxUsersPerRun?: number;
   authRetentionMs?: number;
   now?: Timestamp;
@@ -18,6 +20,7 @@ export interface CleanupResult {
   dryRun: boolean;
   roomsScanned: number;
   roomsDeleted: number;
+  orphanSubtreesScanned: number;
   orphanSubtreesSwept: number;
   authUsersScanned: number;
   authUsersReferenced: number;
@@ -36,6 +39,7 @@ export async function runCleanup(
 ): Promise<CleanupResult> {
   const dryRun = options.dryRun !== undefined ? options.dryRun : (process.env.CLEANUP_DRY_RUN === "false" ? false : true);
   const maxRooms = options.maxRoomsPerRun ?? DEFAULT_ROOM_EXPIRY_LIMIT;
+  const maxOrphans = options.maxOrphansPerRun ?? DEFAULT_ORPHAN_SWEEP_LIMIT;
   const maxUsers = options.maxUsersPerRun ?? DEFAULT_AUTH_USERS_LIMIT;
   const authRetentionMs = options.authRetentionMs ?? DEFAULT_AUTH_RETENTION_MS;
   const now = options.now ?? Timestamp.now();
@@ -45,6 +49,7 @@ export async function runCleanup(
     dryRun,
     roomsScanned: 0,
     roomsDeleted: 0,
+    orphanSubtreesScanned: 0,
     orphanSubtreesSwept: 0,
     authUsersScanned: 0,
     authUsersReferenced: 0,
@@ -79,6 +84,11 @@ export async function runCleanup(
   try {
     const allRoomRefs = await db.collection("rooms").listDocuments();
     for (const roomRef of allRoomRefs) {
+      if (result.orphanSubtreesScanned >= maxOrphans) {
+        break;
+      }
+      result.orphanSubtreesScanned++;
+
       const snap = await roomRef.get();
       if (!snap.exists) {
         const subcollections = await roomRef.listCollections();
@@ -178,6 +188,7 @@ export async function runCleanup(
   console.log(
     `[CLEANUP] Completed run: dryRun=${result.dryRun}, ` +
     `roomsScanned=${result.roomsScanned}, roomsDeleted=${result.roomsDeleted}, ` +
+    `orphanSubtreesScanned=${result.orphanSubtreesScanned}, ` +
     `orphanSubtreesSwept=${result.orphanSubtreesSwept}, ` +
     `authUsersScanned=${result.authUsersScanned}, authUsersReferenced=${result.authUsersReferenced}, ` +
     `authUsersEligible=${result.authUsersEligible}, authUsersDeleted=${result.authUsersDeleted}, ` +

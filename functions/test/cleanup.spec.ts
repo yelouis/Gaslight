@@ -220,4 +220,69 @@ describe('Nightly Cleanup Unit & Emulator Tests (U5 / Issue 143)', () => {
     // Cleanup
     await auth.deleteUser(anonUid);
   });
+
+  it('(g) should honour maxOrphansPerRun cap, bound scan count, and sweep remaining orphans on subsequent run (Issue 146 / Part B)', async () => {
+    const o1 = db.collection('rooms').doc('ORPH_CAP_1');
+    const o2 = db.collection('rooms').doc('ORPH_CAP_2');
+    const o3 = db.collection('rooms').doc('ORPH_CAP_3');
+
+    // Seed 3 orphaned subtrees (no parent doc, only subcollections)
+    await o1.collection('sealed').doc('s1').set({ data: '1' });
+    await o2.collection('sealed').doc('s2').set({ data: '2' });
+    await o3.collection('sealed').doc('s3').set({ data: '3' });
+
+    expect((await o1.get()).exists).to.be.false;
+    expect((await o2.get()).exists).to.be.false;
+    expect((await o3.get()).exists).to.be.false;
+
+    // Run cleanup with maxOrphansPerRun: 1
+    const cappedResult = await runCleanup(db, auth, {
+      dryRun: false,
+      maxOrphansPerRun: 1,
+      now: Timestamp.now(),
+    });
+
+    expect(cappedResult.orphanSubtreesScanned).to.equal(1);
+    expect(cappedResult.orphanSubtreesSwept).to.equal(1);
+
+    // Count remaining orphaned subcollections
+    let remainingOrphans = 0;
+    if ((await o1.collection('sealed').get()).size > 0) remainingOrphans++;
+    if ((await o2.collection('sealed').get()).size > 0) remainingOrphans++;
+    if ((await o3.collection('sealed').get()).size > 0) remainingOrphans++;
+    expect(remainingOrphans).to.equal(2);
+
+    // Run cleanup with default cap to sweep all remaining
+    const fullResult = await runCleanup(db, auth, {
+      dryRun: false,
+      now: Timestamp.now(),
+    });
+
+    expect(fullResult.orphanSubtreesSwept).to.equal(2);
+
+    expect((await o1.collection('sealed').get()).size).to.equal(0);
+    expect((await o2.collection('sealed').get()).size).to.equal(0);
+    expect((await o3.collection('sealed').get()).size).to.equal(0);
+  });
+
+  it('(h) should bound orphanSubtreesScanned to maxOrphansPerRun across mixed live and orphaned rooms', async () => {
+    // Seed 2 live rooms and 2 orphaned rooms
+    const live1 = db.collection('rooms').doc('LIVE_MIX_1');
+    const live2 = db.collection('rooms').doc('LIVE_MIX_2');
+    const orph1 = db.collection('rooms').doc('ORPH_MIX_1');
+    const orph2 = db.collection('rooms').doc('ORPH_MIX_2');
+
+    await live1.set({ code: 'LIVE_MIX_1', phase: 'lobby', expiresAt: Timestamp.fromMillis(Date.now() + 3600 * 1000) });
+    await live2.set({ code: 'LIVE_MIX_2', phase: 'lobby', expiresAt: Timestamp.fromMillis(Date.now() + 3600 * 1000) });
+    await orph1.collection('sealed').doc('s1').set({ data: '1' });
+    await orph2.collection('sealed').doc('s2').set({ data: '2' });
+
+    const cappedResult = await runCleanup(db, auth, {
+      dryRun: false,
+      maxOrphansPerRun: 2,
+      now: Timestamp.now(),
+    });
+
+    expect(cappedResult.orphanSubtreesScanned).to.equal(2);
+  });
 });
