@@ -88,3 +88,9 @@ scratch/
 
 # Firebase Hosting deploy cache (regenerated on every deploy)
 .firebase/
+
+# Agent tooling — local machine state only.
+# .claude/settings.local.json holds this machine's tool-permission allowlist.
+# It was previously ignored ONLY by the user's global git config
+# (~/.config/git/ignore), so a fresh clone would have offered it for commit.
+.claude/settings.local.json
