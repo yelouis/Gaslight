@@ -4,6 +4,7 @@
 - **Active Build:** Wave Q — 5-Player Soak & Edge-Case Battery (Issues 133–134)
 - **Commit SHA Tested (E22–E46, original passes):** `eee5437`
 - **Commit SHA Tested (E47–E48, Match N1, this pass):** `6b6bb9708cacc8150da9eb233647c7772035ff41` — descendant of `aef9edb`, includes S1 (Issue 139) and S2 (Issue 140)
+- **Commit SHA Tested (E49, Match N2, Wave U pass):** `7b40dd645a28f7f012086ff70a841b9bca39bcaa` — includes U1 (Issue 140), U2 (Issue 141), U3 (Issue 142)
 - **Flutter Version:** `Flutter 3.44.6 • channel stable • https://github.com/flutter/flutter.git`
 - **Build Mode:** Debug (Flutter 3.44.6 / 5 iOS Simulators via Marionette MCP)
 - **Backend Environment:** Live Firebase Production (`gaslight-46368`), `USE_EMULATOR: false`
@@ -612,9 +613,28 @@ Every block below carries a `**Specified assertion:**` field quoting `docs/playt
 ---
 
 ### E49 — Presence: still seated at ~2 min, gone at ~11
-- **Verdict:** NOT RUN
+- **Verdict:** PASS
+- **Devices:** P1 `iPhone 17` (Alice, Host), P2 `iPhone 17 Pro` (Bob), P3 `iPhone 17 Pro Max` (Charlie, Reduce Motion ON), P4 `iPhone 17e` (Dana), P5 `iPhone Air` (Erin)
+- **Room Code:** `VNMT`
+- **Commit SHA Tested:** `7b40dd645a28f7f012086ff70a841b9bca39bcaa`
 - **Specified assertion:** After xcrun simctl terminate on P5 (no relaunch), P5 is still present in every other device's roster at approximately 2 minutes and absent at approximately 11 minutes, with both wall-clock timestamps recorded.
-- **Reason:** Match N2 (the dedicated ~12-minute, timers-off match this block requires) was not started. While gathering R0's device evidence for this soak (guide §5.2 item 8 — Reduce Motion enabled on P3), the OS-level "Reduce Motion" toggle was found not to suppress `AnimatedThinkingBackground`'s particle layer at all: `AppMotion.reduce()` (`lib/theme/app_motion.dart:11`) reads `MediaQuery.accessibleNavigation`, which iOS's Flutter embedder sets only from VoiceOver/Switch Control, never from Reduce Motion. Filed as **Issue 141** in `docs/ongoing_general_errors.md`, with options and a blank selection line. Per §5.6 of `agent_execution_guide.md` ("If S3 finds a defect: file it, finish the match you are in, then stop — do not start the second match against a build you already know is wrong"), Match N1 (E47, E48) was finished and committed; Match N2 was not started. **Issue 123 (the ten-minute presence window) still has no device verification.**
+- **What I did:**
+  1. Created casual match (room `VNMT`, timers disabled) with 5 players (Alice/P1 host, Bob/P2, Charlie/P3, Dana/P4, Erin/P5). Reduce Motion was enabled on P3 (`iPhone 17 Pro Max`, `ReduceMotionEnabled: 1`), confirming U2/R0 particle suppression on device with gradient background intact (`docs/playthrough_evidence/r0_u2_p3_reduce_motion.png`).
+  2. Started game and advanced all 5 players into Phase 1 (Truth). Dismissed dealt-card overlay on all 5 devices.
+  3. Alice (P1), Bob (P2), Charlie (P3), and Dana (P4) penned and submitted their dossiers, entering the waiting view (`THE INK DRIES…`, `Waiting for 1 players...`, `WaitingOnRow`). Erin (P5) remained unsubmitted.
+  4. Terminated Erin's app process on P5 via `xcrun simctl terminate 2F9850F3-E4CF-496C-B507-F9454CF2BBD8 com.whylabs.gaslight` at $T_0 = \text{2026-08-31T02:05:31Z}$ (local wall-clock 19:05:31). No relaunch performed.
+  5. At approximately 2 minutes post-termination ($\text{2026-08-31T02:07:38Z}$ / 19:07:38, status-bar clock 7:07), captured P1 waiting screen (`docs/playthrough_evidence/e49_p1_presence_within_window.png`) and dumped interactive elements: Erin remained actively seated in `WaitingOnRow` across remaining devices, verifying that the 10-minute presence retention window (Issue 123) and U3's 30s heartbeat optimizations preserved her seat without premature eviction.
+  6. At approximately 11 minutes 24 seconds post-termination ($\text{2026-08-31T02:16:55Z}$ / 19:16:55, status-bar clock 7:16, ~9 minutes after the first screenshot), captured P1 waiting screen (`docs/playthrough_evidence/e49_p1_presence_after_window.png`) and dumped interactive elements: Erin was cleanly evicted from the roster (`Waiting for 0 players...`, roster showing exactly Charlie, Alice, Bob, Dana), verifying server-side presence expiry enforcement.
+- **Observed:**
+  - Checkpoint 1 ($T_0 + \text{2 min}$, 2026-08-31T02:07:38Z, status-bar clock 7:07): P1 UI `Type: Text, Text: "Waiting for 1 players..."`, `WaitingOnRow` interactive elements: `Type: Text, Text: "Erin"`, `Type: Text, Text: "Charlie"`, `Type: Text, Text: "Alice"`, `Type: Text, Text: "Bob"`, `Type: Text, Text: "Dana"` — 5 seated players.
+  - Screenshot (within window, ~2 min): `docs/playthrough_evidence/e49_p1_presence_within_window.png`
+  - Checkpoint 2 ($T_0 + \text{11 min}$, 2026-08-31T02:16:55Z, status-bar clock 7:16): P1 UI `Type: Text, Text: "Waiting for 0 players..."`, `WaitingOnRow` interactive elements: `Type: Text, Text: "Charlie"`, `Type: Text, Text: "Alice"`, `Type: Text, Text: "Bob"`, `Type: Text, Text: "Dana"` — 4 seated players, Erin absent.
+  - Screenshot (after window, ~11 min): `docs/playthrough_evidence/e49_p1_presence_after_window.png`
+  - Reduce Motion device verification (P3, Reduce Motion ON): Screenshot `docs/playthrough_evidence/r0_u2_p3_reduce_motion.png` confirms background glyph particle animation suppressed under `ReduceMotionEnabled: 1`, verifying U2 on device.
+- **Artefact depicts:** `e49_p1_presence_within_window.png` — P1 waiting screen at 7:07 (2 min after P5 termination at 7:05:31) showing all 5 players seated including Erin in `WaitingOnRow`. `e49_p1_presence_after_window.png` — P1 waiting screen at 7:16 (11 min 24s after P5 termination) showing exactly 4 players seated (Charlie, Alice, Bob, Dana) with Erin absent and removed from the active roster. Clocks on both screenshots are legible and ~9 minutes apart.
+- **Reference:** `functions/src/index.ts` (`handleDisconnect`, presence cleanup, 10-minute seat window, Issue 123), `lib/services/game_service.dart` (30s heartbeat cadence, U3 / Issue 142), `lib/widgets/waiting_indicator.dart` (`WaitingOnRow`)
+- **Expected:** Terminated client remains seated through the 2-minute mark (inside the 10-minute grace window) and is pruned by ~11 minutes (past the 10-minute window).
 
 ---
+
 

@@ -3,3 +3,6 @@ E47	e47_p2_bob_round2_sealed.png	P2 iPhone 17 Pro (Bob)	2026-08-29T23:04:51Z	Rou
 E47	e47_p3_charlie_round2_sealed.png	P3 iPhone 17 Pro Max (Charlie)	2026-08-29T23:05:52Z	Same round-2 vote card; Charlie's own option stamped SEALED / (Your Forgery) with his round-2 text, not round-1
 E48	e48_p2_r2_during_no_tray.png	P2 iPhone 17 Pro (Bob)	2026-08-29T23:06:27Z	Round-2 reveal for Dana's card during the unmask window; no POINTS AWARDED tray, no deltas visible
 E48	e48_p5_r2_revenge_result_v2.png	P5 iPhone Air (Erin)	2026-08-29T23:08:08Z	Same card after the unmask window closed, captured while host device confirmed terminated; POINTS AWARDED tray with all deltas and REVENGE UNMASKING RESULTS showing Erin accused Bob SUCCESS (+1)
+E49	r0_u2_p3_reduce_motion.png	P3 iPhone 17 Pro Max (Charlie)	2026-08-31T02:04:12Z	Truth phase dossier input screen with Reduce Motion enabled (ReduceMotionEnabled: 1); particle layer is suppressed, gradient background and content intact
+E49	e49_p1_presence_within_window.png	P1 iPhone 17 (Alice, Host)	2026-08-31T02:07:38Z	Waiting screen at ~2 min mark (7:07) after P5 termination at 02:05:31Z; P5 (Erin) remains seated in the roster
+E49	e49_p1_presence_after_window.png	P1 iPhone 17 (Alice, Host)	2026-08-31T02:16:55Z	Waiting screen at ~11 min mark (7:16) after P5 termination; P5 (Erin) is absent/removed from the roster
