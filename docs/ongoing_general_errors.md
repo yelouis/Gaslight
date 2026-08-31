@@ -8,7 +8,11 @@
 
 ## 1. Open & in-flight
 
-**Wave S is specced and awaiting implementation (August 28, 2026).** All three open issues are selected: **S1** (139 → A, modified — clear the 13 analyze warnings by *deleting* dead code, not silencing it), **S2** (140 → A, modified — block manifest + gate rule R6 + an artefact hand-off TSV), **S3** (135 → A — recover the three device verifications as **E47–E49** under S2's contract). **Order is S1 → S2 → S3, and S2 before S3 is not negotiable**: running the recovery blocks before the contract exists repeats the conditions that produced two consecutive re-aims. Four commits, no deploy.
+**Wave U is specced and awaiting implementation (August 30, 2026).** Five items, all selected: **U1** (140 → A), **U2** (141 → A), **U3** (142 → A), **U4** (135 → A), **U5** (143 → A, **blocked on the user's go-ahead**). Order is **U1 → U2 → U3 → U4**, and two of those dependencies are load-bearing: **U2 before U4** because fixing the Reduce Motion flag is what makes R0's device evidence observable again, and **U3 before U4** because E49 is a device test of the presence window — landing the heartbeat changes first means E49 verifies what actually ships and doubles as U3's device proof. **U5 is the first `functions/src` change in five waves and the first to require a deploy.**
+
+- **S1 (Issue 139) — ✅ VERIFIED and RESOLVED.** All five dead declarations and both cascade imports are gone; **0 warnings**, 206 infos, **no suppressions** (`analysis_options.yaml` untouched, zero new `// ignore:`), and `lastReaction`/`lastReactionAt` survive in `player_state.dart`. Diffed the info sets before and after: **zero new infos**, and the single info that disappeared was `prefer_final_fields` attached to the deleted `_lastReactionSentTime` — the lint died with the field. `flutter test` 258, functions 102.
+- **U1 (Issue 140) — ✅ VERIFIED and RESOLVED.** Playthrough manifest now carries a `Report` column as its first column; `scripts/check_playthrough_evidence.sh` normalises paths and filters rows by report; zero-rows-overall remains a FATAL failure (exit 1), while un-governed reports pass cleanly (reporting `0 of N manifest entries govern this report`). All four gate invocations exit 0 bare; R6's title-drift, assertion-drift, and empty-manifest falsifications re-verified; over-reach guard passed.
+- **S3 (Issue 135) — partially recovered; stays open.** **E47 and E48 genuinely landed** (see below). **E49 was correctly marked `NOT RUN` with a `Reason:`** rather than re-aimed — the first time in three attempts that a block which could not be performed was reported as such. **Issue 123 still has no device verification.**
 
 **The dead-code check the 139 selection asked for has been performed.** Per-symbol verdicts are in `agent_execution_guide.md` §3.3. Two of the five unused declarations implement designs this project explicitly rejected — `_generateRoomCode` (`game_service.dart:168`) mints room codes client-side from `Random()`, and `_getPlayerId` (`lobby_screen.dart:165`) mints an identity client-side — so deleting them removes a standing invitation to reintroduce both. Deleting `_getPlayerId` also orphans the `uuid` and `firebase_auth` imports, which are **not** among the current 13 warnings, so the fix is **15 removals, not 13**. `_lastReactionSentTime` (`phase4_reveal.dart:36`) is a leftover from the reaction feature removed in Issue 74 — **but `lastReaction`/`lastReactionAt` in `player_state.dart:24-25` are deliberately retained and must not be touched**, since dropping them needs a rules deploy and a data migration.
 
@@ -22,7 +26,7 @@
 - **R3 (Issue 135 → Option A)** — ❌ **NOT VERIFIED. The recovery blocks were themselves re-aimed.** See Issue 135 below, which stays open. **E46 asserts something entirely different from its specification**, E45 dropped the half that was the only reason it existed, and E44's cited screenshot does not show its assertion. All three carry `PASS`, and the evidence gate passes all 25 blocks — because no gate asks whether a block is still about what it was supposed to be about (§2.33, now §2.34).
 - **R3 (Issue 135 → Option A)**: Five-player soak assertions recovered as E44–E46 on 5 live iOS simulators; `docs/playthrough_findings_5player.md` verified at 25 PASS blocks (exit 0).
 
-**Gate state, measured August 28, 2026:**
+**Gate state, measured August 30, 2026:**
 
 | Gate | Result |
 |---|---|
@@ -32,18 +36,26 @@
 | `npm --prefix functions test` | **102 passing** (101 + the 5-player pre-flight) |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH.** 16 functions, deployed 2026-08-28T02:40–02:41Z |
-| `./scripts/check_playthrough_evidence.sh` (iOS, Wave N report) | **exit 0** — 21 blocks |
-| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` | **exit 0** — 25 blocks, 30 artefacts on disk. ⚠️ **Exit 0 here does not mean the blocks assert what they were told to** — three of them do not (Issue 135). |
+| `./scripts/check_playthrough_evidence.sh` (all 4 invocations: no-args, marionette, web, 5player) | **exit 0** — all 4 invocations green (U1 / Issue 140 delivered) |
+| `./scripts/check_playthrough_evidence.sh docs/playthrough_findings_5player.md` | **exit 0** — 28 blocks, 34 artefacts on disk, R6: 3 of 3 manifest entries checked. |
 
 **Read the exit code bare, not through a pipe.**
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**S1 (Issue 139) and S2 (Issue 140) — delivered in Wave S.** S3 (135) is partially recovered: **E47 and E48 landed as Match N1**, verified under S2's manifest/R6 contract; **E49 (Match N2) is stopped pending Issue 141**, found while gathering R0's device evidence mid-soak — see below, and see §5.6 of `agent_execution_guide.md` for why the soak stops here rather than starting a second match.
+**Four open, all selected, specced as Wave U in `agent_execution_guide.md`. Only U5 is gated.**
 
-**Two modifications the user attached to their selections, both delivered:**
-- **139** — delivered: 15 removals, 0 warnings, 206 infos. See Resolved index.
-- **140** — delivered: `docs/playthrough_manifest.md`, R6, `ARTEFACTS.tsv`. See Resolved index.
+| Issue | Selection | Wave U item | Status |
+|---|---|---|---|
+| **140** | → A | **U1** — scope the manifest per report | ✅ **RESOLVED** (U1) |
+| **141** | → A | **U2** — read the real Reduce Motion flag | approved; **run the deciding experiment first** |
+| **142** | → A | **U3** — cut the presence chatter | approved |
+| **135** | → A | **U4** — Match N2, finish E49 | approved; last, ~12 min wall clock |
+| **143** | → A, *"report the cost first"* | **U5** — nightly cleanup | ⚠️ **specced but BLOCKED** pending the user's go-ahead after reading the cost report (guide §8) |
+
+**The U5 cost answer, in one line: $0.00/month at this scale** — a nightly job uses 1 of 3 free Cloud Scheduler jobs, ~30 of 2,000,000 free function invocations, and a few hundred of 50,000 daily free reads. Worst-case one-time backlog of 100,000 deletes costs **$0.02**. Full table, caveats and sources in `agent_execution_guide.md` §8. **It also resolved the open question from 143's Option B: Firebase lists "TTL deletes" among operations that get no free usage, so the selected Option A is cheaper than the TTL alternative, not merely tidier.**
+
+**E47 and E48 were verified this pass by opening every screenshot**, not by reading verdicts. Both match their `Artefact depicts:` exactly: `e47_p2_bob_round2_sealed.png` shows the round-2 vote screen for Dana's card with Bob's **round-2** text (*"Being the test subject for a new energy drink flavor…"*) under the `SEALED` / `(Your Forgery)` ribbon — not his round-1 meal-prep line, which is the leak Issue 117 was about. The E48 pair is stronger than specified: the during-window shot shows `SEALED ANSWER` on both forgeries with no points tray, and the after-close shot from a *non-host* device shows `FORGERY BY BOB` / `FORGERY BY CHARLIE` with the full tray and `Erin accused Bob — SUCCESS! (+1)` — so authorship withholding **and** publication are visible as a contrast in one pair of artefacts. The device clocks (4:04, 4:06, 4:08) agree with `ARTEFACTS.tsv`'s UTC timestamps at PDT, so the artefacts are contemporaneous with the run.
 
 ---
 
@@ -87,6 +99,19 @@ Your selection: Proceed with Option A.
 
 **Practical impact**: Issue 138 was filed to "honour Reduce Motion." On a real device, an end user who turns on Reduce Motion gets no change at all — the particle animation keeps running. Only a user running VoiceOver or Switch Control incidentally gets the suppression, as an unintended side effect.
 
+**⚠️ Independently confirmed at SDK level (verification pass, August 29, 2026), with one correction that changes what the fix must be.** In `bin/cache/pkg/sky_engine/lib/ui/window.dart`, `AccessibilityFeatures` carries **three distinct bits**: `accessibleNavigation` (`1 << 0`), `disableAnimations` (`1 << 2`) and `reduceMotion` (`1 << 4`). `packages/flutter/lib/src/widgets/media_query.dart` populates `accessibleNavigation` and `disableAnimations` from `platformDispatcher.accessibilityFeatures` (`:313–320`) and mentions `reduceMotion` **zero times** — so that bit is genuinely unreachable through `MediaQuery` in this SDK, and `grep -rn disableAnimations lib/ test/` finds no use in this app at all. The diagnosis holds.
+
+**The correction:** the device evidence proves only that `accessibleNavigation` is *not* set by Reduce Motion. **It does not establish which of the two candidate replacements is correct**, and they imply materially different implementations:
+- **`MediaQuery.of(c).disableAnimations`** — if the iOS embedder sets that bit from Reduce Motion, `AppMotion.reduce()` stays a **pure function of `BuildContext`**, all 38 existing call sites keep working unchanged, and no `WidgetsBindingObserver` is needed anywhere.
+- **`PlatformDispatcher.instance.accessibilityFeatures.reduceMotion`** — bypasses `MediaQuery`, so live updates need `didChangeAccessibilityFeatures` wired into every stateful caller (Option A's stated con).
+
+**Whichever option is selected, the implementer must run this deciding experiment first**, on a simulator with Reduce Motion **on**, and paste both values into the commit body:
+```dart
+debugPrint('disableAnimations=${MediaQuery.of(context).disableAnimations} '
+           'reduceMotion=${PlatformDispatcher.instance.accessibilityFeatures.reduceMotion}');
+```
+If `disableAnimations` is `true`, take the simple path and ignore the observer machinery. **Do not implement the observer version on the assumption that it is required.**
+
 **Option A (recommended)**: **Read `PlatformDispatcher.instance.accessibilityFeatures.reduceMotion` directly (`dart:ui`), OR'd with the existing `accessibleNavigation` check**, in `AppMotion.reduce()`, and have call sites rebuild on `WidgetsBindingObserver.didChangeAccessibilityFeatures` rather than relying solely on `didChangeDependencies` (which only fires on `MediaQuery` ancestor changes, and `PlatformDispatcher` reads bypass `MediaQuery` entirely).
   - *Pros*: Fixes the defect on iOS for actual Reduce Motion users without breaking the existing `MediaQueryData(accessibleNavigation: true)` widget-test injection pattern relied on elsewhere (§2.7) — the OR keeps every current test passing. Fixes every current and future `AppMotion.reduce()` call site at once, including `auto_advance_timer.dart`.
   - *Cons*: `AppMotion.reduce()` can no longer be a pure function of `BuildContext` alone if call sites need live updates outside of a `MediaQuery` rebuild; each `StatefulWidget` using it needs a `WidgetsBindingObserver` override added (currently only `thinking_background.dart` has one, for the ticker). Touches more than one file.
@@ -99,7 +124,64 @@ Your selection: Proceed with Option A.
   - *Pros*: Smallest possible change; fixes exactly the widget Issue 138 named.
   - *Cons*: Leaves `AppMotion.reduce()` itself still wrong for any future caller who reasonably expects it to mean real Reduce Motion; produces two different "reduce motion" checks in the codebase reading two different signals, which is the same inconsistency §2.7 warns against propagating.
 
-Your selection: _____
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 142: The app talks to the network far more than it needs to, and that is the main battery cost
+
+**In plain terms:** the biggest battery drain on a phone is usually not drawing pictures — it is **waking up the radio to talk to the internet**. Right now every player's phone reports "I'm still here" to the server **every 10 seconds**, and each of those tiny messages is pushed out to *everyone else's* phone, which then redraws its whole screen. In a five-player game that is roughly **150 screen redraws and 30 network writes every minute**, forever, just to say nobody has left. The server only actually cares about this every **10 minutes**.
+
+**Status**: ⚠️ Confirmed Unresolved — measured by reading the code this session, not estimated. Four separate causes, in descending order of likely impact:
+
+1. **The heartbeat is ~60× more frequent than the server's own threshold.** `game_service.dart:320` runs `Timer.periodic(const Duration(seconds: 10))` writing `lastSeen` per player. The server treats a seat as abandoned only after `PRESENCE_STALE_MS = 600_000` — **10 minutes** (`functions/src/index.ts:179`). The client's own local staleness check is **60 s** (`game_service.dart:490`). Nothing in the system needs 10-second resolution.
+2. **Every heartbeat write wakes every other device.** `game_service.dart:459` listens to the whole `players` collection and calls `notifyListeners()` **unconditionally** on every snapshot (`:501`), so a write whose only change is one player's `lastSeen` rebuilds every widget subscribed to `GameService` on all five phones. Five writers × 6 writes/min × 5 receivers ≈ **150 rebuilds/min per room**, plus the radio wake each delivery costs.
+3. **A rejected-callable storm whenever anyone goes quiet.** The `deadPlayers` loop at `game_service.dart:485-499` fires `handleDisconnect` for any player unseen for 60 s — **and it is not gated to the host**, so every remaining device fires it, on every snapshot. But the server only honours a presence disconnect after 10 minutes (`index.ts:1180`). For the ~9 minutes in between, four devices × ~30 snapshots/min ≈ **1,000+ rejected Cloud Function invocations per stale player**, each one a network round trip on every phone and a billed invocation.
+4. **Continuous full-screen repainting on the three longest screens.** `AnimatedThinkingBackground` repaints 15 `CustomPaint` particles every frame on craft, vote and reveal, and `phase4_reveal.dart:83` runs `Timer.periodic(200 ms)` calling `setState(() {})` — a full rebuild five times a second for the whole reveal phase. The particle step also hardcodes a 60 fps delta (`* 0.016`), so on a 120 Hz ProMotion device it both draws twice as often **and** drifts twice as fast.
+
+**One thing that is already right:** the app takes no wake-lock, so the screen still sleeps normally. **One thing that is not:** `didChangeAppLifecycleState` (`game_service.dart:341`) handles only `resumed` — there is no `paused` branch, so nothing deliberately stops the heartbeat when the app leaves the foreground.
+
+**⚠️ Read this before choosing:** *there is no battery measurement harness in this project, and a simulator cannot produce a trustworthy battery number.* Causes 1–3 are **exactly countable** — writes per minute, callable invocations, snapshot deliveries — so a fix can be proven with numbers. Cause 4 can only be judged on a real device with Xcode Instruments. That asymmetry is the main reason for the recommendation below.
+
+**Option A (recommended)**: **Fix the traffic, not the pixels.** Raise the heartbeat interval (e.g. 10 s → 30 s, still six beats inside the client's 60 s window and twenty inside the server's 10 min), make the players listener skip `notifyListeners()` when the only field that changed is `lastSeen`, gate the `handleDisconnect` loop to the host **and** add a per-player cooldown so it cannot re-fire every snapshot, and stop the heartbeat on `AppLifecycleState.paused`.
+  - *Pros*: Attacks the dominant drain — radio wake — and every part of it is **countable**, so "it worked" is a number rather than an impression: writes/min, invocations/hour, rebuilds/min. Cuts the Firebase bill at the same time (fewer writes, dramatically fewer function invocations). **Zero visual change**, so it cannot damage the app's look. Each of the four sub-fixes is a handful of lines.
+  - *Cons*: Touches presence, which is load-bearing and has already produced Issues 120, 123 and 141 — so it needs careful falsification against the 10-minute window, and the client's 60 s local threshold has to keep at least 2–3 beats of margin. Leaves the ~60 fps repaint untouched, so a phone parked on the craft screen still burns GPU.
+
+**Option B**: **Fix the rendering.** Idle or throttle the particle layer (e.g. cap it at 30 fps, or pause it while a modal/overlay covers the screen), drive particle motion from real elapsed time instead of the hardcoded `0.016`, and drop the reveal countdown from 5 Hz to 1 Hz.
+  - *Pros*: Addresses a genuinely continuous cost on the three screens players sit on longest, and fixes a real correctness bug for free — particles currently drift at double speed on any 120 Hz device. Purely presentational, so it cannot break game logic or presence.
+  - *Cons*: **The improvement cannot be measured with anything this project currently has** — it needs a physical device and Instruments, and device time is exactly what has been scarce for three waves. Touches the app's signature look, so it needs design review. Leaves the network traffic, which is probably the larger drain, entirely in place.
+
+**Option C**: **Do A and B together as one wave.**
+  - *Pros*: Battery is a sum; fixing one half yields a partial result that is easy to mistake for "the fix did not work". The two sets of changes touch different files and cannot conflict.
+  - *Cons*: Mixes presence-logic risk with visual risk in a single wave, and **with no battery harness you could not attribute the outcome to either half** — which is the same "we cannot observe it" trap that produced the last three verification failures. Roughly doubles the review surface for a problem that has no measured baseline yet.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 143: Nothing ever deletes anything — rooms, their sub-documents, and anonymous sign-ins accumulate forever
+
+**In plain terms:** every game room ever created is still sitting in the database, along with a login account for every person who ever joined one. The code already stamps each room with an **"expires in 8 hours"** date — but **nothing ever looks at that stamp**, so nothing is ever cleaned up. It is a filing cabinet where every folder gets an expiry sticker and nobody ever empties it.
+
+**Status**: ⚠️ Confirmed Unresolved — `ROOM_TTL_MS = 8 * 60 * 60 * 1000` (`functions/src/index.ts:181`) and `expiresAt: ttlFrom(...)` is written and refreshed at **ten** sites across `createRoom`, `joinRoom`, `startGame`, `submitAnswer` and the phase advances. But `grep -rn "onSchedule|pubsub|scheduler" functions/` returns **nothing**: all 16 deployed functions are `onCall`, and **no Firestore TTL policy is configured**. The expiry stamp is written and never read. The user's own console screenshot shows the resulting scale — dozens of room documents and a full page of anonymous users going back weeks.
+
+**⚠️ The trap that makes the obvious fix wrong on its own — and it is already happening in production.** Firestore's built-in TTL deletes **only the document**, never its subcollections. Rooms own `players`, `sealed` and `embeddings`. The user's screenshot shows room **`BGHW` rendered in italics with "This document does not exist, it will not appear in queries or snapshots" — while still owning a `sealed` subcollection.** That is an orphaned subtree: invisible to the app, invisible to a room listing, still consuming storage, and unreachable by any cleanup that only targets room documents. **Any option that touches room lifecycle must handle subcollections explicitly.**
+
+**On the anonymous users:** Firebase never expires them, and one is created per join. They are cheap (Authentication is not billed by stored user count on the current plan) but they are not free of risk — the list is an ever-growing surface, and `authUid` is referenced by player documents. **A purge must therefore exclude any UID still referenced by a non-expired room**, or a player mid-match loses their session.
+
+**Option A (recommended)**: **A single nightly scheduled Cloud Function that does all three jobs** — find rooms whose `expiresAt` has passed, `recursiveDelete()` each room subtree (document *and* subcollections), then delete anonymous auth users older than a chosen age whose UID is not referenced by any surviving room.
+  - *Pros*: One place, one schedule, one log to read — and `firestore.recursiveDelete()` in the Admin SDK is purpose-built for exactly the subcollection problem in the ⚠️ above. Because it runs in your own code, it can enforce the ordering that matters (delete room subtrees **first**, then compute which UIDs are still referenced, then purge auth) which no combination of platform features can. Fully testable in the emulator suite, which is this project's strongest gate.
+  - *Cons*: Requires a scheduled function — Cloud Scheduler, which has a small standing cost and needs the Blaze plan — and it is **the first scheduled function in this codebase**, so it adds a new deploy surface and a new failure mode (a silent job that stops running). A bulk-delete job is also the most destructive code in the repo; it needs a dry-run mode and a hard cap on deletions per run before it is ever pointed at production.
+
+**Option B**: **Turn on Firestore's native TTL policy for `expiresAt`, and add a smaller scheduled function only for the leftovers** (orphaned subcollections and anonymous users).
+  - *Pros*: The platform does the bulk of the work on its own schedule with no code and no invocations for the room documents themselves — and **the `expiresAt` field already exists and is already maintained**, so the room half is close to a configuration change rather than a feature. Degrades gracefully: if the cleanup function breaks, rooms still expire.
+  - *Cons*: **Two mechanisms with different schedules operating on the same data**, which is harder to reason about than one — TTL deletes the parent whenever it gets to it (Google documents this as typically within 24 h of expiry, not promptly), so the function must be written to find subtrees whose parent is *already gone*, which is a strictly harder query than "find expired rooms". Confirm the current billing treatment of TTL deletions before assuming they are free.
+
+**Option C**: **Clean up nothing automatically; add a manual maintenance script** run by hand when the console looks cluttered.
+  - *Pros*: No scheduler, no standing cost, no new deploy surface, and no automated process that can ever delete something it should not have. Easiest to reason about and to abandon. Perfectly adequate while the app has few real users.
+  - *Cons*: Relies on a human remembering, which is the same class of control that failed twice in the playthrough re-aims (§2.34). The orphaned-subtree problem keeps growing silently in the meantime, and a manual script run rarely is *more* dangerous per-run than a nightly one, because it deletes a far larger batch each time with far less recent testing.
+
+Your selection: Proceed with Option A. However, before proceeding, ook into how much the scheduled function would cost and report that to me first.
 
 ---
 
@@ -208,6 +290,14 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.35 A new gate rule runs against every file the gate is ever pointed at, not just the one it was written for
+
+Rule R6 was written to stop a block in the five-player soak from drifting away from its specification. It works: a one-word title change and a one-word assertion change each fail the gate, and an empty manifest fails FATAL rather than passing vacuously — all three reproduced independently.
+
+**But `check_playthrough_evidence.sh` takes a report path, and the no-argument invocation targets a different report** (`docs/playthrough_findings_marionette.md`, the Wave N record). R6 read the manifest as globally authoritative, so E47/E48/E49 — which exist only in the five-player report — were reported as three missing blocks, and **a gate that had exited 0 for months began exiting 1**. The regression shipped one commit after the option was chosen, and it is exactly the con that had been written down against that option: *"a stale manifest will produce false failures that erode trust in the gate."*
+
+**Two rules follow.** When you add a rule to a shared checker, **enumerate every invocation of that checker** — including the argument-less default — and run each one before committing; the blast radius of a rule is the set of files the tool can be pointed at, not the file you were thinking about. And when a spec records a *con* for the option being implemented, treat that con as a **required test case**: the con said false failures, so "run the gate against a report the manifest does not govern" was a test that should have existed before the code did.
 
 #### 2.34 A habit that has already failed is not a control — and the recovery from a re-aim is the most likely place for the next one
 
@@ -329,15 +419,15 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–140 — August 8 to 29, 2026
+### Issues 65–140 — August 8 to 30, 2026
 
 **64 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave U / U1 — playthrough manifest scoping & R6** (`docs/playthrough_manifest.md` Report column scoping; `scripts/check_playthrough_evidence.sh` normalises paths and filters rows by report under test; zero-rows-overall remains FATAL while ungoverned reports pass cleanly) | 140 | `scripts/check_playthrough_evidence.sh`; `docs/playthrough_manifest.md`; `docs/ongoing_general_errors.md` §2.35 |
 | **Wave S / S1 — analyze warning cleanup** (15 removals: unused imports, dead declarations, orphaned cascade imports) | 139 | `agent_execution_guide.md` §3 |
-| **Wave S / S2 — manifest + R6 + ARTEFACTS.tsv** (`docs/playthrough_manifest.md` single source of truth for block titles/assertions; Rule R6 in `check_playthrough_evidence.sh` fails on title or assertion drift, empty manifest, or missing TSV entry; `docs/playthrough_evidence/ARTEFACTS.tsv` append-only five-column hand-off at capture time) | 140 | `scripts/check_playthrough_evidence.sh`; `docs/playthrough_manifest.md`; `docs/playthrough_evidence/ARTEFACTS.tsv`; `docs/ongoing_general_errors.md` §2.33 |
-| **Wave R in-game polish & accessibility** (in-game background honours Reduce Motion by omitting the particle layer; in-game AppBar sizes dynamically to measured text at the live text scaler; dealt-card overlay grows to fit the longest catalogue prompt). **Each verified by reading the source and re-running its falsification, not by reading the commit.** | 136, 137, 138 | `design_ui_direction.md` §6, §8; `lib/widgets/thinking_background.dart`; `lib/widgets/in_game_app_bar.dart`; `lib/widgets/dealt_card_overlay.dart` |
+| **Wave R in-game polish & accessibility** (in-game background omits the particle layer when `AppMotion.reduce()` is true — ⚠️ **but see Issue 141: that gate reads VoiceOver/Switch Control, not iOS Reduce Motion, so 138's user-facing claim is not yet true on a device.** The code change is correct and its guard is falsified; it is the *flag* that is wrong, and **138's resolution is contingent on 141**; in-game AppBar sizes dynamically to measured text at the live text scaler; dealt-card overlay grows to fit the longest catalogue prompt). **Each verified by reading the source and re-running its falsification, not by reading the commit.** | 136, 137, 138 | `design_ui_direction.md` §6, §8; `lib/widgets/thinking_background.dart`; `lib/widgets/in_game_app_bar.dart`; `lib/widgets/dealt_card_overlay.dart` |
 | **Wave Q `closeUnmaskWindow` deadline guard & non-host trigger** (server-side `failed-precondition` check on `Date.now() <= room.unmaskDeadline`, `null`/`0` early returns; client non-host trigger with 1500ms safety margin and bounded 5-attempt retry) | 133 | `design_scoring_and_ui.md` §3.3; `functions/src/index.ts:2241`; `lib/screens/phase4_reveal.dart`; `lib/services/game_service.dart` |
 | **Wave P playtest & repair** (repair red functions gate on placeholder timeout; skip vote phase on all-placeholder round; enforce 10-minute presence window server-side; withhold score deltas until unmask window closes with `closeUnmaskWindow`; configurable round timers with casual mode default; clear queued snackbars on re-roll; departure notification snackbar; deck prompt peek modal; one vote option per row with bounded height; submit on done key & pinned bottom bar; single-line gameplay guidance subtitles) | 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132 | `design_database_and_security.md` §4–§5; `design_game_state_and_models.md` §1; `design_scoring_and_ui.md` §3.2–§3.3; `design_prompt_system.md`; `design_ui_direction.md` |
 | **Security — access control** (`/rooms` collection enumeration; seat/host takeover via `joinRoom` re-binding on a world-readable `playerId`; seat tokens hashed into default-deny `sealed`) | 96, 97 | `design_database_and_security.md` §3, §5 |
