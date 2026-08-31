@@ -56,7 +56,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issue 144 is selected → Option A and specced as Wave V** in `agent_execution_guide.md`: verify the deployed `CLEANUP_DRY_RUN` value *before* touching anything, redeploy from the committed tree to clear the stale gate, then read one real dry-run log and report the numbers. **No source changes.** ⚠️ **The retention sub-question was not answered** — `DEFAULT_AUTH_RETENTION_MS = 24 h` remains unconfirmed, and Option A's own text treats it as a separate sign-off, so **deletion stays disabled until both the log is reviewed and that number is agreed.**
+**Issue 144 is selected → Option A and specced as Wave V** in `agent_execution_guide.md`: verify the deployed `CLEANUP_DRY_RUN` value *before* touching anything, redeploy from the committed tree to clear the stale gate, then read one real dry-run log and report the numbers. **No source changes.** ✅ **The retention sub-question is now answered: the user confirmed 24 hours on August 31, 2026.** `DEFAULT_AUTH_RETENTION_MS = 24 * 60 * 60 * 1000` is a settled product decision, written up with its rationale and its safety invariant in **`design_database_and_security.md` §10.4** — including the coupling to `ROOM_TTL_MS` (8 h) that makes 24 h safe, and the `Math.max(lastRefresh, lastSignIn, creation)` trap that must not be simplified. **One gate remains before deletion is enabled: the first real dry-run log must be read and reported** (Wave V, Step 4), after which enabling deletion is a separate decision.
 
 **Issue 144 (selected → A)** — the nightly cleanup job (Issue 143) was built and deployed to production without the go-ahead it was gated on. **Issues 135, 140, 141 and 142 are resolved and verified this session.** Issue 143's *code* is done and well-tested; its *authorisation* is what is outstanding, so it is folded into 144 rather than resolved separately.
 
@@ -125,7 +125,7 @@ Your selection: Proceed with Option A. However, before proceeding, ook into how 
   - *Pros*: The accumulated rooms, orphaned subtrees and stale users start clearing immediately, and the per-run caps mean any single night is bounded. The over-reach guards are tested, so the two failure modes that would actually hurt are covered.
   - *Cons*: **Enables live deletion of production data without a single dry-run log ever having been read** — discarding the safety step the spec existed to create, on code that reached production by skipping its authorisation gate. It would also silently adopt the unreviewed 24-hour auth retention. This is the one option where a mistake is unrecoverable.
 
-**Whichever you pick, please also confirm the 24-hour anonymous-user retention** — or name a different window. It is the one number in this feature nobody has agreed to.
+**Retention: RESOLVED.** The user confirmed **24 hours** on August 31, 2026. The decision, its rationale, and the `ROOM_TTL_MS` coupling invariant are recorded in `design_database_and_security.md` §10.4. It is no longer an open question.
 
 Your selection: Proceed with Option A.
 

@@ -8,7 +8,9 @@
 |---|---|---|---|---|
 | **V1** | Redeploy to clear the stale gate, prove `cleanupDaily` is inert, then read one dry-run log and report | **144 → A** | server (ops) | **YES — authorised** |
 
-**⚠️ One sub-decision is still open and it gates the end of V1.** Issue 144 also asked you to confirm the **24-hour anonymous-user retention**; the selection reads *"Proceed with Option A"* and does not answer it. `DEFAULT_AUTH_RETENTION_MS = 24 h` (`functions/src/cleanup.ts:7`) therefore remains **unconfirmed**, and Option A itself says to treat it as a separate sign-off. **Deletion must not be enabled until both the dry-run log has been reviewed and that number is agreed.**
+**✅ The retention window is settled.** The user confirmed **24 hours** on August 31, 2026. `DEFAULT_AUTH_RETENTION_MS = 24 * 60 * 60 * 1000` (`functions/src/cleanup.ts:7`) is a decided product value — **not a placeholder, and not yours to tune.** Its rationale and the invariant that keeps it safe are in **`design_database_and_security.md` §10.4**; read that before touching anything near it (§5.4 summarises what it constrains you to).
+
+**One gate remains before deletion is enabled:** the first real dry-run log must be read and reported (Step 4). Enabling deletion is a separate decision after that.
 
 **Do not invent work beyond V1.**
 
@@ -175,7 +177,7 @@ Extract and report, as numbers:
 - anonymous users considered, how many were **skipped because still referenced** by a surviving room, and how many **would** be deleted;
 - whether either cap (**100 rooms / 500 users**) was hit — if so the backlog needs more than one night, which is by design.
 
-**Then stop and report to the user.** **Do not set `CLEANUP_DRY_RUN=false`.** Enabling deletion needs both this log reviewed *and* the retention window confirmed.
+**Then stop and report to the user.** **Do not set `CLEANUP_DRY_RUN=false`.** The retention window is now confirmed, so this log is the **last** thing standing between here and enabling deletion — which makes reading it properly the whole point of the step, not a formality. Enabling deletion remains a separate decision by the user.
 
 ### 5.3 Validation
 
@@ -184,6 +186,16 @@ Extract and report, as numbers:
 - **No behaviour changed.** `git diff --stat -- functions/src lib/ test/` for this item must be **empty**. Wave V should touch no source at all; if it does, something has been misread.
 - **The full battery must be unchanged** — not merely green: `flutter analyze lib test` → **0 errors, 0 warnings, 206 infos**; `flutter test` → **267**; `npm --prefix functions test` → **108**; `./scripts/check_decks_in_sync.sh` → exit 0; all **four** evidence-gate invocations → exit 0.
 - **Over-reach guard:** the schedule, the caps and `DEFAULT_AUTH_RETENTION_MS` are **unchanged** — `git diff -- functions/src/cleanup.ts` must be empty. This item is explicitly not the place to "improve" the cleanup.
+
+### 5.4 The retention contract — what you must not change
+
+`DEFAULT_AUTH_RETENTION_MS = 24 hours` is **confirmed** (user, August 31, 2026). **The contract lives in `design_database_and_security.md` §10.4 — read it there rather than re-deriving it here.** Three consequences bind any agent working in `functions/src/cleanup.ts`:
+
+1. **Do not change the number.** It is a product decision, not a tuning parameter. Changing it needs a new decision from the user, filed with options.
+2. **⚠️ It is coupled to `ROOM_TTL_MS` (8 h, `index.ts:183`), across two files.** 24 h is safe *because* it is 3× the room lifetime — an account whose last room expired is unreachable within 8 h. **If `ROOM_TTL_MS` is ever raised toward or beyond 24 h, the retention window must be raised in the same change**, or accounts become eligible for deletion while their room is still alive. Neither file mentions the other; this guide and §10.4 are the only places the coupling is written down.
+3. **⚠️ Do not simplify `Math.max(lastRefresh, lastSignIn, creation)` to `lastRefreshTime` alone** (`cleanup.ts`, the staleness calculation). `lastRefreshTime` can be absent on an account created minutes ago that has not yet refreshed its ID token — collapsing this would make brand-new accounts look 24 hours old and **purge live players**. The `creationTime` term is what protects them; it is not defensive clutter.
+
+**And the guard that actually does the work:** any UID present in a surviving room's `players` subcollection is skipped **regardless of age**. That is why §10.2's ordering is strict — rooms are deleted *first*, so the referenced set reflects the post-cleanup world. The age check is the second line of defence, not the first.
 
 **Blast radius:** none in source. **`docs/ongoing_general_errors.md`** — record the observed `CLEANUP_DRY_RUN` value, the restored gate, and the dry-run log figures against Issue 144.
 
@@ -208,6 +220,7 @@ Extract and report, as numbers:
 - **Error surfaces match on `e.code`, never on the message.**
 - **Phase order is truth → forgery → vote → reveal.** **`ROOM_TTL_MS` is 8 hours.** **`predeploy` stays.**
 - **Timers default OFF** (Issue 130).
+- **`DEFAULT_AUTH_RETENTION_MS` is 24 hours** (confirmed August 31, 2026) and **must always exceed `ROOM_TTL_MS` (8 h) by a wide margin.** The two constants live in different files and neither references the other — see `design_database_and_security.md` §10.4. Raising `ROOM_TTL_MS` without raising retention makes live accounts deletable.
 - **Heartbeat cadence is 30 s** (Issue 142) against a **10-minute** server presence window and a **60 s** client-local staleness check. **Do not raise it above 30 s** without also raising the 60 s threshold — at 45 s a single dropped write false-positives.
 - **`AppMotion.reduce` must keep the `accessibleNavigation` OR term** (Issue 141). Every existing widget test injects it; dropping it breaks the injection pattern the whole suite relies on.
 - **`lastReaction` / `lastReactionAt` in `player_state.dart` are deliberately retained dead fields** from the reaction feature removed in Issue 74. Dropping them needs a rules deploy and a data migration. **Leave them.**
@@ -287,4 +300,4 @@ Extract and report, as numbers:
      SINGLE existing Resolved heading and update the relevant design doc.
 ```
 
-**After V1's Step 4, stop and report.** Enabling deletion requires a further decision from the user, and the 24-hour retention window is still unconfirmed. **Do not invent work.**
+**After V1's Step 4, stop and report.** The retention window is confirmed at 24 hours; enabling deletion still requires a further decision from the user once they have read the dry-run figures. **Do not invent work.**
