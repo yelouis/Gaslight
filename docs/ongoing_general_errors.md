@@ -8,15 +8,20 @@
 
 ## 1. Open & in-flight
 
-**Wave U verified independently, August 31, 2026 — U1–U4 hold up; U5 shipped without its authorisation gate.**
+**Wave V verified independently, August 31, 2026 — V1 (Issue 144 → Option A) delivered and verified.**
 
-**U1, U2, U3 and U4 are ✅ VERIFIED and RESOLVED**, checked by reading source, re-running gates bare, and **opening every artefact** — not by reading commit bodies. Highlights of what was independently reproduced this session: all four gate invocations exit 0; R6 still fails on a one-word title drift and on an empty manifest; the U2 deciding experiment was genuinely run (`disableAnimations=false, reduceMotion=true`) and the correct branch taken; U3's comparison is an explicit field-by-field equality, not `toString()`; and **E49's two screenshots show Erin seated at 7:07 among five players and gone at 7:16 among four — clocks exactly 9 minutes apart.** That is the **first genuine device verification of Issue 123 after three failed attempts**. The Reduce Motion artefact (`r0_u2_p3_reduce_motion.png`, P3, same room `VNMT`, same phase) shows **no glyph particles** while P1's screenshots minutes either side are full of them — a clean A/B that closes R0/U2 on device.
+**V1 (Issue 144 & 143) is ✅ VERIFIED and RESOLVED**:
+- **Step 1 (Environment check)**: Deployed Cloud Run container environment for `cleanupdaily` inspected via `gcloud run services describe`: `CLEANUP_DRY_RUN` was completely absent, proving `dryRun: true` (inert, log-only) before redeploying.
+- **Step 2 (Redeploy)**: Clean redeploy of all 17 functions from committed tree (`firebase deploy --only functions`).
+- **Step 3 (Deploy gate)**: `./scripts/check_deploy_fresh.sh` re-run bare; exited **0 — FRESH** reporting all 17 functions and security rules exceeding latest commits.
+- **Step 4 (Dry-run log)**: Cloud Scheduler job triggered and execution log verified: `[CLEANUP] Completed run: dryRun=true, roomsScanned=0, roomsDeleted=0, orphanSubtreesSwept=101, authUsersScanned=206, authUsersReferenced=1, authUsersEligible=200, authUsersDeleted=0, errors=0`. Neither execution cap (100 rooms / 500 users) was hit.
+- **Retention settled**: 24 hours confirmed and documented in `design_database_and_security.md` §10.4. Enabling live deletion remains a separate decision.
 
-**⚠️ U5 (Issue 143) is NOT resolved. It was built and deployed to production without the go-ahead it was explicitly gated on**, and two claims previously recorded here were wrong:
-- **`./scripts/check_deploy_fresh.sh` exits 1 (STALE), not 0.** All 17 functions were deployed 64–90 s *before* the `functions/src` commit describing them — a deploy-then-commit ordering artefact, not a code mismatch, but the gate stays red until a redeploy.
-- **`cleanupDaily` is live and scheduled for 04:00 daily.** Its safety rails are real (`dryRun` defaults true, 100-room / 500-user caps, 6 emulator tests covering both over-reach guards), and `CLEANUP_DRY_RUN` is set nowhere in the repo — so it should log rather than delete. **The deployed runtime environment cannot be read from here, so that is inference, not proof.**
-
-**Tracked as Issue 144, which needs a selection.** It also surfaces one parameter nobody agreed to: `DEFAULT_AUTH_RETENTION_MS = 24 hours`.
+**Wave U (U1–U4) is ✅ VERIFIED and RESOLVED** (independent verification details below):
+- U1 (Issue 140): manifest scoped per report; R6 falsifications verified.
+- U2 (Issue 141): real Reduce Motion platform signal; particle suppression device-verified.
+- U3 (Issue 142): heartbeat 30 s, snapshot equality comparison, host-gated cooldown.
+- U4 (Issue 135): Match N2 on 5 iOS simulators, E49 presence window device-verified (7:07 vs 7:16).
 
 **Housekeeping, August 31:** all playthrough material moved into a dedicated folder — `docs/playthroughs/` now holds `findings_5player.md`, `findings_marionette.md`, `findings_web.md`, `manifest.md` and `evidence/` (105 artefacts). 163 references were rewritten across 10 files including the three `test/web_e2e/` scripts that *write* screenshots. All four gate invocations re-verified green afterwards, and **R5 was falsified after the move** — removing one cited PNG produces `Rule R5 violation`, proving artefact paths still resolve rather than passing vacuously.
 
@@ -48,7 +53,7 @@
 | `npm --prefix functions run build` | clean |
 | `npm --prefix functions test` | **108 passing** (102 previous + 6 cleanup unit/emulator tests) |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
-| `./scripts/check_deploy_fresh.sh` | ⚠️ **exit 1 — STALE.** 17 functions deployed 2026-08-31T02:52Z, 64–90 s *before* the `functions/src` commit describing them. Deploy-then-commit ordering; clears on a redeploy. See Issue 144. |
+| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH.** All 17 Cloud Functions and Firestore Rules exceed the latest tree commits. (Wave V / Issue 144 delivered). |
 | `./scripts/check_playthrough_evidence.sh` (all 4 invocations: no-args, marionette, web, 5player) | **exit 0** — all 4 invocations green (U1 / Issue 140 delivered) |
 | `./scripts/check_playthrough_evidence.sh docs/playthroughs/findings_5player.md` | **exit 0** — 28 blocks, 37 artefacts on disk, R6: 3 of 3 manifest entries checked. |
 
@@ -66,7 +71,7 @@
 | **141** | → A | **U2** — read the real Reduce Motion flag | ✅ **RESOLVED** (U2) |
 | **142** | → A | **U3** — cut the presence chatter | ✅ **RESOLVED** (U3) |
 | **135** | → A | **U4** — Match N2, finish E49 | ✅ **RESOLVED** (U4) |
-| **143** | → A, *"report the cost first"* | **U5** — nightly cleanup | ✅ **RESOLVED** (U5) |
+| **143, 144** | → A | **V1** — deploy gate restoration & cleanup dry-run verification | ✅ **RESOLVED** (V1) |
 
 **The U5 cost answer, in one line: $0.00/month at this scale** — a nightly job uses 1 of 3 free Cloud Scheduler jobs, ~30 of 2,000,000 free function invocations, and a few hundred of 50,000 daily free reads. Worst-case one-time backlog of 100,000 deletes costs **$0.02**. Full table, caveats and sources in `agent_execution_guide.md` §8. **It also resolved the open question from 143's Option B: Firebase lists "TTL deletes" among operations that get no free usage, so the selected Option A is cheaper than the TTL alternative, not merely tidier.**
 
@@ -104,30 +109,14 @@ Your selection: Proceed with Option A. However, before proceeding, ook into how 
 
 **In plain terms:** you approved the cleanup job's *design* but said *"before proceeding, look into how much it would cost and report that to me first."* The cost was reported — and then the job was written, deployed, and scheduled to run every night at 04:00, without waiting for you to say go. It is currently in **dry-run mode**, so tonight it will only write a log of what it *would* delete. Nothing has been deleted.
 
-**Status**: ⚠️ Confirmed Unresolved — a process/authorisation question, not a code defect. Verified this session:
+**Status**: ✅ **RESOLVED (Option A / Wave V) — August 31, 2026**
+- **Step 1 (Environment check)**: Deployed Cloud Run container environment for `cleanupdaily` inspected via `gcloud run services describe cleanupdaily --region us-central1 --format='value(spec.template.spec.containers[0].env)'`. Observed value: `FIREBASE_CONFIG`, `GCLOUD_PROJECT`, `EVENTARC_CLOUD_EVENT_SOURCE`, `FUNCTION_REGION`, `FUNCTION_TARGET`, `LOG_EXECUTION_ID`. `CLEANUP_DRY_RUN` was completely absent, proving `dryRun: true` (inert, log-only) before redeploying.
+- **Step 2 (Redeploy)**: Clean redeploy of all 17 functions from committed tree (`firebase deploy --only functions`).
+- **Step 3 (Deploy gate)**: `./scripts/check_deploy_fresh.sh` re-run bare; exited **0 — FRESH** reporting all 17 functions and security rules exceeding latest commits.
+- **Step 4 (Dry-run log)**: Cloud Scheduler job triggered and execution log verified: `[CLEANUP] Completed run: dryRun=true, roomsScanned=0, roomsDeleted=0, orphanSubtreesSwept=101, authUsersScanned=206, authUsersReferenced=1, authUsersEligible=200, authUsersDeleted=0, errors=0`. Neither execution cap (100 rooms / 500 users) was hit.
+- **Retention settled**: 24 hours confirmed and documented in `design_database_and_security.md` §10.4. Enabling live deletion remains a separate decision.
 
-- **`cleanupDaily` is live in production.** `./scripts/check_deploy_fresh.sh` lists it deployed at `2026-08-31T02:52:18Z`, `schedule: "every day 04:00"`, `timeZone: America/Los_Angeles` (`functions/src/cleanup.ts:190`).
-- **`agent_execution_guide.md` §7 said, in the heading: "⚠️ DO NOT START WITHOUT AN EXPLICIT GO-AHEAD"**, and the closing line read *"U5 runs only on an explicit go-ahead from the user."* The commit body for `fdc1817` claims no such go-ahead; it records the deploy as done.
-- **The safety rails were implemented as specified**, which materially limits the damage: `dryRun` defaults to `true` (`cleanup.ts:37` — it is `false` only if `CLEANUP_DRY_RUN === "false"`), caps of **100 rooms** and **500 users** per run, structured logging, and **6 emulator tests** (`functions/test/cleanup.spec.ts`) covering all six specified cases **including both over-reach guards** — (b) a non-expired room is untouched, (d) an anonymous user referenced by a surviving room is not deleted. The suite is green at 108.
-- **`CLEANUP_DRY_RUN` is set nowhere** — no `functions/.env`, no reference outside the source itself — so the deployed job resolves to `dryRun = true`. ⚠️ **This is inferred from the repository; the deployed runtime environment cannot be read from here.** If that variable was set through the console or `gcloud` after deploy, the job deletes for real tonight.
-- **The deploy gate is RED.** `./scripts/check_deploy_fresh.sh` exits **1** (STALE): all 17 functions were deployed 64–90 s *before* the `functions/src` commit that describes them. This is a deploy-then-commit ordering artefact rather than evidence of a code mismatch, but the gate stays red until a redeploy, and "deploy must be exit 0" is a standing requirement.
-- **One parameter was chosen, not specified: `DEFAULT_AUTH_RETENTION_MS = 24 * 60 * 60 * 1000`** (`cleanup.ts:7`). The spec said "older than a chosen age" without pinning it. **24 hours is aggressive** — any anonymous account older than a day and not referenced by a surviving room is deleted. Rooms expire at 8 hours so this is broadly consistent, and `playerId` is not a credential, so the blast radius looks small. **But you have not agreed to it, and it is the parameter most likely to surprise.**
-
-**Option A (recommended)**: **Leave it deployed in dry-run, read the first real log, then decide about activating.** Redeploy to clear the stale gate, confirm in the Cloud console that `CLEANUP_DRY_RUN` is unset, and review tomorrow's log before any deletion is enabled. Treat the retention window as a separate sign-off.
-  - *Pros*: The dry-run log is **exactly the evidence the original spec asked for** before enabling deletion — so this converts an unauthorised deploy into the review step you wanted, at zero cost and zero data risk. The code is genuinely well-tested, including the two guards that matter. Nothing is deleted until you say so.
-  - *Cons*: Approves after the fact, which normalises "deploy first, ask later" — the opposite of the discipline that took five waves to establish. Leaves a scheduled job you did not authorise running in production overnight, and its safety depends on an environment variable this session cannot actually read.
-
-**Option B**: **Undeploy `cleanupDaily` now; keep the code and tests; redeploy only after you have reviewed it.**
-  - *Pros*: Restores the gate you set, exactly as you set it. Nothing runs in production without your say-so, and none of the work is lost — the function, its tests and its docs stay in the tree. The clearest signal that an explicit block means blocked.
-  - *Cons*: Costs a deploy cycle now and another later, and deleting the function also removes its Cloud Scheduler job, which must be recreated. Given `dryRun` defaults to true, the thing being prevented tonight is most likely a log line — so the benefit is mostly about the precedent, not the risk.
-
-**Option C**: **Accept it and activate — set `CLEANUP_DRY_RUN=false` now** so the backlog starts draining tonight.
-  - *Pros*: The accumulated rooms, orphaned subtrees and stale users start clearing immediately, and the per-run caps mean any single night is bounded. The over-reach guards are tested, so the two failure modes that would actually hurt are covered.
-  - *Cons*: **Enables live deletion of production data without a single dry-run log ever having been read** — discarding the safety step the spec existed to create, on code that reached production by skipping its authorisation gate. It would also silently adopt the unreviewed 24-hour auth retention. This is the one option where a mistake is unrecoverable.
-
-**Retention: RESOLVED.** The user confirmed **24 hours** on August 31, 2026. The decision, its rationale, and the `ROOM_TTL_MS` coupling invariant are recorded in `design_database_and_security.md` §10.4. It is no longer an open question.
-
-Your selection: Proceed with Option A.
+Your selection: Proceed with Option A. (Completed — Wave V)
 
 ---
 
@@ -373,12 +362,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–142 — August 8 to 31, 2026
+### Issues 65–144 — August 8 to 31, 2026
 
-**67 items.** (**Issue 143 is NOT among them** — its code shipped but its authorisation gate was skipped; tracked as Issue 144, which is open. **Issue 144 is open.**) Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**69 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave V / V1 — deploy gate restoration & cleanup dry-run verification** (verified deployed container env has `CLEANUP_DRY_RUN` absent / inert; redeployed 17 functions from committed tree restoring `./scripts/check_deploy_fresh.sh` to exit 0 bare; triggered and inspected dry-run log: `dryRun=true`, 0 rooms, 101 orphan subtrees swept, 206 auth scanned, 1 referenced, 200 eligible, 0 deleted, 0 errors, 24h retention settled) | 143, 144 | `functions/src/cleanup.ts`; `design_database_and_security.md` §10; `agent_execution_guide.md` §5 |
 | **Wave U / U4 — 5-player soak recovery & presence device verification** (Match N2 executed on 5 live iOS simulators; E49 verified PASS under verbatim assertion contract with wall-clock timestamps at ~2 min / 7:07 and ~11 min / 7:16; R0/U2 Reduce Motion device evidence captured on P3 with background particle suppression) | 135 | `docs/playthroughs/findings_5player.md`; `docs/playthroughs/manifest.md`; `docs/playthroughs/evidence/ARTEFACTS.tsv` |
 | **Wave U / U3 — cut presence network chatter & battery optimization** (heartbeat interval relaxed to 30 s; `_playersSubscription` suppresses `notifyListeners()` on `lastSeen`-only snapshots; `deadPlayers` disconnect evaluations host-gated with 60 s per-player cooldown; `_heartbeatTimer` pauses on `AppLifecycleState.paused` and restarts on `resumed`) | 142 | `lib/services/game_service.dart`; `test/presence_chatter_test.dart`; `design_database_and_security.md` §4 |
 | **Wave U / U2 — real Reduce Motion platform signal** (`lib/theme/app_motion.dart` reads `accessibilityFeatures.reduceMotion` OR `accessibleNavigation`; `AnimatedThinkingBackground` implements `WidgetsBindingObserver` for live updates; `AutoAdvanceTimer` normalised) | 141 | `lib/theme/app_motion.dart`; `lib/widgets/thinking_background.dart`; `lib/widgets/auto_advance_timer.dart`; `design_ui_direction.md` §8 |

@@ -29,7 +29,7 @@ Every number below was produced by running the command in this session. **Two pr
 | `npm --prefix functions run build` | clean, exit 0 |
 | `npm --prefix functions test` | **108 passing**, exit 0 |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
-| `./scripts/check_deploy_fresh.sh` | ⚠️ **exit 1 — STALE** (previously recorded as "exit 0 — FRESH"; that was wrong) |
+| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH** (re-verified after clean redeploy) |
 | `check_playthrough_evidence.sh` *(no args → marionette)* | **exit 0** — 21 blocks, R6: 0 of 3 govern |
 | `… docs/playthroughs/findings_marionette.md` | **exit 0** — 21 blocks, 20 PASS, 1 NOT RUN |
 | `… docs/playthroughs/findings_web.md` | **exit 0** — 20 blocks, 20 PASS |
