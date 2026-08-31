@@ -129,6 +129,83 @@ Upload `build/ios/ipa/*.ipa` to App Store Connect via Xcode's Organizer or the *
 - **Drop-out/rejoin**: force-quit mid-game and reopen — you should recover your seat.
 - **Sound**: quill scratch on submit, wax thunk on vote, the bell on the Truth reveal; the handbell icon mutes everything.
 
+## Releasing
+
+The runbook for shipping a new build. Three surfaces — **web**, **iOS beta**, and **Cloud Functions** — deploy independently; do only the ones your change touches.
+
+### 0. Preflight (always)
+
+Every gate must be green before anything ships. The current expected numbers live in `docs/agent_execution_guide.md` §1 — that file is the source of truth, not this list.
+
+```bash
+flutter analyze lib test          # bar is 0 errors + 0 warnings
+flutter test
+npm --prefix functions run build
+npm --prefix functions test
+./scripts/check_decks_in_sync.sh
+./scripts/check_deploy_fresh.sh
+./scripts/check_playthrough_evidence.sh
+```
+
+> **`flutter analyze` exits 1 even when clean.** It returns non-zero on *infos*, of which there are ~206 (`withOpacity` deprecations, `avoid_print` in tests). **Read the error and warning counts, not the exit code.** Every *other* gate is judged on its exit code — and read those **bare**, never through a pipe: `... | tail` reports the pipe's status, which is always 0.
+
+> **Use `flutter analyze lib test`, never bare `flutter analyze`** — the bare form walks `build/{ios,macos}/SourcePackages` and reports ~678 phantom errors from vendored plugin source.
+
+### 1. Web app
+
+```bash
+flutter build web --release
+npx firebase-tools deploy --only hosting
+```
+
+> **⚠️ `.env` is a declared Flutter asset** (`pubspec.yaml`), so it builds to `build/web/assets/.env`, and `main.dart` calls `dotenv.load()` **before** `runApp()`. If it is missing, the app dies before it paints anything.
+> - The `ignore` list in `firebase.json` **must never gain a dot-file glob** (the `**/.*` pattern) — it would exclude the deployed `.env`. There is a comment in `firebase.json` saying exactly this; heed it.
+> - Before building, confirm `.env` holds the real API keys and that `USE_EMULATOR` is **not** true. It is baked into the bundle at build time — changing it afterwards has no effect.
+
+Hosting already has SPA rewrites (`** → /index.html`), so deep links resolve.
+
+### 2. iOS beta (TestFlight)
+
+**Check the build number first — this is the step that wastes a build if skipped.** iOS takes its version straight from `pubspec.yaml`: `CFBundleShortVersionString = $(FLUTTER_BUILD_NAME)` and `CFBundleVersion = $(FLUTTER_BUILD_NUMBER)`. App Store Connect **rejects a duplicate build number**, and you only find out after the upload.
+
+1. Look up the highest build already in App Store Connect.
+2. Make sure `version:` in `pubspec.yaml` exceeds it (`1.0.0+N`).
+3. Build and upload:
+   ```bash
+   flutter build ipa
+   ```
+   Upload `build/ios/ipa/*.ipa` with Xcode's Organizer or the **Transporter** app.
+4. In App Store Connect → **TestFlight**: internal testers (up to 100, by email) get the build within minutes with no review. External testers need a one-time Beta App Review on the first build.
+
+> **⚠️ Never accept Xcode's "Update to recommended settings" prompt.** It enables `ENABLE_USER_SCRIPT_SANDBOXING` and breaks the iOS build. This has bitten before.
+
+### 3. Cloud Functions — and the flag that vanishes
+
+Only when your change touches `functions/src`.
+
+```bash
+npx firebase-tools deploy --only functions
+```
+
+`predeploy` runs the functions build **and** test suite, so a red suite blocks the deploy. That is intended — do not bypass it.
+
+> **⚠️ Re-apply the cleanup flag immediately afterwards:**
+> ```bash
+> gcloud run services update cleanupdaily --region us-central1 --update-env-vars CLEANUP_DRY_RUN=false
+> ```
+> `CLEANUP_DRY_RUN` lives on the **Cloud Run revision**, and a deploy creates a new revision without it — silently reverting the nightly cleanup to dry-run. The job keeps running and keeps logging; it just stops deleting. **It fails in the safe direction, which is exactly why nobody notices.** Read the value back to confirm:
+> ```bash
+> gcloud run services describe cleanupdaily --region us-central1 \
+>   --format='value(spec.template.spec.containers[0].env)'
+> ```
+> Full detail in `docs/design_database_and_security.md` §10.5.
+
+> **⚠️ Commit before you deploy.** `./scripts/check_deploy_fresh.sh` compares deploy timestamps against the newest `functions/src` commit, so deploying and *then* committing turns that gate red by construction. Afterwards it must exit **0**.
+
+### 4. Order
+
+Land and commit your changes → run the full preflight → bump the build number → deploy functions (if touched, then re-apply the flag) → build and upload the IPA → deploy hosting. Client-side changes must land **before** the IPA is built, or they will not be in the beta.
+
 ## Version Control
 
 When contributing to this repository, please adhere to the following guidelines regarding file commits.
