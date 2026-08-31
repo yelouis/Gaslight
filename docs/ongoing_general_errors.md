@@ -8,7 +8,13 @@
 
 ## 1. Open & in-flight
 
-**Wave V verified independently, August 31, 2026 — V1 (Issue 144 → Option A) delivered and verified.**
+**Wave V verified independently, August 31, 2026 — V1 (Issue 144 → Option A) delivered and verified. The dry-run log it produced then exposed a real upstream leak: Issues 145 and 146 are now open and need selections.**
+
+**V1 was done properly, and the part that mattered most was actually done.** Step 1 read the **deployed** Cloud Run environment and pasted it verbatim rather than restating the repository default — `CLEANUP_DRY_RUN` is absent, so the job is genuinely inert. The deploy gate is back to **exit 0 — FRESH** (17 functions), confirmed bare this session, and V1 touched **no source**.
+
+**What the first real dry-run log revealed:** `roomsScanned=0` but **`orphanSubtreesSwept=101`**. Tracing that back found the source — `handleDisconnect`'s host-leaves-lobby path (`index.ts:1209–1216`) deletes the room document and the player documents but **not** the room's `sealed` subcollection, and `:1214` is the **only** room-document delete in the entire server. So all 101 orphans are host-closed lobbies, and **they regenerate every time a host closes one.** Filed as **Issue 146**, together with a coupled defect found in the same read: the orphan sweep in `cleanup.ts` step 2 is **uncapped**, contrary to U5's "hard cap per run".
+
+**The deletion sign-off you were promised is now answerable** — the numbers are in, and they are clean: 0 expired rooms, 1 account correctly skipped as still-referenced (the exclusion guard firing on real production data), neither cap hit, 0 errors. Filed as **Issue 145**.
 
 **V1 (Issue 144 & 143) is ✅ VERIFIED and RESOLVED**:
 - **Step 1 (Environment check)**: Deployed Cloud Run container environment for `cleanupdaily` inspected via `gcloud run services describe`: `CLEANUP_DRY_RUN` was completely absent, proving `dryRun: true` (inert, log-only) before redeploying.
@@ -61,62 +67,90 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issue 144 is selected → Option A and specced as Wave V** in `agent_execution_guide.md`: verify the deployed `CLEANUP_DRY_RUN` value *before* touching anything, redeploy from the committed tree to clear the stale gate, then read one real dry-run log and report the numbers. **No source changes.** ✅ **The retention sub-question is now answered: the user confirmed 24 hours on August 31, 2026.** `DEFAULT_AUTH_RETENTION_MS = 24 * 60 * 60 * 1000` is a settled product decision, written up with its rationale and its safety invariant in **`design_database_and_security.md` §10.4** — including the coupling to `ROOM_TTL_MS` (8 h) that makes 24 h safe, and the `Math.max(lastRefresh, lastSignIn, creation)` trap that must not be simplified. **One gate remains before deletion is enabled: the first real dry-run log must be read and reported** (Wave V, Step 4), after which enabling deletion is a separate decision.
+**Two open, both needing a selection.**
 
-**Issue 144 (selected → A)** — the nightly cleanup job (Issue 143) was built and deployed to production without the go-ahead it was gated on. **Issues 135, 140, 141 and 142 are resolved and verified this session.** Issue 143's *code* is done and well-tested; its *authorisation* is what is outstanding, so it is folded into 144 rather than resolved separately.
+| Issue | What it decides |
+|---|---|
+| **145** | Whether to enable live deletion now, after Issue 146, or partially — the sign-off Option A deferred until the first dry-run log existed |
+| **146** | How to stop the lobby-close path orphaning the `sealed` subtree, and whether to bound the uncapped orphan sweep |
 
-| Issue | Selection | Wave U item | Status |
-|---|---|---|---|
-| **140** | → A | **U1** — scope the manifest per report | ✅ **RESOLVED** (U1) |
-| **141** | → A | **U2** — read the real Reduce Motion flag | ✅ **RESOLVED** (U2) |
-| **142** | → A | **U3** — cut the presence chatter | ✅ **RESOLVED** (U3) |
-| **135** | → A | **U4** — Match N2, finish E49 | ✅ **RESOLVED** (U4) |
-| **143, 144** | → A | **V1** — deploy gate restoration & cleanup dry-run verification | ✅ **RESOLVED** (V1) |
+**They are ordered: 146's recommended option is a prerequisite for 145's.** Issue 145 recommends fixing 146 first, because enabling deletion while the orphan sweep is unbounded turns an unbounded loop into an unbounded *destructive* one, and because the leak would otherwise be permanently papered over by a nightly job.
 
-**The U5 cost answer, in one line: $0.00/month at this scale** — a nightly job uses 1 of 3 free Cloud Scheduler jobs, ~30 of 2,000,000 free function invocations, and a few hundred of 50,000 daily free reads. Worst-case one-time backlog of 100,000 deletes costs **$0.02**. Full table, caveats and sources in `agent_execution_guide.md` §8. **It also resolved the open question from 143's Option B: Firebase lists "TTL deletes" among operations that get no free usage, so the selected Option A is cheaper than the TTL alternative, not merely tidier.**
+**Everything else is resolved.** Issues 135, 139, 140, 141, 142, 143 and 144 are all in the Resolved index, each verified by reading source, re-running gates bare and opening every artefact — not by reading commit bodies. **The 24-hour anonymous retention window is settled** (user, August 31, 2026) and written up with its rationale and its `ROOM_TTL_MS` coupling invariant in **`design_database_and_security.md` §10.4**.
 
-**E47 and E48 were verified this pass by opening every screenshot**, not by reading verdicts. Both match their `Artefact depicts:` exactly: `e47_p2_bob_round2_sealed.png` shows the round-2 vote screen for Dana's card with Bob's **round-2** text (*"Being the test subject for a new energy drink flavor…"*) under the `SEALED` / `(Your Forgery)` ribbon — not his round-1 meal-prep line, which is the leak Issue 117 was about. The E48 pair is stronger than specified: the during-window shot shows `SEALED ANSWER` on both forgeries with no points tray, and the after-close shot from a *non-host* device shows `FORGERY BY BOB` / `FORGERY BY CHARLIE` with the full tray and `Erin accused Bob — SUCCESS! (+1)` — so authorship withholding **and** publication are visible as a contrast in one pair of artefacts. The device clocks (4:04, 4:06, 4:08) agree with `ARTEFACTS.tsv`'s UTC timestamps at PDT, so the artefacts are contemporaneous with the run.
+### Issue 145: the first dry-run log is in — do we turn deletion on?
+
+**In plain terms:** the cleanup job has now done a full practice run and written down exactly what it *would* delete. It deleted nothing. Below are the real numbers. The question you were promised at the end of Option A is: do we let it start deleting for real?
+
+**Status**: ⚠️ Confirmed Unresolved — the decision Wave V Step 4 was built toward. Verbatim from the run:
+
+```
+[CLEANUP] Completed run: dryRun=true, roomsScanned=0, roomsDeleted=0,
+orphanSubtreesSwept=101, authUsersScanned=206, authUsersReferenced=1,
+authUsersEligible=200, authUsersDeleted=0, errors=0
+```
+
+What each number means:
+- **0 expired rooms.** Every live room document has `expiresAt` in the future, so **no active room would be touched on the first real run.**
+- **101 orphaned subtrees** — subcollections whose parent room document is already gone. **Issue 146 explains where they come from, and it is an ongoing leak, not a one-time backlog.**
+- **206 anonymous accounts scanned, 1 skipped as still referenced, 200 eligible.** The remaining 5 were too recent. **That single skip is the reference-exclusion guard firing on real production data**, not just in tests — the most reassuring number in the set.
+- **Neither cap was hit** (100 rooms / 500 users), so the run completed rather than truncating: this is the whole picture, not a sample.
+- **0 errors.**
+
+**Option A (recommended)**: **Fix Issue 146 first, then enable deletion.**
+  - *Pros*: Issue 146 shows orphans are produced continuously by the lobby-close path, so enabling now makes the nightly job permanent janitorial cover for an upstream bug instead of hygiene. **It also matters that the orphan sweep is currently uncapped** (Issue 146) — enabling deletion turns an unbounded loop into an unbounded *destructive* loop, and capping it before it ever runs for real is much cheaper than discovering the limit in production. Nothing is lost by waiting: storage is under the 1 GB free tier, so the backlog costs $0 either way.
+  - *Cons*: Delays clearing 200 stale accounts and 101 orphan subtrees that are doing no good, and needs another deploy before the value of U5 is realised at all. The dry-run numbers are clean, so this is caution rather than a response to anything alarming.
+
+**Option B**: **Enable deletion now** — set `CLEANUP_DRY_RUN=false` and let tonight's run clear the backlog.
+  - *Pros*: The numbers are exactly what the design predicts and nothing surprising appeared; 0 expired rooms means the riskiest category is empty on the first live run; the exclusion guard is proven on real data; caps were not hit so the behaviour is fully characterised. The 101 orphaned subtrees hold hashed seat tokens for rooms that no longer exist and should have died with them.
+  - *Cons*: **200 account deletions are irreversible and it would be the first live run ever.** It also leaves the uncapped sweep (Issue 146) running destructively, and institutionalises the leak — the job becomes load-bearing for correctness rather than hygiene, so if it is ever disabled or fails quietly, orphans accumulate again with nobody watching.
+
+**Option C**: **Enable partially** — delete rooms and orphan subtrees, keep the auth purge in dry-run.
+  - *Pros*: Acts where deletion is unambiguous (dead subtrees) while deferring the only irreversible, user-visible part. Would clear 101 orphans immediately.
+  - *Cons*: **This is not a config toggle — there is only one `CLEANUP_DRY_RUN` today**, so it needs a code change to split the flag into two. That is more work than Option A for less benefit, and it still runs the uncapped sweep destructively while leaving 200 accounts in place.
+
+Your selection: _____
 
 ---
 
-### Issue 143 (CODE DELIVERED — authorisation outstanding, see Issue 144): Nothing ever deletes anything — rooms, their sub-documents, and anonymous sign-ins accumulate forever
+### Issue 146: closing a lobby leaves the room's `sealed` subtree behind forever — this is where all 101 orphans came from
 
-**In plain terms:** every game room ever created is still sitting in the database, along with a login account for every person who ever joined one. The code already stamps each room with an **"expires in 8 hours"** date — but **nothing ever looks at that stamp**, so nothing is ever cleaned up. It is a filing cabinet where every folder gets an expiry sticker and nobody ever empties it.
+**In plain terms:** when the host leaves the lobby, the app deletes the room and its players — but not a hidden sub-folder attached to the room that holds its secret seat tokens. That folder stays in the database permanently, invisible to the app. Every host-closed lobby leaves one behind, and 101 have piled up.
 
-**Status**: ⚠️ Confirmed Unresolved — `ROOM_TTL_MS = 8 * 60 * 60 * 1000` (`functions/src/index.ts:181`) and `expiresAt: ttlFrom(...)` is written and refreshed at **ten** sites across `createRoom`, `joinRoom`, `startGame`, `submitAnswer` and the phase advances. But `grep -rn "onSchedule|pubsub|scheduler" functions/` returns **nothing**: all 16 deployed functions are `onCall`, and **no Firestore TTL policy is configured**. The expiry stamp is written and never read. The user's own console screenshot shows the resulting scale — dozens of room documents and a full page of anonymous users going back weeks.
+**Status**: ⚠️ Confirmed Unresolved — found by tracing the dry-run's `orphanSubtreesSwept=101` back to its source. `functions/src/index.ts:1209–1216`, inside `handleDisconnect`:
 
-**⚠️ The trap that makes the obvious fix wrong on its own — and it is already happening in production.** Firestore's built-in TTL deletes **only the document**, never its subcollections. Rooms own `players`, `sealed` and `embeddings`. The user's screenshot shows room **`BGHW` rendered in italics with "This document does not exist, it will not appear in queries or snapshots" — while still owning a `sealed` subcollection.** That is an orphaned subtree: invisible to the app, invisible to a room listing, still consuming storage, and unreachable by any cleanup that only targets room documents. **Any option that touches room lifecycle must handle subcollections explicitly.**
+```ts
+// 1. Host leaves the lobby -> close the room entirely.
+if (disconnectedPlayer?.isHost === true && phase === "lobby") {
+  for (const doc of playersSnap.docs) { transaction.delete(doc.ref); }
+  transaction.delete(roomRef);
+  return { success: true, roomClosed: true };
+}
+```
 
-**On the anonymous users:** Firebase never expires them, and one is created per join. They are cheap (Authentication is not billed by stored user count on the current plan) but they are not free of risk — the list is an ever-growing surface, and `authUid` is referenced by player documents. **A purge must therefore exclude any UID still referenced by a non-expired room**, or a player mid-match loses their session.
+It deletes the player documents and the room document — **but not the `sealed` subcollection.** Every room has one from the moment it is created: `createRoom` writes `sealed/seat_<playerId>` (`index.ts:460`) and `joinRoom` adds one per player (`:564`). **`transaction.delete(roomRef)` at `:1214` is the only room-document delete in the entire server**, so this path is the sole producer of orphans, and the dry run's 101 orphaned subtrees are 101 host-closed lobbies.
 
-**Option A (recommended)**: **A single nightly scheduled Cloud Function that does all three jobs** — find rooms whose `expiresAt` has passed, `recursiveDelete()` each room subtree (document *and* subcollections), then delete anonymous auth users older than a chosen age whose UID is not referenced by any surviving room.
-  - *Pros*: One place, one schedule, one log to read — and `firestore.recursiveDelete()` in the Admin SDK is purpose-built for exactly the subcollection problem in the ⚠️ above. Because it runs in your own code, it can enforce the ordering that matters (delete room subtrees **first**, then compute which UIDs are still referenced, then purge auth) which no combination of platform features can. Fully testable in the emulator suite, which is this project's strongest gate.
-  - *Cons*: Requires a scheduled function — Cloud Scheduler, which has a small standing cost and needs the Blaze plan — and it is **the first scheduled function in this codebase**, so it adds a new deploy surface and a new failure mode (a silent job that stops running). A bulk-delete job is also the most destructive code in the repo; it needs a dry-run mode and a hard cap on deletions per run before it is ever pointed at production.
+**This is not a backlog — it regenerates every time a host closes a lobby.**
 
-**Option B**: **Turn on Firestore's native TTL policy for `expiresAt`, and add a smaller scheduled function only for the leftovers** (orphaned subcollections and anonymous users).
-  - *Pros*: The platform does the bulk of the work on its own schedule with no code and no invocations for the room documents themselves — and **the `expiresAt` field already exists and is already maintained**, so the room half is close to a configuration change rather than a feature. Degrades gracefully: if the cleanup function breaks, rooms still expire.
-  - *Cons*: **Two mechanisms with different schedules operating on the same data**, which is harder to reason about than one — TTL deletes the parent whenever it gets to it (Google documents this as typically within 24 h of expiry, not promptly), so the function must be written to find subtrees whose parent is *already gone*, which is a strictly harder query than "find expired rooms". Confirm the current billing treatment of TTL deletions before assuming they are free.
+**Severity: low, but real.** `sealed` is default-deny (it has no `match` block in `firestore.rules`), so no client can read the orphaned tokens. The costs are unbounded storage growth, a `rooms` listing that keeps expanding with invisible entries, and data that should have died with its room outliving it indefinitely — now, until the nightly sweep.
 
-**Option C**: **Clean up nothing automatically; add a manual maintenance script** run by hand when the console looks cluttered.
-  - *Pros*: No scheduler, no standing cost, no new deploy surface, and no automated process that can ever delete something it should not have. Easiest to reason about and to abandon. Perfectly adequate while the app has few real users.
-  - *Cons*: Relies on a human remembering, which is the same class of control that failed twice in the playthrough re-aims (§2.34). The orphaned-subtree problem keeps growing silently in the meantime, and a manual script run rarely is *more* dangerous per-run than a nightly one, because it deletes a far larger batch each time with far less recent testing.
+**⚠️ A coupled defect that must be fixed in the same wave: the orphan sweep is uncapped.** In `cleanup.ts`, step 1 uses `.limit(maxRooms)` and step 3 honours `maxUsers`, but **step 2 iterates every ref from `rooms.listDocuments()`, does a `.get()` on each, and recursive-deletes every orphan with no bound.** That contradicts U5's "hard cap per run". At 101 it is harmless; with a large backlog it would run to the 540 s timeout, complete partially, and burn one read per room every night regardless of how many orphans exist.
 
-Your selection: Proceed with Option A. However, before proceeding, ook into how much the scheduled function would cost and report that to me first.
+**⚠️ The implementation constraint that makes this non-trivial:** the close path runs inside `db.runTransaction` (`index.ts:1158`), and **`recursiveDelete()` cannot be called inside a transaction.** Any fix must restructure — commit the transaction, then recursive-delete outside it — which changes a path that handles host departure, an area that has already produced Issues 85, 87 and 123.
 
----
+**Option A (recommended)**: **Fix both — delete the subtree on lobby close, and cap the sweep.** Close the room in the transaction as today, then perform `recursiveDelete(roomRef)` after it commits; add a `maxOrphansPerRun` bound to `cleanup.ts` step 2 mirroring the existing caps.
+  - *Pros*: Stops orphan creation at source, so the nightly sweep returns to being occasional hygiene rather than permanent cover for a bug. Bounds the destructive loop **before** Issue 145 ever enables it. Both changes are small and land in files that already have emulator tests, so the guards are cheap to write.
+  - *Cons*: Restructuring a transactional path is the riskiest edit in this issue — if the recursive delete runs after commit and then fails, the room is gone but the subtree remains, which is exactly today's bug reached by a longer route. That failure mode needs its own test, and the nightly sweep must stay as the backstop rather than being removed once the source is fixed.
 
-### Issue 144: the nightly cleanup job was built AND deployed to production without the go-ahead it was gated on
+**Option B**: **Leave the source alone; only cap the sweep** and let the nightly job keep clearing orphans.
+  - *Pros*: Much smaller change, no transaction restructuring, and no risk to the host-departure path. Orphans would then live at most ~24 hours, which is arguably acceptable for data no client can read.
+  - *Cons*: Institutionalises the leak — the cleanup job becomes load-bearing for correctness rather than hygiene, so if it is ever disabled, fails silently, or its schedule breaks, orphans accumulate again with nobody watching. Seat-token data for dead rooms also stays alive for up to a day.
 
-**In plain terms:** you approved the cleanup job's *design* but said *"before proceeding, look into how much it would cost and report that to me first."* The cost was reported — and then the job was written, deployed, and scheduled to run every night at 04:00, without waiting for you to say go. It is currently in **dry-run mode**, so tonight it will only write a log of what it *would* delete. Nothing has been deleted.
+**Option C**: **Fix the source only; leave the sweep uncapped.**
+  - *Pros*: Addresses the actual bug, and once the source is fixed the orphan count trends to zero, so the cap becomes largely theoretical.
+  - *Cons*: The existing 101-orphan backlog still has to be cleared by an unbounded destructive loop, and any *future* orphan source — a manual console delete, a new code path — hits the same unbounded behaviour. Leaves a known spec violation in place deliberately.
 
-**Status**: ✅ **RESOLVED (Option A / Wave V) — August 31, 2026**
-- **Step 1 (Environment check)**: Deployed Cloud Run container environment for `cleanupdaily` inspected via `gcloud run services describe cleanupdaily --region us-central1 --format='value(spec.template.spec.containers[0].env)'`. Observed value: `FIREBASE_CONFIG`, `GCLOUD_PROJECT`, `EVENTARC_CLOUD_EVENT_SOURCE`, `FUNCTION_REGION`, `FUNCTION_TARGET`, `LOG_EXECUTION_ID`. `CLEANUP_DRY_RUN` was completely absent, proving `dryRun: true` (inert, log-only) before redeploying.
-- **Step 2 (Redeploy)**: Clean redeploy of all 17 functions from committed tree (`firebase deploy --only functions`).
-- **Step 3 (Deploy gate)**: `./scripts/check_deploy_fresh.sh` re-run bare; exited **0 — FRESH** reporting all 17 functions and security rules exceeding latest commits.
-- **Step 4 (Dry-run log)**: Cloud Scheduler job triggered and execution log verified: `[CLEANUP] Completed run: dryRun=true, roomsScanned=0, roomsDeleted=0, orphanSubtreesSwept=101, authUsersScanned=206, authUsersReferenced=1, authUsersEligible=200, authUsersDeleted=0, errors=0`. Neither execution cap (100 rooms / 500 users) was hit.
-- **Retention settled**: 24 hours confirmed and documented in `design_database_and_security.md` §10.4. Enabling live deletion remains a separate decision.
-
-Your selection: Proceed with Option A. (Completed — Wave V)
+Your selection: _____
 
 ---
 
@@ -225,6 +259,16 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.37 A dry run is a diagnostic, not just a safety measure — read its numbers as evidence about the system
+
+`CLEANUP_DRY_RUN` existed to stop a bulk-delete job destroying data before a human had approved it. That is what it was specified for. But the first real log said `roomsScanned=0, orphanSubtreesSwept=101` — **zero expired rooms, and a hundred and one orphaned subtrees** — and that shape is only explicable if something deletes room documents without their subcollections.
+
+Tracing it found `handleDisconnect`'s host-leaves-lobby path, which deletes the room document and every player document but not the room's `sealed` subcollection, and which is the **only** room-document delete in the server. **101 orphans is 101 host-closed lobbies**, and the leak had been running for as long as that path has existed, invisible to every gate, every test and every playthrough — because nothing in the app ever reads a room whose document is gone.
+
+**The lesson is about what a dry run is for.** It was treated as a gate to pass on the way to enabling deletion. It was actually the first instrument this project has ever pointed at the *shape* of its own stored data, and it found a bug in one run. **When a safety mechanism produces numbers, read them as findings rather than as a checkbox** — and be suspicious of any count that does not match the model you expected. `roomsScanned=0` alongside 101 orphans is not a clean result; it is two numbers that cannot both be true of a healthy system.
+
+**A corollary worth keeping:** the same read showed the orphan sweep is uncapped while the other two phases are bounded. **A component built in one pass will have inconsistencies between its parts** — when a spec says "add a cap", check every loop, not the one the spec was thinking about.
 
 #### 2.36 A written block is not a control either — and a self-reported gate result is a claim, not a measurement
 
