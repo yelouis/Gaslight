@@ -8,7 +8,13 @@
 
 ## 1. Open & in-flight
 
-**No open issues in flight.** Wave W (W1 & W2) has been fully implemented, verified, and shipped to production on August 31, 2026.
+**Wave W verified independently, August 31, 2026 — both items hold up, and this is the cleanest wave so far. Two low-priority issues (147, 148) were filed by that pass and await selection.**
+
+**Independently reproduced this session, not taken from commit bodies:**
+- **W1's falsification.** Reverting *only* the post-commit `recursiveDelete` block yields **111 passing, 1 failing** — `AssertionError: expected false to be true` on `sealedSnap.empty` — while all three over-reach guards still pass. That is the correct shape: exactly one test catches the regression, and the guards are not false positives. The transaction's contents were genuinely left untouched (the diff is two hunks), and the sweep's `break` sits **before** the counter increment, so the `.get()` scan is bounded and not just the deletions.
+- **W2's live state.** Read directly from the deployed service: `{'name': 'CLEANUP_DRY_RUN', 'value': 'false'}`. Deletion is active and the flag has survived — which matters, because §10.5 records that a redeploy silently drops it.
+
+**The dry run predicted the live run almost exactly**, which is the strongest evidence this project has produced about its own stored data: predicted **101** orphaned subtrees and ~**200** stale accounts; delivered **98 + 3 = 101** across two runs and **200**, with `authUsersReferenced=1` both times — the exclusion guard holding on real data. **The cap earned itself on its first live run**, stopping the scan at 100 and leaving the remainder for run 2.
 
 **Wave W (W1 & W2) is ✅ VERIFIED and RESOLVED**:
 - **W1 (Issue 146 → Option A)**: Stopped the lobby-close path from orphaning the `sealed` subcollection by performing `db.recursiveDelete(roomRef)` post-transaction in `handleDisconnect` (`index.ts:1352`). Capped the nightly orphan sweep at `DEFAULT_ORPHAN_SWEEP_LIMIT = 100` (`maxOrphansPerRun`) in `cleanup.ts` on the document scan iteration (`orphanSubtreesScanned`) to bound read costs. Retained the nightly sweep as an essential backstop. Added 4 unit/emulator tests (112 functions tests total, all passing). Falsification tests verified.
@@ -55,7 +61,69 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open unresolved issues.** All open items (Issues 145 and 146) are resolved in Wave W.
+**Two open, both filed by the verification pass of August 31, 2026 now that the queue is otherwise empty. Neither is urgent.**
+
+---
+
+### Issue 147: the game-over screen's ember ticker never stops, so it burns frames for an animation Reduce Motion users cannot see
+
+**In plain terms:** the Game Over screen has a drifting ember background. If a player has Reduce Motion switched on, the app correctly draws a *still* ember picture instead — but the animation engine behind it keeps running anyway, asking the phone to redraw the screen sixty times a second for a picture that never changes. It is the screen players sit on longest at the end of a match.
+
+**Status**: ⚠️ Confirmed Unresolved — carried across four waves as *"latent, do not fix without filing"*, and this is that filing. `lib/screens/game_over_screen.dart:900`, in `_EmberBackdropState.initState`:
+
+```ts
+_controller = AnimationController(duration: const Duration(seconds: 10), vsync: this)..repeat();
+```
+
+The `..repeat()` is unconditional and the class has **no `AppMotion.reduce` check and no `didChangeDependencies`**. Its `build` *is* correct — it returns a `_StaticEmberPainter` under Reduce Motion (`:924–938`) — so **the accessibility behaviour is right and this is not a visual bug.** The defect is that the controller and the rendered branch disagree: a repeating `AnimationController` keeps a `Ticker` registered with `SchedulerBinding`, which keeps requesting frames whether or not anything reads it.
+
+**Two costs, and the second is the one that has been recorded until now:**
+1. **Battery.** A Reduce Motion user pays a continuous frame request on the terminal screen of every match, for an image that is static by design. Small, but it is precisely the population that asked for less.
+2. **A latent test hazard.** Because the tree never reaches a resting state, **`pumpAndSettle` on the game-over screen would hang** exactly as Issue 138 did — ten minutes per test, no output. Latent only because neither `game_over_screen_test.dart` nor `badge_pills_overflow_test.dart` calls it today (both use `pump`). The next person to write a game-over widget test hits it.
+
+**Option A (recommended)**: **Apply the pattern R0 already established.** Add `didChangeDependencies` to `_EmberBackdropState`: stop the controller when `AppMotion.reduce(context)` is true, restart it when false and not already animating — exactly as `AnimatedThinkingBackground` does.
+  - *Pros*: ~8 lines, and it is a pattern this codebase already uses, tested and falsified in Wave R — so it needs no new thinking and reviews trivially. Removes the last known instance of the `pumpAndSettle` trap, so the standing warning in the guide can finally be retired rather than carried forward another wave.
+  - *Cons*: Leaves the underlying shape intact — the controller's lifecycle is still managed in a different place from the branch that decides whether it is read, so the two can drift apart again if someone edits one and not the other. Fixes this instance, not the class.
+
+**Option B**: **Drive the controller from the branch that uses it** — start it when `build` takes the animated path and stop it when it takes the static path, so the controller's state cannot disagree with what is rendered.
+  - *Pros*: Removes the class of bug rather than the instance: it becomes structurally impossible for a ticker to run while a static painter is on screen. Would also have prevented Issue 141's symptom on this screen.
+  - *Cons*: Starting and stopping an `AnimationController` from inside `build` is a side effect in a method that must stay pure, and Flutter will not stop you doing it wrongly — it invites a rebuild loop. Doing it safely needs the call deferred (a post-frame callback or a small state machine), which is more machinery than this screen warrants.
+
+**Option C**: **Accept it and record it.** The visuals are already correct, no test touches it, and the cost is one screen.
+  - *Pros*: No code change, no risk, and honest — the accessibility behaviour genuinely is right, which is the part users experience. The frame cost is real but small and bounded to a terminal screen.
+  - *Cons*: Keeps a known `pumpAndSettle` landmine in the tree for someone to step on, and the guide must keep carrying the warning indefinitely. "Accepted" defects that are one small function away from fixed tend to be re-discovered and re-litigated rather than remembered.
+
+Your selection: _____
+
+---
+
+### Issue 148: E9's `NOT RUN` reason is obsolete, and its assertion has since been covered
+
+**In plain terms:** one old playthrough block says it could not be run because there weren't enough test phones. That stopped being true a while ago — the project now routinely runs five — and another block has since tested the same thing more thoroughly. The record still reads as though it is an outstanding gap.
+
+**Status**: ⚠️ Confirmed Unresolved — `docs/playthroughs/findings_marionette.md`, block **E9 — Mid-Game Departure in 4-Player Match**:
+
+> **Verdict:** NOT RUN
+> **Reason:** Requires a 4th physical simulator instance; verified via unit test `test/simulation_test.dart` and Cloud Function transaction logic at `functions/src/index.ts:986`.
+> **Expected:** In a 4-player game, 1 player departing leaves the remaining 3 players in active match.
+
+**The stated blocker no longer exists** — the five-player soak harness runs five simulators as a matter of course. **And the assertion has been covered since:** `findings_5player.md` **E31 — "Guest departs during FORGERY (4 → 3) and chain re-links"** is E9's exact scenario (four players, one departs, three remain active) *plus* the forgery-chain re-link, and it passed with a screenshot showing room `YOGU` and Charlie re-pointed to Bob.
+
+**Why this is filed rather than just corrected:** editing a playthrough block's `Reason` without a decision is the shape of change that produced Issues 135 and 146's predecessors. **This project's rule is that playthrough records are not edited on an agent's own initiative**, even when the edit is plainly an improvement. Low priority — the gate is green either way and nothing is blocked.
+
+**Option A (recommended)**: **Annotate E9 as superseded** — keep `Verdict: NOT RUN`, and extend its `Reason:` with a pointer to E31 in `findings_5player.md`, noting the original blocker no longer applies.
+  - *Pros*: Preserves the audit trail exactly — the block still reads NOT RUN, which is true, and nobody reading the Wave N report is left thinking a four-player departure has never been checked. Costs one line and no device time.
+  - *Cons*: Adds a cross-report reference, which is a small maintenance burden if E31 is ever renumbered — and this project has already been bitten by cross-document pointers going stale (the manifest scoping regression, Issue 140).
+
+**Option B**: **Re-run E9 properly** on the five-simulator harness and give it a real verdict.
+  - *Pros*: Removes the last `NOT RUN` from every playthrough report, so "all blocks PASS" becomes literally true across all three.
+  - *Cons*: Spends a full five-device setup to re-prove something E31 already proved with a screenshot. That is the definition of low-value device time, and device time has been this project's scarcest resource for six waves.
+
+**Option C**: **Leave E9 exactly as it is.**
+  - *Pros*: Zero work, zero risk, and the block is not *wrong* — it was genuinely not run.
+  - *Cons*: The stated reason is now false, and a false reason in an evidence record is the thing this project has spent four waves learning to distrust. Anyone auditing the reports later has to re-derive that E31 covers it.
+
+Your selection: _____
 
 ---
 
@@ -166,6 +234,14 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
+
+#### 2.38 A prediction followed by a matching outcome is much stronger evidence than either alone
+
+Wave V's dry run said it would sweep **101** orphaned subtrees and purge **200** stale accounts. Wave W's live runs swept **98 + 3 = 101** and purged **200**, with `authUsersReferenced=1` both times. Neither number alone would prove much — a dry run is a claim about what code *would* do, and a live run is a report from the same code about itself. **Together they are a prediction and its outcome, and the match is what makes them evidence.**
+
+This is cheap to arrange wherever a destructive operation has a rehearsal mode: **write the predicted figures down before the real run, then compare, and say plainly whether they matched.** A divergence would have been the most useful possible signal — it would have meant the rehearsal and the live path do not execute the same logic, which is the failure that makes rehearsal worthless.
+
+**The corollary is the alarm condition.** W2's spec named one in advance: `authUsersReferenced` dropping to **0** would mean the guard protecting live players' accounts had matched nothing. **Naming the number that would mean "stop" before the run is what turns monitoring into a check rather than a narration.**
 
 #### 2.37 A dry run is a diagnostic, not just a safety measure — read its numbers as evidence about the system
 
