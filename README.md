@@ -169,13 +169,33 @@ Hosting already has SPA rewrites (`** → /index.html`), so deep links resolve.
 **Check the build number first — this is the step that wastes a build if skipped.** iOS takes its version straight from `pubspec.yaml`: `CFBundleShortVersionString = $(FLUTTER_BUILD_NAME)` and `CFBundleVersion = $(FLUTTER_BUILD_NUMBER)`. App Store Connect **rejects a duplicate build number**, and you only find out after the upload.
 
 1. Look up the highest build already in App Store Connect.
-2. Make sure `version:` in `pubspec.yaml` exceeds it (`1.0.0+N`).
-3. Build and upload:
+2. Make sure `version:` in `pubspec.yaml` exceeds it (`1.0.0+N`). **Check whether a previous commit already bumped it** before adding one.
+3. Build:
    ```bash
    flutter build ipa
    ```
-   Upload `build/ios/ipa/*.ipa` with Xcode's Organizer or the **Transporter** app.
-4. In App Store Connect → **TestFlight**: internal testers (up to 100, by email) get the build within minutes with no review. External testers need a one-time Beta App Review on the first build.
+
+   > **⚠️ Expect this to fail at the export step, and expect that to be fine.** On a machine with no **Apple Distribution** certificate in the keychain, `exportArchive` errors with `No Accounts` and `No signing certificate "iOS Distribution" found`. **This is not a build failure — the `.xcarchive` is still produced, and that is the only thing you need.** The command-line exporter cannot create a distribution certificate; Xcode's Distribute flow can, interactively, which is why step 4 works when this step does not.
+   >
+   > Check with `security find-identity -v -p codesigning` — if you only see *Apple Development*, the CLI export will never succeed on this machine.
+
+4. **Verify the archive — not the `.ipa`.** A stale `.ipa` from an earlier successful export sits in `build/ios/ipa/` indefinitely and will happily upload the wrong build. Check the artefact you are about to distribute:
+   ```bash
+   stat -f "%Sm" -t "%Y-%m-%d %H:%M" build/ios/archive/Runner.xcarchive
+   /usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleVersion" \
+     build/ios/archive/Runner.xcarchive/Info.plist
+   ```
+   The timestamp must be from **this** build and the version must be the number you intend to ship.
+
+5. **Distribute from Xcode's Organizer** — this is the path that works, not Transporter:
+   ```bash
+   open build/ios/archive/Runner.xcarchive
+   ```
+   Organizer opens with the archive selected → **Distribute App** → **App Store Connect** → **Upload**. Let it manage signing; that is what creates the distribution certificate. Transporter is only useful when you already have a valid `.ipa`, which you will not have if step 3's export failed.
+
+6. In App Store Connect → **TestFlight**: internal testers (up to 100, by email) get the build within minutes with no review. External testers need a one-time Beta App Review on the first build.
+
+7. **Expire the previous build** so testers stop playing an older client, and put a line in **What to Test** so they know what changed.
 
 > **⚠️ Never accept Xcode's "Update to recommended settings" prompt.** It enables `ENABLE_USER_SCRIPT_SANDBOXING` and breaks the iOS build. This has bitten before.
 
