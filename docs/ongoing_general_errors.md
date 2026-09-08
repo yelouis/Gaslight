@@ -76,7 +76,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**One open: deferred at user's direction.**
+**Two open. Issue 152 is new and is the priority** — the lobby's leave button dies permanently after the first leave; reported from TestFlight build 6 and deterministically reproducible. **Issue 150 remains deferred, and its trigger has now fired favourably:** on build 6 the user confirmed `v1.0.0 (6)` on the title screen and `PEEK INSIDE` is plainly legible in the deck card, so the original report was a build-version artefact rather than a discoverability failure. It can be closed once the user confirms they are content with the affordance as it stands.
 
 | Issue | Selection | Wave Y item |
 |---|---|---|
@@ -85,6 +85,76 @@
 **⚠️ On the deferral of 150, one fact should not be re-derived:** it is about confirming behaviour on a device, **not** about whether the feature shipped. That was already settled — `strings -a` on the build-5 archive finds `PEEK INSIDE`, `A TASTE OF WHAT'S INSIDE` and `SHUFFLE`, all absent from the build-2 IPA, and `test/deck_peek_test.dart:150` passes. **The button is in the app and it renders**; it is 8.5 pt text on a 150 × 110 pt card. **The trigger to revisit is: Y1 ships, the user confirms on-device which build they are running, then re-checks whether the button is findable.**
 
 **Issue 150** — the deck "PEEK INSIDE" affordance is 8.5 pt text in the corner of a 150 × 110 pt card, and the person who commissioned the feature could not find it in the shipped app. Everything else (Issues 1–149, 151) is resolved and indexed in Section 3.
+
+---
+
+### Issue 152: after leaving one room, the lobby's leave button is dead for the rest of the session
+
+**In plain terms:** leave a room, then join or create another one, and the exit button in the top-left stops working. Tapping it does nothing at all — no dialog, no error, no feedback. The only way out is to force-quit the app.
+
+**Status**: ⚠️ Confirmed Unresolved — reported from TestFlight build `1.0.0 (6)` and traced to a one-way latch in `lib/screens/lobby_screen.dart`:
+
+```dart
+bool _isLeaving = false;                       // :43
+
+void _confirmLeave(BuildContext context, GameService gs, bool isHost) {
+  if (_isLeaving) return;                      // :49  — silently does nothing
+  ...
+}
+
+// inside the confirm button of the leave dialog
+onPressed: () async {
+  if (_isLeaving) return;                      // :100
+  _isLeaving = true;                           // :101 — set here, and nowhere else
+  Navigator.of(ctx).pop();
+  await gs.leaveRoom();
+},
+```
+
+**`grep -n "_isLeaving" lib/screens/lobby_screen.dart` returns exactly four lines: the declaration and three reads/writes. There is no `_isLeaving = false` in the file.** Once set, it stays set.
+
+**Why that survives leaving the room — this is what makes it a real bug rather than a theoretical one.** `LobbyScreen` renders **both** the entry screen and the in-room parlour from a single `State`, as a conditional inside `build` (`:433–449`):
+
+```dart
+if (gs.gameState != null && gs.currentPlayer != null) { … THE PARLOR … }
+return AnimatedLobbyBackground(child: _buildEntryForm(theme));
+```
+
+`LobbyScreen()` is pushed once as a route (`lib/main.dart:120`). Leaving clears `gameState` and re-renders the entry branch — **it does not pop a route and does not dispose the State.** So `_isLeaving` carries into the next room.
+
+**Reproduction, deterministic:**
+1. Create or join a room.
+2. Tap the leave icon → confirm `CLOSE ROOM` / `LEAVE`. Sets `_isLeaving = true`. You return to the guest ledger.
+3. Create or join another room.
+4. Tap the leave icon. **Nothing happens, and nothing will happen again this session.**
+
+**Why the existing tests miss it.** `test/lobby_leave_test.dart` has seven cases including *"double-tapping confirm leaves exactly once"* (`:194`) — which is precisely why the latch exists, and that test still passes. **No test leaves two rooms in a row from the same screen**, which is the ordinary user journey and the only one that exposes it.
+
+**Severity: high for playtesting.** This is the only way out of a room. A host who leaves once cannot close their next room, and there is no error to suggest anything is wrong — the button is simply inert. `gs.leaveRoom()` already catches its own `handleDisconnect` failures internally, so this is **not** network-dependent: it reproduces on a clean, fully successful leave.
+
+**Option A (recommended)**: **Reset the latch in a `finally`:**
+```dart
+onPressed: () async {
+  if (_isLeaving) return;
+  _isLeaving = true;
+  Navigator.of(ctx).pop();
+  try { await gs.leaveRoom(); } finally { if (mounted) _isLeaving = false; }
+},
+```
+  - *Pros*: One line of real change, and it preserves exactly what the latch was for — a second tap during the in-flight `leaveRoom()` still short-circuits, so the *"double-tapping confirm leaves exactly once"* regression test passes unchanged. The `finally` also covers the exception path, so a throw from `_clearLocalRoomState()` cannot re-arm the dead-button state.
+  - *Cons*: The flag stays a mutable field on a `State` that outlives every room, so the *class* of bug remains — a future path that sets it without a matching reset reintroduces exactly this. It depends on every writer remembering the `finally`, which is the same discipline that failed here.
+
+**Option B**: **Tie the flag's lifetime to being in a room** — clear `_isLeaving` whenever the screen renders the entry branch (`gs.gameState == null`).
+  - *Pros*: Self-healing regardless of *how* the room was left — including paths that never touch the dialog, such as the host closing the room from another device, a presence eviction, or any future leave control. It makes the flag mean "a leave is in flight *from this room*", which is what it was always meant to mean.
+  - *Cons*: The natural place is inside `build`, and mutating state during `build` risks *"setState() called during build"* and is easy to get subtly wrong. Doing it properly needs `didChangeDependencies` or a listener, spreading the lifecycle across two places — harder to follow than one `finally`, on a screen already past 1,300 lines.
+
+**Option C**: **Scope the guard to the dialog** — hold the flag inside the dialog via a `StatefulBuilder` and delete `_isLeaving` from the `State`.
+  - *Pros*: The guard's lifetime becomes exactly the dialog's lifetime, so it **cannot** leak across rooms by construction. The bug class disappears rather than being patched.
+  - *Cons*: The dialog is popped *before* `await gs.leaveRoom()`, so a dialog-scoped flag dies while the leave is still in flight — it would no longer stop the user re-opening the dialog mid-leave, which `:49` currently prevents. Making that safe means restructuring the flow (keep the dialog up, show a spinner, pop on completion), a larger change to a path with a passing regression test guarding it.
+
+**Whichever is chosen, the missing test is the same and is the real fix:** leave a room, return to the entry screen, join a second room, and assert the leave dialog **still opens**. That journey is what seven existing tests never exercise.
+
+Your selection: _____
 
 ---
 
