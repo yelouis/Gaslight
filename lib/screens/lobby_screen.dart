@@ -20,6 +20,7 @@ import '../widgets/room_code_plaque.dart';
 import '../widgets/deck_carousel.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
+import '../main.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -1349,6 +1350,19 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                   ),
                                 ),
                               ),
+                              if (appVersionDisplay.isNotEmpty) ...[
+                                SizedBox(height: isSmallHeight ? 2 : 4),
+                                Text(
+                                  appVersionDisplay,
+                                  style: TextStyle(
+                                    fontFamily: 'Lora',
+                                    fontSize: 10.5,
+                                    color: ivoryColor.withValues(alpha: 0.4),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ] else
+                                const SizedBox.shrink(),
                             ],
                           ),
                         ),

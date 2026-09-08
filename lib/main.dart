@@ -17,11 +17,24 @@ import 'screens/phase2_craft.dart';
 import 'screens/phase3_vote.dart';
 import 'screens/phase4_reveal.dart';
 import 'screens/game_over_screen.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'services/game_service.dart';
 
 import 'package:marionette_flutter/marionette_flutter.dart';
 import 'widgets/gaslight_route.dart';
 import 'widgets/table_departure_listener.dart';
+
+String appVersionDisplay = '';
+
+Future<void> initAppVersion() async {
+  try {
+    final info = await PackageInfo.fromPlatform();
+    appVersionDisplay = 'v${info.version} (${info.buildNumber})';
+  } catch (e) {
+    debugPrint('Error loading package info: $e');
+    appVersionDisplay = '';
+  }
+}
 
 void main() async {
   if (kDebugMode) {
@@ -31,6 +44,7 @@ void main() async {
   }
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await dotenv.load(fileName: ".env");
+  await initAppVersion();
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,

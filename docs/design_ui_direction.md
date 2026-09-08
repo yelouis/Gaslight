@@ -255,3 +255,9 @@ All durations come from `AppMotion`: `fast` 180 ms (presses, stamps) · `standar
 - Host's selected deck is badged with `CHOSEN` on non-host carousels.
 - Non-host carousel does not snap back to host's selection when swiped within the last 3 seconds (`_lastSwipeTime`).
 
+### Title Screen Version Label (Issue 151 — Wave Y1, September 2026)
+- **Placement & Styling**: The title / entry screen (`lib/screens/lobby_screen.dart` guest-ledger panel) displays the version label immediately below `READ MANUAL` (`Column`'s last child) in discreet low-opacity ivory (`ivoryColor.withValues(alpha: 0.4)`), 10.5 pt, `Lora`, letter-spacing 0.5.
+- **Runtime Bundle Read**: Formatted as `v${info.version} (${info.buildNumber})` via `package_info_plus` (`PackageInfo.fromPlatform()`) during bootstrap in `lib/main.dart` (`initAppVersion()`).
+- **Why Compile-Time Constants / Code-Gen were Rejected**: Compile-time constants (`--dart-define` or code-gen from `pubspec.yaml`) report what the source or build command claimed, not what the installed bundle actually contains. A version display that can disagree with the installed binary is worse than none because it will be trusted during testing. Reading the bundle at runtime physically guarantees agreement with TestFlight.
+- **Resilience & Layout Invariants**: Bootstrap wraps `PackageInfo.fromPlatform()` in `try/catch` and falls back to an empty string (rendering `SizedBox.shrink()`), guaranteeing bootstrap failures cannot crash the app. The affordance is permanently visible on first pump without gestures, menus, or long presses, and fits small viewports (320×568) and high text scales without clipping or pushing primary actions offscreen.
+

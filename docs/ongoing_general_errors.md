@@ -8,9 +8,10 @@
 
 ## 1. Open & in-flight
 
-**Wave Y is specced and awaiting implementation (September 1, 2026).** Two items selected → Option A: **Y1** (151 — version on the title screen, read from the bundle at runtime) then **Y2** (149 — extend R5 to check artefact paths cited in `NOT RUN` blocks). Client + tooling, **no deploy**. **Issue 150 is deferred at the user's direction.**
-
-**Y1 is blocking a release:** the next TestFlight build must be **`1.0.0+6`** or higher (5 is already uploaded), and the point of Y1 is that build 6 should be the first build a tester can identify on sight.
+**Wave Y in progress (September 1, 2026).**
+- **Y1 (Issue 151 → Option A) — ✅ VERIFIED and RESOLVED.** Read runtime bundle version and build number via `package_info_plus` during `main.dart` bootstrap (`initAppVersion()`), displayed discreetly below `READ MANUAL` in `lobby_screen.dart` (`ivoryColor.withValues(alpha: 0.4)`, `Lora` 10.5 pt). Verified native iOS compilation (`flutter build ios --release --no-codesign`), falsified widget tests in `test/lobby_version_test.dart` (asserted on first pump without gestures, 320x568 at text scale 2.0 without overflow, and graceful empty fallback). Bumped version to `1.0.0+6`.
+- **Y2 (Issue 149 → Option A)**: Extend R5 in `scripts/check_playthrough_evidence.sh` to check cited paths in `NOT RUN` blocks.
+- **Issue 150 is deferred at the user's direction.**
 
 **Wave X verified independently, August 31, 2026 — both items hold up.**
 
@@ -75,47 +76,16 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Three open: two selected as Wave Y, one deferred.**
+**Two open: one selected as Wave Y2, one deferred.**
 
 | Issue | Selection | Wave Y item |
 |---|---|---|
-| **151** | → A — read the bundle at runtime via `package_info_plus` | **Y1** (client) — do first, a build is waiting on it |
 | **149** | → A — extend R5 to check cited paths in `NOT RUN` blocks | **Y2** (tooling) |
 | **150** | ⏸️ **DEFERRED** by the user — *"skip this for now because this might be just an issue with the versioning."* | not scheduled |
 
 **⚠️ On the deferral of 150, one fact should not be re-derived:** it is about confirming behaviour on a device, **not** about whether the feature shipped. That was already settled — `strings -a` on the build-5 archive finds `PEEK INSIDE`, `A TASTE OF WHAT'S INSIDE` and `SHUFFLE`, all absent from the build-2 IPA, and `test/deck_peek_test.dart:150` passes. **The button is in the app and it renders**; it is 8.5 pt text on a 150 × 110 pt card. **The trigger to revisit is: Y1 ships, the user confirms on-device which build they are running, then re-checks whether the button is findable.**
 
-**Issue 151** — the app displays its version nowhere, so there is no way to confirm which build a device is running; this cost a full debugging cycle on August 31. **Issue 150** — the deck "PEEK INSIDE" affordance is 8.5 pt text in the corner of a 150 × 110 pt card, and the person who commissioned the feature could not find it in the shipped app. **Issue 149** — a citation inside a `NOT RUN` block is unchecked by any rule, which produced a real fabricated filename on the first use of that shape. Everything else (Issues 1–148) is resolved and indexed in Section 3.
-
----
-
-### Issue 151: the app never shows its own version, so there is no way to confirm a device is running the build you shipped
-
-**In plain terms:** there is nothing anywhere in the app that says which version it is. When a playtester says "that feature isn't there", the only way to find out which build they are on is to ask them to open TestFlight and read it back — and when several people are round a table, that is the difference between a two-minute check and giving up.
-
-**Status**: ⚠️ Confirmed Unresolved — `grep -rn "package_info\|CFBundleVersion\|appVersion\|buildNumber" lib/` returns **nothing**, and `package_info_plus` is not in `pubspec.yaml`. The app has no access to its own version at runtime and displays it nowhere.
-
-**This is not hypothetical — it cost a full debugging cycle on August 31, 2026.** A report of "many of the features we've been building are not there" took a binary-level `strings` comparison of the shipped archive against an older IPA to resolve. Twelve features were checked; **all twelve were present in build 5.** The report turned out to be about screens on *other people's* devices, which were on build 4 — 26 client commits behind. **A version string on the title screen would have answered it in five seconds.**
-
-**Placement is already decided by the user and is not part of this decision:** the **title / entry screen** (`lib/screens/lobby_screen.dart`, the guest-ledger panel — `READ MANUAL` sits at `:1342` and the line belongs just below it), rendered **discreetly** — small, low-opacity, in keeping with the parlour styling — but **plainly readable without a gesture, a menu, or a long-press.** ⚠️ **Do not hide it behind an interaction.** Issue 150 is open right now precisely because an affordance was made so subtle that the person who commissioned it could not find it; repeating that here would defeat the entire purpose.
-
-Format should be the marketing version and build number together, e.g. **`v1.0.0 (6)`**, because the build number is the part that actually distinguishes two TestFlight builds.
-
-**The decision is where the number comes from.**
-
-**Option A (recommended)**: **Read it at runtime from the installed bundle** via `package_info_plus` — `PackageInfo.fromPlatform()` gives `version` (`CFBundleShortVersionString`) and `buildNumber` (`CFBundleVersion`).
-  - *Pros*: **It reads the artefact that is actually installed**, so it physically cannot disagree with the build a tester is running — which is the entire point of the feature. No generation step, no build flag, nothing to forget, and it keeps working if someone builds from Xcode rather than the Flutter CLI. `package_info_plus` is a Flutter Favourite and works on iOS, Android and web, so the web deploy gets the same benefit.
-  - *Cons*: It is a **native plugin**, and this project has been bitten before by a package that resolved cleanly and then would not compile (`phosphor_flutter`, whose `IconData` was a `final class`) — hence the standing lesson that *analyze ≠ compile*. So the very first step must be to add it and run a real **iOS build**, not just `flutter analyze` and `flutter test`. It is also **async**, so the line needs a `FutureBuilder` or a load-before-`runApp()` and may briefly render empty.
-
-**Option B**: **Generate a Dart constant from `pubspec.yaml`**, mirroring the existing deck pipeline — a `scripts/generate_version_dart.sh` writing `lib/utils/app_version.dart`, plus a `scripts/check_version_in_sync.sh` gate in the battery.
-  - *Pros*: **No new dependency and no async** — a plain `const`, synchronous, trivially testable, and it renders on the first frame with no flash. This project already knows this pattern works: `lib/utils/prompt_decks.dart` is generated from `functions/src/prompt_decks.ts` and `check_decks_in_sync.sh` proves they have not drifted, so both the generator and the drift gate have proven shapes to copy.
-  - *Cons*: It reports **what the source said when it was last generated, not what the bundle contains.** If someone bumps `pubspec.yaml` and builds without regenerating, the app confidently displays the wrong version — and a version display that can lie is worse than none, because it will be trusted. The sync gate closes that in the battery, but only for people who run the battery before shipping. It is also a permanent maintenance surface (one more generator, one more gate) for a single string.
-
-**Option C**: **Inject it at build time** with `--dart-define=APP_VERSION=$(...)` read via `String.fromEnvironment`.
-  - *Pros*: No dependency, no generated file, no sync gate, and it is synchronous. The value is fixed at compile time by whoever ran the build, so it cannot drift from that particular build.
-  - *Cons*: **Every build command must carry the flag**, including `flutter build ipa`, `flutter build web`, and any archive triggered from Xcode's UI — which does not go through the CLI at all, so an Xcode archive would silently produce an app with an empty version. That is the worst possible failure for this feature: it fails on exactly the path used to ship the last build. The README runbook would have to carry the flag in three places and it would still be one forgotten paste away from a blank line.
-
-Your selection: Proceed with Option A.
+**Issue 150** — the deck "PEEK INSIDE" affordance is 8.5 pt text in the corner of a 150 × 110 pt card, and the person who commissioned the feature could not find it in the shipped app. **Issue 149** — a citation inside a `NOT RUN` block is unchecked by any rule, which produced a real fabricated filename on the first use of that shape. Everything else (Issues 1–148, 151) is resolved and indexed in Section 3.
 
 ---
 
@@ -443,12 +413,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–148 — August 8 to 31, 2026
+### Issues 65–151 — August 8 to September 1, 2026
 
-**73 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**74 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave Y / Y1 — title screen runtime version display** (read bundle version and build number via `package_info_plus` during `main.dart` bootstrap, displaying discreetly below `READ MANUAL` in `lobby_screen.dart` guest ledger; falsified with widget tests; proved native iOS compilation before UI implementation; zero gestures required; robust against small viewports and text scale 2.0; bumped to `1.0.0+6`) | 151 | `lib/main.dart`; `lib/screens/lobby_screen.dart`; `test/lobby_version_test.dart`; `design_ui_direction.md` §10; `pubspec.yaml` |
 | **Wave X / X2 — playthrough E9 annotation as superseded** (annotated block E9's obsolete blocker in `findings_marionette.md` while strictly preserving `Verdict: NOT RUN`, pointing to verified 4→3 departure evidence in `findings_5player.md` block E31; all 4 evidence gate invocations exit 0) | 148 | `docs/playthroughs/findings_marionette.md`; `agent_execution_guide.md` §4 |
 | **Wave X / X1 — EmberBackdrop ticker Reduce Motion lifecycle guard** (wired `WidgetsBindingObserver` into `_EmberBackdropState` in `game_over_screen.dart`, stopping the `AnimationController` ticker under `AppMotion.reduce(context)` in both `didChangeDependencies` and `didChangeAccessibilityFeatures` and cleaning up observer in `dispose()`; eliminated the last latent `pumpAndSettle` landmine; 4 widget tests in `test/ember_backdrop_reduce_motion_test.dart`) | 147 | `lib/screens/game_over_screen.dart`; `test/ember_backdrop_reduce_motion_test.dart`; `design_ui_direction.md` §8; `agent_execution_guide.md` §3 |
 | **Wave W / W2 — production live deletion activation** (verified in production that closed lobby produces 0 orphans; activated live mode with `CLEANUP_DRY_RUN=false`; documented revision-scoped trap with restore command in `design_database_and_security.md` §10.5; observed first live run: 98 orphan subtrees swept, 200 stale anonymous accounts purged, 1 active user protected with `authUsersReferenced=1`, 0 errors; subsequent run cleared remaining 3 orphans and reached 0 eligible) | 145 | `functions/src/cleanup.ts`; `design_database_and_security.md` §10.5; `agent_execution_guide.md` §3 |
