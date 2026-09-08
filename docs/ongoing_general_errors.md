@@ -8,9 +8,10 @@
 
 ## 1. Open & in-flight
 
-**Wave Z is specced and awaiting implementation (September 7, 2026).** One item: **Z1** (152 → A — reset the `_isLeaving` latch in a `finally` so the lobby's leave button keeps working after the first leave). Client only, **no deploy**.
+**Wave Z verified independently, September 7, 2026 — item delivered.**
+- **Z1 (Issue 152 → Option A) — ✅ VERIFIED and RESOLVED.** Wrapped `await gs.leaveRoom()` in `try/finally` in `lib/screens/lobby_screen.dart` to reset `_isLeaving = false` upon leave completion, preventing the latch from persisting into subsequent rooms within the same session. Verified with widget test leaving two rooms consecutively without re-pumping `LobbyScreen`, verified mid-leave dialog block over-reach guard, and verified premature reset / missing reset falsification failures. Bumped version in `pubspec.yaml` to `1.0.0+7`.
 
-**⚠️ Do not expire TestFlight build 5 until Z1 ships.** Build 6 carries this bug, and testers need a working fallback. The next upload is **`1.0.0+7`**.
+**⚠️ Do not expire TestFlight build 5 until Z1 (build 7) ships.** Build 6 carries this bug, and testers need a working fallback. The next upload is **`1.0.0+7`**.
 
 **Issue 150 is CLOSED with no code change** (user, September 7): *"No need to change anything. Once the version was updated, things look fine."* Its trigger fired favourably — on build 6 the user confirmed `v1.0.0 (6)` on the title screen and `PEEK INSIDE` renders legibly. **The original report was a build-version artefact, not a discoverability failure**, which is precisely what Issue 151's version label was built to disambiguate: the first time it was needed, it worked.
 
@@ -82,87 +83,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**One open, and it is the priority: Issue 152** — the lobby's leave button dies permanently after the first leave. Selected → **Option A** and specced as **Wave Z / Z1**.
-
-**Issue 150 is CLOSED with no code change** (user, September 7, 2026): *"No need to change anything. Once the version was updated, things look fine."* Its trigger fired favourably — on build 6 the user confirmed `v1.0.0 (6)` on the title screen and `PEEK INSIDE` renders plainly legibly beneath `50 PROMPTS` on the centred deck card. **The original report was a build-version artefact, not a discoverability failure**, which is exactly what Issue 151's version label was built to disambiguate — the first time it was needed, it worked. Indexed in §3.
-
-| Issue | Selection | Wave Y item |
-|---|---|---|
-| **150** | ⏸️ **DEFERRED** by the user — *"skip this for now because this might be just an issue with the versioning."* | not scheduled |
-
-**⚠️ On the deferral of 150, one fact should not be re-derived:** it is about confirming behaviour on a device, **not** about whether the feature shipped. That was already settled — `strings -a` on the build-5 archive finds `PEEK INSIDE`, `A TASTE OF WHAT'S INSIDE` and `SHUFFLE`, all absent from the build-2 IPA, and `test/deck_peek_test.dart:150` passes. **The button is in the app and it renders**; it is 8.5 pt text on a 150 × 110 pt card. **The trigger to revisit is: Y1 ships, the user confirms on-device which build they are running, then re-checks whether the button is findable.**
-
-**Issue 150** — the deck "PEEK INSIDE" affordance is 8.5 pt text in the corner of a 150 × 110 pt card, and the person who commissioned the feature could not find it in the shipped app. Everything else (Issues 1–149, 151) is resolved and indexed in Section 3.
-
----
-
-### Issue 152: after leaving one room, the lobby's leave button is dead for the rest of the session
-
-**In plain terms:** leave a room, then join or create another one, and the exit button in the top-left stops working. Tapping it does nothing at all — no dialog, no error, no feedback. The only way out is to force-quit the app.
-
-**Status**: ⚠️ Confirmed Unresolved — reported from TestFlight build `1.0.0 (6)` and traced to a one-way latch in `lib/screens/lobby_screen.dart`:
-
-```dart
-bool _isLeaving = false;                       // :43
-
-void _confirmLeave(BuildContext context, GameService gs, bool isHost) {
-  if (_isLeaving) return;                      // :49  — silently does nothing
-  ...
-}
-
-// inside the confirm button of the leave dialog
-onPressed: () async {
-  if (_isLeaving) return;                      // :100
-  _isLeaving = true;                           // :101 — set here, and nowhere else
-  Navigator.of(ctx).pop();
-  await gs.leaveRoom();
-},
-```
-
-**`grep -n "_isLeaving" lib/screens/lobby_screen.dart` returns exactly four lines: the declaration and three reads/writes. There is no `_isLeaving = false` in the file.** Once set, it stays set.
-
-**Why that survives leaving the room — this is what makes it a real bug rather than a theoretical one.** `LobbyScreen` renders **both** the entry screen and the in-room parlour from a single `State`, as a conditional inside `build` (`:433–449`):
-
-```dart
-if (gs.gameState != null && gs.currentPlayer != null) { … THE PARLOR … }
-return AnimatedLobbyBackground(child: _buildEntryForm(theme));
-```
-
-`LobbyScreen()` is pushed once as a route (`lib/main.dart:120`). Leaving clears `gameState` and re-renders the entry branch — **it does not pop a route and does not dispose the State.** So `_isLeaving` carries into the next room.
-
-**Reproduction, deterministic:**
-1. Create or join a room.
-2. Tap the leave icon → confirm `CLOSE ROOM` / `LEAVE`. Sets `_isLeaving = true`. You return to the guest ledger.
-3. Create or join another room.
-4. Tap the leave icon. **Nothing happens, and nothing will happen again this session.**
-
-**Why the existing tests miss it.** `test/lobby_leave_test.dart` has seven cases including *"double-tapping confirm leaves exactly once"* (`:194`) — which is precisely why the latch exists, and that test still passes. **No test leaves two rooms in a row from the same screen**, which is the ordinary user journey and the only one that exposes it.
-
-**Severity: high for playtesting.** This is the only way out of a room. A host who leaves once cannot close their next room, and there is no error to suggest anything is wrong — the button is simply inert. `gs.leaveRoom()` already catches its own `handleDisconnect` failures internally, so this is **not** network-dependent: it reproduces on a clean, fully successful leave.
-
-**Option A (recommended)**: **Reset the latch in a `finally`:**
-```dart
-onPressed: () async {
-  if (_isLeaving) return;
-  _isLeaving = true;
-  Navigator.of(ctx).pop();
-  try { await gs.leaveRoom(); } finally { if (mounted) _isLeaving = false; }
-},
-```
-  - *Pros*: One line of real change, and it preserves exactly what the latch was for — a second tap during the in-flight `leaveRoom()` still short-circuits, so the *"double-tapping confirm leaves exactly once"* regression test passes unchanged. The `finally` also covers the exception path, so a throw from `_clearLocalRoomState()` cannot re-arm the dead-button state.
-  - *Cons*: The flag stays a mutable field on a `State` that outlives every room, so the *class* of bug remains — a future path that sets it without a matching reset reintroduces exactly this. It depends on every writer remembering the `finally`, which is the same discipline that failed here.
-
-**Option B**: **Tie the flag's lifetime to being in a room** — clear `_isLeaving` whenever the screen renders the entry branch (`gs.gameState == null`).
-  - *Pros*: Self-healing regardless of *how* the room was left — including paths that never touch the dialog, such as the host closing the room from another device, a presence eviction, or any future leave control. It makes the flag mean "a leave is in flight *from this room*", which is what it was always meant to mean.
-  - *Cons*: The natural place is inside `build`, and mutating state during `build` risks *"setState() called during build"* and is easy to get subtly wrong. Doing it properly needs `didChangeDependencies` or a listener, spreading the lifecycle across two places — harder to follow than one `finally`, on a screen already past 1,300 lines.
-
-**Option C**: **Scope the guard to the dialog** — hold the flag inside the dialog via a `StatefulBuilder` and delete `_isLeaving` from the `State`.
-  - *Pros*: The guard's lifetime becomes exactly the dialog's lifetime, so it **cannot** leak across rooms by construction. The bug class disappears rather than being patched.
-  - *Cons*: The dialog is popped *before* `await gs.leaveRoom()`, so a dialog-scoped flag dies while the leave is still in flight — it would no longer stop the user re-opening the dialog mid-leave, which `:49` currently prevents. Making that safe means restructuring the flow (keep the dialog up, show a spinner, pop on completion), a larger change to a path with a passing regression test guarding it.
-
-**Whichever is chosen, the missing test is the same and is the real fix:** leave a room, return to the entry screen, join a second room, and assert the leave dialog **still opens**. That journey is what seven existing tests never exercise.
-
-Your selection: Proceed with Option A.
+**No open issues.** All issues through 152 are resolved or closed and indexed in Section 3.
 
 ---
 
@@ -438,12 +359,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–151 — August 8 to September 7, 2026
+### Issues 65–152 — August 8 to September 7, 2026
 
-**76 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**77 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave Z / Z1 — lobby leave button latch reset on room exit** (wrapped `await gs.leaveRoom()` in `try/finally` in `lib/screens/lobby_screen.dart` to reset `_isLeaving = false` when leave completes, preventing the latch from surviving across rooms in the same session; widget tested with two consecutive room leaves without re-pumping `LobbyScreen`; over-reach guards verified; bumped to `1.0.0+7`) | 152 | `lib/screens/lobby_screen.dart`; `test/lobby_leave_test.dart`; `pubspec.yaml` |
 | **Deck "PEEK INSIDE" discoverability — CLOSED, no code change** (September 7, 2026). Reported as absent from the shipped app; `strings -a` on the build-5 archive proved it shipped (and was absent from build 2), and `deck_peek_test.dart:150` proved it renders. On build 6 — with Issue 151's version label finally making the running build identifiable — the affordance was legible and the user closed it. **Kept as the record that a build-version ambiguity can present as a missing feature, and that the version label resolved it the first time it was needed.** | 150 | `lib/widgets/deck_carousel.dart`; `design_ui_direction.md` §10 |
 | **Wave Y / Y2 — R5 check on cited artefacts in NOT RUN blocks & full body** (extended Rule R5 in `scripts/check_playthrough_evidence.sh` to verify on-disk existence for every cited PNG path across block `body` including `NOT RUN` blocks and `Artefact depicts:`, while strictly preserving the over-reach guard that `NOT RUN` blocks are exempt from *requiring* evidence; fixed field header regexes with `[ \t]` to prevent newline bleeding; falsified with bogus E9/E47 paths and empty Reason guards; all 4 evidence gates exit 0) | 149 | `scripts/check_playthrough_evidence.sh`; `docs/ongoing_general_errors.md` §2.39; `agent_execution_guide.md` §3 |
 | **Wave Y / Y1 — title screen runtime version display** (read bundle version and build number via `package_info_plus` during `main.dart` bootstrap, displaying discreetly below `READ MANUAL` in `lobby_screen.dart` guest ledger; falsified with widget tests; proved native iOS compilation before UI implementation; zero gestures required; robust against small viewports and text scale 2.0; bumped to `1.0.0+6`) | 151 | `lib/main.dart`; `lib/screens/lobby_screen.dart`; `test/lobby_version_test.dart`; `design_ui_direction.md` §10; `pubspec.yaml` |

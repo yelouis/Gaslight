@@ -100,7 +100,11 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
             if (_isLeaving) return;
             _isLeaving = true;
             Navigator.of(ctx).pop();
-            await gs.leaveRoom();
+            try {
+              await gs.leaveRoom();
+            } finally {
+              if (mounted) _isLeaving = false;
+            }
           },
           style: TextButton.styleFrom(
             minimumSize: const Size(64, 48),

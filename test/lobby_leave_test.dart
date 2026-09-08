@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -211,5 +212,96 @@ void main() {
 
       expect(fakeFunctions.callableInvocations['handleDisconnect'] ?? 0, 1);
     });
+
+    testWidgets('leave button still works after leaving a previous room in the same session (Issue 152)', (tester) async {
+      await pumpLobbyScreen(tester, isHost: true);
+
+      final leaveButton = find.byTooltip('Leave room');
+      expect(leaveButton, findsOneWidget);
+
+      await tester.tap(leaveButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('CLOSE ROOM'), findsOneWidget);
+      await tester.tap(find.text('CLOSE ROOM'));
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      // Intermediate assertion: entry screen is visible after the first leave
+      expect(find.text('THE GUEST LEDGER'), findsOneWidget);
+      expect(gameService.gameState, isNull);
+
+      // Create a second room without re-pumping LobbyScreen widget
+      await tester.runAsync(() async {
+        await gameService.createRoom('Host', 'p_host2');
+        gameService.stopHeartbeat();
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+
+      // Parlour is showing again
+      expect(find.text('THE GUEST LEDGER'), findsNothing);
+      expect(find.byTooltip('Leave room'), findsOneWidget);
+
+      // Tap leave room in the second room
+      await tester.tap(find.byTooltip('Leave room'));
+      await tester.pumpAndSettle();
+
+      // Falsifying assertion: dialog must open
+      expect(find.text('CLOSE ROOM'), findsOneWidget);
+    });
+
+    testWidgets('reopening leave dialog mid-leave is blocked, but unblocked after completion', (tester) async {
+      final completer = Completer<void>();
+      fakeFunctions.overrideCallable('handleDisconnect', (params) async {
+        await completer.future;
+        return {'success': true};
+      });
+
+      await pumpLobbyScreen(tester, isHost: true);
+
+      final leaveButton = find.byTooltip('Leave room');
+      await tester.tap(leaveButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('CLOSE ROOM'), findsOneWidget);
+      await tester.tap(find.text('CLOSE ROOM'));
+      await tester.pump();
+
+      // Dialog is popped
+      expect(find.text('CLOSE ROOM'), findsNothing);
+
+      // While leave is in flight, tapping leave button must not reopen dialog
+      await tester.tap(leaveButton);
+      await tester.pump();
+      expect(find.text('CLOSE ROOM'), findsNothing);
+
+      // Complete the leave
+      completer.complete();
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      // Entry screen is visible
+      expect(find.text('THE GUEST LEDGER'), findsOneWidget);
+
+      // Join/create second room
+      await tester.runAsync(() async {
+        await gameService.createRoom('Host', 'p_host2');
+        gameService.stopHeartbeat();
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+
+      // Tap leave room in the second room: now it opens
+      await tester.tap(find.byTooltip('Leave room'));
+      await tester.pumpAndSettle();
+      expect(find.text('CLOSE ROOM'), findsOneWidget);
+    });
   });
 }
+
