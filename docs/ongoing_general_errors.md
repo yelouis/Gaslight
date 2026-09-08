@@ -8,6 +8,12 @@
 
 ## 1. Open & in-flight
 
+**Wave Z is specced and awaiting implementation (September 7, 2026).** One item: **Z1** (152 → A — reset the `_isLeaving` latch in a `finally` so the lobby's leave button keeps working after the first leave). Client only, **no deploy**.
+
+**⚠️ Do not expire TestFlight build 5 until Z1 ships.** Build 6 carries this bug, and testers need a working fallback. The next upload is **`1.0.0+7`**.
+
+**Issue 150 is CLOSED with no code change** (user, September 7): *"No need to change anything. Once the version was updated, things look fine."* Its trigger fired favourably — on build 6 the user confirmed `v1.0.0 (6)` on the title screen and `PEEK INSIDE` renders legibly. **The original report was a build-version artefact, not a discoverability failure**, which is precisely what Issue 151's version label was built to disambiguate: the first time it was needed, it worked.
+
 **Wave Y verified independently, September 1, 2026 — both items delivered.**
 - **Y1 (Issue 151 → Option A) — ✅ VERIFIED and RESOLVED.** Read runtime bundle version and build number via `package_info_plus` during `main.dart` bootstrap (`initAppVersion()`), displayed discreetly below `READ MANUAL` in `lobby_screen.dart` (`ivoryColor.withValues(alpha: 0.4)`, `Lora` 10.5 pt). Verified native iOS compilation (`flutter build ios --release --no-codesign`), falsified widget tests in `test/lobby_version_test.dart` (asserted on first pump without gestures, 320x568 at text scale 2.0 without overflow, and graceful empty fallback). Bumped version to `1.0.0+6`.
 - **Y2 (Issue 149 → Option A) — ✅ VERIFIED and RESOLVED.** Extended Rule R5 in `scripts/check_playthrough_evidence.sh` to check cited PNG paths across full `body` including `NOT RUN` blocks and `Artefact depicts:`, while strictly preserving the non-mandatory evidence invariant for `NOT RUN`. Fixed markdown field header regexes with `[ \t]` to prevent newline bleeding. Falsified against bogus citations in E9 (`exit 0` -> `exit 1`) and E47 (`exit 1`), verified over-reach guards (no PNG in E9 exits 0; empty Reason exits 1). All 4 evidence gate invocations exit 0 bare.
@@ -76,7 +82,9 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Two open. Issue 152 is new and is the priority** — the lobby's leave button dies permanently after the first leave; reported from TestFlight build 6 and deterministically reproducible. **Issue 150 remains deferred, and its trigger has now fired favourably:** on build 6 the user confirmed `v1.0.0 (6)` on the title screen and `PEEK INSIDE` is plainly legible in the deck card, so the original report was a build-version artefact rather than a discoverability failure. It can be closed once the user confirms they are content with the affordance as it stands.
+**One open, and it is the priority: Issue 152** — the lobby's leave button dies permanently after the first leave. Selected → **Option A** and specced as **Wave Z / Z1**.
+
+**Issue 150 is CLOSED with no code change** (user, September 7, 2026): *"No need to change anything. Once the version was updated, things look fine."* Its trigger fired favourably — on build 6 the user confirmed `v1.0.0 (6)` on the title screen and `PEEK INSIDE` renders plainly legibly beneath `50 PROMPTS` on the centred deck card. **The original report was a build-version artefact, not a discoverability failure**, which is exactly what Issue 151's version label was built to disambiguate — the first time it was needed, it worked. Indexed in §3.
 
 | Issue | Selection | Wave Y item |
 |---|---|---|
@@ -154,37 +162,7 @@ onPressed: () async {
 
 **Whichever is chosen, the missing test is the same and is the real fix:** leave a room, return to the entry screen, join a second room, and assert the leave dialog **still opens**. That journey is what seven existing tests never exercise.
 
-Your selection: _____
-
----
-
-### Issue 150: the deck "PEEK INSIDE" affordance is effectively invisible — the person who commissioned it could not find it
-
-**In plain terms:** we built a way to preview a deck's prompts before choosing it. It works, and it shipped. But the thing you tap is 8.5-point underlined text tucked into the bottom-left corner of a card the size of a postage stamp — so the user who asked for the feature opened the app, looked at the lobby, and concluded it had never been built.
-
-**Status**: ⚠️ Confirmed Unresolved — this is a discoverability defect, not a missing feature. Verified three ways:
-
-1. **It shipped.** `strings -a` on the build-5 archive binary finds `PEEK INSIDE` and `SHUFFLE`; both are **absent** from the build-2 IPA, which predates Issue 126 — so the test discriminates and the code is genuinely in the shipped app.
-2. **It renders.** `test/deck_peek_test.dart:150` (*"PEEK INSIDE button opens sheet from carousel"*) finds `ValueKey('peek_inside_$deckId')` on the centred deck and passes in the green suite.
-3. **It is far too small to find.** `lib/widgets/deck_carousel.dart:424–460`: the affordance is a bare `Text('PEEK INSIDE')` at **`fontSize: 8.5`**, underlined, brass on parchment, inside `Positioned(left: 2, bottom: 2)` — on a card that is **150 × 110 points** (`:260–261`). It sits under a 9-point `'$size PROMPTS'` label, and it only renders **`if (isCentred …)`**, so the two flanking cards show nothing.
-
-**The tap target is the real problem.** It is a bare `GestureDetector` wrapping text roughly 8.5 pt tall — well under Apple's 44 × 44 pt minimum — nested *inside* the card's own `GestureDetector` (`ValueKey('deck_$deckId')`, `:193–195`), which selects the deck. So a near-miss selects the deck instead of peeking, which reads as "the button does nothing".
-
-**Why this is worth a decision rather than a quick nudge:** the card is only 150 × 110 pt and already carries a title, a sample prompt, a prompt count and a wax seal. Anything given a real touch target has to displace something, and doing that badly is the same class of defect as Issues 136 and 137 — content clipped on small devices and at large text scales.
-
-**Option A (recommended)**: **Make the in-card affordance a real control** — a brass pill with an eye glyph, ~11–12 pt, meeting the 44 × 44 pt minimum hit area (expanding the touch target beyond the visible pill if necessary), replacing the current text link where the prompt-count label sits.
-  - *Pros*: Keeps the action attached to the deck it previews, so there is never a question of *which* deck is being peeked. Adds no chrome to a lobby that is already stacking carousel, House Rules and the suspects sheet. The nested `GestureDetector` and `DeckPeekSheet.show` plumbing already exist, so this is styling and hit-area work rather than new behaviour, and `deck_peek_test.dart` already covers the interaction.
-  - *Cons*: A 44 pt target is **40% of the card's 110 pt height** — the sample prompt or the seal has to shrink or move, and getting that wrong on a 320 pt-wide device or at `textScaleFactor: 2.0` reproduces exactly the clipping that produced Issues 136 and 137. It needs the same width × text-scale matrix those fixes were validated against, which is most of the work.
-
-**Option B**: **Move peek out of the card** — one "PEEK INSIDE THIS DECK" button below the carousel, acting on whichever deck is centred.
-  - *Pros*: Unconstrained by the 150 × 110 card, so it can be a properly sized control with a readable label and no clipping risk at any device size. One control instead of one per card, and it stays put as the carousel scrolls.
-  - *Cons*: Costs vertical space in a lobby that visibly has none — the current screenshot already shows the House Rules panel and the suspects sheet overlapping the carousel. It also separates the action from its object: which deck you peek depends on carousel position rather than on what you touched, which is a weaker mental model and harder to describe in a tooltip.
-
-**Option C**: **Long-press the card to peek**, and drop the text link entirely.
-  - *Pros*: Zero layout cost and zero clipping risk, and the whole 150 × 110 card becomes the target — the largest possible hit area, with no competition against the existing tap-to-select.
-  - *Cons*: A long-press is invisible, so this trades a small-target problem for a *no-signal* problem, which is worse. This project already has a documented case of users not finding an unmarked affordance — Issue 132 needed a partial third row added purely as a scroll cue. Without a persistent hint it would likely be discovered even less than the 8.5 pt link.
-
-Your selection: Skip this for now because this might be just an issue with the versioning.
+Your selection: Proceed with Option A.
 
 ---
 
@@ -460,12 +438,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–151 — August 8 to September 1, 2026
+### Issues 65–151 — August 8 to September 7, 2026
 
-**75 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**76 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Deck "PEEK INSIDE" discoverability — CLOSED, no code change** (September 7, 2026). Reported as absent from the shipped app; `strings -a` on the build-5 archive proved it shipped (and was absent from build 2), and `deck_peek_test.dart:150` proved it renders. On build 6 — with Issue 151's version label finally making the running build identifiable — the affordance was legible and the user closed it. **Kept as the record that a build-version ambiguity can present as a missing feature, and that the version label resolved it the first time it was needed.** | 150 | `lib/widgets/deck_carousel.dart`; `design_ui_direction.md` §10 |
 | **Wave Y / Y2 — R5 check on cited artefacts in NOT RUN blocks & full body** (extended Rule R5 in `scripts/check_playthrough_evidence.sh` to verify on-disk existence for every cited PNG path across block `body` including `NOT RUN` blocks and `Artefact depicts:`, while strictly preserving the over-reach guard that `NOT RUN` blocks are exempt from *requiring* evidence; fixed field header regexes with `[ \t]` to prevent newline bleeding; falsified with bogus E9/E47 paths and empty Reason guards; all 4 evidence gates exit 0) | 149 | `scripts/check_playthrough_evidence.sh`; `docs/ongoing_general_errors.md` §2.39; `agent_execution_guide.md` §3 |
 | **Wave Y / Y1 — title screen runtime version display** (read bundle version and build number via `package_info_plus` during `main.dart` bootstrap, displaying discreetly below `READ MANUAL` in `lobby_screen.dart` guest ledger; falsified with widget tests; proved native iOS compilation before UI implementation; zero gestures required; robust against small viewports and text scale 2.0; bumped to `1.0.0+6`) | 151 | `lib/main.dart`; `lib/screens/lobby_screen.dart`; `test/lobby_version_test.dart`; `design_ui_direction.md` §10; `pubspec.yaml` |
 | **Wave X / X2 — playthrough E9 annotation as superseded** (annotated block E9's obsolete blocker in `findings_marionette.md` while strictly preserving `Verdict: NOT RUN`, pointing to verified 4→3 departure evidence in `findings_5player.md` block E31; all 4 evidence gate invocations exit 0) | 148 | `docs/playthroughs/findings_marionette.md`; `agent_execution_guide.md` §4 |
