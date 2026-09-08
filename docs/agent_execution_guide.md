@@ -1,27 +1,21 @@
-# Agent Execution Guide — Active Build: Wave Z — the lobby leave button dies after the first leave — September 7, 2026
+# Agent Execution Guide — Queue Complete: no open work — September 7, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**One item, selected. It is a user-facing bug found in the shipped TestFlight build.**
+**There is no approved queue and nothing is broken.** Wave Z is delivered and verified; all ten gates are green and there are no open issues.
 
-| # | Item | Issue → choice | Side | Deploy |
-|---|---|---|---|---|
-| **Z1** | Reset the `_isLeaving` latch so the leave button keeps working | **152 → A** | client | — |
+**Do not invent work.** The only legitimate actions are in §2.1.
 
-**No deploy is needed.** Nothing here touches `functions/src`; `./scripts/check_deploy_fresh.sh` must stay at exit 0.
-
-**One item = one commit.**
-
-**Every number, formula and literal string below is a decision, not a suggestion.**
+**Every number and literal string in this document is a decision, not a suggestion.**
 
 ---
 
-## 1. Verified baseline — measured on `4c95dec`
+## 1. Verified baseline — measured this session on `18865d3`
 
 | Gate | Result |
 |---|---|
 | `flutter analyze lib test` | **0 errors · 0 warnings · 206 infos · exit 1** |
-| `flutter test` | **274 passing**, exit 0 |
+| `flutter test` | **276 passing**, exit 0 |
 | `npm --prefix functions run build` | clean, exit 0 |
 | `npm --prefix functions test` | **112 passing**, exit 0 |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
@@ -32,137 +26,53 @@
 
 **Read every other exit code bare, never through a pipe.**
 
-**Shipped:** TestFlight `1.0.0 (6)`, live in Testing alongside build 5. `pubspec.yaml` is at `1.0.0+6`; **the next upload must be `1.0.0+7` or higher.** Builds 2–4 are expired. **Do not expire build 5 until Z1 ships** — build 6 has the bug this wave fixes, and testers need a fallback.
+**⚠️ `pubspec.yaml` is at `1.0.0+7` and build 7 has NOT been uploaded.** Wave Z1 bumped it. **Do not bump again** before the next upload. TestFlight builds 5 and 6 are live; **6 carries the Issue 152 leave bug**, so once 7 ships, expire both 5 and 6.
+
+**⚠️ Any `.xcarchive` under `build/ios/` predates Wave Z1 and must be rebuilt** before a release. `flutter build ipa` will fail at the *export* step on this machine (no Apple Distribution certificate) — **that is expected and is not a build failure**; the archive is still produced and Organizer distributes it. **Verify the archive's timestamp and `CFBundleVersion`, never the `.ipa`.** Full detail in `README.md` → Releasing.
 
 **Production:** `cleanupDaily` runs `every day 04:00` America/Los_Angeles with `CLEANUP_DRY_RUN=false`. ⚠️ **Revision-scoped — re-apply after any functions redeploy.**
 
 ---
 
-## 2. Z1 — Reset the leave latch (152 → A)
+## 2. Already delivered — do NOT rework
 
-**What this means for the user:** leave a room, join another, and the exit button in the top-left stops working — no dialog, no error, nothing. The only way out is force-quitting the app. This was found on the shipped build.
+### Wave Z
 
-### 2.1 The gap
+- **Z1 (Issue 152) ✅** — the leave latch is reset in a `finally`:
+  ```dart
+  try { await gs.leaveRoom(); } finally { if (mounted) _isLeaving = false; }
+  ```
+  **Independently falsified:** removing the `finally` makes **both** new tests fail while **all seven original tests still pass**, including *"double-tapping confirm leaves exactly once"* — which was left unedited. That is the right shape: the new tests catch the regression and the existing suite is untouched.
+  **The falsifying test was built correctly**, which was the hard part: it uses `pumpLobbyScreen` once and then drives the second room through `gameService.createRoom` inside `runAsync` **without re-pumping**. Re-pumping would have constructed a fresh `State` and passed against the broken code.
+  See lesson **§2.40** in `ongoing_general_errors.md` for the durable version of this trap.
 
-`lib/screens/lobby_screen.dart` holds a one-way latch:
+### 2.1 The only legitimate actions now
 
-```dart
-bool _isLeaving = false;                       // :43
+1. Answer questions about the state of the repository.
+2. Re-run the baseline in §1 to confirm it still holds.
+3. If a gate that §1 says is green goes red, investigate and **file** it.
+4. **After any `firebase deploy --only functions`, re-apply `CLEANUP_DRY_RUN=false` and read it back.** Maintenance of an existing decision, not new work.
+5. Ship a release by following `README.md` → **Releasing**.
 
-void _confirmLeave(BuildContext context, GameService gs, bool isHost) {
-  if (_isLeaving) return;                      // :49  — silently does nothing
-  ...
-}
+### Earlier
 
-onPressed: () async {                          // the dialog's CLOSE ROOM / LEAVE button
-  if (_isLeaving) return;                      // :100
-  _isLeaving = true;                           // :101 — set here, and nowhere else
-  Navigator.of(ctx).pop();
-  await gs.leaveRoom();
-},
-```
-
-**`grep -n "_isLeaving" lib/screens/lobby_screen.dart` returns exactly four lines — the declaration and three reads/writes. There is no `_isLeaving = false` in the file.**
-
-**Why that outlives the room, which is what turns a sensible guard into a dead button.** `LobbyScreen` renders **both** the entry screen and the in-room parlour from a **single `State`**, as a conditional inside `build` (`:433–449`):
-
-```dart
-if (gs.gameState != null && gs.currentPlayer != null) { … THE PARLOR … }
-return AnimatedLobbyBackground(child: _buildEntryForm(theme));
-```
-
-`LobbyScreen()` is pushed once as a route (`lib/main.dart:120`). Leaving clears `gameState` and re-renders the entry branch — **no route is popped and the `State` is never disposed.** So the latch carries into the next room and every later tap silently returns at `:49`.
-
-**This is not network-dependent.** `gs.leaveRoom()` already wraps its `handleDisconnect` call in `try`/`catch` and swallows failures, so the bug reproduces on a clean, fully successful leave.
-
-### 2.2 Implementation
-
-```dart
-onPressed: () async {
-  if (_isLeaving) return;
-  _isLeaving = true;
-  Navigator.of(ctx).pop();
-  try {
-    await gs.leaveRoom();
-  } finally {
-    if (mounted) _isLeaving = false;
-  }
-},
-```
-
-Five things to get right:
-
-1. **⚠️ It must be a `finally`, not an assignment after the `await`.** `leaveRoom()` swallows its own callable errors, but it then awaits `_clearLocalRoomState()`, which touches `SharedPreferences` and *can* throw. A trailing assignment would be skipped on that path and the button would stay dead — **reproducing this exact bug by a rarer route, which is the worst possible outcome for a fix.**
-2. **⚠️ Do NOT wrap the reset in `setState`.** `_isLeaving` is read only in the two tap handlers (`:49`, `:100`) and appears **nowhere in `build`** — confirm with `grep` before assuming. A `setState` would force a pointless rebuild, and doing so from a `finally` after an async gap invites a rebuild at an awkward lifecycle moment. A plain field assignment is correct here.
-3. **`if (mounted)` is belt-and-braces, not load-bearing.** Because there is no `setState`, writing a field on a disposed `State` is harmless. Keep the guard for convention; **do not treat its absence in review as a defect**, and do not add `setState` to "justify" it.
-4. **Do not touch the guard at `:49`.** That is what stops the dialog being reopened while a leave is in flight, and it is still wanted.
-5. **Do not change `gs.leaveRoom()`.** Its internal `try`/`catch` is deliberate and out of scope.
-
-### 2.3 Validation
-
-**The construction of the falsifying test *is* the item.** A carelessly written version passes against the broken code and proves nothing.
-
-1. **The falsifying test — leave two rooms in a row from the same screen.** Add to `test/lobby_leave_test.dart`, reusing the existing `pumpLobbyScreen` helper for the *first* room only:
-
-   ⚠️ **After the first leave, do NOT call `pumpLobbyScreen` or `pumpWidget` again.** The bug exists precisely because the `State` survives; re-pumping risks constructing a fresh `State`, and the test would then pass against unfixed code — a worthless test that looks like coverage. Drive the second room through `gameService` inside `tester.runAsync(...)`, then `await tester.pumpAndSettle()`.
-
-   Sequence:
-   - `await pumpLobbyScreen(tester, isHost: true);`
-   - tap `find.byTooltip('Leave room')`, settle, assert `find.text('CLOSE ROOM')` is present, tap it, settle.
-   - **Assert the entry screen is now showing** (e.g. `find.text('THE GUEST LEDGER')`). This proves the first leave genuinely completed — without it the test could be passing through a half-state and asserting nothing meaningful.
-   - Inside `tester.runAsync`: `await gameService.createRoom('Host', 'p_host2'); gameService.stopHeartbeat();` and a short delay, mirroring `pumpLobbyScreen`'s own setup.
-   - `await tester.pumpAndSettle();` and assert the parlour is showing again.
-   - Tap `find.byTooltip('Leave room')`, settle.
-   - **Assert `find.text('CLOSE ROOM')` findsOneWidget.** ← the assertion that fails today.
-
-   **Run it against current code and observe it fail.** Paste the failure into the commit body.
-
-2. **⚠️ Over-reach guard — the double-tap protection must survive.** `test/lobby_leave_test.dart:194` (*"double-tapping confirm leaves exactly once"*) must still pass **unchanged, with no edits to that test**. It is the reason the latch exists. **If it breaks, the reset was placed wrongly** — almost certainly before the `await` rather than in the `finally`.
-
-3. **Over-reach guard — reopening mid-leave is still blocked.** While `leaveRoom()` is in flight, tapping the leave icon must **not** open a second dialog. `FakeFirebaseFunctions.overrideCallable` (`test/fake_functions.dart`) lets you hold `handleDisconnect` open with a `Completer`: register a handler that awaits the completer, tap through the leave, assert no dialog appears on a second tap, then complete it and assert a subsequent tap **does** open the dialog. That last step is what proves the reset fires on the real path rather than only on an error path.
-
-4. **Falsify the fix itself.** Remove the `finally` (or move the reset above the `await`) and confirm test 1 fails again. A reset whose test passes either way is decoration.
-
-5. **Full battery:** `flutter test` **≥ 274 + the new tests**; analyze still **0 errors, 0 warnings, 206 infos**; functions **112**; decks exit 0; all four evidence gates exit 0; deploy exit 0.
-
-**Blast radius:** `lib/screens/lobby_screen.dart` · `test/lobby_leave_test.dart`. **No design-doc change** — this is a defect in an existing behaviour, not a change to a contract.
-
----
-
-## 3. Definition of Done
-
-- [ ] Falsifying two-room test written **without re-pumping the widget**, observed to fail first, failure pasted into the commit body.
-- [ ] The intermediate assertion (entry screen visible after the first leave) is present.
-- [ ] Reset is in a **`finally`**, not after the `await`.
-- [ ] **No `setState`** around the reset; `_isLeaving` still appears nowhere in `build`.
-- [ ] `:49`'s guard and `gs.leaveRoom()` unchanged.
-- [ ] **`double-tapping confirm leaves exactly once` still passes, unedited.**
-- [ ] Mid-leave reopen still blocked, and a tap **after** completion opens the dialog.
-- [ ] Fix falsified by removing the `finally`.
-- [ ] Battery: **0 errors · 0 warnings · 206 infos** · `flutter test` ≥ 274 + new · functions **112** · all gates exit 0.
-- [ ] Issue **152** moved into the **single** existing Resolved heading.
-
----
-
-## 4. Already delivered — do NOT rework
-
-- **Y1 (151)** title-screen version label, read from the bundle at runtime during `main()`'s bootstrap. **It worked the first time it was needed** — it is what let a "missing feature" report be resolved as a build-version artefact (Issue 150).
-- **Y2 (149)** R5 now checks cited evidence paths **anywhere in a block, including `NOT RUN` blocks**, while never requiring one.
+- **Y1 (151)** title-screen version label read from the bundle at runtime. **It worked the first time it was needed** — it is what let a "missing feature" report be resolved as a build-version artefact (Issue 150).
+- **Y2 (149)** R5 checks cited evidence paths **anywhere in a block, including `NOT RUN` blocks**, while never requiring one.
 - **Issue 150 — CLOSED with no code change.** The deck `PEEK INSIDE` affordance ships, renders, and is legible on build 6. **Do not "improve" it without a new selection.**
-- **X1 (147)** `EmberBackdrop` ticker guarded — **the `pumpAndSettle` trap is closed**; all fifteen `.repeat(` call sites in `lib/` are guarded · **X2 (148)** E9 annotated as superseded by E31.
+- **X1 (147)** `EmberBackdrop` ticker guarded — **the `pumpAndSettle` trap is closed** · **X2 (148)** E9 annotated as superseded by E31.
 - **W1 (146)** post-commit `recursiveDelete` on lobby close, sweep capped with the **scan** bounded · **W2 (145)** live deletion enabled; the dry run predicted the live run exactly.
 - **V1 (143, 144)** deployed environment verified; **24-hour retention settled** with its `ROOM_TTL_MS` coupling invariant.
 - **U1 (140)** manifest scoping + R6 · **U2 (141)** real `reduceMotion` bit, device-verified · **U3 (142)** 30 s heartbeat, host-gated disconnects · **U4 (135)** E49 PASS — **first device verification of Issue 123**.
 - **S1 (139)** · **E47/E48** · **R0 (138)** · **R1 (136)** · **R2 (137)** · soak blocks **E22–E49** · **Wave Q** · **Wave P** · **Wave O's six** · **Issues 96–105, 50–95, 31, 28/29**.
 - **The playthrough reorganisation** — everything under `docs/playthroughs/`.
-- **The release runbook** — `README.md` → **Releasing**. ⚠️ **`flutter build ipa` fails at export on this machine** (no Apple Distribution certificate) and that is expected — the `.xcarchive` is still produced, and Organizer distributes it. **Verify the archive's timestamp and `CFBundleVersion`, never the `.ipa`.**
+- **The release runbook** — `README.md` → **Releasing**.
 
 **Release plumbing:** bundle ID `com.whylabs.gaslight` · `CFBundleDisplayName` **`Gaslight`** · `ITSAppUsesNonExemptEncryption` **`false`** · iOS target **15.0** · Node **22**.
 
 ### Accepted equivalents — do NOT "fix" these back
 
 - **Analyze infos are 206.** Bar is **206 and no new infos**.
-- **Y1 bumped `pubspec.yaml` to `1.0.0+6`** inside its own commit rather than at release time. Build 6 is uploaded; the next must be `+7`.
+- **Waves Y1 and Z1 both bumped `pubspec.yaml` inside their own commits** rather than at release time. Harmless and useful — the on-screen version matches what the next build reports.
 - **`EmberBackdrop` and `AnimatedThinkingBackground` both keep `..repeat()` in `initState`.**
 - **E48 merged two specified artefacts into one.**
 - **`r0_u2_p3_reduce_motion.png` is logged under `block_id E49`.**
@@ -170,7 +80,7 @@ Five things to get right:
 
 ---
 
-## 5. Invariants & intentional decisions — do NOT change
+## 3. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.**
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty.
@@ -209,7 +119,7 @@ Five things to get right:
 
 ---
 
-## 6. Where the contracts live
+## 4. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -226,7 +136,7 @@ Five things to get right:
 
 ---
 
-## 7. Validation standard
+## 5. Validation standard
 
 **A guard flag lives as long as the object holding it.** `_isLeaving` guards "a leave is in flight", but it sits on a `State` that outlives every room. When a flag's lifetime is longer than the thing it guards, it needs an explicit reset — and the reset belongs in a `finally`, because the failure path is exactly when it matters.
 
@@ -277,4 +187,4 @@ Five things to get right:
      SINGLE existing Resolved heading and update the relevant design doc.
 ```
 
-**After Z1, the queue is empty. Do not invent work.**
+**The queue is empty. Do not invent work.**

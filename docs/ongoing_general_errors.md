@@ -193,6 +193,20 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
 ---
 
+#### 2.40 A guard flag outlives what it guards when it sits on a State that is never disposed
+
+`_isLeaving` was added for a good reason: stop a double-tap on the leave dialog from leaving twice. There was even a test for it — *"double-tapping confirm leaves exactly once"*. The guard was correct and the test passed.
+
+**But the flag lived on `LobbyScreen`'s `State`, and that `State` outlives every room.** `LobbyScreen` renders both the entry screen and the in-room parlour from one conditional inside `build` (`:433–449`) and is pushed once as a route (`main.dart:120`), so leaving a room clears `gameState` and **re-renders** — it never pops a route and never disposes the `State`. `_isLeaving` was set on the first leave and assigned `false` nowhere in the file. From then on, every tap on the leave icon hit `if (_isLeaving) return;` and did nothing at all — no dialog, no error, no feedback. The only escape was force-quitting. It shipped to TestFlight and a user found it.
+
+**Three rules follow.**
+
+**When a flag's lifetime is longer than the thing it guards, reset it in a `finally`.** Not after the `await` — the failure path is exactly when the reset matters most. `leaveRoom()` swallows its own callable errors but then awaits `_clearLocalRoomState()`, which touches `SharedPreferences` and can throw; a trailing assignment would have been skipped and reproduced the same dead button by a rarer route.
+
+**Write the test for the journey, not the defence.** Seven leave tests existed, and they covered the defensive case that *motivated* the code. **None left two rooms in a row** — the ordinary thing a player does, and the only sequence that exposes the bug. When you add a guard, the test to write is not "does the guard fire" but "does the app still work afterwards".
+
+**A test that reconstructs the world cannot catch a state bug.** The falsifying test had to drive the second room through the service and `pump`, because calling `pumpWidget` again would have built a fresh `State` and passed against the broken code — coverage that proves nothing. **When the defect *is* surviving state, a test that resets state is worse than no test**, because it looks like protection.
+
 #### 2.39 A deliberate exemption in a checker is still a hole, and the first thing through it will look correct
 
 `check_playthrough_evidence.sh` exempts `NOT RUN` blocks from the artefact rules, on purpose, with its own falsification record: a block that was legitimately not run must not be forced to invent evidence. That reasoning is sound and the guard should stay.
