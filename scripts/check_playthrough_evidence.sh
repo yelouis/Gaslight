@@ -31,8 +31,20 @@
 #   2. Restore cited PNG:
 #      $ git mv docs/playthroughs/evidence/e10_p1_gameover.png.bak docs/playthroughs/evidence/e10_p1_gameover.png
 #      $ ./scripts/check_playthrough_evidence.sh -> exit 0 (14 PASS, 1 NOT RUN, 0 FAIL; 14 artefact file paths verified on disk)
-#   3. Over-reach guard: E9 (NOT RUN with no PNG) is not flagged by R5.
+#   3. Over-reach guard: NOT RUN blocks carry no required artefact check — they are exempt from REQUIRING an artefact, not from CHECKING cited ones.
 #   4. Non-zero match assertion: 14 artefacts verified on iOS, 37 on Web.
+#
+# Falsification record for Wave Y2 / Issue 149 (R5 extended to check cited paths across full body and in NOT RUN blocks):
+#   1. Bogus PNG path cited in NOT RUN block (E9):
+#      $ ./scripts/check_playthrough_evidence.sh docs/playthroughs/findings_marionette.md -> exit 1
+#      FAIL: 1 violation(s) found across 21 blocks:
+#        [E9] Rule R5 violation: Cited artefact does not exist on disk: docs/playthroughs/evidence/nonexistent_test_artefact_123.png
+#   2. Over-reach guard: E9 with no cited PNG still exits 0 (absence stays legal; never required).
+#   3. Over-reach guard: E9 with empty Reason still fails (Reason requirement preserved).
+#   4. Bogus PNG path in Artefact depicts: field of PASS block (E47):
+#      $ ./scripts/check_playthrough_evidence.sh docs/playthroughs/findings_5player.md -> exit 1
+#      FAIL: 1 violation(s) found across 28 blocks:
+#        [E47] Rule R5 violation: Cited artefact does not exist on disk: docs/playthroughs/evidence/bogus_depicts_artefact.png
 #
 # Rule R6 — manifest-driven verbatim assertion check:
 #   Reads docs/playthroughs/manifest.md. For every block listed there, R6 checks:
@@ -115,9 +127,9 @@ total_pngs_checked = 0
 
 violations = []
 
-verdict_regex = re.compile(r'(?m)^\s*[-*]*\s*\*\*Verdict:\*\*\s*(.+)$')
-reason_regex = re.compile(r'(?m)^\s*[-*]*\s*\*\*Reason[^*]*:\*\*\s*(.+)$')
-observed_header_regex = re.compile(r'(?m)^\s*[-*]*\s*\*\*Observed([^*]*):\*\*\s*(.*)$')
+verdict_regex = re.compile(r'(?m)^[ \t]*[-*]*[ \t]*\*\*Verdict:\*\*[ \t]*(.+)$')
+reason_regex = re.compile(r'(?m)^[ \t]*[-*]*[ \t]*\*\*Reason[^\n*]*:\*\*[ \t]*(.*)$')
+observed_header_regex = re.compile(r'(?m)^[ \t]*[-*]*[ \t]*\*\*Observed([^\n*]*):\*\*[ \t]*(.*)$')
 field_header_regex = re.compile(r'(?m)^\s*[-*]*\s*\*\*[A-Z][a-zA-Z0-9\s()_-]*:\*\*')
 
 artefact_png_regex = re.compile(r'docs/playthroughs/evidence/[a-zA-Z0-9_.-]+\.png')
@@ -148,11 +160,23 @@ for block in blocks:
     else:
         other_count += 1
 
-    # Check NOT RUN rules (R5 over-reach guard: NOT RUN blocks carry no required artefact check)
+    # Check NOT RUN rules (R5 over-reach guard: NOT RUN blocks carry no required artefact check,
+    # but any cited artefact paths must exist on disk)
     if is_not_run:
         rmatch = reason_regex.search(body)
         if not rmatch or not rmatch.group(1).strip():
             violations.append(f"[{bid}] NOT RUN block is missing a non-empty **Reason:** line")
+
+        # Rule R5: Existence check for any cited PNG artefact in NOT RUN blocks (check, never require)
+        cited_pngs = artefact_png_regex.findall(body)
+        for p in cited_pngs:
+            total_pngs_checked += 1
+            full_png_path = os.path.join(repo_root, p)
+            if not os.path.isfile(full_png_path):
+                violations.append(
+                    f"[{bid}] Rule R5 violation: Cited artefact does not exist on disk: {p}\n"
+                    f"      Expected absolute path: {full_png_path}"
+                )
         continue
 
     # Rules R2 - R5 apply to PASS and FAIL blocks
@@ -211,8 +235,8 @@ for block in blocks:
                 f"      Offending Observed content:\n        {preview}"
             )
 
-    # 5. Rule R5: Existence check for every cited PNG artefact on disk
-    cited_pngs = artefact_png_regex.findall(obs_content)
+    # 5. Rule R5: Existence check for every cited PNG artefact on disk (scans full body)
+    cited_pngs = artefact_png_regex.findall(body)
     for p in cited_pngs:
         total_pngs_checked += 1
         full_png_path = os.path.join(repo_root, p)

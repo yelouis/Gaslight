@@ -8,9 +8,9 @@
 
 ## 1. Open & in-flight
 
-**Wave Y in progress (September 1, 2026).**
+**Wave Y verified independently, September 1, 2026 — both items delivered.**
 - **Y1 (Issue 151 → Option A) — ✅ VERIFIED and RESOLVED.** Read runtime bundle version and build number via `package_info_plus` during `main.dart` bootstrap (`initAppVersion()`), displayed discreetly below `READ MANUAL` in `lobby_screen.dart` (`ivoryColor.withValues(alpha: 0.4)`, `Lora` 10.5 pt). Verified native iOS compilation (`flutter build ios --release --no-codesign`), falsified widget tests in `test/lobby_version_test.dart` (asserted on first pump without gestures, 320x568 at text scale 2.0 without overflow, and graceful empty fallback). Bumped version to `1.0.0+6`.
-- **Y2 (Issue 149 → Option A)**: Extend R5 in `scripts/check_playthrough_evidence.sh` to check cited paths in `NOT RUN` blocks.
+- **Y2 (Issue 149 → Option A) — ✅ VERIFIED and RESOLVED.** Extended Rule R5 in `scripts/check_playthrough_evidence.sh` to check cited PNG paths across full `body` including `NOT RUN` blocks and `Artefact depicts:`, while strictly preserving the non-mandatory evidence invariant for `NOT RUN`. Fixed markdown field header regexes with `[ \t]` to prevent newline bleeding. Falsified against bogus citations in E9 (`exit 0` -> `exit 1`) and E47 (`exit 1`), verified over-reach guards (no PNG in E9 exits 0; empty Reason exits 1). All 4 evidence gate invocations exit 0 bare.
 - **Issue 150 is deferred at the user's direction.**
 
 **Wave X verified independently, August 31, 2026 — both items hold up.**
@@ -76,16 +76,15 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Two open: one selected as Wave Y2, one deferred.**
+**One open: deferred at user's direction.**
 
 | Issue | Selection | Wave Y item |
 |---|---|---|
-| **149** | → A — extend R5 to check cited paths in `NOT RUN` blocks | **Y2** (tooling) |
 | **150** | ⏸️ **DEFERRED** by the user — *"skip this for now because this might be just an issue with the versioning."* | not scheduled |
 
 **⚠️ On the deferral of 150, one fact should not be re-derived:** it is about confirming behaviour on a device, **not** about whether the feature shipped. That was already settled — `strings -a` on the build-5 archive finds `PEEK INSIDE`, `A TASTE OF WHAT'S INSIDE` and `SHUFFLE`, all absent from the build-2 IPA, and `test/deck_peek_test.dart:150` passes. **The button is in the app and it renders**; it is 8.5 pt text on a 150 × 110 pt card. **The trigger to revisit is: Y1 ships, the user confirms on-device which build they are running, then re-checks whether the button is findable.**
 
-**Issue 150** — the deck "PEEK INSIDE" affordance is 8.5 pt text in the corner of a 150 × 110 pt card, and the person who commissioned the feature could not find it in the shipped app. **Issue 149** — a citation inside a `NOT RUN` block is unchecked by any rule, which produced a real fabricated filename on the first use of that shape. Everything else (Issues 1–148, 151) is resolved and indexed in Section 3.
+**Issue 150** — the deck "PEEK INSIDE" affordance is 8.5 pt text in the corner of a 150 × 110 pt card, and the person who commissioned the feature could not find it in the shipped app. Everything else (Issues 1–149, 151) is resolved and indexed in Section 3.
 
 ---
 
@@ -116,30 +115,6 @@
   - *Cons*: A long-press is invisible, so this trades a small-target problem for a *no-signal* problem, which is worse. This project already has a documented case of users not finding an unmarked affordance — Issue 132 needed a partial third row added purely as a scroll cue. Without a persistent hint it would likely be discovered even less than the 8.5 pt link.
 
 Your selection: Skip this for now because this might be just an issue with the versioning.
-
----
-
-### Issue 149: artefact citations inside `NOT RUN` blocks are unchecked, and one was wrong on its first use
-
-**In plain terms:** the evidence gate checks that every screenshot a passing block mentions really exists on disk. It deliberately skips blocks marked "not run", because those are not supposed to have screenshots. But a *reason* can still name a file — and when one did, nobody noticed the filename was invented.
-
-**Status**: ⚠️ Confirmed Unresolved — surfaced by Wave X2. The E9 annotation added in `230ea88` cited **`e31_p1_forgery_relinked.png`**, which has never existed; the real artefacts are `e31_p3_relinked.png` and `e31_p5_left.png`. **All four gate invocations exited 0 with that citation in place.** The cause is deliberate and otherwise correct: `scripts/check_playthrough_evidence.sh` applies rules R2–R5 only to `PASS`/`FAIL` blocks, and its own header documents the over-reach guard *"NOT RUN blocks carry no required artefact check"* — a guard added on purpose so that a legitimately un-run block is not forced to invent evidence.
-
-**The gap is narrower than the guard.** *Requiring* an artefact in a `NOT RUN` block would be wrong. *Checking a path that the block chose to mention* is not the same thing — and this project's whole history is of citations drifting from reality (the fabricated functions table, `grep` as observation, E45's launch-screen screenshot). The substance of the annotation was correct; only the filename was invented, which is precisely the failure a one-line existence check catches and a human reviewer does not.
-
-**Option A (recommended)**: **Extend R5 to check any `docs/playthroughs/evidence/*.png` path cited anywhere in a block, including `NOT RUN` blocks — while still never *requiring* one.** Existence is checked if a path is present; absence of a path stays legal for `NOT RUN`.
-  - *Pros*: Closes the hole without touching the over-reach guard that matters — a `NOT RUN` block with no artefact still passes, so nothing is forced to fabricate evidence. It reuses the existing `artefact_png_regex` and the existing on-disk check, so it is a few lines in a rule that already exists and is already falsified. Catches the exact defect that just occurred, mechanically, in a project that has repeatedly proved habits do not catch it.
-  - *Cons*: Slightly widens a rule whose narrowness was itself a deliberate design decision with its own falsification record in the script header — that record would need updating so the next reader does not think the guard was weakened by accident. It also still proves only that a *file exists*, not that it shows what the prose claims, which is the failure mode that actually cost this project the most.
-
-**Option B**: **Leave the gate alone; treat it as a review obligation.** Add "open every artefact cited in any block, including `NOT RUN` ones" to the validation standard.
-  - *Pros*: No change to a gate that is currently correct and well-falsified, and no risk of weakening the over-reach guard. Honest about the limit — a human opening the file is the only thing that ever proves an artefact shows what is claimed.
-  - *Cons*: This project has established twice over that a written habit is not a control (§2.34, §2.36), and this defect is the third data point: the citation was written and reviewed in the same pass that produced it, and nothing caught it. Choosing the habit here contradicts the lesson the file already records.
-
-**Option C**: **Forbid artefact paths in `NOT RUN` blocks entirely** — a `Reason:` may reference another *block*, but not a file.
-  - *Pros*: Removes the ambiguity at source rather than checking it, and is trivially enforceable: fail if a `NOT RUN` block contains an evidence path at all. A block that was not run has no artefacts of its own, so citing one is arguably always a category error.
-  - *Cons*: Loses genuinely useful cross-references — E9's annotation is *more* helpful for naming the screenshot a reader should look at, not less. It would also fail the corrected E9 block as it now stands, so adopting this means rewriting that annotation to drop the pointer it was just given.
-
-Your selection: Proceed with Option A.
 
 ---
 
@@ -258,6 +233,8 @@ SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `desig
 **Two rules follow.** When you write an exemption into a checker, **state what it exempts from as narrowly as possible** — "not required to have an artefact" and "not checked if it has one" are different rules, and the second was never intended. And when reviewing, **remember that the exempted cases are where errors accumulate**, because they are the cases nothing looks at; this one survived being written, reviewed and committed in the same pass.
 
 **The general shape:** a checker's exemption list is a map of where its guarantees stop. Read it as a list of places to look manually, not as a list of things that do not matter.
+
+**Closed in Wave Y2 (Issue 149):** Rule R5 now checks any artefact paths cited anywhere in `body` for all blocks (including `NOT RUN` blocks and across fields like `Artefact depicts:`), while strictly preserving the over-reach guard that `NOT RUN` blocks are exempt from *requiring* an artefact. Field header regexes were also tightened to horizontal whitespace (`[ \t]`) to prevent matching across lines.
 
 #### 2.38 A prediction followed by a matching outcome is much stronger evidence than either alone
 
@@ -415,10 +392,11 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 
 ### Issues 65–151 — August 8 to September 1, 2026
 
-**74 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**75 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave Y / Y2 — R5 check on cited artefacts in NOT RUN blocks & full body** (extended Rule R5 in `scripts/check_playthrough_evidence.sh` to verify on-disk existence for every cited PNG path across block `body` including `NOT RUN` blocks and `Artefact depicts:`, while strictly preserving the over-reach guard that `NOT RUN` blocks are exempt from *requiring* evidence; fixed field header regexes with `[ \t]` to prevent newline bleeding; falsified with bogus E9/E47 paths and empty Reason guards; all 4 evidence gates exit 0) | 149 | `scripts/check_playthrough_evidence.sh`; `docs/ongoing_general_errors.md` §2.39; `agent_execution_guide.md` §3 |
 | **Wave Y / Y1 — title screen runtime version display** (read bundle version and build number via `package_info_plus` during `main.dart` bootstrap, displaying discreetly below `READ MANUAL` in `lobby_screen.dart` guest ledger; falsified with widget tests; proved native iOS compilation before UI implementation; zero gestures required; robust against small viewports and text scale 2.0; bumped to `1.0.0+6`) | 151 | `lib/main.dart`; `lib/screens/lobby_screen.dart`; `test/lobby_version_test.dart`; `design_ui_direction.md` §10; `pubspec.yaml` |
 | **Wave X / X2 — playthrough E9 annotation as superseded** (annotated block E9's obsolete blocker in `findings_marionette.md` while strictly preserving `Verdict: NOT RUN`, pointing to verified 4→3 departure evidence in `findings_5player.md` block E31; all 4 evidence gate invocations exit 0) | 148 | `docs/playthroughs/findings_marionette.md`; `agent_execution_guide.md` §4 |
 | **Wave X / X1 — EmberBackdrop ticker Reduce Motion lifecycle guard** (wired `WidgetsBindingObserver` into `_EmberBackdropState` in `game_over_screen.dart`, stopping the `AnimationController` ticker under `AppMotion.reduce(context)` in both `didChangeDependencies` and `didChangeAccessibilityFeatures` and cleaning up observer in `dispose()`; eliminated the last latent `pumpAndSettle` landmine; 4 widget tests in `test/ember_backdrop_reduce_motion_test.dart`) | 147 | `lib/screens/game_over_screen.dart`; `test/ember_backdrop_reduce_motion_test.dart`; `design_ui_direction.md` §8; `agent_execution_guide.md` §3 |
