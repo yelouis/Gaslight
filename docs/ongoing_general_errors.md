@@ -8,7 +8,11 @@
 
 ## 1. Open & in-flight
 
-**Wave X verified independently, August 31, 2026 — both items hold up. One new issue (149) is open and needs a selection; it is small.**
+**Wave Y is specced and awaiting implementation (September 1, 2026).** Two items selected → Option A: **Y1** (151 — version on the title screen, read from the bundle at runtime) then **Y2** (149 — extend R5 to check artefact paths cited in `NOT RUN` blocks). Client + tooling, **no deploy**. **Issue 150 is deferred at the user's direction.**
+
+**Y1 is blocking a release:** the next TestFlight build must be **`1.0.0+6`** or higher (5 is already uploaded), and the point of Y1 is that build 6 should be the first build a tester can identify on sight.
+
+**Wave X verified independently, August 31, 2026 — both items hold up.**
 
 **X1 (Issue 147) — ✅ VERIFIED and RESOLVED.** `_EmberBackdropState` carries `WidgetsBindingObserver`, registers in `initState`, keeps `..repeat()` (matching the blessed `AnimatedThinkingBackground` shape), implements **both** `didChangeDependencies` and `didChangeAccessibilityFeatures` with `setState`, and removes the observer in `dispose` before disposing the controller. **Independently falsified this session:** removing both guards makes test 1 and test 3 fail with `pumpAndSettle timed out`, while tests 2 and 4 correctly still pass — they assert the build branch and dispose safety, which are independent of the ticker. **This was the last live instance of the `pumpAndSettle` trap:** every `.repeat(` call site in `lib/` now sits in a file that consults `AppMotion.reduce`, so the standing game-over caveat has been removed from `agent_execution_guide.md` rather than carried forward.
 
@@ -71,7 +75,17 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Three open.** **Issue 151** — the app displays its version nowhere, so there is no way to confirm which build a device is running; this cost a full debugging cycle on August 31. **Issue 150** — the deck "PEEK INSIDE" affordance is 8.5 pt text in the corner of a 150 × 110 pt card, and the person who commissioned the feature could not find it in the shipped app. **Issue 149** — a citation inside a `NOT RUN` block is unchecked by any rule, which produced a real fabricated filename on the first use of that shape. Everything else (Issues 1–148) is resolved and indexed in Section 3.
+**Three open: two selected as Wave Y, one deferred.**
+
+| Issue | Selection | Wave Y item |
+|---|---|---|
+| **151** | → A — read the bundle at runtime via `package_info_plus` | **Y1** (client) — do first, a build is waiting on it |
+| **149** | → A — extend R5 to check cited paths in `NOT RUN` blocks | **Y2** (tooling) |
+| **150** | ⏸️ **DEFERRED** by the user — *"skip this for now because this might be just an issue with the versioning."* | not scheduled |
+
+**⚠️ On the deferral of 150, one fact should not be re-derived:** it is about confirming behaviour on a device, **not** about whether the feature shipped. That was already settled — `strings -a` on the build-5 archive finds `PEEK INSIDE`, `A TASTE OF WHAT'S INSIDE` and `SHUFFLE`, all absent from the build-2 IPA, and `test/deck_peek_test.dart:150` passes. **The button is in the app and it renders**; it is 8.5 pt text on a 150 × 110 pt card. **The trigger to revisit is: Y1 ships, the user confirms on-device which build they are running, then re-checks whether the button is findable.**
+
+**Issue 151** — the app displays its version nowhere, so there is no way to confirm which build a device is running; this cost a full debugging cycle on August 31. **Issue 150** — the deck "PEEK INSIDE" affordance is 8.5 pt text in the corner of a 150 × 110 pt card, and the person who commissioned the feature could not find it in the shipped app. **Issue 149** — a citation inside a `NOT RUN` block is unchecked by any rule, which produced a real fabricated filename on the first use of that shape. Everything else (Issues 1–148) is resolved and indexed in Section 3.
 
 ---
 
@@ -101,7 +115,7 @@ Format should be the marketing version and build number together, e.g. **`v1.0.0
   - *Pros*: No dependency, no generated file, no sync gate, and it is synchronous. The value is fixed at compile time by whoever ran the build, so it cannot drift from that particular build.
   - *Cons*: **Every build command must carry the flag**, including `flutter build ipa`, `flutter build web`, and any archive triggered from Xcode's UI — which does not go through the CLI at all, so an Xcode archive would silently produce an app with an empty version. That is the worst possible failure for this feature: it fails on exactly the path used to ship the last build. The README runbook would have to carry the flag in three places and it would still be one forgotten paste away from a blank line.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -131,7 +145,7 @@ Your selection: _____
   - *Pros*: Zero layout cost and zero clipping risk, and the whole 150 × 110 card becomes the target — the largest possible hit area, with no competition against the existing tap-to-select.
   - *Cons*: A long-press is invisible, so this trades a small-target problem for a *no-signal* problem, which is worse. This project already has a documented case of users not finding an unmarked affordance — Issue 132 needed a partial third row added purely as a scroll cue. Without a persistent hint it would likely be discovered even less than the 8.5 pt link.
 
-Your selection: _____
+Your selection: Skip this for now because this might be just an issue with the versioning.
 
 ---
 
@@ -155,7 +169,7 @@ Your selection: _____
   - *Pros*: Removes the ambiguity at source rather than checking it, and is trivially enforceable: fail if a `NOT RUN` block contains an evidence path at all. A block that was not run has no artefacts of its own, so citing one is arguably always a category error.
   - *Cons*: Loses genuinely useful cross-references — E9's annotation is *more* helpful for naming the screenshot a reader should look at, not less. It would also fail the corrected E9 block as it now stands, so adopting this means rewriting that annotation to drop the pointer it was just given.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
