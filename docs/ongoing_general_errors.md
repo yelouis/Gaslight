@@ -71,7 +71,67 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**One open, and it is small.** Issue 149 — a citation inside a `NOT RUN` block is unchecked by any rule, which produced a real fabricated filename on the first use of that shape. Everything else (Issues 1–148) is resolved and indexed in Section 3.
+**Three open.** **Issue 151** — the app displays its version nowhere, so there is no way to confirm which build a device is running; this cost a full debugging cycle on August 31. **Issue 150** — the deck "PEEK INSIDE" affordance is 8.5 pt text in the corner of a 150 × 110 pt card, and the person who commissioned the feature could not find it in the shipped app. **Issue 149** — a citation inside a `NOT RUN` block is unchecked by any rule, which produced a real fabricated filename on the first use of that shape. Everything else (Issues 1–148) is resolved and indexed in Section 3.
+
+---
+
+### Issue 151: the app never shows its own version, so there is no way to confirm a device is running the build you shipped
+
+**In plain terms:** there is nothing anywhere in the app that says which version it is. When a playtester says "that feature isn't there", the only way to find out which build they are on is to ask them to open TestFlight and read it back — and when several people are round a table, that is the difference between a two-minute check and giving up.
+
+**Status**: ⚠️ Confirmed Unresolved — `grep -rn "package_info\|CFBundleVersion\|appVersion\|buildNumber" lib/` returns **nothing**, and `package_info_plus` is not in `pubspec.yaml`. The app has no access to its own version at runtime and displays it nowhere.
+
+**This is not hypothetical — it cost a full debugging cycle on August 31, 2026.** A report of "many of the features we've been building are not there" took a binary-level `strings` comparison of the shipped archive against an older IPA to resolve. Twelve features were checked; **all twelve were present in build 5.** The report turned out to be about screens on *other people's* devices, which were on build 4 — 26 client commits behind. **A version string on the title screen would have answered it in five seconds.**
+
+**Placement is already decided by the user and is not part of this decision:** the **title / entry screen** (`lib/screens/lobby_screen.dart`, the guest-ledger panel — `READ MANUAL` sits at `:1342` and the line belongs just below it), rendered **discreetly** — small, low-opacity, in keeping with the parlour styling — but **plainly readable without a gesture, a menu, or a long-press.** ⚠️ **Do not hide it behind an interaction.** Issue 150 is open right now precisely because an affordance was made so subtle that the person who commissioned it could not find it; repeating that here would defeat the entire purpose.
+
+Format should be the marketing version and build number together, e.g. **`v1.0.0 (6)`**, because the build number is the part that actually distinguishes two TestFlight builds.
+
+**The decision is where the number comes from.**
+
+**Option A (recommended)**: **Read it at runtime from the installed bundle** via `package_info_plus` — `PackageInfo.fromPlatform()` gives `version` (`CFBundleShortVersionString`) and `buildNumber` (`CFBundleVersion`).
+  - *Pros*: **It reads the artefact that is actually installed**, so it physically cannot disagree with the build a tester is running — which is the entire point of the feature. No generation step, no build flag, nothing to forget, and it keeps working if someone builds from Xcode rather than the Flutter CLI. `package_info_plus` is a Flutter Favourite and works on iOS, Android and web, so the web deploy gets the same benefit.
+  - *Cons*: It is a **native plugin**, and this project has been bitten before by a package that resolved cleanly and then would not compile (`phosphor_flutter`, whose `IconData` was a `final class`) — hence the standing lesson that *analyze ≠ compile*. So the very first step must be to add it and run a real **iOS build**, not just `flutter analyze` and `flutter test`. It is also **async**, so the line needs a `FutureBuilder` or a load-before-`runApp()` and may briefly render empty.
+
+**Option B**: **Generate a Dart constant from `pubspec.yaml`**, mirroring the existing deck pipeline — a `scripts/generate_version_dart.sh` writing `lib/utils/app_version.dart`, plus a `scripts/check_version_in_sync.sh` gate in the battery.
+  - *Pros*: **No new dependency and no async** — a plain `const`, synchronous, trivially testable, and it renders on the first frame with no flash. This project already knows this pattern works: `lib/utils/prompt_decks.dart` is generated from `functions/src/prompt_decks.ts` and `check_decks_in_sync.sh` proves they have not drifted, so both the generator and the drift gate have proven shapes to copy.
+  - *Cons*: It reports **what the source said when it was last generated, not what the bundle contains.** If someone bumps `pubspec.yaml` and builds without regenerating, the app confidently displays the wrong version — and a version display that can lie is worse than none, because it will be trusted. The sync gate closes that in the battery, but only for people who run the battery before shipping. It is also a permanent maintenance surface (one more generator, one more gate) for a single string.
+
+**Option C**: **Inject it at build time** with `--dart-define=APP_VERSION=$(...)` read via `String.fromEnvironment`.
+  - *Pros*: No dependency, no generated file, no sync gate, and it is synchronous. The value is fixed at compile time by whoever ran the build, so it cannot drift from that particular build.
+  - *Cons*: **Every build command must carry the flag**, including `flutter build ipa`, `flutter build web`, and any archive triggered from Xcode's UI — which does not go through the CLI at all, so an Xcode archive would silently produce an app with an empty version. That is the worst possible failure for this feature: it fails on exactly the path used to ship the last build. The README runbook would have to carry the flag in three places and it would still be one forgotten paste away from a blank line.
+
+Your selection: _____
+
+---
+
+### Issue 150: the deck "PEEK INSIDE" affordance is effectively invisible — the person who commissioned it could not find it
+
+**In plain terms:** we built a way to preview a deck's prompts before choosing it. It works, and it shipped. But the thing you tap is 8.5-point underlined text tucked into the bottom-left corner of a card the size of a postage stamp — so the user who asked for the feature opened the app, looked at the lobby, and concluded it had never been built.
+
+**Status**: ⚠️ Confirmed Unresolved — this is a discoverability defect, not a missing feature. Verified three ways:
+
+1. **It shipped.** `strings -a` on the build-5 archive binary finds `PEEK INSIDE` and `SHUFFLE`; both are **absent** from the build-2 IPA, which predates Issue 126 — so the test discriminates and the code is genuinely in the shipped app.
+2. **It renders.** `test/deck_peek_test.dart:150` (*"PEEK INSIDE button opens sheet from carousel"*) finds `ValueKey('peek_inside_$deckId')` on the centred deck and passes in the green suite.
+3. **It is far too small to find.** `lib/widgets/deck_carousel.dart:424–460`: the affordance is a bare `Text('PEEK INSIDE')` at **`fontSize: 8.5`**, underlined, brass on parchment, inside `Positioned(left: 2, bottom: 2)` — on a card that is **150 × 110 points** (`:260–261`). It sits under a 9-point `'$size PROMPTS'` label, and it only renders **`if (isCentred …)`**, so the two flanking cards show nothing.
+
+**The tap target is the real problem.** It is a bare `GestureDetector` wrapping text roughly 8.5 pt tall — well under Apple's 44 × 44 pt minimum — nested *inside* the card's own `GestureDetector` (`ValueKey('deck_$deckId')`, `:193–195`), which selects the deck. So a near-miss selects the deck instead of peeking, which reads as "the button does nothing".
+
+**Why this is worth a decision rather than a quick nudge:** the card is only 150 × 110 pt and already carries a title, a sample prompt, a prompt count and a wax seal. Anything given a real touch target has to displace something, and doing that badly is the same class of defect as Issues 136 and 137 — content clipped on small devices and at large text scales.
+
+**Option A (recommended)**: **Make the in-card affordance a real control** — a brass pill with an eye glyph, ~11–12 pt, meeting the 44 × 44 pt minimum hit area (expanding the touch target beyond the visible pill if necessary), replacing the current text link where the prompt-count label sits.
+  - *Pros*: Keeps the action attached to the deck it previews, so there is never a question of *which* deck is being peeked. Adds no chrome to a lobby that is already stacking carousel, House Rules and the suspects sheet. The nested `GestureDetector` and `DeckPeekSheet.show` plumbing already exist, so this is styling and hit-area work rather than new behaviour, and `deck_peek_test.dart` already covers the interaction.
+  - *Cons*: A 44 pt target is **40% of the card's 110 pt height** — the sample prompt or the seal has to shrink or move, and getting that wrong on a 320 pt-wide device or at `textScaleFactor: 2.0` reproduces exactly the clipping that produced Issues 136 and 137. It needs the same width × text-scale matrix those fixes were validated against, which is most of the work.
+
+**Option B**: **Move peek out of the card** — one "PEEK INSIDE THIS DECK" button below the carousel, acting on whichever deck is centred.
+  - *Pros*: Unconstrained by the 150 × 110 card, so it can be a properly sized control with a readable label and no clipping risk at any device size. One control instead of one per card, and it stays put as the carousel scrolls.
+  - *Cons*: Costs vertical space in a lobby that visibly has none — the current screenshot already shows the House Rules panel and the suspects sheet overlapping the carousel. It also separates the action from its object: which deck you peek depends on carousel position rather than on what you touched, which is a weaker mental model and harder to describe in a tooltip.
+
+**Option C**: **Long-press the card to peek**, and drop the text link entirely.
+  - *Pros*: Zero layout cost and zero clipping risk, and the whole 150 × 110 card becomes the target — the largest possible hit area, with no competition against the existing tap-to-select.
+  - *Cons*: A long-press is invisible, so this trades a small-target problem for a *no-signal* problem, which is worse. This project already has a documented case of users not finding an unmarked affordance — Issue 132 needed a partial third row added purely as a scroll cue. Without a persistent hint it would likely be discovered even less than the 8.5 pt link.
+
+Your selection: _____
 
 ---
 
