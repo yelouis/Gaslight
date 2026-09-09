@@ -105,7 +105,7 @@
   - *Pros*: Structurally immune to autocorrect and to the suggestion bar, because no box ever holds a word; a mistyped slot is visible at a glance; a pattern users already know from OTP entry.
   - *Cons*: A new custom widget owning focus traversal, paste-of-4, and backspace-across-boxes, plus its own accessibility labelling. The `ValueKey('room_code_field')` contract breaks, so the lobby widget tests and any playthrough scripts that type a code must be rewritten. Large surface area for a defect that Option A closes in one file.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -125,7 +125,7 @@ Your selection: _____
   - *Pros*: Zero new widgets; the limit is stated before writing begins, when it is most actionable.
   - *Cons*: The hint disappears on the first keystroke, so it is gone for the entire period it would be useful; gives no feedback about *current* length, which is the actual complaint.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -145,7 +145,7 @@ Your selection: _____
   - *Pros*: Keeps the theatrical introduction where it has the most value and costs the least; removes the per-rotation tax that makes it feel redundant; a small, contained change to the trigger condition.
   - *Cons*: Still wrong on the one occasion it appears — it is shown on the *truth* round, which is exactly the round where it hides the re-roll affordance. Introduces a "first time only" flag whose lifetime must be reasoned about carefully; the `_isLeaving` latch in Issue 152 is the standing example of what that costs when the holding `State` outlives the match.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -165,7 +165,7 @@ Your selection: _____
   - *Pros*: Closes the whole class of defect rather than the one reported instance, which is the same reasoning that retired the `pumpAndSettle` trap in Wave X.
   - *Cons*: Touches the lobby screen, which is the most test-covered and most recently regressed file in the project (Issues 151 and 152 both landed there); a wrapper over the lobby's `Stack` must be checked against the entry/parlour conditional in `lobby_screen.dart` so it does not intercept taps in the in-room branch.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -185,7 +185,7 @@ Your selection: _____
   - *Pros*: Gives the input its own layout budget instead of competing with the app bar, prompt card, re-roll button and pinned submit button inside one shrinking column; a well-trodden pattern for keyboard-first input.
   - *Cons*: Substantial restructuring of the most timing-sensitive screen in the game — the craft screen also hosts the round timer, the phase-change detection at `phase2_craft.dart:180`, and the auto-advance path, all of which must keep working while a sheet is open and when a phase change closes it out from under the player.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -205,7 +205,7 @@ Your selection: _____
   - *Pros*: Cuts the worst case substantially with a contained change; the global rotation index and every path that depends on it survive untouched; naturally rewards a table that writes quickly.
   - *Cons*: Punishes one slow writer under social pressure, which cuts against a game about carefully impersonating someone. Needs a new server-side rule for when the grace window starts and a client countdown that can jump backwards, which will read as a bug unless it is explained on screen.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -225,7 +225,7 @@ Your selection: _____
   - *Pros*: Never degenerate at any player count and never has a tie problem, because it makes no claim; feeds directly into Issue 169's request for a visible scoring transcript.
   - *Cons*: Removes a celebratory beat that a party game wants, trading a moment for a table. Overlaps with Issue 169 — if that lands, this becomes redundant work; decide 169 first.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -245,7 +245,7 @@ Your selection: _____
   - *Pros*: Each answer gets the full screen and maximum legibility regardless of player count; scales to any number of options without shrinking anything.
   - *Cons*: Directly opposes the stated goal — the complaint is *too much scrolling* and wanting everything on one page; a carousel makes simultaneous comparison impossible rather than merely awkward. Also adds a new interaction to learn during a timed phase.
 
-Your selection: _____
+Your selection: Lets do option C but before actually implementing it, create some demo images for me to view and select which paged/swipeable design is the best.
 
 ---
 
@@ -265,25 +265,50 @@ Your selection: _____
   - *Pros*: Deletes the irreversible state rather than managing it; the target has no decision to make here, so asking them for one is arguably the underlying mistake. Fewest moving parts afterwards.
   - *Cons*: Removes the target's only remaining agency on that screen, which makes Issue 162 strictly worse — do not select this without also selecting something in 162. The readiness gate's arithmetic must be re-derived to exclude the target, touching server logic that currently counts all non-spectators uniformly.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
-### Issue 162: The target has nothing to do while their card is being voted on
+### Issue 162: The target has nothing to do while their card is being voted on — REWRITTEN, awaiting a new selection
 
-**Status**: ⚠️ Confirmed Unresolved — When a player's own card is up, `phase3_vote.dart` gives them a read-only `CardGrid` (`onSelect: isTarget ? (_) {} : ...`, `selectedAuthorId: null`), a sealed-ballot counter, and a single ready button. They cannot vote, cannot select, and have no other input for the entire voting phase on their own card — which, across a full match, is one full voting phase per player. This is the dead-time complaint of Issue 158 relocated to the vote screen, and it is the seat where the game's premise should be most engaging: the table is arguing about which answer is really yours.
+**Status**: ⚠️ Confirmed Unresolved — **rewritten September 8, 2026 at the user's direction.** The original three options were not selected. Instead the user proposed a specific mechanic and asked whether it is possible before anything is built:
 
-**Option A (recommended)**: **Give the target a prediction** — let them privately guess how many voters will find their truth, or which forgery will draw the most votes, scored at reveal.
-  - *Pros*: Turns the waiting seat into a distinct role with its own tension, using only data the reveal already computes; it is the one seat with private information, so a prediction there is genuinely interesting rather than busywork. Feeds Issue 169's transcript with another line to show.
-  - *Cons*: Adds a scoring term, so `design_scoring_and_ui.md` and `ScoringLogic` both change, and the honors metrics in `player_state.dart` may need a new field. Every scoring addition raises the "too complicated to explain" risk that Issue 169 already flags.
+> *"the target sees all the answers written for them and they can get points guessing which player would select which answer. Maybe something like a drag and drop using the player icon."*
 
-**Option B**: **Give the target a non-scoring performance beat** — let them react, bluff, or flag one answer as "obviously not me" for the table to see, with no points attached.
-  - *Pros*: No scoring change at all, so no `ScoringLogic` or design-doc churn; leans directly into the table talk the screen already encourages with "Talk it out — discussion is part of the game"; cheapest option that still fills the seat.
-  - *Cons*: Purely cosmetic to the outcome, so it may not hold attention past the novelty; a visible "not me" signal leaks information and could distort voting in ways that need playtesting before shipping.
+**The underlying defect is unchanged.** When a player's own card is up, `phase3_vote.dart` gives them a read-only `CardGrid` (`onSelect: isTarget ? (_) {} : ...`, `selectedAuthorId: null`), a sealed-ballot counter, and one ready button. Across a full match that is one entire voting phase per player with no input, in the seat that should be the most engaged — the table is arguing about which answer is really theirs.
 
-**Option C**: **Let the target watch the vote arrive** — replace the static counter with live, anonymous vote arrival (which options are accumulating votes, without identifying voters).
-  - *Pros*: Uses data already written to Firestore; makes the seat tense in real time with no new rules to learn and no scoring change; small client-side change.
-  - *Cons*: Leaks tallies before the reveal, which flattens the reveal beat the game is built around — the reveal's whole structure is a staged disclosure, and this pre-empts it. Also a live-updating tally invites the target to react visibly and tip off the table.
+#### Feasibility verdict: **the mechanic is possible, and cheaper than it looks. The drag-and-drop is the part that is not.**
+
+**What already exists, verified in source:**
+
+- **The target already holds every answer text.** During the vote phase the server publishes `card.options` as unlabelled `{id, text}` pairs, and the target renders them today — `phase3_vote_test.dart` asserts exactly this in *"O9: Target player sees card prompt and read-only options grid with no confirm vote button (Issue 121)"*. **No new data has to reach the client.**
+- **Predicting per-*option* needs no authorship**, so the mechanic does **not** violate the standing invariant that other players' authorship is never sent to the client before the unmask window. The target would map *voters → option ids*, never *voters → authors*. This is the single most important reason the idea is safe to build.
+- **A private pre-reveal store already exists.** `sealed` is default-deny by having no `match` block, and is exactly where pre-reveal secrets already live. Predictions belong there.
+- **Deferred scoring already exists.** `pendingScoreDeltas` is already flushed at three sites, so folding prediction points into the existing reveal scoring needs no new mechanism.
+
+**What has to be built:** one callable (`submitTargetPredictions`) writing `Record<voterId, optionId>` into `sealed`, resolution at reveal, and a UI. That is a normal-sized feature, not an architectural change.
+
+**What does not work: the drag-and-drop, specifically.** The vote screen is *already* the most space-starved surface in the app — that is **Issue 160**, which is open and unresolved, and whose own selection is currently blocked pending design mockups. At 6 options and 5 players the target would need 4 draggable player tokens plus a 6-row option list on a 320 pt screen where the options **already do not fit without scrolling**. Drag-and-drop across a scrolling list on a phone is the weakest possible interaction for that layout: auto-scroll-while-dragging is fiddly, drop targets are small, and it is hard to correct a mistake under a timer. **Tap-to-assign carries exactly the same information with none of that cost** — tap a player chip, then tap an answer.
+
+**The one genuine design risk** is scale. With N players the target makes N−1 predictions, so an unweighted +1 each pays up to N−1 points, against a truth reward of `ceil((P−1)/(S+1))` — at 6 players that is 5 potential points against a truth reward of 1. **Any option below that scores per-voter must state its weighting**, or the target's seat becomes the highest-scoring seat in the game.
+
+**Sequencing note:** the full mapping is the only option here whose UI must be designed on top of whatever Issue 160 settles. The one-tap options are layout-independent and can ship before it.
+
+**Option A (recommended)**: **Full mapping by tap-to-assign, sequenced after Issue 160** — the user's mechanic, with tapping instead of dragging. The target taps a player chip then taps an answer, building `voterId → optionId` for every voter; unassigned voters simply score nothing. Resolved at reveal and folded into `scoreDeltas`.
+  - *Pros*: This is the richest use of the one seat with private information — the target knows which answer is true *and* knows the people, which is the exact pairing Quiplash has no equivalent for, so it doubles as a real answer to Issue 165. Needs no new data on the client and no authorship leak. Tap-to-assign works at 320 pt, is trivially correctable, and is testable in a widget test in a way drag-and-drop is not.
+  - *Cons*: The most expensive option here — a new callable, `sealed` writes, reveal resolution, a scoring term, and updates to `design_scoring_and_ui.md` and `design_database_and_security.md`. Its UI cannot be finalised until Issue 160 settles the vote screen's layout, so it is the only option that cannot start immediately. Scoring must be weighted (see the risk above) and every added scoring term worsens Issues 164 and 169.
+
+**Option B**: **Name the one voter you will fool** — the target taps a single player they believe will pick a forgery, scored at reveal.
+  - *Pros*: One tap, one chip row, completely independent of Issue 160's layout, so it can ship immediately. Keeps the social core of the user's idea — it is still "how well do you know this person" — at roughly a quarter of the build. A single fixed-value point cannot unbalance scoring, so the weighting risk disappears.
+  - *Cons*: Much shallower than the mapping; one prediction per card rather than N−1, so it fills the seat without really occupying it. Reveals less about the target's read of the table.
+
+**Option C**: **Mark the most dangerous forgery** — the target taps the one forgery they think will draw the most votes, scored if correct.
+  - *Pros*: One tap and layout-independent, like B, and it reuses the tally the reveal already computes for Issue 159's banner, so resolution is nearly free. Reads naturally on the existing read-only grid — it is a selection on a grid that already renders.
+  - *Cons*: Tests the target's read of the *answers*, not of the *people*, which is the weaker half of the premise and does the least for Issue 165. Collides directly with Issue 159, which suppresses that banner on ties and at small tables — the two must agree on what "most votes" means or they will disagree on screen.
+
+**Option D**: **Predict the count** — the target guesses how many voters will find their truth.
+  - *Pros*: The cheapest possible fill for the seat: one number, one control, no layout pressure, no new resolution logic beyond a comparison the reveal already has. Naturally bounded scoring.
+  - *Cons*: The least interesting of the four and the least connected to the premise — it is a guess about an aggregate, not about anybody at the table. Unlikely to hold attention past the first match.
 
 Your selection: _____
 
@@ -307,7 +332,7 @@ Your selection: _____
   - *Pros*: Escalation with no new rules and no new scoring terms — the same game gets harder, which players feel without being told; reuses parameters the server already validates.
   - *Cons*: A shorter timer makes Issues 154, 156 and 157 materially worse, since all three are about being unable to write comfortably under time pressure — **do not select this before those three are fixed**. Raising `forgeriesPerCard` directly worsens Issue 160's option-count problem.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -327,7 +352,7 @@ Your selection: _____
   - *Pros*: Teaches at the exact moment of need and then gets out of the way permanently; no permanent screen real estate consumed.
   - *Cons*: Adds a full-screen modal to timed phases — the same pattern Issue 155 is about *removing*, and it would land on the same craft screen. Needs persisted per-player state, whose lifetime is exactly the trap lesson 2.40 was written about. Useless to a player joining a friend's match on someone else's device.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -353,7 +378,7 @@ The structural asset the game already has and does not exploit: **the answers ar
   - *Pros*: Every one of those issues is a known, verifiable fix with a clear done condition, and the playthrough found nine of them — a game that is same-y but flawless beats a differentiated one that is hard to type into. No design risk, no doc churn, no reversal of Section 4.
   - *Cons*: Leaves the strategic concern unanswered, and it will be raised again by the next playtester; the longer the phase structure hardens, the more expensive Options A and B become.
 
-Your selection: _____
+Your selection: Lets put this off for now but don't lose this issue.
 
 ---
 
@@ -373,7 +398,7 @@ Your selection: _____
   - *Pros*: Reuses machinery that already exists, including the exhaustion plumbing in `design_prompt_system.md`; gives an escape hatch on the round where there currently is none.
   - *Cons*: Does not answer the request — it changes the question instead of helping with the answer. Structurally much harder than truth re-roll: a forgery card is a *shared* card that other players are simultaneously writing on, so re-rolling it would invalidate their work. Likely infeasible without also changing the rotation plan.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -389,7 +414,7 @@ Your selection: _____
   - *Pros*: Puts the result on screen with no scrolling at all, at any player count; keeps the celebratory material for those who want it.
   - *Cons*: Hides the honors, which are the screen's most distinctive content and part of what Issue 165 says the game needs more of, not less. Adds navigation to a terminal screen that currently has none.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -409,7 +434,7 @@ Your selection: _____
   - *Pros*: Guarantees fit in the current layout at any width; the measurement pattern already exists, is text-scale aware, and is proven in this codebase.
   - *Cons*: Shrinking a 14 pt letter-spaced display face has very little headroom before it becomes unreadable, so it can turn a truncation bug into a legibility bug. Solves a layout problem with measurement when Option A removes the constraint outright.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
@@ -429,7 +454,7 @@ Your selection: _____
   - *Pros*: Unlimited space for the full derivation without disturbing the reveal's pacing; naturally accompanies the standings; the match summary infrastructure already exists to carry it.
   - *Cons*: Arrives long after the moment of confusion, so it explains rather than teaches; the game-over screen is already the busiest in the app and the subject of Issues 167 and 168. Same `ScoringLogic` breakdown requirement as Option A, so it is not cheaper in server terms — only later.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 
