@@ -310,7 +310,7 @@ Your selection: Proceed with Option A.
   - *Pros*: The cheapest possible fill for the seat: one number, one control, no layout pressure, no new resolution logic beyond a comparison the reveal already has. Naturally bounded scoring.
   - *Cons*: The least interesting of the four and the least connected to the premise — it is a guess about an aggregate, not about anybody at the table. Unlikely to hold attention past the first match.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 

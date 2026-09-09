@@ -1,10 +1,15 @@
-# Agent Execution Guide — Wave AA: 14 approved code items + 2 non-code items — September 8, 2026
+# Agent Execution Guide — Wave AA: 15 approved code items, 1 blocked, 1 mockup item — September 8, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Every number and literal string in this document is a decision, not a suggestion.**
 
-Selections were made by the user in `docs/ongoing_general_errors.md` on **September 8, 2026** against Issues 153–169, filed from a live playthrough of build 7. **Fourteen selected Option A and are specified below as AA1–AA14.** Two are deliberately **not** implementation work — **AA15** produces design mockups for the user to choose between, and Issue 162 has been rewritten and returned to the user. **Issue 165 (Quiplash differentiation) is deferred at the user's direction and must not be worked on, but must not be closed either.**
+Selections were made by the user in `docs/ongoing_general_errors.md` on **September 8, 2026** against Issues 153–169, filed from a live playthrough of build 7. **Fifteen items are approved and buildable: AA1–AA14 and AA16a.** Two are not ordinary implementation work:
+
+- **AA15 (Issue 160)** produces design mockups for the user to choose between. **No production code.**
+- **AA16b (Issue 162, client half)** is **approved but BLOCKED** on Issue 160's design landing. Its server half, **AA16a, is unblocked and should be built now** — the data contract does not depend on the layout.
+
+**Issue 165 (Quiplash differentiation) is deferred at the user's direction and must not be worked on, but must not be closed either.**
 
 **Do only what is specified here.** A `(recommended)` label in the issue file is not approval; a filled `Your selection:` line is. **Never fill one in.**
 
@@ -39,6 +44,8 @@ Selections were made by the user in `docs/ongoing_general_errors.md` on **Septem
 **One item = one commit.** Conventional Commit, WHY in the body, never a bare title.
 
 **Implement in the order given.** Six items land on `phase2_craft.dart` and two on `game_over_screen.dart`; the order below is chosen so each builds on a settled tree. **AA1 must be first** — it deletes a widget that later items would otherwise have to work around.
+
+**Two ordering constraints are hard, not stylistic.** **AA10 before AA11** — the round multiplier becomes a line in the itemised transcript. **AA11 before or with AA16a** — target predictions add a `target_read` rule that must satisfy AA11's sum invariant. **AA16b is last and gated**: it cannot start until Issue 160 has a selected design *and* that design is implemented.
 
 ### 2.0 Read this before touching anything
 
@@ -423,11 +430,102 @@ Save to `docs/playthroughs/evidence/` **only if** the evidence gate tolerates it
 
 ---
 
-### AA16 — Issue 162: **rewritten and returned to the user — no work to do**
+### AA16a — Issue 162 → Option A, server half: target prediction storage, resolution and scoring
 
-The user did not select any of the three original options. They proposed their own mechanic — the target predicting which player picks which answer — and asked for a feasibility check first. **Issue 162 has been rewritten with that analysis and four fresh options, and carries a blank `Your selection: _____`.**
+**Selected September 8, 2026.** The target predicts, for every voter, which answer that voter will pick, and scores on the ones they get right.
 
-**Do not implement anything for Issue 162.** The findings recorded there, for context: the mechanic is feasible and needs no new client data, because the target already renders the option list during voting and would map *voters → option ids* rather than *voters → authors*, so no authorship leaks. **The drag-and-drop specifically does not work** — the vote screen already does not fit (Issue 160), and drag targets across a scrolling list on a 320 pt screen are the worst available interaction for it. Tap-to-assign carries the same information.
+**⚠️ Split into two items on purpose. AA16a is unblocked; AA16b is not.** The data contract — `Record<voterId, optionId>` — is identical whether the UI ends up being taps, drags or dropdowns, so the entire server half can be built and tested now with no UI at all. **Build AA16a first and prove it with emulator tests.** AA16b needs the vote screen's layout, which Issue 160 has not settled.
+
+**Why this is safe, and the reason it must stay that way.** The target maps **voters → option ids**, never **voters → authors**. Authorship stays server-side until the unmask window closes, which is a standing invariant in §4. **If any part of your implementation sends authorship to the client to make the UI easier, you have broken the game's central secret.** The client already has everything it needs: `card.options` is `{id, text}` and is already rendered for the target today.
+
+**What already exists — verified, do not rebuild it**
+
+- `sealed/{targetPlayerId}` is the per-card private document. It is **default-deny by having no `match` block**, which is exactly why predictions belong there and nowhere else.
+- `sealedData.answerAuthors` is `Record<optionId, authorId>` — already populated, and it is what you validate predictions against.
+- `card.votes` is `Record<voterId, optionId>`. **A prediction is therefore compared to a vote by direct equality**: `predictions[voterId] === card.votes[voterId]`. No resolution step, no text matching.
+- `pendingScoreDeltas` already carries deferred scoring through three flush sites.
+
+**Files**
+
+- `functions/src/index.ts` — new callable `submitTargetPredictions`.
+- `functions/src/scoring_logic.ts` — resolution and scoring.
+- `lib/utils/scoring_logic.dart` — **the test-only mirror. See §2.0.** Both or neither.
+- `lib/services/game_service.dart` — the client wrapper (used by AA16b; add it here so AA16b is pure UI).
+- `docs/design_scoring_and_ui.md` and `docs/design_database_and_security.md` — the new scoring term and the new `sealed` field.
+
+**The callable.** `submitTargetPredictions({ roomCode, cardId, predictions })` where `predictions` is `Record<voterId, optionId>`.
+
+**Follow `castVote`'s authorization shape exactly** (`index.ts:880` onward) — it is the house idiom and deviating from it is how an authorization hole gets introduced:
+
+1. No `request.auth` → `unauthenticated`.
+2. Read `rooms/{roomCode}/players/{callerPlayerId}` and require `authUid === request.auth.uid` → `permission-denied`. **`playerId` is not a credential** (§4).
+3. Inside a transaction: room exists; `room.currentPhase === "vote"`; `cardId === room.currentReaderId`.
+4. **The caller must be the card's target** — `cardId === callerPlayerId` → `permission-denied` otherwise. Only the target predicts.
+5. Reject if the target is already ready (`room.readyPlayers[cardId] === true`) → `failed-precondition`. **Predictions close when the target readies.** AA8 makes that ready a toggle, so un-readying re-opens the window — that is intended and must be tested.
+
+**Validation of the payload — every one of these is a real failure mode, not defensive padding:**
+
+- Every key must be an **active non-spectator player** in the room, and **must not be the target**. The target is not a voter.
+- Every value must be an **option id present on this card**.
+- **Reject a prediction that assigns a voter to their own answer** — `answerAuthors[optionId] === voterId` → `invalid-argument`. That vote is impossible by construction (`castVote` refuses it), so predicting it is a UI bug and must not be silently stored as an unwinnable guess.
+- **Reject placeholder options**, matching `castVote`'s `kMissingAnswerPlaceholder` check. A voter cannot vote for one.
+- **Partial maps are legal.** Unassigned voters simply score nothing. Do not require a complete mapping.
+
+**Write semantics: replace, do not merge.** A resubmission overwrites the whole map. A merge would make it impossible for the target to *unassign* a voter.
+
+**Storage.** `sealed/{cardId}.targetPredictions`. **Never on the room document** — the room is client-readable and this would hand every player the target's read of the table.
+
+**Scoring.** Add an optional fourth parameter to `calculateScores` in **both** implementations:
+
+```ts
+targetPredictions?: Record<string, string>
+```
+
+Award the target `kTargetReadPointsPerCorrect` for each voter where `targetPredictions[voterId] === playerVotes[voterId]`.
+
+**⚠️ Balance decision, recorded explicitly so it can be changed in one line.** Set `kTargetReadPointsPerCorrect = 1`, matching the existing "believable target" rule, which already pays the target +1 per truth-finder. **This is a judgement call, not a derived value.** It gives the target a per-card ceiling of `2 × (voters)` on the one card per round that is theirs, against a voter's typical 1–2. That is defensible — the target's turn is meant to be their moment — but it is untested at the table. **Define it as a single named constant in both implementations, and tell the user it is the knob** if the target seat proves to over-earn. Do not bury the number inline.
+
+**AA11 dependency.** AA11 itemises score deltas. **This adds a `target_read` rule to that breakdown**, and AA11's invariant — `sum(breakdown[player].points) === scoreDeltas[player]` — must continue to hold with predictions scoring. **If AA11 has already landed, extend it in this commit. If it has not, AA16a must add the rule to the breakdown shape anyway** so AA11 does not have to come back for it. Making the points visible per-rule is also what makes the balance knob observable in play rather than inferred.
+
+**Departures.** A voter who leaves mid-card leaves a prediction that can never resolve. It must score nothing and **must not throw**. The 3-player floor and the departure recalculation already exist; this must not become a new crash path.
+
+**Validation**
+
+1. New emulator test: a complete correct mapping scores `voters × 1` to the target and nothing to anyone else.
+2. New emulator test: a partial mapping scores only the correct entries.
+3. New emulator test per rejection — non-target caller, wrong phase, wrong card, target already ready, voter id not in the room, target predicting themselves, option id not on the card, **voter predicted onto their own answer**, placeholder option. **Nine rejections, nine assertions.**
+4. New emulator test: resubmission **replaces** rather than merges — assign voter A then resubmit without A, and assert A is gone.
+5. New emulator test: un-ready reopens the window (pairs with AA8).
+6. New emulator test: a voter who left the room mid-card scores nothing and the reveal completes without throwing.
+7. **Rules test in `functions/test/rules.spec.ts`: a non-target client cannot read `sealed/{cardId}`.** `sealed` is default-deny today; this proves predictions did not change that.
+8. **Mirror the scoring fixtures into `test/scoring_logic_test.dart`** against the Dart copy, asserting the same numbers. §2.0.
+9. **AA11's sum invariant re-run** with predictions in play.
+10. **Over-reach guards, unedited:** every existing test in `functions/test/game_e2e.spec.ts` and `functions/test/rules.spec.ts`.
+11. **Falsification:** remove the self-answer rejection; test 3's corresponding case must fail while the other eight still pass. Then remove the scoring term; tests 1 and 2 fail and the rejection tests pass.
+
+---
+
+### AA16b — Issue 162 → Option A, client half: tap-to-assign on the vote screen
+
+**⚠️ BLOCKED. Do not start this until Issue 160 has a selected design and it is implemented.** The target's assignment UI has to be built on top of the vote screen's option layout, and that layout is being redesigned — AA15 produces mockups, the user picks one, and only then does this have a surface to sit on. **Building it against today's scrolling `CardGrid` means building it twice.**
+
+**Why tap and not drag — this is settled, do not revisit.** The vote screen already does not fit at 320 pt with six options; that is Issue 160. Drag targets across a scrolling list on a phone need auto-scroll-while-dragging, offer small drop zones, and are hard to correct under a timer. Tap-to-assign — tap a player chip, then tap an answer — carries identical information, works at 320 pt, is trivially correctable, and is testable in a widget test in a way drag is not.
+
+**A useful observation for whoever implements it:** if Issue 160 lands on a **paged** layout, the interaction gets *easier*, not harder. With one answer on screen at a time, the target assigns players **to the answer they are looking at** — a row of voter chips beneath the current page. That is a better fit than any per-row control in a scrolling list, so do not treat the 160 redesign as an obstacle here.
+
+**Scope.** The target's branch of `phase3_vote.dart` only. The voter's path is untouched. Call the `game_service.dart` wrapper added in AA16a; **this item adds no new server surface.**
+
+**⚠️ This item edits an existing passing test, and that needs saying in the commit body.** `phase3_vote_test.dart` → *"O9: Target player sees card prompt and read-only options grid with no confirm vote button (Issue 121)"*. **The "no confirm vote button" half stays true and must keep being asserted — the target still never votes.** The "read-only" half stops being true, because the grid becomes interactive for assignment. Update that assertion precisely; **do not delete the test and do not loosen it.**
+
+**Validation**
+
+1. New widget test: target taps a voter chip then an answer; the assignment renders; tapping a different answer moves it; tapping the assigned answer again clears it.
+2. New widget test: the target cannot assign a voter to that voter's own answer — the affordance is absent or inert. **The server rejects this (AA16a); the client must not offer it.**
+3. New widget test at 320 pt with six options and the maximum voter count for the chosen layout: no overflow, every voter chip reachable.
+4. New widget test: a partial mapping submits successfully.
+5. **State-lifetime guard.** Any local assignment map lives on a `State` that survives reader changes. **Advance to the next card without re-pumping and assert the assignments are cleared.** This is the Issue 152 / lesson 2.40 trap for the third time in this wave — a re-pump builds a fresh `State` and passes against broken code.
+6. **Over-reach guard:** the voter path is unchanged — `CONFIRM VOTE` still works and self-voting is still refused.
+7. **Falsification:** remove the clear-on-reader-change; test 5 must fail and test 1 must pass.
 
 ---
 
@@ -575,23 +673,29 @@ These are always legitimate, alongside — not instead of — Wave AA in §2.
 
 ```
 (1) A selection exists? If NO -- stop. Never fill in a `Your selection:` line.
-    Wave AA in section 2 is selected. Issues 160 and 162 are NOT: 160 needs
-    mockups first (AA15), 162 was rewritten and returned. 165 is deferred.
+    Wave AA in section 2 is selected. Two carry gates: Issue 160 needs mockups
+    before any code (AA15), and Issue 162's client half (AA16b) is blocked on
+    160 landing -- its server half (AA16a) is not. 165 is deferred, and must
+    stay open.
 (2) If the spec says "determine X first", DO THAT AND RECORD THE RESULT
     BEFORE writing the fix. AA8 has one: what setReady(false) does after the
     gate has fired. Answer it with an emulator test, not by reasoning.
 (3) Changing scoring? You must change BOTH functions/src/scoring_logic.ts AND
     the test-only mirror lib/utils/scoring_logic.dart, or the client suite
-    stays green while computing different numbers from production.
+    stays green while computing different numbers from production. Three items
+    touch scoring: AA10, AA11, AA16a.
+(3b) Adding a callable? Copy castVote's authorization shape (index.ts:880):
+    request.auth, then authUid on the player doc, then phase and card checks
+    inside the transaction. playerId is NOT a credential.
 (4) WRITE the falsifying validation. Run it. OBSERVE IT FAIL. Record the
     exact output in the commit body. A DELETION STILL NEEDS ONE (AA1).
 (5) IMPLEMENT exactly as specified. RECORD ANY SUBSTITUTION YOU MAKE.
 (6) VALIDATE, including every named over-reach guard, then RE-RUN THE GUARD
     WITH THE FIX REMOVED and confirm it fails.
-(7) State bugs: the test must NOT re-pump the widget between steps. AA6 and
-    AA8 both carry a flag on a State that outlives what it guards. Re-pumping
-    builds a fresh State and passes against broken code -- that is how Issue
-    152 shipped.
+(7) State bugs: the test must NOT re-pump the widget between steps. AA6, AA8
+    and AA16b all carry state on a State that outlives what it guards.
+    Re-pumping builds a fresh State and passes against broken code -- that is
+    how Issue 152 shipped.
 (8) ENUMERATE EVERY INVOCATION of anything you changed and run them all.
     pendingScoreDeltas has THREE flush sites (AA11).
 (9) RE-RUN THE FULL BATTERY -- exit codes bare, except flutter analyze,
