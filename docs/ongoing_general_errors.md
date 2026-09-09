@@ -83,7 +83,353 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**No open issues.** All issues through 152 are resolved or closed and indexed in Section 3.
+**Issues 153–169 were filed from a live playthrough on September 8, 2026** (build 7, iOS). They are ordered by the playthrough's own numbering, not by severity. Items 2, 5 and 6 of that report collapse into a single issue (**155**) because all three describe the same widget. Three items were ambiguous on filing and were clarified by the user before options were written: the craft-screen visibility failure is *the keyboard covering the field* (**157**), the irreversible ready is *the target's* on the vote screen (**161**), and the Quiplash comparison covers **all four** axes offered — core loop, tone, scoring and social dynamics (**165**).
+
+**Read 162, 163 and 165 together before selecting any of them.** They are one design question approached from three sides — the empty target seat, the flat match arc, and the Quiplash resemblance — and a selection in 165 can moot the other two.
+
+---
+
+### Issue 153: Room code entry fights iOS autocorrect, and codes are unspeakable
+
+**Status**: ⚠️ Confirmed Unresolved — `lib/screens/lobby_screen.dart:1289` sets `textCapitalization: TextCapitalization.characters` and `maxLength: 4`, but leaves `autocorrect` and `enableSuggestions` at their defaults (both `true`) and supplies no `inputFormatters` and no `keyboardType`. iOS therefore treats a 4-letter fragment as a misspelled word and offers substitutions. Separately, `generateRoomCode()` (`functions/src/index.ts:208`) draws 4 characters uniformly from `A–Z`, so almost every code is a non-word — precisely the input autocorrect is most aggressive about replacing.
+
+**Option A (recommended)**: **Harden the field** — set `autocorrect: false`, `enableSuggestions: false`, `keyboardType: TextInputType.text`, and add `FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z]'))` plus an uppercasing formatter so the controller text matches what `_joinRoom` already upper-cases at `lobby_screen.dart:197`.
+  - *Pros*: Fixes the reported failure at its source in one file; no server change, no migration, no effect on the existing 456,976-code space; the `room_code_field` widget key and every playthrough step that types into it keep working unchanged.
+  - *Cons*: Does nothing for the *other* half of the complaint — reading "V K X Q" aloud across a table is still error-prone. Autocorrect is silenced but the code is still four arbitrary letters.
+
+**Option B**: **Harden the field and draw codes from a word list** — do everything in A, and additionally replace the uniform `A–Z` draw in `generateRoomCode()` with a curated list of unambiguous 4-letter words.
+  - *Pros*: Codes become speakable, memorable and easy to relay by voice; a fixed list can be screened once for offensive strings, which a random draw can never be.
+  - *Cons*: Collapses the code space from 456,976 to the list size (typically ~1,000–2,000), which materially raises collision rate — the retry loop at `index.ts:394` must be re-examined and its bound justified for the smaller space. The list needs curating for offensive words *and* near-homophones (`BEAR`/`BARE`, `SEAM`/`SEEM`), which is ongoing content work. **Worthless without A**: a real word is *more* likely to be autocorrected into a different real word, not less.
+
+**Option C**: **Segmented 4-box code input** — replace the free-text field with four single-character boxes that auto-advance.
+  - *Pros*: Structurally immune to autocorrect and to the suggestion bar, because no box ever holds a word; a mistyped slot is visible at a glance; a pattern users already know from OTP entry.
+  - *Cons*: A new custom widget owning focus traversal, paste-of-4, and backspace-across-boxes, plus its own accessibility labelling. The `ValueKey('room_code_field')` contract breaks, so the lobby widget tests and any playthrough scripts that type a code must be rewritten. Large surface area for a defect that Option A closes in one file.
+
+Your selection: _____
+
+---
+
+### Issue 154: The 100-character answer limit is invisible until submission is rejected
+
+**Status**: ⚠️ Confirmed Unresolved — `kMaxAnswerLength = 100` (`lib/widgets/card_grid.dart:22`) is enforced only inside `_submitAnswer` (`lib/screens/phase2_craft.dart:64–84`), which shows an error SnackBar *after* the player has finished writing. The `TextField` at `phase2_craft.dart:563` deliberately sets no `maxLength`. **This is a reversal of a documented decision, not an oversight**: the comment at `phase2_craft.dart:69–73` states that silently refusing keystrokes gives the player no idea why the words stopped appearing, so the cap was moved to submit time on purpose. The playthrough shows the cost of that choice — a player who overruns loses their work's shape at the worst possible moment, under a timer. Any option here must preserve the *other* half of that comment: the server bound in `submitAnswer` is the real limit and stays.
+
+**Option A (recommended)**: **Live counter, no cap** — add a `counterText`/counter widget showing `n/100` that turns to the error colour past 100, leaving the field itself uncapped and submit-time validation untouched.
+  - *Pros*: Honours the original decision exactly — keystrokes are never silently swallowed — while removing the surprise. The player sees the ceiling approaching and can self-edit before the timer pressure hits. Purely additive: `_submitAnswer`'s guard and the server bound are unchanged, so no test in `vote_option_truncation_test.dart` is affected.
+  - *Cons*: A player can still submit an over-long answer and be rejected; it only makes that outcome predictable rather than impossible. Adds visual weight to a deliberately spare parchment card.
+
+**Option B**: **Hard cap the field** — set `maxLength: kMaxAnswerLength` with `maxLengthEnforcement: enforced`, which also renders Flutter's built-in counter.
+  - *Pros*: The rejection path becomes unreachable from the UI; shortest possible diff; counter comes free.
+  - *Cons*: Reintroduces exactly the failure the code comment was written to prevent — typing stops with no explanation, which is worse under a countdown. Also silently truncates a paste, destroying text the player may not notice is gone.
+
+**Option C**: **State the limit in the hint and instruction copy only** — extend the `hintText` and the existing `instructionText` at `phase2_craft.dart:460` to name the 100-character bound.
+  - *Pros*: Zero new widgets; the limit is stated before writing begins, when it is most actionable.
+  - *Cons*: The hint disappears on the first keystroke, so it is gone for the entire period it would be useful; gives no feedback about *current* length, which is the actual complaint.
+
+Your selection: _____
+
+---
+
+### Issue 155: The dealt-card overlay is a redundant gate with two misleading button labels
+
+**Status**: ⚠️ Confirmed Unresolved — Covers items 2, 5 and 6 of the playthrough, which are all `lib/widgets/dealt_card_overlay.dart`. The overlay is raised whenever the phase or rotation changes (`phase2_craft.dart:180–196`) and is dismissed by a single button whose label is `DISMISS` on truth rounds and `INSPECT` on forgery rounds (`dealt_card_overlay.dart:186`). Both labels misdescribe the action: the button *proceeds to the writing screen* in both cases — it neither dismisses the prompt (which is re-rendered immediately behind it, in the `CASE DOSSIER` block at `phase2_craft.dart:529`) nor inspects anything. The overlay's content is therefore a strict subset of the screen it covers. On truth rounds it is also actively counterproductive: it presents the prompt as final at the exact moment the player has not yet seen the `RE-ROLL PROMPT` button that sits below the fold on the screen behind it.
+
+**Option A (recommended)**: **Remove the overlay entirely** — delete the `_showDealtOverlay` state and the `DealtCardOverlay` branch from `phase2_craft.dart`, landing the player directly on the writing screen, and fold the overlay's one unique line (the "You have been dealt the ledger of X" framing) into the existing `instructionText`.
+  - *Pros*: Resolves all three reported items at once, and matches the playthrough's own conclusion. Removes a full-screen modal and a mandatory tap from every single rotation — with 5 players that is 5 taps per card cycle that convey nothing new. Deletes a widget, its `AnimationController`, and its entrance animation rather than debugging label copy. Makes `RE-ROLL PROMPT` reachable on first paint.
+  - *Cons*: Loses the deliberate theatrical beat of a card being dealt, which is a real part of the parlour framing — this is a genuine cost to the game's identity, not just decoration. `dealt_card_overlay.dart` and any test referencing it must be removed, and the phase-change detection block at `phase2_craft.dart:180` needs its `_showDealtOverlay` assignment excised without disturbing the adjacent "nobody answered" SnackBar logic that shares the same branch.
+
+**Option B**: **Keep the overlay but make it non-blocking and correctly labelled** — relabel the button to `BEGIN WRITING` in both phases, and auto-dismiss on a short timer or on tap-anywhere so it reads as a transition rather than a gate.
+  - *Pros*: Preserves the dealt-card theatre; fixes the label complaint (items 2 and 5) with a one-line copy change; a tap-anywhere dismiss removes the sense of a wall.
+  - *Cons*: Does not address item 6 at all — the page is still redundant with the screen behind it, which was the playthrough's main point. An auto-dismiss timer competes with the round timer and will feel arbitrary; too short and it is unreadable, too long and it is a wall with extra steps.
+
+**Option C**: **Show the overlay only on the first card of a match** — raise it once per game as an orientation beat, then go straight to the writing screen for every later rotation.
+  - *Pros*: Keeps the theatrical introduction where it has the most value and costs the least; removes the per-rotation tax that makes it feel redundant; a small, contained change to the trigger condition.
+  - *Cons*: Still wrong on the one occasion it appears — it is shown on the *truth* round, which is exactly the round where it hides the re-roll affordance. Introduces a "first time only" flag whose lifetime must be reasoned about carefully; the `_isLeaving` latch in Issue 152 is the standing example of what that costs when the holding `State` outlives the match.
+
+Your selection: _____
+
+---
+
+### Issue 156: The keyboard cannot be dismissed by tapping away from the field
+
+**Status**: ⚠️ Confirmed Unresolved — `Phase2CraftScreen.build` wraps its body in `Stack > SafeArea > Center > Padding` (`phase2_craft.dart:299–303`) with no `GestureDetector`, no `TapRegion`, and no `onTapOutside` on the `TextField` at `phase2_craft.dart:563`. The only dismissal paths are the keyboard's own key and `textInputAction: TextInputAction.done`, which submits rather than merely unfocusing. There is no way to close the keyboard to read the screen without giving up the answer.
+
+**Option A (recommended)**: **Wrap the craft body in an unfocus gesture** — add a `GestureDetector` with `behavior: HitTestBehavior.translucent` and `onTap: () => FocusScope.of(context).unfocus()` around the craft screen body.
+  - *Pros*: The universally expected behaviour, in a few lines, on the one screen that reports the problem. `translucent` means buttons underneath still receive their taps, so `RE-ROLL PROMPT` and `SUBMIT DOSSIER` are unaffected.
+  - *Cons*: Only fixes the craft screen; the lobby name and room-code fields (`lobby_screen.dart:1201`, `:1289`) have the same gap and would still trap the keyboard, so the complaint can recur elsewhere.
+
+**Option B**: **Use `TextField.onTapOutside`** — supply `onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus()` on the field itself.
+  - *Pros*: Scoped to the field rather than the layout, so it survives future restructuring of the craft screen's widget tree; no extra wrapper in the tree.
+  - *Cons*: Fires on *every* outside pointer-down including the submit button, so the unfocus races the button's own tap handling and must be verified not to swallow the first tap on `SUBMIT DOSSIER` — a regression that would be worse than the bug.
+
+**Option C**: **Apply Option A's wrapper as a shared widget across every text-entry screen** — build one `DismissKeyboard` wrapper and use it in `phase2_craft.dart` and both lobby fields.
+  - *Pros*: Closes the whole class of defect rather than the one reported instance, which is the same reasoning that retired the `pumpAndSettle` trap in Wave X.
+  - *Cons*: Touches the lobby screen, which is the most test-covered and most recently regressed file in the project (Issues 151 and 152 both landed there); a wrapper over the lobby's `Stack` must be checked against the entry/parlour conditional in `lobby_screen.dart` so it does not intercept taps in the in-room branch.
+
+Your selection: _____
+
+---
+
+### Issue 157: Answers must be written without seeing them, because the keyboard covers the field
+
+**Status**: ⚠️ Confirmed Unresolved — Clarified by the user on filing: the on-screen keyboard sits over the answer field, so the player types blind. `Scaffold` leaves `resizeToAvoidBottomInset` at its default `true`, so the body shrinks when the keyboard opens; the writing column is `Column > Expanded > SingleChildScrollView` (`phase2_craft.dart:506`) with a fixed-height `SUBMIT DOSSIER` button pinned below it (`phase2_craft.dart:682`). The `TextField` is the *last* element inside the scroll view, below the prompt block and instruction copy, so once the viewport shrinks, the field's resting position is behind the keyboard and the pinned button consumes part of what is left. This compounds Issue 156 — the player cannot see the field *and* cannot dismiss the keyboard to look at it.
+
+**Option A (recommended)**: **Ensure the focused field is scrolled into view** — attach a `FocusNode` to the field and, on focus gain, call `Scrollable.ensureVisible` on its context after the inset animation settles (or attach a `ScrollController` and scroll to the field's offset), so the field lands above the keyboard.
+  - *Pros*: Directly targets the reported failure and keeps the whole existing layout, including the prompt block the player needs to keep referring to. Verifiable in a widget test by pumping with a synthetic `viewInsets.bottom` and asserting the field's global rect sits above the inset.
+  - *Cons*: Requires waiting out the keyboard's inset animation before measuring, so the implementation has a timing component that must be tested rather than eyeballed; if the remaining viewport is genuinely too short (small phones at large text scale), scrolling alone cannot create room.
+
+**Option B**: **Reorder the writing column** — move the `TextField` above the prompt/instruction block so it is the first thing in the scroll view and is never pushed down.
+  - *Pros*: No scroll orchestration and no timing to get right; the field is structurally always the highest element, so it survives future content being added below it.
+  - *Cons*: Inverts the reading order the screen was designed around — the player would see the input before the prompt they are answering, which is the wrong sequence on first paint and undermines the `CASE DOSSIER` framing. A significant visual redesign for a positioning bug.
+
+**Option C**: **Move writing into a dedicated full-height sheet** — open a modal bottom sheet or route containing the prompt and the field, sized against `viewInsets` so the field always sits directly above the keyboard.
+  - *Pros*: Gives the input its own layout budget instead of competing with the app bar, prompt card, re-roll button and pinned submit button inside one shrinking column; a well-trodden pattern for keyboard-first input.
+  - *Cons*: Substantial restructuring of the most timing-sensitive screen in the game — the craft screen also hosts the round timer, the phase-change detection at `phase2_craft.dart:180`, and the auto-advance path, all of which must keep working while a sheet is open and when a phase change closes it out from under the player.
+
+Your selection: _____
+
+---
+
+### Issue 158: Fast writers idle because forgery rotations advance in lock-step
+
+**Status**: ⚠️ Confirmed Unresolved — Rotation pacing is a single global value. `currentRotationIndex` lives on the room document, and `index.ts:1561–1580` advances it in one transaction only after the readiness gate passes, writing a new `currentCardAssignments` map and one shared `endTime` for everybody. A player who finishes their forgery early is routed to `_buildWaitingUI` (`phase2_craft.dart:402`) and blocked until the slowest writer submits. With `forgeriesPerCard = min(players - 1, 5)` (`index.ts:642`), a 5-player match runs 4 such barriers per card cycle, so the total idle time is the sum of four worst-case waits.
+
+**Option A (recommended)**: **Keep the barrier, fill the wait** — leave the lock-step architecture intact and give `_buildWaitingUI` something substantive: show the prompts and forgeries already written for cards the player has *finished* (their own contributions only), or let them revise their submitted forgery until the barrier lifts.
+  - *Pros*: Zero change to the server's rotation contract, the `rotationPlan`, the readiness gate, or the disconnect/`forceAdvance` recalculation paths — all of which are load-bearing and well tested. Addresses the felt problem (dead time) without inheriting the correctness risk of B. Composes directly with Issue 162, which is the same complaint from the target's seat.
+  - *Cons*: Does not actually let a fast player progress, so a table with one very slow writer still moves at that writer's pace; it makes waiting pleasant rather than shorter.
+
+**Option B**: **Per-player rotation index** — replace the room-level `currentRotationIndex` with a per-player index so each player is handed their next card the moment they submit, converging only at the transition into the vote phase.
+  - *Pros*: Actually eliminates the idle time the playthrough reported; total forgery-phase duration collapses toward the slowest *player's total*, not the sum of per-round maxima.
+  - *Cons*: The largest architectural change in this queue. `currentCardAssignments`, the shared `endTime`, `readyPlayers`, `forceAdvance`, the timer-expiry path, the `kMissingAnswerPlaceholder` back-fill at `index.ts:1554`, and the disconnect recalculation in the rotation engine all assume one global rotation index. A single shared countdown no longer has a meaning, so the timer contract must be redesigned too. High risk of a mid-match state that no existing emulator test covers, and `design_rotation_engine.md` would need rewriting rather than amending.
+
+**Option C**: **Shorten the barrier adaptively** — when every player but one has submitted, cut the remaining time to a short fixed grace window instead of the full round timer.
+  - *Pros*: Cuts the worst case substantially with a contained change; the global rotation index and every path that depends on it survive untouched; naturally rewards a table that writes quickly.
+  - *Cons*: Punishes one slow writer under social pressure, which cuts against a game about carefully impersonating someone. Needs a new server-side rule for when the grace window starts and a client countdown that can jump backwards, which will read as a bug unless it is explained on screen.
+
+Your selection: _____
+
+---
+
+### Issue 159: "Best forgery of the round" is meaningless at 3 players, and ties are decided arbitrarily
+
+**Status**: ⚠️ Confirmed Unresolved — `_buildBestForgeryBanner` (`lib/screens/phase4_reveal.dart:110–134`) crowns a winner whenever any non-truth answer received at least one vote (`if (bestAuthorId == null || maxVotes == 0) return null;` is the only guard). At 3 players, `forgeriesPerCard = min(3 - 1, 5) = 2` and exactly 2 players vote on each card, neither of whom may vote for their own answer — so a forgery can receive at most **1** vote and the banner celebrates a single vote as the round's best. Worse, the tie-break at `phase4_reveal.dart:124` uses a strict `entry.value > maxVotes` over `Map.entries`, so a 1–1 tie silently crowns whichever author Firestore's map iteration happens to yield first, with no indication a tie occurred. **This is a second, separate defect that the playthrough did not report and that affects all player counts.**
+
+**Option A (recommended)**: **Suppress the banner unless it is meaningful, and handle ties explicitly** — require both `maxVotes >= 2` and a unique maximum; when the maximum is tied, either name all tied authors or show nothing.
+  - *Pros*: Fixes both the reported 3-player degeneracy and the unreported tie bug in one contained change to a single method. `>= 2` is self-justifying — it means "fooled more than one person", which is what "best" is claiming. Purely a client-side display rule; no server, scoring, or schema change, and `scoreDeltas` is untouched.
+  - *Cons*: At 3 players the banner then never appears at all, which is a silently different reveal screen for small tables — acceptable only if the reveal still reads as complete without it, which must be checked on device rather than assumed.
+
+**Option B**: **Scale the threshold to the table** — require a forgery to have fooled a majority of eligible voters rather than a fixed count.
+  - *Pros*: Adapts to any player count instead of hard-coding 2; at large tables it raises the bar so the banner stays a genuine distinction rather than firing every round.
+  - *Cons*: At 3 players, one of two voters *is* a majority, so it does not fix the reported case — the very complaint that opened this issue. Needs the eligible-voter count computed client-side, duplicating a rule the server already owns.
+
+**Option C**: **Replace the banner with a per-card vote tally** — show every answer's vote count in the reveal rather than singling one out.
+  - *Pros*: Never degenerate at any player count and never has a tie problem, because it makes no claim; feeds directly into Issue 169's request for a visible scoring transcript.
+  - *Cons*: Removes a celebratory beat that a party game wants, trading a moment for a table. Overlaps with Issue 169 — if that lands, this becomes redundant work; decide 169 first.
+
+Your selection: _____
+
+---
+
+### Issue 160: Vote options require scrolling and do not scale with player count
+
+**Status**: ⚠️ Confirmed Unresolved — In portrait, `CardGrid` renders one option per row at a hard-coded `height: 92` inside `BoxConstraints(minHeight: 72, maxHeight: 132)` (`lib/widgets/card_grid.dart:98–112`), inside the vote screen's outer `SingleChildScrollView`. The option list is preceded by the avatar, the "One of these is X's truth" line, the `WHICH ONE IS THE TRUTH?` heading, the full prompt in a `ParchmentCard`, and the "Talk it out" line (`phase3_vote.dart:386–467`) — roughly 300 logical pixels of chrome before the first option. Options number `forgeriesPerCard + 1`, which is `min(players - 1, 5) + 1` — up to **6** at 6+ players, or 552 px of options alone. Nothing above them collapses, so at typical phone heights the player cannot see all options at once and cannot compare them without scrolling — during the one phase where comparison *is* the game.
+
+**Option A (recommended)**: **Make the option area the screen's priority and let the chrome yield** — collapse the pre-option chrome (fold the prompt into a compact single-line header, drop the redundant heading), then give options a flexible height computed from the remaining viewport and option count instead of a fixed 92, keeping `AutoSizedAnswerText` to scale text down to its 9.5 pt floor.
+  - *Pros*: Keeps the existing one-option-per-row reading order, which is the right shape for comparing sentences; `AutoSizedAnswerText` and the `vote_option_truncation_test.dart` no-ellipsis contract already exist to make variable heights safe. Contained to `card_grid.dart` and the vote screen's layout.
+  - *Cons*: At 6 options on a small phone with large text scale, fitting on one page may drive text to the 9.5 pt floor, and the truncation test's guarantee is that the longest legal 100-character answer renders in full — that must be re-verified at the new heights at 320, 375 and 430 pt, or the fix trades scrolling for unreadability.
+
+**Option B**: **Two-column grid in portrait above a threshold** — keep single-column for ≤3 options and switch to two columns for 4+, reusing the landscape `GridView` path already in `card_grid.dart:117`.
+  - *Pros*: Halves vertical space at the counts where the problem actually appears; the grid code path already exists and is exercised in landscape.
+  - *Cons*: Halves the width available to each answer, which is the dimension a 100-character sentence needs most — this is the case `AutoSizedAnswerText` handles worst. Side-by-side prose is harder to compare than a vertical list. Likely trades a scrolling problem for a legibility problem.
+
+**Option C**: **Paged or swipeable option cards** — present options one or two at a time in a carousel with position indicators.
+  - *Pros*: Each answer gets the full screen and maximum legibility regardless of player count; scales to any number of options without shrinking anything.
+  - *Cons*: Directly opposes the stated goal — the complaint is *too much scrolling* and wanting everything on one page; a carousel makes simultaneous comparison impossible rather than merely awkward. Also adds a new interaction to learn during a timed phase.
+
+Your selection: _____
+
+---
+
+### Issue 161: The target's "I'M READY" is irreversible
+
+**Status**: ⚠️ Confirmed Unresolved — Clarified by the user on filing: this is the *target's* button on the vote screen, not the lobby's. When your own card is up, `phase3_vote.dart:504` renders `I'M READY`, which sets `_submitted = true` and calls `setPlayerReady(true)` with no un-ready path — the button is gone on the next build and nothing restores it. The lobby's equivalent at `lobby_screen.dart:1137` *does* toggle back to `NOT READY`, so the two buttons share a label and a mental model but not a contract. A target who taps it to see what it does, or taps it early, is locked out of the screen for the rest of the vote. Pairs with Issue 162, which is the same seat's other problem.
+
+**Option A (recommended)**: **Make it a toggle, matching the lobby** — render `NOT READY` once ready and call `setPlayerReady(false)`, mirroring `toggleLobbyReady`'s shape.
+  - *Pros*: Makes two identically labelled buttons behave identically, which is the actual defect; `setPlayerReady` already accepts a boolean (`game_service.dart:720`), so the client change is small. Removes an unrecoverable state from a timed screen.
+  - *Cons*: The server-side readiness gate must be checked for whether un-readying after the gate has already fired is safe — if the phase advanced between the tap and the un-ready, the call must fail cleanly rather than corrupting `readyPlayers`. **That is the whole risk of this option and must be tested against the emulator, not reasoned about.**
+
+**Option B**: **Confirm before locking** — keep it one-way but require a confirmation dialog.
+  - *Pros*: No server-contract question at all; prevents the accidental tap, which is the likely real-world case; smallest diff.
+  - *Cons*: Adds a modal to a timed screen; does nothing for a player who confirms and then changes their mind. Treats a design mismatch as a user error.
+
+**Option C**: **Remove the button entirely** — advance the target automatically once all voters have sealed their ballots, since `$N of $M ballots sealed` is already displayed directly above it (`phase3_vote.dart:492`).
+  - *Pros*: Deletes the irreversible state rather than managing it; the target has no decision to make here, so asking them for one is arguably the underlying mistake. Fewest moving parts afterwards.
+  - *Cons*: Removes the target's only remaining agency on that screen, which makes Issue 162 strictly worse — do not select this without also selecting something in 162. The readiness gate's arithmetic must be re-derived to exclude the target, touching server logic that currently counts all non-spectators uniformly.
+
+Your selection: _____
+
+---
+
+### Issue 162: The target has nothing to do while their card is being voted on
+
+**Status**: ⚠️ Confirmed Unresolved — When a player's own card is up, `phase3_vote.dart` gives them a read-only `CardGrid` (`onSelect: isTarget ? (_) {} : ...`, `selectedAuthorId: null`), a sealed-ballot counter, and a single ready button. They cannot vote, cannot select, and have no other input for the entire voting phase on their own card — which, across a full match, is one full voting phase per player. This is the dead-time complaint of Issue 158 relocated to the vote screen, and it is the seat where the game's premise should be most engaging: the table is arguing about which answer is really yours.
+
+**Option A (recommended)**: **Give the target a prediction** — let them privately guess how many voters will find their truth, or which forgery will draw the most votes, scored at reveal.
+  - *Pros*: Turns the waiting seat into a distinct role with its own tension, using only data the reveal already computes; it is the one seat with private information, so a prediction there is genuinely interesting rather than busywork. Feeds Issue 169's transcript with another line to show.
+  - *Cons*: Adds a scoring term, so `design_scoring_and_ui.md` and `ScoringLogic` both change, and the honors metrics in `player_state.dart` may need a new field. Every scoring addition raises the "too complicated to explain" risk that Issue 169 already flags.
+
+**Option B**: **Give the target a non-scoring performance beat** — let them react, bluff, or flag one answer as "obviously not me" for the table to see, with no points attached.
+  - *Pros*: No scoring change at all, so no `ScoringLogic` or design-doc churn; leans directly into the table talk the screen already encourages with "Talk it out — discussion is part of the game"; cheapest option that still fills the seat.
+  - *Cons*: Purely cosmetic to the outcome, so it may not hold attention past the novelty; a visible "not me" signal leaks information and could distort voting in ways that need playtesting before shipping.
+
+**Option C**: **Let the target watch the vote arrive** — replace the static counter with live, anonymous vote arrival (which options are accumulating votes, without identifying voters).
+  - *Pros*: Uses data already written to Firestore; makes the seat tense in real time with no new rules to learn and no scoring change; small client-side change.
+  - *Cons*: Leaks tallies before the reveal, which flattens the reveal beat the game is built around — the reveal's whole structure is a staged disclosure, and this pre-empts it. Also a live-updating tally invites the target to react visibly and tip off the table.
+
+Your selection: _____
+
+---
+
+### Issue 163: Nothing escalates across rounds
+
+**Status**: ⚠️ Confirmed Unresolved — `totalRounds` (`index.ts:655`) repeats an identical structure each time: same scoring formulas, same timer, same `forgeriesPerCard`, same reveal beats. A round 3 card is worth exactly what a round 1 card was worth, so a match has no arc and a player who falls behind early has no mechanism to catch up.
+
+**⚠️ This conflicts with a standing decision and must be read before selecting.** Section 4 of this file records three escalation mechanics that were designed, costed and **consciously not built**: **P7 Confidence Wager** (stake points on your own forgery), **P9 House Cards** (per-round modifiers), and **P11 The Final Gambit** (a comeback round for trailing players). That section is titled *"do not re-propose"*. The playthrough now asks for exactly this, so **selecting any option below re-opens a closed decision** — which is the user's to make, but it should be made knowingly, and whichever option is chosen, Section 4 must be amended to record the reversal rather than left contradicting the queue.
+
+**Option A (recommended)**: **Escalate the scoring multiplier only** — apply a per-round multiplier to points already awarded, leaving every rule, phase and screen unchanged.
+  - *Pros*: The smallest possible change that produces an arc: later rounds matter more, so trailing players stay live and the finish has stakes. No new mechanics for players to learn, which keeps Issue 169's explainability problem from getting worse. Confined to `ScoringLogic`; the reveal's existing `POINTS AWARDED THIS CARD` block (`phase4_reveal.dart:454`) surfaces it for free.
+  - *Cons*: The thinnest kind of escalation — it changes the arithmetic, not the play; a player doing nothing differently in round 3 is simply worth more. Devalues early rounds, which can make the first round feel like it does not matter. Does not resurrect P7/P9/P11, so the reversal it records is a narrow one.
+
+**Option B**: **Revive P9 House Cards** — introduce per-round modifiers that change a rule for that round.
+  - *Pros*: Escalation through variety rather than arithmetic; the design already exists and was costed once, so it is not starting from nothing; directly serves Issue 165 by making later rounds play differently from Quiplash's flat repetition.
+  - *Cons*: A full re-opening of a deliberate rejection, with the original reasons for rejection unrecorded here and needing recovery from `git log` before proceeding. Every modifier is a rule the players must learn mid-match, worsening Issue 164's "nobody reads the rules" problem precisely when the rules stop being constant.
+
+**Option C**: **Tighten the constraints each round** — shorten the writing timer and/or raise `forgeriesPerCard` in later rounds.
+  - *Pros*: Escalation with no new rules and no new scoring terms — the same game gets harder, which players feel without being told; reuses parameters the server already validates.
+  - *Cons*: A shorter timer makes Issues 154, 156 and 157 materially worse, since all three are about being unable to write comfortably under time pressure — **do not select this before those three are fixed**. Raising `forgeriesPerCard` directly worsens Issue 160's option-count problem.
+
+Your selection: _____
+
+---
+
+### Issue 164: The rules are only readable in the lobby, before any of them apply
+
+**Status**: ⚠️ Confirmed Unresolved — `READ MANUAL` exists at exactly one place in the codebase, `lobby_screen.dart:1347`, on the pre-game entry screen. Once a match starts there is no route back to it: the craft, vote, reveal and game-over screens carry no rules affordance. Every phase therefore relies on the player having read and retained a multi-section manual before play, and the playthrough's premise — that people do not read rules — means each screen must carry its own explanation. Compounding this, the manual's own scoring section is the subject of Issue 169.
+
+**Option A (recommended)**: **One contextual line per phase, plus a manual button in the in-game app bar** — add a short "what you are doing right now" line to each phase screen and a rules icon in `in_game_app_bar.dart` that opens the existing manual.
+  - *Pros*: Serves both kinds of player — the one who needs a nudge gets it without asking, the one who wants detail can reach the full manual from any screen. Reuses the manual that already exists rather than writing a second set of rules that can drift from it. `in_game_app_bar.dart` is 45 lines and already the shared header for all in-game phases, so the button lands in one place.
+  - *Cons*: The craft and vote screens are already tight on vertical space — Issues 157 and 160 are both about running out of it — so any added line must come out of existing chrome, not on top of it. Some phase copy already exists (`instructionText`, "Talk it out"), so this risks duplicating what is there unless the existing lines are audited and folded in first.
+
+**Option B**: **Manual button only** — add the rules affordance to the in-game app bar and change no phase copy.
+  - *Pros*: Costs no vertical space on any screen, which sidesteps the direct conflict with Issues 157 and 160; single small change to one shared 45-line widget; nothing can drift out of sync because there is still exactly one rules source.
+  - *Cons*: Still requires the player to know they are confused and to go looking, which is precisely the behaviour the playthrough says does not happen. Opening a full manual mid-round is impractical under a countdown.
+
+**Option C**: **First-run coach marks** — show a one-time overlay explaining each phase the first time a player reaches it.
+  - *Pros*: Teaches at the exact moment of need and then gets out of the way permanently; no permanent screen real estate consumed.
+  - *Cons*: Adds a full-screen modal to timed phases — the same pattern Issue 155 is about *removing*, and it would land on the same craft screen. Needs persisted per-player state, whose lifetime is exactly the trap lesson 2.40 was written about. Useless to a player joining a friend's match on someone else's device.
+
+Your selection: _____
+
+---
+
+### Issue 165: The game reads as Quiplash across all four axes
+
+**Status**: ⚠️ Confirmed Unresolved — Reported after a full playthrough. On filing, the user was asked which axis drove the comparison and selected **all four**: the core loop, the tone and presentation, the scoring and progression, and the social dynamics. That answer matters: it means the Victorian parlour framing is not currently doing differentiating work, and no single mechanic tweak will change the impression. **This is a product-direction question, not a defect**, and it is the parent of Issues 162 and 163 — both are partial answers to it. Decide this one first; a selection here may change what you want from those.
+
+The structural asset the game already has and does not exploit: **the answers are impersonations of a specific person at the table, and that person is in the room.** Quiplash has no target. Every option below is a way of leaning on that.
+
+**Option A (recommended)**: **Make the game about knowing the target, and say so everywhere** — re-weight scoring toward the target relationship (points for a forgery the *target themselves* rates as plausible; points for the target when their truth is found), give the target an active role during their own card (Issue 162), and re-cut the prompt decks toward personal history rather than absurdist invention.
+  - *Pros*: Differentiates on the one axis Quiplash structurally cannot follow — it has no target and no relationships between players. Reuses the entire existing phase structure, so it is a re-weighting rather than a rewrite. Directly absorbs Issue 162, and gives Issue 163's escalation something to escalate.
+  - *Cons*: Adds scoring terms, worsening the explainability problem in Issues 164 and 169 — those should be selected alongside it. Changes the deck's character, so `design_prompt_system.md` and the deck content both need revision, which is content work with no test to prove it landed. Weakest with strangers, where nobody knows the target well enough for the mechanic to bite.
+
+**Option B**: **Make deception continuous rather than per-card** — carry accusation and trust across the whole match (a standing suspicion economy, unmasking that persists, running rivalries) instead of resetting every card.
+  - *Pros*: Replaces the round-by-round arc that reads as Quiplash's with a match-long social one; the `headToHead` "RIVALRIES" data in the match summary already computes the raw material, so the game is halfway to tracking it. Answers Issue 163 without reviving P7/P9/P11.
+  - *Cons*: The largest design change in this queue, touching scoring, the reveal beats, and the game-over screen simultaneously. Cross-card state introduces exactly the kind of long-lived state lesson 2.40 warns about, at server scale. Long feedback loops are hard to playtest and harder to explain.
+
+**Option C**: **Differentiate on presentation and content only** — keep every mechanic and invest in the parlour framing: prompt decks, reveal theatre, the raven, the copy.
+  - *Pros*: No mechanical risk whatsoever, no scoring or server change, and nothing to re-explain to players; the theming assets and vocabulary already exist and are strong. Fastest path to a *felt* difference.
+  - *Cons*: The user reported presentation as one of the four axes that already feels same-y, so this option addresses the complaint least — it doubles down on the thing that was named as not working. Tone alone has never separated a party game from its ancestor.
+
+**Option D**: **Accept the resemblance and compete on execution** — treat Quiplash-likeness as acceptable and spend the effort on Issues 153–162, which are all concrete usability defects.
+  - *Pros*: Every one of those issues is a known, verifiable fix with a clear done condition, and the playthrough found nine of them — a game that is same-y but flawless beats a differentiated one that is hard to type into. No design risk, no doc churn, no reversal of Section 4.
+  - *Cons*: Leaves the strategic concern unanswered, and it will be raised again by the next playtester; the longer the phase structure hardens, the more expensive Options A and B become.
+
+Your selection: _____
+
+---
+
+### Issue 166: Nothing helps a player who cannot think of what to write
+
+**Status**: ⚠️ Confirmed Unresolved — The craft screen offers a prompt, one line of `instructionText` (`phase2_craft.dart:460`), and an empty field hinted `Dip the quill…`. The only escape from a hard prompt is `RE-ROLL PROMPT`, which exists on truth rounds only (`phase2_craft.dart:614`) and is not available at all when writing a forgery for someone else — the harder of the two tasks, since it requires writing in another player's voice under the same timer.
+
+**Option A (recommended)**: **Sentence stems in the hint and instruction copy, drawn per prompt** — give each deck prompt one or more opening stems ("The worst part was…", "Nobody knows that I…") shown as the field's hint or beneath it, differing for truth and forgery rounds.
+  - *Pros*: Attacks the blank page directly at the moment it blocks someone, with no new interaction, no extra tap, and no screen space beyond copy. Stems can be authored alongside the prompts they belong to, so they are always contextually apt. Extends the existing deck schema rather than adding a system.
+  - *Cons*: Content work proportional to deck size — every prompt needs stems written and reviewed, and `check_decks_in_sync.sh` plus `design_prompt_system.md` must be extended to cover the new field or the decks will silently drift. A stem that all players see risks homogenising answers, which feeds the duplicate-answer heuristic in `design_semantic_integrity.md`.
+
+**Option B**: **Generic stems not tied to the prompt** — show a small rotating set of universal openers, identical across all prompts.
+  - *Pros*: No deck content work and no schema change at all; ships immediately; still removes the blank page.
+  - *Cons*: A generic stem will fit some prompts and actively mislead on others, which is worse than no help; because every player sees the same small set, the homogenisation and duplicate-rejection risk is higher than in Option A.
+
+**Option C**: **Extend re-roll to forgery rounds** — let a player swap the card they are forging, rather than helping them write.
+  - *Pros*: Reuses machinery that already exists, including the exhaustion plumbing in `design_prompt_system.md`; gives an escape hatch on the round where there currently is none.
+  - *Cons*: Does not answer the request — it changes the question instead of helping with the answer. Structurally much harder than truth re-roll: a forgery card is a *shared* card that other players are simultaneously writing on, so re-rolling it would invalidate their work. Likely infeasible without also changing the rotation plan.
+
+Your selection: _____
+
+---
+
+### Issue 167: Final standings are buried below the honors
+
+**Status**: ⚠️ Confirmed Unresolved — `game_over_screen.dart:241–256` renders in this order: `THE NIGHT'S HONORS` heading → honor cards → `FINAL STANDINGS` → `MATCH HIGHLIGHTS`. The score — the thing every player wants first — sits below a full block of superlatives and requires scrolling, while the screen's own heading announces the honors as the page's subject.
+
+**Option A (recommended)**: **Swap the two blocks and re-title the screen** — render `_buildStandings` before `_buildHonorCards`, and change the page heading so it no longer announces the honors as the screen's subject.
+  - *Pros*: Exactly what was asked, in a straightforward reorder of two calls in one build method. The heading change is the part that is easy to miss and would otherwise leave the screen contradicting itself.
+  - *Cons*: The honors block carries the reveal animation sequence (`honorsSequence` staggering, `game_over_screen.dart:323–330`); moving it below the standings means the animated payoff now begins off-screen, so the sequence's timing and any auto-scroll must be re-checked rather than assumed to survive the move.
+
+**Option B**: **Standings first, honors and highlights behind a tab or expander**
+  - *Pros*: Puts the result on screen with no scrolling at all, at any player count; keeps the celebratory material for those who want it.
+  - *Cons*: Hides the honors, which are the screen's most distinctive content and part of what Issue 165 says the game needs more of, not less. Adds navigation to a terminal screen that currently has none.
+
+Your selection: _____
+
+---
+
+### Issue 168: Match highlight titles are truncated
+
+**Status**: ⚠️ Confirmed Unresolved — `_highlightCard` (`game_over_screen.dart:779–815`) lays the title and the badge in a single `Row`: the title is `Expanded` with `maxLines: 1, overflow: TextOverflow.ellipsis`, and the badge is `Flexible(fit: FlexFit.loose)` with the same ellipsis. The longest titles — `BEST LIE OF THE NIGHT`, `CLEANEST TRUTH` — are set in `CormorantGaramond` at 14 pt with `letterSpacing: 1.2`, and share the row with a variable-length badge such as `Fooled 3 players`, after a 16 pt icon and two 6 px gaps. On narrow viewports, and at any raised text scale, the title loses the contest and is cut. This is the same class of defect as the AppBar sizing work: a fixed single line holding text whose measured width depends on the live `textScaler`.
+
+**Option A (recommended)**: **Put the title and badge on separate lines** — stack the badge beneath the title (or move it to the card's footer) so the title owns the full card width.
+  - *Pros*: Removes the competition rather than tuning it, so it cannot regress at any width, text scale or future title length. No measurement code and no fragile constants. Keeps both elements fully readable.
+  - *Cons*: Makes each highlight card taller, and there can be three of them plus the rivalries block on an already-long screen — worth checking against Issue 167 if the standings move above them.
+
+**Option B**: **Let the title wrap to two lines** — raise `maxLines` to 2 and keep the badge in the row.
+  - *Pros*: Smallest possible diff, one constant; preserves the current compact side-by-side layout.
+  - *Cons*: A two-line title beside a one-line badge needs deliberate cross-axis alignment or it will look misaligned; at large text scales two lines will not be enough either, so this defers the bug rather than closing it.
+
+**Option C**: **Auto-size the title** — reuse the `AutoSizedAnswerText` measurement approach from `card_grid.dart:24` to shrink the title until it fits.
+  - *Pros*: Guarantees fit in the current layout at any width; the measurement pattern already exists, is text-scale aware, and is proven in this codebase.
+  - *Cons*: Shrinking a 14 pt letter-spaced display face has very little headroom before it becomes unreadable, so it can turn a truncation bug into a legibility bug. Solves a layout problem with measurement when Option A removes the constraint outright.
+
+Your selection: _____
+
+---
+
+### Issue 169: Scoring is explained as a formula and never shown being applied
+
+**Status**: ⚠️ Confirmed Unresolved — Two related failures. First, the in-app manual's section is titled `3. SCORING (Dynamic)` and its first line reads *"Points scale based on difficulty. Formula: ceil((Players - 1) / (Forgeries + 1))"* (`lobby_screen.dart:288–294`) — a raw expression printed at players, in a manual most will not read (Issue 164). Second, the reveal screen's `POINTS AWARDED THIS CARD` block (`phase4_reveal.dart:454`) shows only resulting `scoreDeltas`, never their derivation, so a player sees that they gained points but not which of the five rules fired. With five scoring rules in play — truth-finding, successful forgery, believable target, sharp eye, and unmask revenge — a bare delta is unattributable.
+
+**Option A (recommended)**: **Itemise the deltas at the reveal, and rewrite the manual copy in plain language** — break each player's card total into named lines ("Found the truth +2", "Fooled 2 players +2"), and replace the printed formula with a sentence about what it means, keeping the expression only as a footnote for those who want it.
+  - *Pros*: Answers both halves of the report. The reveal is where players are actually looking and where the numbers are already computed, so the transcript costs no new calculation — only the per-rule breakdown must be surfaced from `ScoringLogic` rather than summed away. Teaching by worked example is what makes the manual unnecessary, which is the same problem Issue 164 is about.
+  - *Cons*: Requires `ScoringLogic` to emit an itemised breakdown alongside `scoreDeltas`, which is a change to the scoring contract in `design_scoring_and_ui.md` and to the room schema that carries it — a server change, not a copy change. Adds vertical content to the reveal, which is already a paced five-beat sequence and cannot simply absorb more.
+
+**Option B**: **Fix the manual copy only** — rewrite `3. SCORING (Dynamic)` in plain language and leave the reveal as it is.
+  - *Pros*: Pure copy change in one file, no server work, no schema change, no scoring-contract churn; removes the most obviously wrong thing (a formula shown to a player) immediately.
+  - *Cons*: Ignores the actual request, which was for a transcript of how points were calculated; and it improves a manual that Issue 164 establishes is unread, so the benefit may be close to zero in practice.
+
+**Option C**: **Add an end-of-match scoring transcript** — leave both the manual and the reveal alone and show a full per-card, per-rule breakdown on the game-over screen.
+  - *Pros*: Unlimited space for the full derivation without disturbing the reveal's pacing; naturally accompanies the standings; the match summary infrastructure already exists to carry it.
+  - *Cons*: Arrives long after the moment of confusion, so it explains rather than teaches; the game-over screen is already the busiest in the app and the subject of Issues 167 and 168. Same `ScoringLogic` breakdown requirement as Option A, so it is not cheaper in server terms — only later.
+
+Your selection: _____
 
 ---
 
@@ -459,6 +805,8 @@ These were designed, costed and consciously **not** selected. Their absence is a
 - **P11 — The Final Gambit**: a comeback round for trailing players.
 - **Issue 30 Option C**: making `_familyFriendlyOnly` a synced house rule. It stays client-local.
 - **Issue 34 Option C**: priority arbitration between mascot poses. Available as an upgrade if reveal-screen collisions prove annoying in practice.
+
+**⚠️ Issue 163 (filed September 8, 2026) asks for exactly what P7, P9 and P11 were rejected for: escalating stakes across rounds.** That issue is open and unselected. If any of its options is selected, **this section must be amended to record the reversal** — do not leave §4 saying "do not re-propose" while the queue carries an approved escalation mechanic. If Issue 163 is instead closed with no change, this section stands as written and needs no edit.
 
 ---
 

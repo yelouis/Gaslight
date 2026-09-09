@@ -1,8 +1,10 @@
-# Agent Execution Guide — Queue Complete: no open work — September 7, 2026
+# Agent Execution Guide — Awaiting Selections: no approved work — September 8, 2026
 
 **You are an engineering agent with no memory of this project.**
 
-**There is no approved queue and nothing is broken.** Wave Z is delivered and verified; all ten gates are green and there are no open issues.
+**There is no approved queue.** Wave Z is delivered and verified and all ten gates are green.
+
+**⚠️ 17 issues (153–169) are open in `docs/ongoing_general_errors.md`, filed from a live playthrough on September 8, 2026 — but NONE of them has been selected yet.** Every one ends in a blank `Your selection: _____` line. **That line belongs to the user and an agent must never fill it in.** Until a selection exists, an open issue is a question, not an instruction: **do not implement any option, and do not treat an `(recommended)` label as approval.** When selections land, this guide gets rewritten with the specs; until then §2.1 is still the only legitimate action.
 
 **Do not invent work.** The only legitimate actions are in §2.1.
 
