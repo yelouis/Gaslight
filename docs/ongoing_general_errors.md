@@ -269,7 +269,7 @@ Your selection: Proceed with Option A.
 
 ---
 
-### Issue 162: The target has nothing to do while their card is being voted on — REWRITTEN, awaiting a new selection
+### Issue 162: The target has nothing to do while their card is being voted on — SELECTED and REDIRECTED, specced as AA16a / AA16b
 
 **Status**: ⚠️ Confirmed Unresolved — **rewritten September 8, 2026 at the user's direction.** The original three options were not selected. Instead the user proposed a specific mechanic and asked whether it is possible before anything is built:
 
@@ -277,7 +277,11 @@ Your selection: Proceed with Option A.
 
 **The underlying defect is unchanged.** When a player's own card is up, `phase3_vote.dart` gives them a read-only `CardGrid` (`onSelect: isTarget ? (_) {} : ...`, `selectedAuthorId: null`), a sealed-ballot counter, and one ready button. Across a full match that is one entire voting phase per player with no input, in the seat that should be the most engaged — the table is arguing about which answer is really theirs.
 
-#### Feasibility verdict: **the mechanic is possible, and cheaper than it looks. The drag-and-drop is the part that is not.**
+**⚠️ REDIRECTED by the user on September 9, 2026, after Option A had been selected and specced.** The mechanic changed from *predicting which answer each voter will pick* to **the target guessing who *wrote* each forgery** — *"The target guesses who wrote each lie for points."* The four options below describe the superseded vote-prediction framing and are kept only as the record of how the decision was reached. **The spec that is actually being built is `agent_execution_guide.md` → AA16a / AA16b.**
+
+**What the redirection changed, and what it did not.** The contract became `Record<optionId, guessedAuthorId>`. Everything the feasibility verdict below established still holds and holds *more* strongly: the target already has the option texts, no authorship reaches the client, `sealed` is the right home, and the drag-and-drop is still the wrong interaction for a screen that does not fit. What improved is the mechanic's fit — the game already owns an authorship-guess verb in `submitUnmaskGuess` (P8), and **the target is the one player who can never use it, because they never vote and so are never fooled.** The new version extends an existing beat to the seat it excludes, rather than adding a new kind of guess.
+
+#### Feasibility verdict (written for the superseded framing; the architectural findings carry over)
 
 **What already exists, verified in source:**
 
@@ -310,7 +314,7 @@ Your selection: Proceed with Option A.
   - *Pros*: The cheapest possible fill for the seat: one number, one control, no layout pressure, no new resolution logic beyond a comparison the reveal already has. Naturally bounded scoring.
   - *Cons*: The least interesting of the four and the least connected to the premise — it is a guess about an aggregate, not about anybody at the table. Unlikely to hold attention past the first match.
 
-Your selection: Proceed with Option A.
+Your selection: Actually instead of the target guessing which answer each voter will pick, they should be guessing which answer each voter created. The target guesses who wrote each lie for points.
 
 ---
 

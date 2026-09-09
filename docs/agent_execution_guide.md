@@ -1,4 +1,4 @@
-# Agent Execution Guide — Wave AA: 15 approved code items, 1 blocked, 1 mockup item — September 8, 2026
+# Agent Execution Guide — Wave AA: 15 approved code items, 1 blocked, 1 mockup item — September 9, 2026
 
 **You are an engineering agent with no memory of this project.**
 
@@ -8,6 +8,8 @@ Selections were made by the user in `docs/ongoing_general_errors.md` on **Septem
 
 - **AA15 (Issue 160)** produces design mockups for the user to choose between. **No production code.**
 - **AA16b (Issue 162, client half)** is **approved but BLOCKED** on Issue 160's design landing. Its server half, **AA16a, is unblocked and should be built now** — the data contract does not depend on the layout.
+
+**⚠️ Issue 162 was redirected by the user on September 9, 2026** after its first spec was written. The mechanic is now **the target guessing who *wrote* each forgery**, not predicting who will *vote* for what. AA16a and AA16b below carry the current spec; **anything describing a `Record<voterId, optionId>` prediction contract is stale.**
 
 **Issue 165 (Quiplash differentiation) is deferred at the user's direction and must not be worked on, but must not be closed either.**
 
@@ -45,7 +47,7 @@ Selections were made by the user in `docs/ongoing_general_errors.md` on **Septem
 
 **Implement in the order given.** Six items land on `phase2_craft.dart` and two on `game_over_screen.dart`; the order below is chosen so each builds on a settled tree. **AA1 must be first** — it deletes a widget that later items would otherwise have to work around.
 
-**Two ordering constraints are hard, not stylistic.** **AA10 before AA11** — the round multiplier becomes a line in the itemised transcript. **AA11 before or with AA16a** — target predictions add a `target_read` rule that must satisfy AA11's sum invariant. **AA16b is last and gated**: it cannot start until Issue 160 has a selected design *and* that design is implemented.
+**Two ordering constraints are hard, not stylistic.** **AA10 before AA11** — the round multiplier becomes a line in the itemised transcript. **AA11 before or with AA16a** — the target's forgery guesses add a `target_forger_guess` rule that must satisfy AA11's sum invariant. **AA16b is last and gated**: it cannot start until Issue 160 has a selected design *and* that design is implemented.
 
 ### 2.0 Read this before touching anything
 
@@ -430,102 +432,141 @@ Save to `docs/playthroughs/evidence/` **only if** the evidence gate tolerates it
 
 ---
 
-### AA16a — Issue 162 → Option A, server half: target prediction storage, resolution and scoring
+### AA16a — Issue 162 → server half: the target unmasks the forgers
 
-**Selected September 8, 2026.** The target predicts, for every voter, which answer that voter will pick, and scores on the ones they get right.
+**Redirected by the user on September 9, 2026.** The mechanic is **not** predicting which answer each voter will pick. It is:
 
-**⚠️ Split into two items on purpose. AA16a is unblocked; AA16b is not.** The data contract — `Record<voterId, optionId>` — is identical whether the UI ends up being taps, drags or dropdowns, so the entire server half can be built and tested now with no UI at all. **Build AA16a first and prove it with emulator tests.** AA16b needs the vote screen's layout, which Issue 160 has not settled.
+> *"the target guesses which answer each voter **created**. The target guesses who wrote each lie for points."*
 
-**Why this is safe, and the reason it must stay that way.** The target maps **voters → option ids**, never **voters → authors**. Authorship stays server-side until the unmask window closes, which is a standing invariant in §4. **If any part of your implementation sends authorship to the client to make the UI easier, you have broken the game's central secret.** The client already has everything it needs: `card.options` is `{id, text}` and is already rendered for the target today.
+While their own card is being voted on, the target attributes each forgery to the player they think wrote it. Correct attributions score.
 
-**What already exists — verified, do not rebuild it**
+**⚠️ This supersedes the vote-prediction spec entirely.** If you are reading a `Record<voterId, optionId>` contract anywhere, it is stale — the contract is now `Record<optionId, guessedAuthorId>`.
 
-- `sealed/{targetPlayerId}` is the per-card private document. It is **default-deny by having no `match` block**, which is exactly why predictions belong there and nowhere else.
-- `sealedData.answerAuthors` is `Record<optionId, authorId>` — already populated, and it is what you validate predictions against.
-- `card.votes` is `Record<voterId, optionId>`. **A prediction is therefore compared to a vote by direct equality**: `predictions[voterId] === card.votes[voterId]`. No resolution step, no text matching.
-- `pendingScoreDeltas` already carries deferred scoring through three flush sites.
+**Why this version is better founded than the one it replaces.** The game already has an authorship-guess mechanic — `submitUnmaskGuess`, the revenge guess (P8). This is that verb, extended to the one player who can never use it: **the target is never fooled, because the target never votes**, so they are currently excluded from the only deduction beat in the game. It is also a genuinely harder puzzle than the vote prediction was — each forger writes at most one forgery per card, so the target is matching people to prose, which is exactly the "how well do you know these people" premise.
 
-**Files**
+**⚠️ Split into two items on purpose. AA16a is unblocked; AA16b is not.** The contract `Record<optionId, guessedAuthorId>` does not depend on the layout, so the whole server half can be built and proven with emulator tests now. **AA16b needs the vote screen's layout, which Issue 160 has not settled.**
 
-- `functions/src/index.ts` — new callable `submitTargetPredictions`.
-- `functions/src/scoring_logic.ts` — resolution and scoring.
-- `lib/utils/scoring_logic.dart` — **the test-only mirror. See §2.0.** Both or neither.
-- `lib/services/game_service.dart` — the client wrapper (used by AA16b; add it here so AA16b is pure UI).
-- `docs/design_scoring_and_ui.md` and `docs/design_database_and_security.md` — the new scoring term and the new `sealed` field.
+#### What already exists — read it before writing anything
 
-**The callable.** `submitTargetPredictions({ roomCode, cardId, predictions })` where `predictions` is `Record<voterId, optionId>`.
+- **`submitUnmaskGuess` (`index.ts:2096`) is your template.** Copy its authorization shape, its validation ordering, and above all its deliberate silence: it **does not return correctness**, so results land with the author flip. The new callable must be equally silent.
+- **`sealed/{cardId}.answerAuthors` is `Record<optionId, authorId>`** (`index.ts:868`), already populated. It is both the answer key and the validator.
+- **`sealed` is default-deny by having no `match` block.** Guesses go there and nowhere else.
+- **The exclusion-in-two-places idiom.** `submitUnmaskGuess` at `index.ts:2166–2173` rejects accusing the card's target, and carries a comment naming its client twin in `phase4_reveal.dart:_buildRevengeGuessTray`: *"Change both or neither."* **Follow that idiom for every exclusion you add here — client copy keeps the impossible choice off screen, server copy is the real guard, and each site names the other.**
 
-**Follow `castVote`'s authorization shape exactly** (`index.ts:880` onward) — it is the house idiom and deviating from it is how an authorization hole gets introduced:
+#### The callable
+
+`submitTargetForgeryGuesses({ roomCode, cardId, guesses })` where `guesses` is `Record<optionId, guessedAuthorId>`.
+
+**Phase gate — and this is the one place it deliberately differs from `submitUnmaskGuess`.** That callable requires `currentPhase === "reveal"` inside an active `unmaskDeadline`. **This one requires `currentPhase === "vote"`**, because the entire point of Issue 162 is the dead seat during voting. Guessing during the vote phase is also a *purer* test: by the reveal, vote tallies are visible and would leak inference.
+
+Validation, in order:
 
 1. No `request.auth` → `unauthenticated`.
-2. Read `rooms/{roomCode}/players/{callerPlayerId}` and require `authUid === request.auth.uid` → `permission-denied`. **`playerId` is not a credential** (§4).
-3. Inside a transaction: room exists; `room.currentPhase === "vote"`; `cardId === room.currentReaderId`.
-4. **The caller must be the card's target** — `cardId === callerPlayerId` → `permission-denied` otherwise. Only the target predicts.
-5. Reject if the target is already ready (`room.readyPlayers[cardId] === true`) → `failed-precondition`. **Predictions close when the target readies.** AA8 makes that ready a toggle, so un-readying re-opens the window — that is intended and must be tested.
+2. `rooms/{roomCode}/players/{cardId}` exists and `authUid === request.auth.uid` → `permission-denied`. **`playerId` is not a credential** (§4).
+3. Transaction. Room exists. `room.currentPhase === "vote"` → else `failed-precondition`.
+4. `cardId === room.currentReaderId` → else `failed-precondition`.
+5. **The caller must be the card's target.** The target is the only player who guesses here, and `cardId` *is* the target's player id, so steps 2 and 4 together already bind it — **assert it explicitly anyway** rather than relying on that coincidence holding after a refactor.
+6. `room.readyPlayers[cardId] !== true` → else `failed-precondition`. **Guessing closes when the target readies.** AA8 makes that ready a toggle, so un-readying reopens the window. That is intended and must be tested.
+7. Read `sealed/{cardId}`; take `answerAuthors`.
 
-**Validation of the payload — every one of these is a real failure mode, not defensive padding:**
+Then, for **every entry** in `guesses`:
 
-- Every key must be an **active non-spectator player** in the room, and **must not be the target**. The target is not a voter.
-- Every value must be an **option id present on this card**.
-- **Reject a prediction that assigns a voter to their own answer** — `answerAuthors[optionId] === voterId` → `invalid-argument`. That vote is impossible by construction (`castVote` refuses it), so predicting it is a UI bug and must not be silently stored as an unwinnable guess.
-- **Reject placeholder options**, matching `castVote`'s `kMissingAnswerPlaceholder` check. A voter cannot vote for one.
-- **Partial maps are legal.** Unassigned voters simply score nothing. Do not require a complete mapping.
+- `optionId` must be a key of `answerAuthors` → else `invalid-argument`.
+- **Reject if `answerAuthors[optionId] === cardId`.** That is the target's own truth. They wrote it; attributing it is not a guess. **Two places, cross-commented.**
+- **Reject placeholder options** — an option whose text is `kMissingAnswerPlaceholder` was authored by nobody. Mirrors `castVote`'s placeholder refusal.
+- `guessedAuthorId` must be an **active non-spectator player** in the room → else `invalid-argument`.
+- **Reject `guessedAuthorId === cardId`.** The target cannot have forged on their own card. This is Issue 79's exclusion inverted, and deserves the same two-place treatment.
 
-**Write semantics: replace, do not merge.** A resubmission overwrites the whole map. A merge would make it impossible for the target to *unassign* a voter.
+**Write semantics: replace, not merge.** A resubmission overwrites the whole map, so the target can *unassign* a guess. A merge makes that impossible.
 
-**Storage.** `sealed/{cardId}.targetPredictions`. **Never on the room document** — the room is client-readable and this would hand every player the target's read of the table.
+**No uniqueness constraint — a decision, with a reason.** Each forger writes at most one forgery per card, so a complete correct answer *is* a matching, and it is tempting to enforce one-player-per-option. **Do not.** A forger who never submitted leaves a placeholder, and a mid-card departure removes a candidate, so the bijection is not guaranteed and a uniqueness rule would deadlock the UI in exactly the awkward cases. Accept any map; let the client hint visually if it wants.
 
-**Scoring.** Add an optional fourth parameter to `calculateScores` in **both** implementations:
+**Partial maps are legal.** Unguessed forgeries score nothing.
+
+**Storage:** `sealed/{cardId}.targetForgeryGuesses`. **Never on the room document** — the room is world-readable and the target's guesses are a live read of the table.
+
+**Return `{ success: true }` and nothing else.** No correctness, no count, no hint. `submitUnmaskGuess` is deliberately silent for this exact reason and the design contract in `design_scoring_and_ui.md` records it.
+
+#### Scoring
+
+Add an optional parameter to `calculateScores` in **both** `functions/src/scoring_logic.ts` and the test-only mirror `lib/utils/scoring_logic.dart` (§2.0 — both or neither):
 
 ```ts
-targetPredictions?: Record<string, string>
+targetForgeryGuesses?: Record<string, string>   // optionId -> guessedAuthorId
 ```
 
-Award the target `kTargetReadPointsPerCorrect` for each voter where `targetPredictions[voterId] === playerVotes[voterId]`.
+Award the target `kTargetForgeryGuessPoints` for each entry where `answerAuthors[optionId] === guesses[optionId]`.
 
-**⚠️ Balance decision, recorded explicitly so it can be changed in one line.** Set `kTargetReadPointsPerCorrect = 1`, matching the existing "believable target" rule, which already pays the target +1 per truth-finder. **This is a judgement call, not a derived value.** It gives the target a per-card ceiling of `2 × (voters)` on the one card per round that is theirs, against a voter's typical 1–2. That is defensible — the target's turn is meant to be their moment — but it is untested at the table. **Define it as a single named constant in both implementations, and tell the user it is the knob** if the target seat proves to over-earn. Do not bury the number inline.
+**⚠️ Decision: `+1` per correct guess, and no penalty to anyone.** The revenge guess costs the forger `−1` because that forger *successfully deceived that specific voter* and is being caught out. **The target was never deceived — they do not vote — so there is no revenge to take**, and penalising a forger for being recognisable by someone who was never their victim would be a different rule wearing the same coat. Define the value as a **single named constant in both implementations** so rebalancing is one line. Tell the user it is the knob.
 
-**AA11 dependency.** AA11 itemises score deltas. **This adds a `target_read` rule to that breakdown**, and AA11's invariant — `sum(breakdown[player].points) === scoreDeltas[player]` — must continue to hold with predictions scoring. **If AA11 has already landed, extend it in this commit. If it has not, AA16a must add the rule to the breakdown shape anyway** so AA11 does not have to come back for it. Making the points visible per-rule is also what makes the balance knob observable in play rather than inferred.
+**Rule id for AA11's breakdown: `target_forger_guess`.** It must be distinct from the revenge guess's rule id — they are different rules with different eligibility and different penalties, and collapsing them in the transcript would be a lie about how the points were earned.
 
-**Departures.** A voter who leaves mid-card leaves a prediction that can never resolve. It must score nothing and **must not throw**. The 3-player floor and the departure recalculation already exist; this must not become a new crash path.
+#### ⚠️ The leak, and it is not obvious
 
-**Validation**
+`design_scoring_and_ui.md` records that while `unmaskDeadline != null`, `scoreDeltas` is **withheld** from the public card and player `totalScore` increments are stashed in `sealed/{cardId}.pendingScoreDeltas` (Issues 113, 124, 133) — precisely so that a score moving does not reveal forgery authorship before the authors flip.
 
-1. New emulator test: a complete correct mapping scores `voters × 1` to the target and nothing to anyone else.
-2. New emulator test: a partial mapping scores only the correct entries.
-3. New emulator test per rejection — non-target caller, wrong phase, wrong card, target already ready, voter id not in the room, target predicting themselves, option id not on the card, **voter predicted onto their own answer**, placeholder option. **Nine rejections, nine assertions.**
-4. New emulator test: resubmission **replaces** rather than merges — assign voter A then resubmit without A, and assert A is gone.
-5. New emulator test: un-ready reopens the window (pairs with AA8).
-6. New emulator test: a voter who left the room mid-card scores nothing and the reveal completes without throwing.
-7. **Rules test in `functions/test/rules.spec.ts`: a non-target client cannot read `sealed/{cardId}`.** `sealed` is default-deny today; this proves predictions did not change that.
-8. **Mirror the scoring fixtures into `test/scoring_logic_test.dart`** against the Dart copy, asserting the same numbers. §2.0.
-9. **AA11's sum invariant re-run** with predictions in play.
-10. **Over-reach guards, unedited:** every existing test in `functions/test/game_e2e.spec.ts` and `functions/test/rules.spec.ts`.
-11. **Falsification:** remove the self-answer rejection; test 3's corresponding case must fail while the other eight still pass. Then remove the scoring term; tests 1 and 2 fail and the rejection tests pass.
+**The target's guess points are authorship information by construction.** If they reach the public card or a `totalScore` while the unmask window is open, the table learns the target guessed right — which narrows authorship for everyone still holding a revenge guess.
+
+**Therefore: route these points through `calculateScores` so they inherit the existing withholding automatically, and prove it with a test.** Do not add a separate write path. **Enumerate all three `pendingScoreDeltas` flush sites** — `advancePhaseInternal`, `advanceToNextResolution`, `closeUnmaskWindow` (§4) — and confirm the points survive each.
+
+Likewise, **the guesses themselves stay in `sealed` until authorship is published.** Publish results with the author flip, never before.
+
+#### Departures and placeholders
+
+A guessed player who leaves mid-card, and a forgery that is a placeholder, must both **score nothing and not throw**. The 3-player floor and the departure recalculation already exist; this must not become a new crash path.
+
+#### Docs to update
+
+- `design_scoring_and_ui.md` — the new scoring term, its eligibility, and its place in the withholding contract alongside P8.
+- `design_database_and_security.md` — the new `sealed/{cardId}.targetForgeryGuesses` field and why it cannot live on the room.
+
+#### Validation
+
+1. Emulator test: all forgeries attributed correctly scores `forgeries × 1` to the target and nothing to anyone else. **In particular, assert no forger is penalised** — that is the decision above, and a test is how it stays decided.
+2. Emulator test: a partial map scores only the correct entries.
+3. Emulator test per rejection — **eight of them, eight assertions**: non-target caller; wrong phase (`reveal`); wrong card; target already ready; `optionId` not on the card; guess on the target's own truth; guess naming the target as a forger; guess naming a player not in the room. Add a ninth for the placeholder option.
+4. Emulator test: resubmission **replaces** — guess two options, resubmit with one, assert the other is gone.
+5. Emulator test: un-readying reopens the window (pairs with AA8).
+6. **Leak test, the important one:** with `unmaskDeadline` active, the public card carries **no** `scoreDeltas` and no `totalScore` has moved, while `sealed/{cardId}.pendingScoreDeltas` holds the target's guess points. Then close the window and assert they land.
+7. Emulator test per flush site — all three.
+8. **`functions/test/rules.spec.ts`: a non-target client still cannot read `sealed/{cardId}`.** Proves the new field did not change the default-deny posture.
+9. Emulator test: a guessed player who left mid-card scores nothing and the reveal completes.
+10. **Mirror the scoring fixtures into `test/scoring_logic_test.dart`** against the Dart copy, same numbers. §2.0.
+11. **AA11's sum invariant re-run** with `target_forger_guess` in play.
+12. **Over-reach guards, unedited:** every existing test in `functions/test/game_e2e.spec.ts` and `functions/test/rules.spec.ts`. **The revenge guess must be untouched** — same eligibility, same ±1, same silence.
+13. **Falsification:** remove the own-truth rejection; test 3's matching case fails and the other eight pass. Then remove the scoring term; tests 1 and 2 fail and the rejections pass. Then route the points around `calculateScores`; **test 6 must fail** — if it still passes, it is not observing the withholding.
 
 ---
 
-### AA16b — Issue 162 → Option A, client half: tap-to-assign on the vote screen
+### AA16b — Issue 162 → client half: forgery attribution on the vote screen
 
-**⚠️ BLOCKED. Do not start this until Issue 160 has a selected design and it is implemented.** The target's assignment UI has to be built on top of the vote screen's option layout, and that layout is being redesigned — AA15 produces mockups, the user picks one, and only then does this have a surface to sit on. **Building it against today's scrolling `CardGrid` means building it twice.**
+**⚠️ BLOCKED. Do not start until Issue 160 has a selected design and it is implemented.** The attribution UI sits on the target's branch of the vote screen, and that screen's option layout is being redesigned — AA15 produces mockups, the user picks one, and only then does this have a surface. **Building it against today's scrolling `CardGrid` means building it twice.**
 
-**Why tap and not drag — this is settled, do not revisit.** The vote screen already does not fit at 320 pt with six options; that is Issue 160. Drag targets across a scrolling list on a phone need auto-scroll-while-dragging, offer small drop zones, and are hard to correct under a timer. Tap-to-assign — tap a player chip, then tap an answer — carries identical information, works at 320 pt, is trivially correctable, and is testable in a widget test in a way drag is not.
+**Interaction: tap-to-assign, not drag.** Tap a player chip, then tap a forgery. The vote screen already does not fit at 320 pt with six options (that is Issue 160), and drag across a scrolling list needs auto-scroll-while-dragging, offers small drop zones, and is hard to correct under a timer. Tap carries identical information, works at 320 pt, is trivially correctable, and is testable in a widget test in a way drag is not.
 
-**A useful observation for whoever implements it:** if Issue 160 lands on a **paged** layout, the interaction gets *easier*, not harder. With one answer on screen at a time, the target assigns players **to the answer they are looking at** — a row of voter chips beneath the current page. That is a better fit than any per-row control in a scrolling list, so do not treat the 160 redesign as an obstacle here.
+**If Issue 160 lands on a paged layout the interaction gets easier, not harder** — with one answer on screen the target picks its author from a chip row beneath it. Do not treat the redesign as an obstacle.
 
-**Scope.** The target's branch of `phase3_vote.dart` only. The voter's path is untouched. Call the `game_service.dart` wrapper added in AA16a; **this item adds no new server surface.**
+**Two exclusions must be enforced on the client too**, each carrying a comment naming its server twin, per the `submitUnmaskGuess` idiom:
 
-**⚠️ This item edits an existing passing test, and that needs saying in the commit body.** `phase3_vote_test.dart` → *"O9: Target player sees card prompt and read-only options grid with no confirm vote button (Issue 121)"*. **The "no confirm vote button" half stays true and must keep being asserted — the target still never votes.** The "read-only" half stops being true, because the grid becomes interactive for assignment. Update that assertion precisely; **do not delete the test and do not loosen it.**
+- The target's **own truth** is not attributable — no affordance on it.
+- The **target themselves** is not a candidate author.
+
+**Scope.** The target's branch of `phase3_vote.dart` only. The voter path is untouched. Call the `game_service.dart` wrapper added in AA16a; **this item adds no server surface.**
+
+**⚠️ No feedback of any kind.** Do not show correctness, a running score, or a "that one's already taken" hint derived from anything but local state. The server is deliberately silent (AA16a); the client must not invent a signal it does not have.
+
+**⚠️ This item edits an existing passing test — say so in the commit body.** `phase3_vote_test.dart` → *"O9: Target player sees card prompt and read-only options grid with no confirm vote button (Issue 121)"*. **The "no confirm vote button" half stays true and must keep being asserted — the target still never votes.** The "read-only" half stops being true. Update that assertion precisely; **do not delete the test and do not loosen it to a `contains`.**
 
 **Validation**
 
-1. New widget test: target taps a voter chip then an answer; the assignment renders; tapping a different answer moves it; tapping the assigned answer again clears it.
-2. New widget test: the target cannot assign a voter to that voter's own answer — the affordance is absent or inert. **The server rejects this (AA16a); the client must not offer it.**
-3. New widget test at 320 pt with six options and the maximum voter count for the chosen layout: no overflow, every voter chip reachable.
-4. New widget test: a partial mapping submits successfully.
-5. **State-lifetime guard.** Any local assignment map lives on a `State` that survives reader changes. **Advance to the next card without re-pumping and assert the assignments are cleared.** This is the Issue 152 / lesson 2.40 trap for the third time in this wave — a re-pump builds a fresh `State` and passes against broken code.
-6. **Over-reach guard:** the voter path is unchanged — `CONFIRM VOTE` still works and self-voting is still refused.
-7. **Falsification:** remove the clear-on-reader-change; test 5 must fail and test 1 must pass.
+1. Widget test: tap a player chip then a forgery; the attribution renders; tapping another chip on the same forgery replaces it; tapping the assigned chip again clears it.
+2. Widget test: the target's own truth offers no attribution affordance.
+3. Widget test: the target does not appear in the candidate author list.
+4. Widget test at 320 pt with six options and the maximum candidate count for the chosen layout — no overflow, every chip reachable.
+5. Widget test: a partial map submits successfully.
+6. **State-lifetime guard.** The local attribution map lives on a `State` that survives reader changes. **Advance to the next card without re-pumping and assert the map is cleared.** This is the Issue 152 / lesson 2.40 trap for the third time in this wave; a re-pump builds a fresh `State` and passes against broken code.
+7. **Over-reach guard:** the voter path is unchanged — `CONFIRM VOTE` still works, self-voting still refused.
+8. **Falsification:** remove the clear-on-reader-change; test 6 fails and test 1 passes. Then remove the own-truth exclusion; test 2 fails.
 
 ---
 
