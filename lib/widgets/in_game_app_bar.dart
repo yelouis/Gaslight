@@ -10,24 +10,27 @@ import 'dart:math' as math;
 double inGameAppBarHeight(
   BuildContext context, {
   required List<TextSpan> lines,
+  int trailingSlots = 1,
 }) {
   final mediaQuery = MediaQuery.of(context);
-  final screenWidth = mediaQuery.size.width;
+  final screenWidth = mediaQuery.size.width > 0 ? mediaQuery.size.width : 375.0;
   final textScaler = mediaQuery.textScaler;
 
-  // Title area available width: screen width minus leading IconButton (56pt) and right action/reserve (56pt)
-  final availableWidth = math.max(0.0, screenWidth - 112.0);
+  // Title area available width: screen width minus leading IconButton (56pt) and trailing actions reserve (56pt * trailingSlots)
+  final double reservedWidth = 56.0 + (56.0 * trailingSlots);
+  final availableWidth = math.max(0.0, screenWidth - reservedWidth);
 
   final theme = Theme.of(context);
   final defaultStyle = theme.appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge ?? DefaultTextStyle.of(context).style;
   double textTotalHeight = 0.0;
-  for (final line in lines) {
+  for (int i = 0; i < lines.length; i++) {
+    final line = lines[i];
     final effectiveStyle = defaultStyle.merge(line.style);
     final painter = TextPainter(
       text: TextSpan(text: line.text, children: line.children, style: effectiveStyle),
       textDirection: TextDirection.ltr,
       textScaler: textScaler,
-      maxLines: 1,
+      maxLines: i == 0 ? 1 : null,
     );
     painter.layout(maxWidth: availableWidth);
     textTotalHeight += painter.height;

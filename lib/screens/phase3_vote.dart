@@ -22,6 +22,7 @@ import '../widgets/lamp_loading.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
 import '../widgets/in_game_app_bar.dart';
+import '../widgets/instructions_dialog.dart';
 import '../theme/app_icons.dart';
 
 class Phase3VoteScreen extends StatefulWidget {
@@ -154,7 +155,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
         style: roomCodeStyle,
       ),
     ];
-    final double computedAppBarHeight = inGameAppBarHeight(context, lines: appBarLines);
+    final double computedAppBarHeight = inGameAppBarHeight(context, lines: appBarLines, trailingSlots: 2);
 
     return AnimatedThinkingBackground(
       child: Scaffold(
@@ -188,6 +189,15 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
           elevation: 0,
           automaticallyImplyLeading: false,
           actions: [
+            IconButton(
+              key: const Key('in_game_manual_button'),
+              icon: ThematicIcon(
+                type: ThematicIconType.ledger,
+                color: theme.colorScheme.secondary,
+              ),
+              onPressed: () => showGameInstructionsDialog(context),
+              tooltip: 'Game Manual',
+            ),
             Padding(
               padding: const EdgeInsets.only(right: 16.0),
               child: Center(
@@ -460,7 +470,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Talk it out — discussion is part of the game.',
+                    'Find the real truth among the forgeries. Talk it out — discussion is part of the game.',
                     style: TextStyle(
                       fontFamily: 'Lora',
                       fontStyle: FontStyle.italic,

@@ -9,6 +9,7 @@ import 'package:gaslight/models/card_model.dart';
 import 'package:gaslight/screens/phase2_craft.dart';
 import 'package:gaslight/screens/phase3_vote.dart';
 import 'package:gaslight/screens/phase4_reveal.dart';
+import 'package:gaslight/widgets/in_game_app_bar.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart';
 
@@ -263,6 +264,163 @@ void main() {
           reason: 'Reveal screen at scale $scale: roomCodeBottom ($roomCodeBottom) <= appBarBottom ($appBarBottom)',
         );
       }
+    });
+
+    testWidgets('Issue 164 (AA12): Manual button is present in AppBar on Craft, Vote, and Reveal screens and opens instructions dialog', (tester) async {
+      // 1. Craft screen
+      await setupAndPumpScreen(
+        tester: tester,
+        child: const Phase2CraftScreen(),
+        phase: GamePhase.truth,
+        width: 375,
+        textScale: 1.0,
+      );
+      final craftManualBtn = find.byKey(const Key('in_game_manual_button'));
+      expect(craftManualBtn, findsOneWidget);
+      await tester.tap(craftManualBtn);
+      await tester.pumpAndSettle();
+      expect(find.text('HOW TO PLAY'), findsOneWidget);
+      await tester.tap(find.text('GOT IT'));
+      await tester.pumpAndSettle();
+      expect(find.text('HOW TO PLAY'), findsNothing);
+
+      // 2. Vote screen
+      await setupAndPumpScreen(
+        tester: tester,
+        child: const Phase3VoteScreen(),
+        phase: GamePhase.vote,
+        width: 375,
+        textScale: 1.0,
+      );
+      final voteManualBtn = find.byKey(const Key('in_game_manual_button'));
+      expect(voteManualBtn, findsOneWidget);
+      await tester.tap(voteManualBtn);
+      await tester.pumpAndSettle();
+      expect(find.text('HOW TO PLAY'), findsOneWidget);
+      await tester.tap(find.text('GOT IT'));
+      await tester.pumpAndSettle();
+      expect(find.text('HOW TO PLAY'), findsNothing);
+
+      // 3. Reveal screen
+      await setupAndPumpScreen(
+        tester: tester,
+        child: const Phase4RevealScreen(),
+        phase: GamePhase.reveal,
+        width: 375,
+        textScale: 1.0,
+      );
+      final revealManualBtn = find.byKey(const Key('in_game_manual_button'));
+      expect(revealManualBtn, findsOneWidget);
+      await tester.tap(revealManualBtn);
+      await tester.pumpAndSettle();
+      expect(find.text('HOW TO PLAY'), findsOneWidget);
+      await tester.tap(find.text('GOT IT'));
+      await tester.pumpAndSettle();
+      expect(find.text('HOW TO PLAY'), findsNothing);
+    });
+
+    testWidgets('Issue 164 (AA12): Extended guard: Forgery rotation label fits at width 320 with 2 trailing actions at textScale 2.0', (tester) async {
+      await setupAndPumpScreen(
+        tester: tester,
+        child: const Phase2CraftScreen(),
+        phase: GamePhase.forgery,
+        width: 320,
+        textScale: 2.0,
+      );
+
+      final appBarFinder = find.byType(AppBar);
+      expect(appBarFinder, findsOneWidget);
+      final appBarRenderBox = tester.renderObject<RenderBox>(appBarFinder);
+      final appBarBottom = appBarRenderBox.localToGlobal(Offset.zero).dy + appBarRenderBox.size.height;
+
+      final rotationFinder = find.text('Rotation 1 of 2');
+      expect(rotationFinder, findsOneWidget);
+      final rotationRenderBox = tester.renderObject<RenderBox>(rotationFinder);
+      final rotationBottom = rotationRenderBox.localToGlobal(Offset.zero).dy + rotationRenderBox.size.height;
+
+      expect(
+        rotationBottom,
+        lessThanOrEqualTo(appBarBottom),
+        reason: 'At width 320, scale 2.0 with 2 actions: rotationBottom ($rotationBottom) <= appBarBottom ($appBarBottom)',
+      );
+    });
+
+    testWidgets('Issue 164 (AA12): Reserve calculation differentiates 1 vs 2 trailing slots at width 320 textScale 2.0', (tester) async {
+      await setupAndPumpScreen(
+        tester: tester,
+        child: const Phase2CraftScreen(),
+        phase: GamePhase.forgery,
+        width: 320,
+        textScale: 2.0,
+      );
+      final context = tester.element(find.byType(Phase2CraftScreen));
+      final h1 = inGameAppBarHeight(context, lines: [
+        const TextSpan(text: 'FORGERY'),
+        const TextSpan(text: 'ROOM: TEST'),
+        const TextSpan(text: 'Rotation 1 of 2'),
+      ], trailingSlots: 1);
+      final h2 = inGameAppBarHeight(context, lines: [
+        const TextSpan(text: 'FORGERY'),
+        const TextSpan(text: 'ROOM: TEST'),
+        const TextSpan(text: 'Rotation 1 of 2'),
+      ], trailingSlots: 2);
+      expect(
+        h2,
+        greaterThan(h1),
+        reason: 'Two trailing action slots must measure against a narrower available width (168pt reserve vs 112pt), producing taller wrapped height',
+      );
+    });
+
+    testWidgets('Issue 164 (AA12): Extended guard: Vote screen AppBar renders cleanly at 320pt and textScale 2.0 with 2 trailing actions', (tester) async {
+      await setupAndPumpScreen(
+        tester: tester,
+        child: const Phase3VoteScreen(),
+        phase: GamePhase.vote,
+        width: 320,
+        textScale: 2.0,
+      );
+
+      final appBarFinder = find.byType(AppBar);
+      expect(appBarFinder, findsOneWidget);
+      final appBarRenderBox = tester.renderObject<RenderBox>(appBarFinder);
+      final appBarBottom = appBarRenderBox.localToGlobal(Offset.zero).dy + appBarRenderBox.size.height;
+
+      final roomCodeFinder = find.text('ROOM: TEST');
+      expect(roomCodeFinder, findsOneWidget);
+      final roomCodeRenderBox = tester.renderObject<RenderBox>(roomCodeFinder);
+      final roomCodeBottom = roomCodeRenderBox.localToGlobal(Offset.zero).dy + roomCodeRenderBox.size.height;
+
+      expect(
+        roomCodeBottom,
+        lessThanOrEqualTo(appBarBottom),
+        reason: 'Vote screen at 320pt and scale 2.0 with 2 actions: roomCodeBottom ($roomCodeBottom) <= appBarBottom ($appBarBottom)',
+      );
+    });
+
+    testWidgets('Issue 164 (AA12): Extended guard: Reveal screen AppBar renders cleanly at 320pt and textScale 2.0 with 2 trailing actions', (tester) async {
+      await setupAndPumpScreen(
+        tester: tester,
+        child: const Phase4RevealScreen(),
+        phase: GamePhase.reveal,
+        width: 320,
+        textScale: 2.0,
+      );
+
+      final appBarFinder = find.byType(AppBar);
+      expect(appBarFinder, findsOneWidget);
+      final appBarRenderBox = tester.renderObject<RenderBox>(appBarFinder);
+      final appBarBottom = appBarRenderBox.localToGlobal(Offset.zero).dy + appBarRenderBox.size.height;
+
+      final roomCodeFinder = find.text('ROOM: TEST');
+      expect(roomCodeFinder, findsOneWidget);
+      final roomCodeRenderBox = tester.renderObject<RenderBox>(roomCodeFinder);
+      final roomCodeBottom = roomCodeRenderBox.localToGlobal(Offset.zero).dy + roomCodeRenderBox.size.height;
+
+      expect(
+        roomCodeBottom,
+        lessThanOrEqualTo(appBarBottom),
+        reason: 'Reveal screen at 320pt and scale 2.0 with 2 actions: roomCodeBottom ($roomCodeBottom) <= appBarBottom ($appBarBottom)',
+      );
     });
   });
 }

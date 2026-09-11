@@ -21,6 +21,7 @@ import '../widgets/waiting_indicator.dart';
 import '../widgets/lamp_loading.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/in_game_app_bar.dart';
+import '../widgets/instructions_dialog.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_motion.dart';
 
@@ -279,7 +280,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
           style: rotationStyle,
         ),
     ];
-    final double computedAppBarHeight = inGameAppBarHeight(context, lines: appBarLines);
+    final double computedAppBarHeight = inGameAppBarHeight(context, lines: appBarLines, trailingSlots: 2);
 
     return AnimatedThinkingBackground(
       child: Scaffold(
@@ -321,6 +322,15 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
           elevation: 0,
           automaticallyImplyLeading: false,
           actions: [
+            IconButton(
+              key: const Key('in_game_manual_button'),
+              icon: ThematicIcon(
+                type: ThematicIconType.ledger,
+                color: theme.colorScheme.secondary,
+              ),
+              onPressed: () => showGameInstructionsDialog(context),
+              tooltip: 'Game Manual',
+            ),
             Padding(
               padding: const EdgeInsets.only(right: 16.0),
               child: Center(
@@ -535,8 +545,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
     }
 
     final String instructionText = isTruthRound
-        ? 'Write something true about you — the more surprising, the better. Others must be able to believe it.'
-        : 'You are writing as $targetName. Make it sound like something they would say, so people pick yours.';
+        ? 'Write something true about you. You score points for every player who identifies your answer.'
+        : 'Write a convincing lie as $targetName. You score points for every player you fool.';
 
     final stems = PromptDecks.getStemsForPrompt(targetCard.promptText);
     final String? stem = (stems != null && stems.isNotEmpty) ? stems.first : null;

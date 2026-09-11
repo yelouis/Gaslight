@@ -19,6 +19,7 @@ import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
 import '../widgets/lamp_loading.dart';
 import '../widgets/in_game_app_bar.dart';
+import '../widgets/instructions_dialog.dart';
 
 class Phase4RevealScreen extends StatefulWidget {
   const Phase4RevealScreen({super.key});
@@ -335,7 +336,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
         style: roomCodeStyle,
       ),
     ];
-    final double computedAppBarHeight = inGameAppBarHeight(context, lines: appBarLines);
+    final double computedAppBarHeight = inGameAppBarHeight(context, lines: appBarLines, trailingSlots: 2);
 
     return AnimatedThinkingBackground(
       child: Scaffold(
@@ -369,6 +370,15 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
           elevation: 0,
           automaticallyImplyLeading: false,
           actions: [
+            IconButton(
+              key: const Key('in_game_manual_button'),
+              icon: ThematicIcon(
+                type: ThematicIconType.ledger,
+                color: theme.colorScheme.secondary,
+              ),
+              onPressed: () => showGameInstructionsDialog(context),
+              tooltip: 'Game Manual',
+            ),
             IconButton(
               icon: ThematicIcon(
                 type: gs.soundEnabled ? ThematicIconType.sound : ThematicIconType.mute,
@@ -423,7 +433,18 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 8),
+                          Text(
+                            'See who found the truth, who was fooled, and unmask forgers for revenge points.',
+                            style: TextStyle(
+                              fontFamily: 'Lora',
+                              fontStyle: FontStyle.italic,
+                              color: AppColors.ivory.withOpacity(0.7),
+                              fontSize: 13,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
                           
                           // Options & Votes List
                           if (revealStage >= 1) ...[

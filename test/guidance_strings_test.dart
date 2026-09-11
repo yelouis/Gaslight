@@ -7,6 +7,7 @@ import 'package:gaslight/models/player_state.dart';
 import 'package:gaslight/models/card_model.dart';
 import 'package:gaslight/screens/phase2_craft.dart';
 import 'package:gaslight/screens/phase3_vote.dart';
+import 'package:gaslight/screens/phase4_reveal.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/widgets/shared_ui.dart';
 import 'package:gaslight/widgets/card_grid.dart';
@@ -65,7 +66,7 @@ void main() {
       }
 
       const expectedTruthString =
-          'Write something true about you — the more surprising, the better. Others must be able to believe it.';
+          'Write something true about you. You score points for every player who identifies your answer.';
       expect(find.text(expectedTruthString), findsOneWidget);
     });
 
@@ -103,7 +104,7 @@ void main() {
       }
 
       const expectedForgeryString =
-          'You are writing as Bob. Make it sound like something they would say, so people pick yours.';
+          'Write a convincing lie as Bob. You score points for every player you fool.';
       expect(find.text(expectedForgeryString), findsOneWidget);
       // Assert against display name, NEVER against raw player id
       expect(find.textContaining('p2'), findsNothing);
@@ -143,7 +144,7 @@ void main() {
       }
 
       const expectedFallbackString =
-          'You are writing as them. Make it sound like something they would say, so people pick yours.';
+          'Write a convincing lie as them. You score points for every player you fool.';
       expect(find.text(expectedFallbackString), findsOneWidget);
       expect(find.textContaining('unknown_player'), findsNothing);
     });
@@ -179,8 +180,46 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      const expectedVoteString = 'Talk it out — discussion is part of the game.';
+      const expectedVoteString =
+          'Find the real truth among the forgeries. Talk it out — discussion is part of the game.';
       expect(find.text(expectedVoteString), findsOneWidget);
+    });
+
+    testWidgets('Reveal phase displays exact guidance string', (WidgetTester tester) async {
+      final me = PlayerState(id: 'p1', name: 'Alice', isHost: true);
+      final target = PlayerState(id: 'p2', name: 'Bob');
+      final card = CardModel(
+        targetPlayerId: 'p2',
+        promptText: 'Reveal prompt',
+        truthAnswer: 'True answer',
+        sabotageAnswers: {'p1': 'Alice lie'},
+      );
+      final state = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.reveal,
+        totalPlayers: 2,
+        isTimerDisabled: true,
+        cards: [card],
+        currentCardAssignments: {'p1': 'p2'},
+        resolutionOrder: ['p2'],
+        currentReaderId: 'p2',
+      );
+      gameService.debugSetState(state, [me, target], me.id);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: const MaterialApp(
+            home: Phase4RevealScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      const expectedRevealString =
+          'See who found the truth, who was fooled, and unmask forgers for revenge points.';
+      expect(find.text(expectedRevealString), findsOneWidget);
     });
 
     testWidgets('320pt width test: Truth, Forgery, and Vote screens have no overflow and primary action is visible', (WidgetTester tester) async {
