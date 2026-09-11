@@ -291,21 +291,25 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
             ),
           ],
         ),
-        body: Stack(
-          children: [
-            SafeArea(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: me.role == PlayerRole.spectator
-                      ? _buildSpectatorUI(state, gs, theme)
-                      : (state.readyPlayers[me.id] ?? false)
-                          ? _buildWaitingUI(state, gs, theme)
-                          : _buildWriteUI(state, me, theme, gs),
+        body: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Stack(
+            children: [
+              SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: me.role == PlayerRole.spectator
+                        ? _buildSpectatorUI(state, gs, theme)
+                        : (state.readyPlayers[me.id] ?? false)
+                            ? _buildWaitingUI(state, gs, theme)
+                            : _buildWriteUI(state, me, theme, gs),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
