@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +22,21 @@ import '../widgets/deck_carousel.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
 import '../main.dart';
+
+class UpperCaseTextFormatter extends TextInputFormatter {
+  const UpperCaseTextFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return newValue.copyWith(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
+    );
+  }
+}
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -1289,6 +1305,13 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                               TextField(
                                 key: const ValueKey('room_code_field'),
                                 controller: _roomCodeController,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                keyboardType: TextInputType.text,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z]')),
+                                  const UpperCaseTextFormatter(),
+                                ],
                                 style: TextStyle(color: ivoryColor, fontWeight: FontWeight.bold, letterSpacing: 8, fontSize: 18),
                                 textAlign: TextAlign.center,
                                 decoration: InputDecoration(
