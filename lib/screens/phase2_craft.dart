@@ -612,6 +612,30 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
                             ),
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _answerController,
+                          builder: (context, value, _) {
+                            final int count = value.text.trim().length;
+                            final bool isOver = count > kMaxAnswerLength;
+                            final Color color = isOver
+                                ? Theme.of(context).colorScheme.error
+                                : const Color(0x992C1E16); // ink @ 0.6
+                            return Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                '$count/$kMaxAnswerLength',
+                                key: const ValueKey('answer_character_counter'),
+                                style: TextStyle(
+                                  fontFamily: 'Lora',
+                                  fontSize: 12,
+                                  fontWeight: isOver ? FontWeight.bold : FontWeight.normal,
+                                  color: color,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ],
                     ),
                   ),
