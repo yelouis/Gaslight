@@ -118,6 +118,13 @@ export class ScoringLogic {
       }
     }
 
+    const multiplier = Math.max(1, state.currentRound ?? 1);
+    if (multiplier > 1) {
+      for (const playerId of Object.keys(deltas)) {
+        deltas[playerId] *= multiplier;
+      }
+    }
+
     return deltas;
   }
 }

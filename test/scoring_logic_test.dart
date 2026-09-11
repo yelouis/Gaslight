@@ -101,4 +101,50 @@ void main() {
       expect(deltas['p_g1'], isNull);
     });
   });
+
+  group('Issue 163 (AA10): ScoringLogic Round Multiplier', () {
+    final card = CardModel(
+      targetPlayerId: 'p_host',
+      promptText: 'What is my secret?',
+      truthAnswer: 'I love cats',
+      sabotageAnswers: {
+        'p_g3': 'I love dogs',
+      },
+    );
+
+    final votes = {
+      'p_g1': 'p_host',
+      'p_g2': 'p_g3',
+      'p_g3': 'p_host',
+    };
+
+    test('1. identical votes at currentRound 1, 2 and 3 produce x1, x2 and x3 the deltas', () {
+      final stateR1 = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 1, currentRound: 1);
+      final deltasR1 = ScoringLogic.calculateScores(state: stateR1, currentCard: card, playerVotes: votes);
+      expect(deltasR1['p_g1'], equals(2));
+      expect(deltasR1['p_g3'], equals(4));
+      expect(deltasR1['p_host'], equals(2));
+
+      final stateR2 = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 1, currentRound: 2);
+      final deltasR2 = ScoringLogic.calculateScores(state: stateR2, currentCard: card, playerVotes: votes);
+      expect(deltasR2['p_g1'], equals(4));
+      expect(deltasR2['p_g3'], equals(8));
+      expect(deltasR2['p_host'], equals(4));
+
+      final stateR3 = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 1, currentRound: 3);
+      final deltasR3 = ScoringLogic.calculateScores(state: stateR3, currentCard: card, playerVotes: votes);
+      expect(deltasR3['p_g1'], equals(6));
+      expect(deltasR3['p_g3'], equals(12));
+      expect(deltasR3['p_host'], equals(6));
+    });
+
+    test('2. currentRound default (1) -> behaves as round 1', () {
+      final stateDefault = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 1);
+      final deltas = ScoringLogic.calculateScores(state: stateDefault, currentCard: card, playerVotes: votes);
+      expect(deltas['p_g1'], equals(2));
+      expect(deltas['p_g3'], equals(4));
+      expect(deltas['p_host'], equals(2));
+    });
+  });
 }
+

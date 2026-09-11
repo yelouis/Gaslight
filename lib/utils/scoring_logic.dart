@@ -38,6 +38,11 @@ class ScoringLogic {
       }
     });
 
+    final multiplier = state.currentRound < 1 ? 1 : state.currentRound;
+    if (multiplier > 1) {
+      deltas.updateAll((key, value) => value * multiplier);
+    }
+
     return deltas;
   }
 }
