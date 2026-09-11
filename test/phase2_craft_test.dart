@@ -108,10 +108,6 @@ void main() {
           },
         );
 
-        // Dismiss dealt card overlay first
-        await tester.tap(find.text('INSPECT'));
-        await tester.pump();
-
         // Find TextField and type a duplicate forgery
         final txtFinder = find.byType(TextField);
         expect(txtFinder, findsOneWidget);
@@ -147,10 +143,6 @@ void main() {
             'guest_id': 'playing video games',
           },
         );
-
-        // Dismiss dealt card overlay first
-        await tester.tap(find.text('INSPECT'));
-        await tester.pump();
 
         // Find TextField and type a distinct forgery
         final txtFinder = find.byType(TextField);
@@ -193,11 +185,6 @@ void main() {
         sabotageAnswers: const {},
       );
 
-      await tester.tap(find.text('INSPECT'));
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 250));
-      await tester.pump(const Duration(milliseconds: 50));
-
       final tooLong = 'z' * 120;
       await tester.enterText(find.byType(TextField), tooLong);
       await tester.pump();
@@ -239,12 +226,6 @@ void main() {
           truthAnswer: 'sleeping in my bed all day',
           sabotageAnswers: {},
         );
-
-        // Dismiss dealt card overlay first
-        await tester.tap(find.text('INSPECT'));
-        await tester.pump(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 250));
-        await tester.pump(const Duration(milliseconds: 50));
 
         // 1. Verify pinned target name is visible and styled in CormorantGaramond
         final targetText = find.text('GUESTPLAYER');
@@ -331,12 +312,6 @@ void main() {
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 900));
-
-        // Dismiss dealt overlay
-        await tester.tap(find.text('DISMISS'));
-        await tester.pump(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 250));
-        await tester.pump(const Duration(milliseconds: 50));
 
         // Tap RE-ROLL PROMPT
         expect(find.text('RE-ROLL PROMPT'), findsOneWidget);

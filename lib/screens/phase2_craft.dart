@@ -17,7 +17,6 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/gaslight_route.dart';
 import '../widgets/waiting_indicator.dart';
-import '../widgets/dealt_card_overlay.dart';
 import '../widgets/lamp_loading.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/in_game_app_bar.dart';
@@ -34,7 +33,6 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
   final TextEditingController _answerController = TextEditingController();
   bool _isSubmitting = false;
   bool _isNavigating = false;
-  bool _showDealtOverlay = false;
   GamePhase? _lastPhase;
   int? _lastRotation;
 
@@ -193,9 +191,6 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
         }
         _lastPhase = state.currentPhase;
         _lastRotation = state.currentRotationIndex;
-        if (!(state.readyPlayers[me.id] ?? false)) {
-          _showDealtOverlay = true;
-        }
       }
     }
 
@@ -310,29 +305,6 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                 ),
               ),
             ),
-            if (_showDealtOverlay && me.role != PlayerRole.spectator) ...[
-              () {
-                final bool isTruthRound = state.currentPhase == GamePhase.truth;
-                final String? targetId = isTruthRound ? me.id : state.currentCardAssignments[me.id];
-                final String promptText = targetId != null
-                    ? state.cards.firstWhere((c) => c.targetPlayerId == targetId, orElse: () => state.cards.first).promptText
-                    : '';
-                final String readerName = targetId != null
-                    ? gs.players.firstWhere((p) => p.id == targetId, orElse: () => me).name
-                    : me.name;
-
-                return DealtCardOverlay(
-                  phase: state.currentPhase,
-                  readerName: readerName,
-                  promptText: promptText,
-                  onDismiss: () {
-                    setState(() {
-                      _showDealtOverlay = false;
-                    });
-                  },
-                );
-              }(),
-            ],
           ],
         ),
       ),

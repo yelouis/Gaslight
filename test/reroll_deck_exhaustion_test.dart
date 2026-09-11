@@ -7,7 +7,6 @@ import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/models/game_state.dart';
 import 'package:gaslight/models/player_state.dart';
 import 'package:gaslight/models/card_model.dart';
-import 'package:gaslight/widgets/dealt_card_overlay.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart';
 
@@ -75,11 +74,6 @@ void main() {
         ),
       );
       await tester.pump();
-
-      if (find.byType(DealtCardOverlay).evaluate().isNotEmpty) {
-        await tester.tap(find.byType(DealtCardOverlay));
-        await tester.pump(const Duration(milliseconds: 500));
-      }
 
       final rerollBtn = find.ancestor(of: find.text('RE-ROLL PROMPT'), matching: find.byType(ElevatedButton));
       expect(rerollBtn, findsOneWidget);
@@ -162,11 +156,6 @@ void main() {
       );
       await tester.pump();
 
-      if (find.byType(DealtCardOverlay).evaluate().isNotEmpty) {
-        await tester.tap(find.byType(DealtCardOverlay), warnIfMissed: false);
-        await tester.pump(const Duration(milliseconds: 1500));
-      }
-
       final rerollBtn = find.ancestor(of: find.text('RE-ROLL PROMPT'), matching: find.byType(ElevatedButton));
       expect(rerollBtn, findsOneWidget);
 
@@ -248,11 +237,6 @@ void main() {
         ),
       );
       await tester.pump();
-
-      if (find.byType(DealtCardOverlay).evaluate().isNotEmpty) {
-        await tester.tap(find.byType(DealtCardOverlay), warnIfMissed: false);
-        await tester.pump(const Duration(milliseconds: 500));
-      }
 
       final rerollBtn = find.ancestor(of: find.text('RE-ROLL PROMPT'), matching: find.byType(ElevatedButton));
       expect(rerollBtn, findsOneWidget);
@@ -341,11 +325,6 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('nav_btn')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-
-      if (find.byType(DealtCardOverlay).evaluate().isNotEmpty) {
-        await tester.tap(find.byType(DealtCardOverlay), warnIfMissed: false);
-        await tester.pump(const Duration(milliseconds: 500));
-      }
 
       final rerollBtn = find.ancestor(of: find.text('RE-ROLL PROMPT'), matching: find.byType(ElevatedButton));
       expect(rerollBtn, findsOneWidget);

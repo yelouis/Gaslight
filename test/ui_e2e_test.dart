@@ -83,10 +83,6 @@ void main() {
       // 5. Verify transition to TRUTH phase
       expect(find.text('TRUTH'), findsOneWidget);
 
-      // Dismiss dealt card overlay first
-      await tester.tap(find.text('DISMISS'));
-      await tick(600); // Allow overlay dismiss transition
-
       expect(find.text('YOUR TRUTH'), findsOneWidget);
       print('Successfully transitioned to TRUTH phase.');
 
@@ -108,10 +104,6 @@ void main() {
       // 6. Verify transition to FORGERY phase
       expect(find.text('FORGERY'), findsOneWidget);
       print('Successfully transitioned to FORGERY phase.');
-
-      // Dismiss dealt card overlay
-      await tester.tap(find.text('INSPECT'));
-      await tick(600); // Allow overlay dismiss transition
 
       // Submit forgery
       await tester.enterText(find.byType(TextField).first, 'Alice\'s Simulated Forgery');
@@ -218,10 +210,6 @@ void main() {
 
       // Verify truth phase
       expect(find.text('TRUTH'), findsOneWidget);
-
-      // Dismiss dealt card overlay first
-      await tester.tap(find.text('DISMISS'));
-      await tick(600); // Allow overlay dismiss transition
 
       // Try submitting a similarity failure text (contains "trigger_error")
       final craftField = find.byType(TextField).first;
