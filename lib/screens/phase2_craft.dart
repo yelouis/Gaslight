@@ -38,6 +38,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
   bool _isNavigating = false;
   GamePhase? _lastPhase;
   int? _lastRotation;
+  String? _lastSubmittedAnswer;
+  String? _lastSubmittedPrompt;
 
   @override
   void initState() {
@@ -171,6 +173,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
 
       await gs.submitCardAnswer(targetId, me.id, text, isTruth);
       if (mounted) {
+        _lastSubmittedAnswer = text;
+        _lastSubmittedPrompt = card?.promptText;
         _answerController.clear();
         AudioService.instance.playSubmit();
       }
@@ -217,6 +221,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
 
     if (me.role != PlayerRole.spectator) {
       if (state.currentPhase != _lastPhase || state.currentRotationIndex != _lastRotation) {
+        _lastSubmittedAnswer = null;
+        _lastSubmittedPrompt = null;
         if (_lastPhase == GamePhase.forgery && state.currentPhase == GamePhase.truth) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -421,35 +427,89 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
     final activeNonSpectators = gs.players.where((p) => p.role != PlayerRole.spectator).toList();
     final activeCount = activeNonSpectators.length;
     int unready = (activeCount - readyCount).clamp(0, activeCount);
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const RavenMascot(state: RavenState.idle, size: 64),
-        const SizedBox(height: 12),
-        const CandleFlameIndicator(),
-        const SizedBox(height: 24),
-        Text(
-          'THE INK DRIES…',
-          style: theme.textTheme.headlineSmall?.copyWith(
-            color: theme.colorScheme.secondary,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2,
-            shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 8)],
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const RavenMascot(state: RavenState.idle, size: 64),
+          const SizedBox(height: 12),
+          const CandleFlameIndicator(),
+          const SizedBox(height: 24),
+          Text(
+            'THE INK DRIES…',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: theme.colorScheme.secondary,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2,
+              shadows: const [
+                Shadow(
+                  color: Color(0xCC000000), // black @ 0.8
+                  blurRadius: 8,
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-        Text('Waiting for $unready players...', style: const TextStyle(color: Colors.white)),
-        const SizedBox(height: 16),
-        WaitingOnRow(players: activeNonSpectators, readyMap: state.readyPlayers),
-        
-        if (kDebugMode && gs.currentPlayer!.isHost) ...[
-          const SizedBox(height: 20),
-          TextButton(
-            onPressed: () => gs.debugSimulateBotResponses(),
-            child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
-          ),
-        ]
-      ],
+          const SizedBox(height: 10),
+          Text('Waiting for $unready players...', style: const TextStyle(color: Colors.white)),
+          const SizedBox(height: 16),
+          WaitingOnRow(players: activeNonSpectators, readyMap: state.readyPlayers),
+          if (_lastSubmittedAnswer != null) ...[
+            const SizedBox(height: 24),
+            Container(
+              key: const ValueKey('submitted_answer_recap'),
+              constraints: const BoxConstraints(maxWidth: 380),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.parchment,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.brass, width: 1.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x4D000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_lastSubmittedPrompt != null && _lastSubmittedPrompt!.isNotEmpty) ...[
+                    Text(
+                      _lastSubmittedPrompt!,
+                      style: const TextStyle(
+                        fontFamily: 'Lora',
+                        fontStyle: FontStyle.italic,
+                        fontSize: 12,
+                        color: Color(0xA62C1E16), // ink @ 0.65
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                  Text(
+                    '“$_lastSubmittedAnswer”',
+                    style: const TextStyle(
+                      fontFamily: 'CormorantGaramond',
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.ink,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (kDebugMode && gs.currentPlayer!.isHost) ...[
+            const SizedBox(height: 20),
+            TextButton(
+              onPressed: () => gs.debugSimulateBotResponses(),
+              child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+            ),
+          ]
+        ],
+      ),
     );
   }
 
