@@ -803,6 +803,34 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
     required String subtext,
     required String badgeText,
   }) {
+    return HighlightCard(
+      title: title,
+      sigilType: sigilType,
+      quote: quote,
+      subtext: subtext,
+      badgeText: badgeText,
+    );
+  }
+}
+
+class HighlightCard extends StatelessWidget {
+  final String title;
+  final ThematicIconType sigilType;
+  final String quote;
+  final String subtext;
+  final String badgeText;
+
+  const HighlightCard({
+    super.key,
+    required this.title,
+    required this.sigilType,
+    required this.quote,
+    required this.subtext,
+    required this.badgeText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
@@ -820,8 +848,6 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
               Expanded(
                 child: Text(
                   title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontFamily: 'CormorantGaramond',
                     fontSize: 14,
@@ -831,30 +857,25 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
-              Flexible(
-                fit: FlexFit.loose,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ground,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: AppColors.brass.withOpacity(0.4)),
-                  ),
-                  child: Text(
-                    badgeText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Lora',
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.ivory,
-                    ),
-                  ),
-                ),
-              ),
             ],
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.ground,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: AppColors.brass.withOpacity(0.4)),
+            ),
+            child: Text(
+              badgeText,
+              style: const TextStyle(
+                fontFamily: 'Lora',
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: AppColors.ivory,
+              ),
+            ),
           ),
           const SizedBox(height: 8),
           Text(
