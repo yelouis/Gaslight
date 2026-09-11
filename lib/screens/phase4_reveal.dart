@@ -119,15 +119,22 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     if (voteCounts.isEmpty) return null;
     
     var maxVotes = 0;
-    String? bestAuthorId;
-    for (var entry in voteCounts.entries) {
-      if (entry.value > maxVotes) {
-        maxVotes = entry.value;
-        bestAuthorId = entry.key;
+    for (var votes in voteCounts.values) {
+      if (votes > maxVotes) {
+        maxVotes = votes;
       }
     }
     
-    if (bestAuthorId == null || maxVotes == 0) return null;
+    if (maxVotes < 2) return null;
+
+    final topAuthors = voteCounts.entries
+        .where((e) => e.value == maxVotes)
+        .map((e) => e.key)
+        .toList();
+
+    if (topAuthors.length != 1) return null;
+
+    final bestAuthorId = topAuthors.first;
     
     final bestPlayer = gs.players.firstWhere(
       (p) => p.id == bestAuthorId, 
