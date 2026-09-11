@@ -261,6 +261,46 @@ Your selection: Proceed with Option A.
 
 Your selection: Lets do option C but before actually implementing it, create some demo images for me to view and select which paged/swipeable design is the best.
 
+#### Paged/Swipeable Vote Option Mockups (Generated in Wave AA / AA15)
+
+To evaluate Option C without speculative implementation in production code, four authentic Flutter widget mockups were rendered using the authentic Gaslight design system (Cormorant Garamond, Lora, Victorian gold/brass/oxblood palette, authentic parchment cards). All mockups evaluate the worst-case layout: 6 options (7+ players) with a maximum-length 100-character answer (`kMaxAnswerLength = 100`) in Slot 1, rendered at both 320 pt (iPhone SE) and 430 pt (iPhone Pro Max) viewport widths.
+
+**Design Option C1: Single Card Full Width with Dot Indicators**
+- **Artefacts**:
+  - `docs/mockups/vote_options/treatment_1_single_card_dots_320.png`
+  - `docs/mockups/vote_options/treatment_1_single_card_dots_430.png`
+- **Description**: Displays one large, prominent parchment card per page with navigation chevron buttons and horizontal dot indicators (`• • • • • •`) at the bottom.
+- **Pros**: Maximum possible font size and line height; zero card crowding; 100-character answers fit easily without aggressive auto-sizing even on 320 pt devices.
+- **Cons**: Players must swipe/paginate 5 times to read all 6 options; zero simultaneous comparison; highest interaction cost under a vote timer.
+
+**Design Option C2: Two-Up Carousel**
+- **Artefacts**:
+  - `docs/mockups/vote_options/treatment_2_two_up_carousel_320.png`
+  - `docs/mockups/vote_options/treatment_2_two_up_carousel_430.png`
+- **Description**: Displays two full-width options stacked vertically on each page, with 3 page dot indicators at the bottom for 6 options (`Page 1 of 3`).
+- **Pros**: Cuts pagination in half (3 screens instead of 6) while preserving generous card height and width; allows comparing pairs of answers directly.
+- **Cons**: Still requires pagination to see all answers; pairs may feel arbitrarily grouped.
+
+**Design Option C3: Stacked Deck with Peek (Atmospheric Parlour Deck)**
+- **Artefacts**:
+  - `docs/mockups/vote_options/treatment_3_stacked_deck_peek_320.png`
+  - `docs/mockups/vote_options/treatment_3_stacked_deck_peek_430.png`
+- **Description**: Physical parlour card aesthetic where the current card sits in the foreground and the next card peeks out from underneath with an offset layered shadow and border. Includes a vintage counter pill (`CARD I OF VI`) and next/previous controls.
+- **Pros**: Deep thematic harmony with Gaslight's Victorian parlour mystery aesthetic; gives tactile visual feedback that more cards remain in the stack.
+- **Cons**: Margins needed for the peek offset slightly reduce usable width; custom gesture/stack animations are more complex to implement cleanly.
+
+**Design Option C4: Segmented Pager (Direct Tab Access)**
+- **Artefacts**:
+  - `docs/mockups/vote_options/treatment_4_segmented_pager_320.png`
+  - `docs/mockups/vote_options/treatment_4_segmented_pager_430.png`
+- **Description**: A brass-accented segmented tab bar along the top (`OPTION I` through `VI`) directly above a dedicated card display pane, with previous/next chevrons below.
+- **Pros**: Random access — players can jump directly between options in a single tap without swiping sequentially through intermediates; clear overview of how many options exist.
+- **Cons**: Segmented tab strip consumes ~44 pt of vertical height; tabs can feel tight on narrow 320 pt viewports.
+
+⚠️ **Implementation Notice for Future Wave**: When the selected design is implemented, `test/vote_option_truncation_test.dart` ("P9 discoverability: six options at 320x640 portrait exceed viewport height and option at index 3 has non-zero height below fold") will need to be rewritten. That test currently asserts the below-the-fold scrolling behaviour that Option C is designed to replace.
+
+Your selection: _____
+
 ---
 
 ### Issue 161: The target's "I'M READY" is irreversible
