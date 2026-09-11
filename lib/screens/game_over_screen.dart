@@ -238,7 +238,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'THE NIGHT\'S HONORS',
+                              'FINAL RESULTS',
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 color: theme.colorScheme.secondary, // Gold
                                 fontWeight: FontWeight.bold,
@@ -248,9 +248,9 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                               ),
                             ),
                             const SizedBox(height: 30),
-                            _buildHonorCards(theme, mastermind, trickster, runnerUp, gullible),
-                            const SizedBox(height: 32),
                             _buildStandings(theme, sortedByScore, gs.currentPlayer?.id),
+                            const SizedBox(height: 32),
+                            _buildHonorCards(theme, mastermind, trickster, runnerUp, gullible),
                             if (gs.gameState?.matchSummary != null) ...[
                               const SizedBox(height: 32),
                               _buildMatchHighlights(theme, gs.gameState!.matchSummary!),
@@ -332,6 +332,23 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
     List<Widget> cards = [];
 
     cards.add(
+      Text(
+        'THE NIGHT\'S HONORS',
+        textAlign: TextAlign.center,
+        style: theme.textTheme.titleMedium?.copyWith(
+          color: theme.colorScheme.secondary,
+          fontWeight: FontWeight.bold,
+          fontFamily: 'CormorantGaramond',
+          fontSize: 20,
+          letterSpacing: 2.5,
+        ),
+      ),
+    );
+    cards.add(
+      const SizedBox(height: 12),
+    );
+
+    cards.add(
       StaggeredPlaque(
         index: getIndex('mastermind'),
         onComplete: () => _playHonorSound(getIndex('mastermind'), totalCount),
@@ -407,6 +424,8 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
     }
 
     return Column(
+      key: const Key('game_over_honors_block'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: cards,
     );
   }
@@ -547,6 +566,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
 
   Widget _buildStandings(ThemeData theme, List<PlayerState> sortedByScore, String? currentPlayerId) {
     return Column(
+      key: const Key('game_over_standings_block'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(

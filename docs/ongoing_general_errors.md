@@ -422,7 +422,7 @@ Your selection: Proceed with Option A.
 
 ### Issue 167: Final standings are buried below the honors
 
-**Status**: ⚠️ Confirmed Unresolved — `game_over_screen.dart:241–256` renders in this order: `THE NIGHT'S HONORS` heading → honor cards → `FINAL STANDINGS` → `MATCH HIGHLIGHTS`. The score — the thing every player wants first — sits below a full block of superlatives and requires scrolling, while the screen's own heading announces the honors as the page's subject.
+**Status**: ✅ Resolved (Option A implemented in Wave AA13) — Swapped `_buildStandings` above `_buildHonorCards` in `GameOverScreen`. Retitled the top container headline to `FINAL RESULTS`, and gave the honors block its own dedicated `THE NIGHT'S HONORS` section header styled consistently with `FINAL STANDINGS` and `MATCH HIGHLIGHTS`. Verified ceremony animations and bottom bar pinning remain intact, with vertical order assertion and falsification confirmed in `test/game_over_screen_test.dart`.
 
 **Option A (recommended)**: **Swap the two blocks and re-title the screen** — render `_buildStandings` before `_buildHonorCards`, and change the page heading so it no longer announces the honors as the screen's subject.
   - *Pros*: Exactly what was asked, in a straightforward reorder of two calls in one build method. The heading change is the part that is easy to miss and would otherwise leave the screen contradicting itself.

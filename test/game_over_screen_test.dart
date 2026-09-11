@@ -536,5 +536,29 @@ void main() {
 
       await gameService.leaveRoom();
     });
+
+    testWidgets('AA13 (Issue 167): Standings render above honors in widget tree order', (WidgetTester tester) async {
+      await setupAndPumpGameOverScreen(tester: tester, reduceMotion: true);
+
+      final standingsFinder = find.byKey(const Key('game_over_standings_block'));
+      final honorsFinder = find.byKey(const Key('game_over_honors_block'));
+
+      expect(standingsFinder, findsOneWidget);
+      expect(honorsFinder, findsOneWidget);
+
+      final standingsTop = tester.getTopLeft(standingsFinder).dy;
+      final honorsTop = tester.getTopLeft(honorsFinder).dy;
+
+      expect(standingsTop, lessThan(honorsTop));
+
+      // Also verify vertical positioning of titles
+      final standingsTitleFinder = find.text('FINAL STANDINGS');
+      final honorsTitleFinder = find.text('THE NIGHT\'S HONORS');
+      expect(standingsTitleFinder, findsOneWidget);
+      expect(honorsTitleFinder, findsOneWidget);
+      expect(tester.getTopLeft(standingsTitleFinder).dy, lessThan(tester.getTopLeft(honorsTitleFinder).dy));
+
+      await gameService.leaveRoom();
+    });
   });
 }
