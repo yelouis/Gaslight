@@ -990,9 +990,13 @@ export const setReady = onCall(async (request) => {
     if (!roomSnap.exists) {
       throw new HttpsError("not-found", "Game room not found.");
     }
+    const room = roomSnap.data() as GameState;
+    if (room.currentPhase !== "vote") {
+      throw new HttpsError("failed-precondition", "setReady is only allowed during the vote phase.");
+    }
+
     const playersSnap = await transaction.get(roomRef.collection("players"));
 
-    const room = roomSnap.data() as GameState;
     const newReadyMap: Record<string, boolean> = { ...room.readyPlayers, [playerId]: ready };
 
     const activePlayers = playersSnap.docs.map(doc => doc.data() as PlayerState).filter(p => p.role !== "spectator");

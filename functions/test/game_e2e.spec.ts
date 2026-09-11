@@ -5498,9 +5498,116 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
           }
         }
       });
+    describe('Issue 161 / AA8: setReady toggle and post-advance rejection', () => {
+      it('rejects setReady(false) after phase advanced to reveal and never corrupts readyPlayers', async () => {
+        const hostUser = await createAnonUser();
+        const bobUser = await createAnonUser();
+        const charlieUser = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_alice',
+          sabotageAnswersCount: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', bobUser.idToken, {
+          roomCode,
+          playerName: 'Bob',
+          playerId: 'p_bob'
+        });
+
+        await callFn('joinRoom', charlieUser.idToken, {
+          roomCode,
+          playerName: 'Charlie',
+          playerId: 'p_charlie'
+        });
+
+        // Ready up in lobby & start game
+        await roomRef.collection('players').doc('p_bob').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_charlie').update({ lobbyReady: true });
+
+        await callFn('startGame', hostUser.idToken, {
+          roomCode,
+          selectedDeckId: FALLBACK_DECK
+        });
+
+        // Submit truth answers
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_alice', authorId: 'p_alice', text: 'Alice Truth', isTruth: true });
+        await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: 'p_bob', authorId: 'p_bob', text: 'Bob Truth', isTruth: true });
+        await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: 'p_charlie', authorId: 'p_charlie', text: 'Charlie Truth', isTruth: true });
+
+        // Submit forgeries
+        const roomSnapForgeries = await roomRef.get();
+        const assignments = roomSnapForgeries.data()?.currentCardAssignments || {};
+
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_alice'], authorId: 'p_alice', text: 'Alice Forgery', isTruth: false });
+        await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: assignments['p_bob'], authorId: 'p_bob', text: 'Bob Forgery', isTruth: false });
+        await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: assignments['p_charlie'], authorId: 'p_charlie', text: 'Charlie Forgery', isTruth: false });
+
+        // Room is now in vote phase
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('vote');
+        const currentReaderId = roomSnap.data()?.currentReaderId;
+        const readerToken = currentReaderId === 'p_alice' ? hostUser.idToken : (currentReaderId === 'p_bob' ? bobUser.idToken : charlieUser.idToken);
+
+        // 1. Target can toggle ready on and off during vote phase
+        await callFn('setReady', readerToken, { roomCode, playerId: currentReaderId, ready: true });
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.readyPlayers[currentReaderId]).to.be.true;
+
+        await callFn('setReady', readerToken, { roomCode, playerId: currentReaderId, ready: false });
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.readyPlayers[currentReaderId]).to.be.false;
+
+        // Target readies again
+        await callFn('setReady', readerToken, { roomCode, playerId: currentReaderId, ready: true });
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.readyPlayers[currentReaderId]).to.be.true;
+
+        // Voters cast votes
+        const sealedSnap = await roomRef.collection('sealed').doc(currentReaderId).get();
+        const answerAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+        const currentCard = roomSnap.data()?.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+        const voters = ['p_alice', 'p_bob', 'p_charlie'].filter(id => id !== currentReaderId);
+
+        for (const vId of voters) {
+          const vToken = vId === 'p_alice' ? hostUser.idToken : (vId === 'p_bob' ? bobUser.idToken : charlieUser.idToken);
+          const validOption = currentCard.options.find((opt: any) => answerAuthors[opt.id] !== vId);
+          await callFn('castVote', vToken, {
+            roomCode,
+            targetCardId: currentReaderId,
+            voterId: vId,
+            votedForId: validOption.id
+          });
+        }
+
+        // Phase has advanced to reveal
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+        expect(roomSnap.data()?.readyPlayers).to.deep.equal({});
+
+        // 2. Late un-ready after phase advanced must be rejected and must not corrupt readyPlayers
+        try {
+          await callFn('setReady', readerToken, { roomCode, playerId: currentReaderId, ready: false });
+          expect.fail('setReady(false) after phase advanced should have been rejected');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('FAILED_PRECONDITION');
+        }
+
+        // Verify readyPlayers is still empty in reveal, never corrupted
+        roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+        expect(roomSnap.data()?.readyPlayers).to.deep.equal({});
+      });
     });
   });
 });
+});
+
 
 
 

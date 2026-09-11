@@ -33,6 +33,7 @@ class Phase3VoteScreen extends StatefulWidget {
 
 class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<Phase3VoteScreen> {
   bool _submitted = false;
+  bool _isSettingReady = false;
   bool _isNavigating = false;
   final Set<String> _sealedSoundPlayed = {};
   String? _lastReaderId;
@@ -132,6 +133,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
         currentCard = state.cards.firstWhere((c) => c.targetPlayerId == currentTargetId);
       } catch (_) {}
     }
+    final isTarget = currentCard?.targetPlayerId == me.id;
 
     final titleStyle = AppTextStyles.phaseTitle.copyWith(fontSize: 26);
     final roomCodeStyle = AppTextStyles.sectionLabel.copyWith(
@@ -209,7 +211,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
               padding: const EdgeInsets.all(24.0),
               child: me.role == PlayerRole.spectator
                 ? _buildSpectatorVoteUI(state, me, theme, currentCard, gs)
-                : _submitted || (state.readyPlayers[me.id] ?? false) 
+                : (!isTarget && (_submitted || (state.readyPlayers[me.id] ?? false)))
                   ? _buildWaitingUI(state, gs, theme) 
                   : _buildVotingUI(state, me, theme, currentCard),
             ),
@@ -312,6 +314,9 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
     if (_lastReaderId != state.currentReaderId) {
       _sealedSoundPlayed.clear();
       _lastReaderId = state.currentReaderId;
+      _submitted = false;
+      _localSelectedAuthorId = null;
+      _isSettingReady = false;
       if (AppMotion.reduce(context)) {
         for (var voter in expectedVoters) {
           if (state.readyPlayers[voter.id] ?? false) {
@@ -501,12 +506,15 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
             ),
             const SizedBox(height: 8),
             PrimaryButton(
-              text: "I'M READY",
-              onPressed: () async {
-                setState(() => _submitted = true);
+              text: (state.readyPlayers[me.id] == true) ? 'NOT READY' : "I'M READY",
+              onPressed: _isSettingReady ? null : () async {
+                setState(() => _isSettingReady = true);
+                final targetReady = !(state.readyPlayers[me.id] == true);
                 try {
-                  await context.read<GameService>().setPlayerReady(true);
-                  AudioService.instance.playVote();
+                  await context.read<GameService>().setPlayerReady(targetReady);
+                  if (targetReady) {
+                    AudioService.instance.playVote();
+                  }
                 } catch (e) {
                   debugPrint('setPlayerReady error: $e');
                   if (mounted) {
@@ -516,7 +524,10 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                         backgroundColor: Theme.of(context).colorScheme.error,
                       ),
                     );
-                    setState(() => _submitted = false);
+                  }
+                } finally {
+                  if (mounted) {
+                    setState(() => _isSettingReady = false);
                   }
                 }
               },

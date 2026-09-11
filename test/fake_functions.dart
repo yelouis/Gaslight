@@ -495,6 +495,13 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         final snapshot = await transaction.get(roomRef);
         final currentState = GameState.fromMap(snapshot.data()!, snapshot.id);
 
+        if (ready == false && (currentState.currentPhase == GamePhase.reveal || currentState.currentPhase == GamePhase.gameOver)) {
+          throw FirebaseFunctionsException(
+            message: 'setReady is only allowed during the vote phase.',
+            code: 'failed-precondition',
+          );
+        }
+
         final newReadyMap = Map<String, bool>.from(currentState.readyPlayers);
         newReadyMap[playerId] = ready;
         
