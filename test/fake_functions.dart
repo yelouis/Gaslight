@@ -1089,11 +1089,13 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       }
     } else if (state.currentPhase == GamePhase.vote) {
       final currentCard = state.cards.firstWhere((c) => c.targetPlayerId == state.currentReaderId);
-      final deltas = ScoringLogic.calculateScores(
+      final scoreResult = ScoringLogic.calculateScoresAndBreakdown(
         state: state,
         currentCard: currentCard,
         playerVotes: Map<String, String>.from(currentCard.votes),
       );
+      final deltas = scoreResult.deltas;
+      final breakdown = scoreResult.breakdown;
 
       final timesFooledDeltas = <String, int>{};
       final playersDeceivedDeltas = <String, int>{};
@@ -1123,7 +1125,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
 
       final updatedCards = state.cards.map((c) {
         if (c.targetPlayerId == state.currentReaderId) {
-          return c.copyWith(scoreDeltas: deltas);
+          return c.copyWith(scoreDeltas: deltas, scoreBreakdown: breakdown);
         }
         return c;
       }).toList();

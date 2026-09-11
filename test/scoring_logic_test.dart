@@ -146,5 +146,96 @@ void main() {
       expect(deltas['p_host'], equals(2));
     });
   });
+
+  group('ScoringLogic Breakdown Sum Invariant (AA11 / Issue 169)', () {
+    int sumBreakdown(List<ScoreBreakdownItem>? items) =>
+        items?.fold<int>(0, (sum, item) => sum + item.points) ?? 0;
+
+    final card = CardModel(
+      targetPlayerId: 'p_host',
+      promptText: 'What is my secret?',
+      truthAnswer: 'I love cats',
+      sabotageAnswers: {
+        'p_g3': 'I love dogs',
+      },
+    );
+
+    final votes = {
+      'p_g1': 'p_host',
+      'p_g2': 'p_g3',
+      'p_g3': 'p_host',
+    };
+
+    test('Fixture 1: Round 1 (P=4, S=1) - sum(breakdown) == deltas for every player', () {
+      final state = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 1, currentRound: 1);
+      final res = ScoringLogic.calculateScoresAndBreakdown(state: state, currentCard: card, playerVotes: votes);
+      for (final entry in res.deltas.entries) {
+        expect(sumBreakdown(res.breakdown[entry.key]), equals(entry.value), reason: 'Sum for player ${entry.key}');
+      }
+    });
+
+    test('Fixture 2: Round 2 Multiplier (x2) - sum(breakdown) == deltas for every player', () {
+      final state = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 1, currentRound: 2);
+      final res = ScoringLogic.calculateScoresAndBreakdown(state: state, currentCard: card, playerVotes: votes);
+      for (final entry in res.deltas.entries) {
+        expect(sumBreakdown(res.breakdown[entry.key]), equals(entry.value), reason: 'Sum for player ${entry.key}');
+        final multItem = res.breakdown[entry.key]?.any((item) => item.rule == 'round_multiplier');
+        expect(multItem, isTrue, reason: 'Multiplier line present for player ${entry.key}');
+      }
+    });
+
+    test('Fixture 3: Round 3 Multiplier (x3) on 5-player 3-forgery match - sum(breakdown) == deltas for every player', () {
+      final state5 = GameState(roomCode: 'TEST', totalPlayers: 5, forgeriesPerCard: 3, currentRound: 3);
+      final card5 = CardModel(
+        targetPlayerId: 'p_host',
+        promptText: 'A secret',
+        truthAnswer: 'Truth',
+        sabotageAnswers: {
+          'p_g1': 'Lie 1',
+          'p_g2': 'Lie 2',
+          'p_g3': 'Lie 3',
+        },
+      );
+      final votes5 = {
+        'p_g4': 'p_host',
+        'p_g1': 'p_g2',
+        'p_g2': 'p_host',
+        'p_g3': 'p_host',
+      };
+      final res = ScoringLogic.calculateScoresAndBreakdown(state: state5, currentCard: card5, playerVotes: votes5);
+      for (final entry in res.deltas.entries) {
+        expect(sumBreakdown(res.breakdown[entry.key]), equals(entry.value), reason: 'Sum for player ${entry.key}');
+      }
+    });
+
+    test('Fixture 4: Negative deltas from unmask revenge accusation - sum(breakdown) == deltas for both sides', () {
+      final state = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 1, currentRound: 1);
+      final res = ScoringLogic.calculateScoresAndBreakdown(state: state, currentCard: card, playerVotes: votes);
+      final deltas = Map<String, int>.from(res.deltas);
+      final breakdown = Map<String, List<ScoreBreakdownItem>>.from(
+        res.breakdown.map((k, v) => MapEntry(k, List<ScoreBreakdownItem>.from(v))),
+      );
+
+      const guesserId = 'p_g2';
+      const forgerId = 'p_g3';
+
+      deltas[guesserId] = (deltas[guesserId] ?? 0) + 1;
+      deltas[forgerId] = (deltas[forgerId] ?? 0) - 1;
+
+      final guesserItems = breakdown.putIfAbsent(guesserId, () => []);
+      guesserItems.add(const ScoreBreakdownItem(rule: 'revenge_guess', points: 1));
+
+      final forgerItems = breakdown.putIfAbsent(forgerId, () => []);
+      forgerItems.add(const ScoreBreakdownItem(rule: 'revenge_guess', points: -1));
+
+      expect(sumBreakdown(breakdown[guesserId]), equals(deltas[guesserId]));
+      expect(sumBreakdown(breakdown[forgerId]), equals(deltas[forgerId]));
+
+      // Standalone negative delta test
+      final negativeBreakdown = const [ScoreBreakdownItem(rule: 'revenge_guess', points: -1)];
+      expect(sumBreakdown(negativeBreakdown), equals(-1));
+    });
+  });
 }
+
 

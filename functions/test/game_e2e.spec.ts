@@ -5337,6 +5337,65 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         const forgerDoc = playersSnap.docs.find(d => d.id === forgerId);
         expect(forgerDoc?.data().totalScore).to.equal(3);
       });
+
+      describe('Wave AA11 — Score Breakdown Flush Sites (Issue 169)', () => {
+        it('Flush Site 1: breakdown survives advancePhaseInternal when advancing from reveal', async () => {
+          const { roomRef, roomCode, currentReader, hostUser } = await setupRevealWithFooledPlayer();
+
+          const sealedSnap = await roomRef.collection('sealed').doc(currentReader).get();
+          expect(sealedSnap.data()?.pendingScoreBreakdown, 'pendingScoreBreakdown exists on sealed').to.not.be.undefined;
+
+          // Host advances phase from reveal
+          await callFn('advancePhase', hostUser.idToken, { roomCode });
+
+          const freshSnap = await roomRef.get();
+          const flushedCard = (freshSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+          expect(flushedCard.scoreBreakdown, 'scoreBreakdown on card').to.be.an('object');
+          expect(Object.keys(flushedCard.scoreBreakdown).length).to.be.greaterThan(0);
+
+          const freshSealed = await roomRef.collection('sealed').doc(currentReader).get();
+          expect(freshSealed.data()?.pendingScoreBreakdown).to.be.undefined;
+        });
+
+        it('Flush Site 2: breakdown survives advanceToNextResolution during open unmask window', async () => {
+          const { roomRef, roomCode, currentReader, hostUser } = await setupRevealWithFooledPlayer();
+
+          const sealedSnap = await roomRef.collection('sealed').doc(currentReader).get();
+          expect(sealedSnap.data()?.pendingScoreBreakdown, 'pendingScoreBreakdown exists on sealed').to.not.be.undefined;
+
+          // Host advances to next resolution
+          await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+
+          const freshSnap = await roomRef.get();
+          const flushedCard = (freshSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+          expect(flushedCard.scoreBreakdown, 'scoreBreakdown on card').to.be.an('object');
+          expect(Object.keys(flushedCard.scoreBreakdown).length).to.be.greaterThan(0);
+
+          const freshSealed = await roomRef.collection('sealed').doc(currentReader).get();
+          expect(freshSealed.data()?.pendingScoreBreakdown).to.be.undefined;
+        });
+
+        it('Flush Site 3: breakdown survives closeUnmaskWindow when window expires', async () => {
+          const { roomRef, roomCode, currentReader, hostUser } = await setupRevealWithFooledPlayer();
+
+          const sealedSnap = await roomRef.collection('sealed').doc(currentReader).get();
+          expect(sealedSnap.data()?.pendingScoreBreakdown, 'pendingScoreBreakdown exists on sealed').to.not.be.undefined;
+
+          // Expire the unmask deadline
+          await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
+
+          // Close unmask window
+          await callFn('closeUnmaskWindow', hostUser.idToken, { roomCode });
+
+          const freshSnap = await roomRef.get();
+          const flushedCard = (freshSnap.data()?.cards as any[]).find(c => c.targetPlayerId === currentReader);
+          expect(flushedCard.scoreBreakdown, 'scoreBreakdown on card').to.be.an('object');
+          expect(Object.keys(flushedCard.scoreBreakdown).length).to.be.greaterThan(0);
+
+          const freshSealed = await roomRef.collection('sealed').doc(currentReader).get();
+          expect(freshSealed.data()?.pendingScoreBreakdown).to.be.undefined;
+        });
+      });
     });
 
     describe('Wave Q2 — 5-Player Emulator Pre-Flight (§4.4)', () => {

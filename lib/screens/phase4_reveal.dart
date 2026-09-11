@@ -471,11 +471,54 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                   final isPositive = e.value > 0;
                                   final prefix = isPositive ? '+' : '';
                                   final color = isPositive ? theme.colorScheme.primary : AppColors.oxblood;
-                                  return Chip(
-                                    avatar: PlayerAvatar(player: player, size: 20, showName: false),
-                                    label: Text('${player.name}: $prefix${e.value}', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-                                    backgroundColor: (isPositive ? theme.colorScheme.secondary : AppColors.oxblood).withOpacity(0.2),
-                                    side: BorderSide(color: isPositive ? theme.colorScheme.secondary : AppColors.oxblood),
+                                  final breakdownItems = currentCard?.scoreBreakdown[e.key] ?? const [];
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: (isPositive ? theme.colorScheme.secondary : AppColors.oxblood).withValues(alpha: 0.12),
+                                      border: Border.all(
+                                        color: isPositive ? theme.colorScheme.secondary : AppColors.oxblood,
+                                        width: 1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            PlayerAvatar(player: player, size: 20, showName: false),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              '${player.name}: $prefix${e.value}',
+                                              style: TextStyle(
+                                                color: color,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (breakdownItems.isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          ...breakdownItems.map((item) {
+                                            final itemPrefix = item.points > 0 ? '+' : '';
+                                            return Padding(
+                                              padding: const EdgeInsets.only(left: 28, top: 2),
+                                              child: Text(
+                                                '${_ruleDisplayName(item.rule)}: $itemPrefix${item.points}',
+                                                style: TextStyle(
+                                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            );
+                                          }),
+                                        ],
+                                      ],
+                                    ),
                                   );
                                 }).toList(),
                               ),
@@ -1094,7 +1137,25 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
       ),
     );
   }
+
+  String _ruleDisplayName(String rule) {
+    switch (rule) {
+      case 'truth_found':
+        return 'Truth Found';
+      case 'sharp_eye':
+        return 'Sharp Eye';
+      case 'believable_target':
+        return 'Believable Target';
+      case 'successful_forgery':
+        return 'Successful Forgery';
+      case 'round_multiplier':
+        return 'Round Multiplier';
+      case 'revenge_guess':
+        return 'Revenge Guess';
+      case 'target_forger_guess':
+        return 'Unmasked Forger';
+      default:
+        return rule;
+    }
+  }
 }
-
-
-

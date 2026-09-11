@@ -303,11 +303,13 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                             theme,
                             '3. SCORING (Dynamic)',
                             [
-                               _highlightItem('Finding Truth: ', 'Points scale based on difficulty. Formula: ceil((Players - 1) / (Forgeries + 1))'),
-                               _highlightItem('Successful Forgery: ', 'Get +1 point for every player you successfully trick into voting for your lie.'),
-                               _highlightItem('Believeable Target: ', 'Targets get +1 point for every player who correctly identifies their truth.'),
-                               _highlightItem('Sharp Eye: ', 'Spot the truth on a card you also faked? Earn +1 bonus point.'),
-                               _highlightItem('Unmask Revenge: ', 'Fooled by a forgery? Submit one guess during the unmask window to accuse the author. Correct = +1 to you, -1 to them.'),
+                              _highlightItem('Finding Truth: ', 'Earn points for identifying the real truth. The bounty scales with difficulty — the fewer forgeries to hide behind and the more players in the game, the higher the reward.*'),
+                              _highlightItem('Believable Target: ', 'Targets earn +1 point for every player who correctly identifies their real answer.'),
+                              _highlightItem('Successful Forgery: ', 'Earn +1 point for every player fooled into voting for your lie.'),
+                              _highlightItem('Sharp Eye: ', 'Spot the truth on a card you also forged? Earn +1 bonus point.'),
+                              _highlightItem('Unmask Revenge: ', 'Fooled by a forgery? Accuse the author during the unmask window. Correct = +1 to you, -1 to them.'),
+                              _highlightItem('Round Multiplier: ', 'Later rounds raise the stakes — card points are multiplied by the round number (Round 1: 1×, Round 2: 2×, Round 3: 3×).'),
+                              _highlightItem('* Formula: ', 'ceil((Players - 1) / (Forgeries + 1))'),
                             ],
                           ),
                           _buildInstructionSection(

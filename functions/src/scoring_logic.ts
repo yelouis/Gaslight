@@ -1,3 +1,8 @@
+export interface ScoreBreakdownItem {
+  rule: string;
+  points: number;
+}
+
 export interface CardModel {
   targetPlayerId: string;
   promptText: string;
@@ -7,6 +12,7 @@ export interface CardModel {
   votes: Record<string, string>;
   unmaskGuesses?: Record<string, string>;
   scoreDeltas?: Record<string, number>;
+  scoreBreakdown?: Record<string, ScoreBreakdownItem[]>;
 }
 
 export interface GameState {
@@ -82,19 +88,33 @@ export interface MatchSummary {
 
 export class ScoringLogic {
   /**
-   * Dynamically tallies points for the Mimicry Edition.
-   * Returns a map of playerId -> point delta.
+   * Dynamically tallies points and computes rule breakdown for the Mimicry Edition.
+   * Returns deltas and breakdown per player.
    */
-  static calculateScores(
+  static calculateScoresAndBreakdown(
     state: GameState,
     currentCard: CardModel,
     playerVotes: Record<string, string>
-  ): Record<string, number> {
+  ): { deltas: Record<string, number>; breakdown: Record<string, ScoreBreakdownItem[]> } {
     const deltas: Record<string, number> = {};
+    const breakdown: Record<string, ScoreBreakdownItem[]> = {};
 
     const p = state.totalPlayers;
     const s = Object.keys(currentCard.sabotageAnswers || {}).length;
     const truthReward = Math.ceil((p - 1) / (s + 1));
+
+    const addBreakdown = (playerId: string, rule: string, points: number) => {
+      if (points === 0) return;
+      if (!breakdown[playerId]) {
+        breakdown[playerId] = [];
+      }
+      const existing = breakdown[playerId].find(item => item.rule === rule);
+      if (existing) {
+        existing.points += points;
+      } else {
+        breakdown[playerId].push({ rule, points });
+      }
+    };
 
     // Evaluate every single vote
     for (const [voterId, votedForId] of Object.entries(playerVotes)) {
@@ -103,28 +123,61 @@ export class ScoringLogic {
       if (votedForId === currentCard.targetPlayerId) {
         // The voter gets points for finding the truth
         deltas[voterId] = (deltas[voterId] || 0) + truthReward;
+        addBreakdown(voterId, "truth_found", truthReward);
 
         // Bonus: +1 point if the Saboteur *also* correctly identifies the Truth
         if (currentCard.sabotageAnswers && Object.prototype.hasOwnProperty.call(currentCard.sabotageAnswers, voterId)) {
           deltas[voterId] = (deltas[voterId] || 0) + 1;
+          addBreakdown(voterId, "sharp_eye", 1);
         }
 
         // The Target gets 1 point because someone correctly guessed their truth
         const targetId = currentCard.targetPlayerId;
         deltas[targetId] = (deltas[targetId] || 0) + 1;
+        addBreakdown(targetId, "believable_target", 1);
       } else {
         // A Saboteur tricked someone and gets 1 point
         deltas[votedForId] = (deltas[votedForId] || 0) + 1;
+        addBreakdown(votedForId, "successful_forgery", 1);
       }
     }
 
     const multiplier = Math.max(1, state.currentRound ?? 1);
     if (multiplier > 1) {
       for (const playerId of Object.keys(deltas)) {
+        const basePoints = deltas[playerId];
+        const multBonus = basePoints * (multiplier - 1);
         deltas[playerId] *= multiplier;
+        if (multBonus !== 0) {
+          addBreakdown(playerId, "round_multiplier", multBonus);
+        }
       }
     }
 
-    return deltas;
+    return { deltas, breakdown };
+  }
+
+  /**
+   * Dynamically tallies points for the Mimicry Edition.
+   * Returns a map of playerId -> point delta.
+   */
+  static calculateScores(
+    state: GameState,
+    currentCard: CardModel,
+    playerVotes: Record<string, string>
+  ): Record<string, number> {
+    return this.calculateScoresAndBreakdown(state, currentCard, playerVotes).deltas;
+  }
+
+  /**
+   * Returns a map of playerId -> array of ScoreBreakdownItem.
+   */
+  static calculateBreakdown(
+    state: GameState,
+    currentCard: CardModel,
+    playerVotes: Record<string, string>
+  ): Record<string, ScoreBreakdownItem[]> {
+    return this.calculateScoresAndBreakdown(state, currentCard, playerVotes).breakdown;
   }
 }
+

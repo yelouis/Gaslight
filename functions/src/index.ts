@@ -3,7 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomUUID, createHash } from "crypto";
 import { RotationEngine } from "./rotation_engine";
-import { ScoringLogic, GameState, CardModel, CardSummary, MatchSummary } from "./scoring_logic";
+import { ScoringLogic, GameState, CardModel, CardSummary, MatchSummary, ScoreBreakdownItem } from "./scoring_logic";
 import { PromptDecks } from "./prompt_decks";
 import { isTooSimilar } from "./text_similarity";
 
@@ -1680,6 +1680,7 @@ async function advancePhaseInternal(
     const currentCardIdx = currentCards.findIndex(c => c.targetPlayerId === room.currentReaderId);
     let hasFooled = false;
     let calculatedDeltas: Record<string, number> = {};
+    let calculatedBreakdown: Record<string, ScoreBreakdownItem[]> = {};
     if (currentCardIdx !== -1) {
       const card = currentCards[currentCardIdx];
       const sealedData = sealedDataMap[card.targetPlayerId] || {};
@@ -1699,8 +1700,9 @@ async function advancePhaseInternal(
       };
 
       hasFooled = Object.values(resolvedVotes).some(v => v !== card.targetPlayerId);
-      const deltas = ScoringLogic.calculateScores(room, cardWithAnswers, resolvedVotes);
+      const { deltas, breakdown } = ScoringLogic.calculateScoresAndBreakdown(room, cardWithAnswers, resolvedVotes);
       calculatedDeltas = deltas;
+      calculatedBreakdown = breakdown;
 
       const timesFooledDeltas: Record<string, number> = {};
       const playersDeceivedDeltas: Record<string, number> = {};
@@ -1734,6 +1736,7 @@ async function advancePhaseInternal(
         transaction.set(sealedRef, {
           ...sealedData,
           pendingScoreDeltas: deltas,
+          pendingScoreBreakdown: breakdown,
           pendingTimesFooled: timesFooledDeltas,
           pendingPlayersDeceived: playersDeceivedDeltas
         });
@@ -1829,7 +1832,8 @@ async function advancePhaseInternal(
           votes: resolvedVotes,
           truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
           sabotageAnswers: sealedData.sabotageAnswers || {},
-          scoreDeltas: calculatedDeltas
+          scoreDeltas: calculatedDeltas,
+          scoreBreakdown: calculatedBreakdown
         });
       }
     }
@@ -1850,6 +1854,7 @@ async function advancePhaseInternal(
       const sealedData = sealedDataMap[currentCard.targetPlayerId] || {};
       const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
       const pendingScoreDeltas = sealedData.pendingScoreDeltas;
+      const pendingScoreBreakdown = sealedData.pendingScoreBreakdown;
 
       if (pendingScoreDeltas) {
         for (const p of activePlayers) {
@@ -1870,6 +1875,7 @@ async function advancePhaseInternal(
         const sealedRef = roomRef.collection("sealed").doc(currentCard.targetPlayerId);
         transaction.update(sealedRef, {
           pendingScoreDeltas: FieldValue.delete(),
+          pendingScoreBreakdown: FieldValue.delete(),
           pendingTimesFooled: FieldValue.delete(),
           pendingPlayersDeceived: FieldValue.delete()
         });
@@ -1885,7 +1891,8 @@ async function advancePhaseInternal(
         ...currentCard,
         votes: resolvedVotes,
         sabotageAnswers: sealedData.sabotageAnswers || {},
-        scoreDeltas: pendingScoreDeltas || currentCard.scoreDeltas || {}
+        scoreDeltas: pendingScoreDeltas || currentCard.scoreDeltas || {},
+        scoreBreakdown: pendingScoreBreakdown || currentCard.scoreBreakdown || {}
       };
 
       transaction.update(roomRef, {
@@ -2024,9 +2031,11 @@ export const advanceToNextResolution = onCall(async (request) => {
       playerSeenMap[p.id] = new Set(seenPrompts);
     }
 
+    let updatedCards = room.cards;
     if (currentReaderSealedSnap && currentReaderSealedSnap.exists) {
       const sealedData = currentReaderSealedSnap.data() as any;
       const pendingScoreDeltas = sealedData.pendingScoreDeltas;
+      const pendingScoreBreakdown = sealedData.pendingScoreBreakdown;
       if (pendingScoreDeltas) {
         for (const p of players) {
           const sDelta = pendingScoreDeltas[p.id] || 0;
@@ -2043,9 +2052,29 @@ export const advanceToNextResolution = onCall(async (request) => {
         }
         transaction.update(currentReaderSealedSnap.ref, {
           pendingScoreDeltas: FieldValue.delete(),
+          pendingScoreBreakdown: FieldValue.delete(),
           pendingTimesFooled: FieldValue.delete(),
           pendingPlayersDeceived: FieldValue.delete()
         });
+
+        const currentCardIdx = room.cards.findIndex(c => c.targetPlayerId === room.currentReaderId);
+        if (currentCardIdx !== -1) {
+          const currentCard = room.cards[currentCardIdx];
+          const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+          const resolvedVotes: Record<string, string> = {};
+          for (const [vId, optId] of Object.entries(currentCard.votes || {})) {
+            resolvedVotes[vId] = answerAuthors[optId] || optId;
+          }
+          const newCards = [...room.cards];
+          newCards[currentCardIdx] = {
+            ...currentCard,
+            votes: resolvedVotes,
+            sabotageAnswers: sealedData.sabotageAnswers || {},
+            scoreDeltas: pendingScoreDeltas || currentCard.scoreDeltas || {},
+            scoreBreakdown: pendingScoreBreakdown || currentCard.scoreBreakdown || {}
+          };
+          updatedCards = newCards;
+        }
       }
     }
 
@@ -2078,13 +2107,14 @@ export const advanceToNextResolution = onCall(async (request) => {
         currentReaderId: nextReaderId,
         readyPlayers: {},
         endTime: endTime,
-        unmaskDeadline: null
+        unmaskDeadline: null,
+        cards: updatedCards
       });
     } else {
       await concludeResolutionRound(
         transaction,
         roomRef,
-        room,
+        { ...room, cards: updatedCards },
         players,
         accumulatedCards,
         snapshottedPlayerNames,
@@ -2190,9 +2220,20 @@ export const submitUnmaskGuess = onCall(async (request) => {
     let nextUnmaskDeadline = room.unmaskDeadline;
     const isCorrect = guessedAuthorId === votedForId;
     const currentPendingDeltas: Record<string, number> = { ...(sealedData.pendingScoreDeltas || currentCard.scoreDeltas || {}) };
+    const currentPendingBreakdown: Record<string, ScoreBreakdownItem[]> = {
+      ...(sealedData.pendingScoreBreakdown || currentCard.scoreBreakdown || {})
+    };
     if (isCorrect) {
       currentPendingDeltas[voterId] = (currentPendingDeltas[voterId] || 0) + 1;
       currentPendingDeltas[votedForId] = (currentPendingDeltas[votedForId] || 0) - 1;
+
+      const voterBreakdown = [...(currentPendingBreakdown[voterId] || [])];
+      voterBreakdown.push({ rule: "revenge_guess", points: 1 });
+      currentPendingBreakdown[voterId] = voterBreakdown;
+
+      const votedForBreakdown = [...(currentPendingBreakdown[votedForId] || [])];
+      votedForBreakdown.push({ rule: "revenge_guess", points: -1 });
+      currentPendingBreakdown[votedForId] = votedForBreakdown;
     }
 
     if (allFooledGuessed) {
@@ -2214,6 +2255,7 @@ export const submitUnmaskGuess = onCall(async (request) => {
 
       transaction.update(sealedRef, {
         pendingScoreDeltas: FieldValue.delete(),
+        pendingScoreBreakdown: FieldValue.delete(),
         pendingTimesFooled: FieldValue.delete(),
         pendingPlayersDeceived: FieldValue.delete()
       });
@@ -2227,12 +2269,14 @@ export const submitUnmaskGuess = onCall(async (request) => {
         votes: resolvedVotes,
         sabotageAnswers: sealedData.sabotageAnswers || {},
         unmaskGuesses,
-        scoreDeltas: currentPendingDeltas
+        scoreDeltas: currentPendingDeltas,
+        scoreBreakdown: currentPendingBreakdown
       };
       nextUnmaskDeadline = 0;
     } else {
       transaction.update(sealedRef, {
-        pendingScoreDeltas: currentPendingDeltas
+        pendingScoreDeltas: currentPendingDeltas,
+        pendingScoreBreakdown: currentPendingBreakdown
       });
 
       updatedCard = {
@@ -2302,6 +2346,7 @@ export const closeUnmaskWindow = onCall(async (request) => {
     }
     const sealedData = sealedSnap.data() as any;
     const pendingScoreDeltas = sealedData.pendingScoreDeltas;
+    const pendingScoreBreakdown = sealedData.pendingScoreBreakdown;
     const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
 
     if (pendingScoreDeltas) {
@@ -2321,6 +2366,7 @@ export const closeUnmaskWindow = onCall(async (request) => {
 
       transaction.update(sealedRef, {
         pendingScoreDeltas: FieldValue.delete(),
+        pendingScoreBreakdown: FieldValue.delete(),
         pendingTimesFooled: FieldValue.delete(),
         pendingPlayersDeceived: FieldValue.delete()
       });
@@ -2336,7 +2382,8 @@ export const closeUnmaskWindow = onCall(async (request) => {
       ...currentCard,
       votes: resolvedVotes,
       sabotageAnswers: sealedData.sabotageAnswers || {},
-      scoreDeltas: pendingScoreDeltas || currentCard.scoreDeltas || {}
+      scoreDeltas: pendingScoreDeltas || currentCard.scoreDeltas || {},
+      scoreBreakdown: pendingScoreBreakdown || currentCard.scoreBreakdown || {}
     };
 
     transaction.update(roomRef, {

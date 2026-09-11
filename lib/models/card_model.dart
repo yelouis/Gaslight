@@ -24,6 +24,41 @@ class CardAnswerOption {
   }
 }
 
+class ScoreBreakdownItem {
+  final String rule;
+  final int points;
+
+  const ScoreBreakdownItem({
+    required this.rule,
+    required this.points,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'rule': rule,
+      'points': points,
+    };
+  }
+
+  factory ScoreBreakdownItem.fromMap(Map<String, dynamic> map) {
+    return ScoreBreakdownItem(
+      rule: map['rule']?.toString() ?? '',
+      points: (map['points'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ScoreBreakdownItem &&
+          runtimeType == other.runtimeType &&
+          rule == other.rule &&
+          points == other.points;
+
+  @override
+  int get hashCode => rule.hashCode ^ points.hashCode;
+}
+
 class CardModel {
   final String targetPlayerId;
   final String promptText;
@@ -33,6 +68,7 @@ class CardModel {
   final Map<String, String> votes; // VoterId -> VotedForAuthorId
   final Map<String, String> unmaskGuesses; // GuesserId -> GuessedAuthorId
   final Map<String, int> scoreDeltas; // PlayerId -> Delta points on this card
+  final Map<String, List<ScoreBreakdownItem>> scoreBreakdown; // PlayerId -> rule breakdown items
 
   CardModel({
     required this.targetPlayerId,
@@ -43,6 +79,7 @@ class CardModel {
     this.votes = const {},
     this.unmaskGuesses = const {},
     this.scoreDeltas = const {},
+    this.scoreBreakdown = const {},
   });
 
   CardModel copyWith({
@@ -54,6 +91,7 @@ class CardModel {
     Map<String, String>? votes,
     Map<String, String>? unmaskGuesses,
     Map<String, int>? scoreDeltas,
+    Map<String, List<ScoreBreakdownItem>>? scoreBreakdown,
   }) {
     return CardModel(
       targetPlayerId: targetPlayerId ?? this.targetPlayerId,
@@ -64,6 +102,7 @@ class CardModel {
       votes: votes ?? this.votes,
       unmaskGuesses: unmaskGuesses ?? this.unmaskGuesses,
       scoreDeltas: scoreDeltas ?? this.scoreDeltas,
+      scoreBreakdown: scoreBreakdown ?? this.scoreBreakdown,
     );
   }
 
@@ -77,6 +116,7 @@ class CardModel {
       'votes': votes,
       'unmaskGuesses': unmaskGuesses,
       'scoreDeltas': scoreDeltas,
+      'scoreBreakdown': scoreBreakdown.map((k, v) => MapEntry(k, v.map((item) => item.toMap()).toList())),
     };
   }
 
@@ -87,6 +127,18 @@ class CardModel {
       parsedOptions = rawOptions
           .map((item) => CardAnswerOption.fromMap(Map<String, dynamic>.from(item)))
           .toList();
+    }
+
+    final rawBreakdown = map['scoreBreakdown'];
+    Map<String, List<ScoreBreakdownItem>> parsedBreakdown = {};
+    if (rawBreakdown is Map) {
+      rawBreakdown.forEach((k, v) {
+        if (v is List) {
+          parsedBreakdown[k.toString()] = v
+              .map((item) => ScoreBreakdownItem.fromMap(Map<String, dynamic>.from(item as Map)))
+              .toList();
+        }
+      });
     }
 
     return CardModel(
@@ -100,6 +152,8 @@ class CardModel {
       scoreDeltas: Map<String, int>.from(
         (map['scoreDeltas'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? {},
       ),
+      scoreBreakdown: parsedBreakdown,
     );
   }
 }
+
