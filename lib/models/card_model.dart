@@ -69,6 +69,8 @@ class CardModel {
   final Map<String, String> unmaskGuesses; // GuesserId -> GuessedAuthorId
   final Map<String, int> scoreDeltas; // PlayerId -> Delta points on this card
   final Map<String, List<ScoreBreakdownItem>> scoreBreakdown; // PlayerId -> rule breakdown items
+  final Map<String, String>? targetForgeryGuesses; // OptionId -> GuessedAuthorId
+  final Map<String, String>? answerAuthors; // OptionId -> AuthorId (sealed answer key)
 
   CardModel({
     required this.targetPlayerId,
@@ -80,6 +82,8 @@ class CardModel {
     this.unmaskGuesses = const {},
     this.scoreDeltas = const {},
     this.scoreBreakdown = const {},
+    this.targetForgeryGuesses,
+    this.answerAuthors,
   });
 
   CardModel copyWith({
@@ -92,6 +96,8 @@ class CardModel {
     Map<String, String>? unmaskGuesses,
     Map<String, int>? scoreDeltas,
     Map<String, List<ScoreBreakdownItem>>? scoreBreakdown,
+    Map<String, String>? targetForgeryGuesses,
+    Map<String, String>? answerAuthors,
   }) {
     return CardModel(
       targetPlayerId: targetPlayerId ?? this.targetPlayerId,
@@ -103,6 +109,8 @@ class CardModel {
       unmaskGuesses: unmaskGuesses ?? this.unmaskGuesses,
       scoreDeltas: scoreDeltas ?? this.scoreDeltas,
       scoreBreakdown: scoreBreakdown ?? this.scoreBreakdown,
+      targetForgeryGuesses: targetForgeryGuesses ?? this.targetForgeryGuesses,
+      answerAuthors: answerAuthors ?? this.answerAuthors,
     );
   }
 
@@ -117,6 +125,8 @@ class CardModel {
       'unmaskGuesses': unmaskGuesses,
       'scoreDeltas': scoreDeltas,
       'scoreBreakdown': scoreBreakdown.map((k, v) => MapEntry(k, v.map((item) => item.toMap()).toList())),
+      if (targetForgeryGuesses != null) 'targetForgeryGuesses': targetForgeryGuesses,
+      if (answerAuthors != null) 'answerAuthors': answerAuthors,
     };
   }
 
@@ -153,6 +163,12 @@ class CardModel {
         (map['scoreDeltas'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? {},
       ),
       scoreBreakdown: parsedBreakdown,
+      targetForgeryGuesses: map['targetForgeryGuesses'] != null
+          ? Map<String, String>.from(map['targetForgeryGuesses'])
+          : null,
+      answerAuthors: map['answerAuthors'] != null
+          ? Map<String, String>.from(map['answerAuthors'])
+          : null,
     );
   }
 }

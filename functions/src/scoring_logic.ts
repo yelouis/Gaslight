@@ -13,7 +13,12 @@ export interface CardModel {
   unmaskGuesses?: Record<string, string>;
   scoreDeltas?: Record<string, number>;
   scoreBreakdown?: Record<string, ScoreBreakdownItem[]>;
+  targetForgeryGuesses?: Record<string, string>;
+  answerAuthors?: Record<string, string>;
 }
+
+export const kTargetForgeryGuessPoints = 1;
+export const kMissingAnswerPlaceholder = "THE SOUL IS SILENT";
 
 export interface GameState {
   roomCode: string;
@@ -94,7 +99,10 @@ export class ScoringLogic {
   static calculateScoresAndBreakdown(
     state: GameState,
     currentCard: CardModel,
-    playerVotes: Record<string, string>
+    playerVotes: Record<string, string>,
+    targetForgeryGuesses?: Record<string, string>,
+    answerAuthors?: Record<string, string>,
+    activePlayerIds?: string[]
   ): { deltas: Record<string, number>; breakdown: Record<string, ScoreBreakdownItem[]> } {
     const deltas: Record<string, number> = {};
     const breakdown: Record<string, ScoreBreakdownItem[]> = {};
@@ -142,6 +150,32 @@ export class ScoringLogic {
       }
     }
 
+    // Target forgery author guesses (Issue 162 / AA16a)
+    const guesses = targetForgeryGuesses || currentCard.targetForgeryGuesses;
+    const authors = answerAuthors || currentCard.answerAuthors;
+    if (guesses && authors) {
+      const targetId = currentCard.targetPlayerId;
+      for (const [optionId, guessedAuthorId] of Object.entries(guesses)) {
+        if (!guessedAuthorId) continue;
+        // The target cannot guess themselves
+        if (guessedAuthorId === targetId) continue;
+        // Skip placeholder options
+        const opt = currentCard.options?.find(o => o.id === optionId);
+        if (opt && (opt.text === kMissingAnswerPlaceholder || opt.text.trim() === "")) {
+          continue;
+        }
+        // If an active player roster is supplied, skip players who have departed
+        if (activePlayerIds && !activePlayerIds.includes(guessedAuthorId)) {
+          continue;
+        }
+        // Check if guess matches actual author
+        if (authors[optionId] === guessedAuthorId) {
+          deltas[targetId] = (deltas[targetId] || 0) + kTargetForgeryGuessPoints;
+          addBreakdown(targetId, "target_forger_guess", kTargetForgeryGuessPoints);
+        }
+      }
+    }
+
     const multiplier = Math.max(1, state.currentRound ?? 1);
     if (multiplier > 1) {
       for (const playerId of Object.keys(deltas)) {
@@ -164,9 +198,19 @@ export class ScoringLogic {
   static calculateScores(
     state: GameState,
     currentCard: CardModel,
-    playerVotes: Record<string, string>
+    playerVotes: Record<string, string>,
+    targetForgeryGuesses?: Record<string, string>,
+    answerAuthors?: Record<string, string>,
+    activePlayerIds?: string[]
   ): Record<string, number> {
-    return this.calculateScoresAndBreakdown(state, currentCard, playerVotes).deltas;
+    return this.calculateScoresAndBreakdown(
+      state,
+      currentCard,
+      playerVotes,
+      targetForgeryGuesses,
+      answerAuthors,
+      activePlayerIds
+    ).deltas;
   }
 
   /**
@@ -175,9 +219,19 @@ export class ScoringLogic {
   static calculateBreakdown(
     state: GameState,
     currentCard: CardModel,
-    playerVotes: Record<string, string>
+    playerVotes: Record<string, string>,
+    targetForgeryGuesses?: Record<string, string>,
+    answerAuthors?: Record<string, string>,
+    activePlayerIds?: string[]
   ): Record<string, ScoreBreakdownItem[]> {
-    return this.calculateScoresAndBreakdown(state, currentCard, playerVotes).breakdown;
+    return this.calculateScoresAndBreakdown(
+      state,
+      currentCard,
+      playerVotes,
+      targetForgeryGuesses,
+      answerAuthors,
+      activePlayerIds
+    ).breakdown;
   }
 }
 

@@ -199,4 +199,17 @@ describe('Firestore Security Rules', () => {
     await assertFails(setDoc(sealedRef, { truthAnswer: 'secret' }));
     await assertFails(setDoc(summaryRef, { cards: [] }));
   });
+
+  it('AA16a: non-target client still cannot read sealed/{cardId} containing targetForgeryGuesses', async () => {
+    await testEnv.withSecurityRulesDisabled(async (adminContext: any) => {
+      const adminSealedRef = doc(adminContext.firestore(), 'rooms/TEST/sealed/card_target');
+      await setDoc(adminSealedRef, {
+        targetForgeryGuesses: { opt_1: 'p_forger' }
+      });
+    });
+
+    const bobContext = testEnv.authenticatedContext('bob');
+    const sealedRef = doc(bobContext.firestore(), 'rooms/TEST/sealed/card_target');
+    await assertFails(getDoc(sealedRef));
+  });
 });

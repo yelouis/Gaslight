@@ -188,3 +188,162 @@ describe('ScoringLogic Breakdown Sum Invariant (AA11 / Issue 169)', () => {
   });
 });
 
+describe('ScoringLogic Target Forgery Guesses (AA16a / Issue 162)', () => {
+  const sumBreakdown = (items: Array<{ rule: string; points: number }> = []) =>
+    items.reduce((acc, item) => acc + item.points, 0);
+
+  const createBaseState = (currentRound?: number): GameState => ({
+    roomCode: 'TEST',
+    currentPhase: 'reveal',
+    totalPlayers: 4,
+    forgeriesPerCard: 2,
+    currentRound,
+    isTimerDisabled: false,
+    selectedDeckId: 'default',
+    currentRotationIndex: 0,
+    cards: [],
+    currentCardAssignments: {},
+    currentReaderId: 'p_target',
+    rotationPlan: {},
+    readyPlayers: {},
+    endTime: null,
+    resolutionOrder: ['p_target']
+  });
+
+  const card: CardModel = {
+    targetPlayerId: 'p_target',
+    promptText: 'My secret',
+    truthAnswer: 'True answer',
+    sabotageAnswers: {
+      'p_f1': 'Lie 1',
+      'p_f2': 'Lie 2'
+    },
+    options: [
+      { id: 'opt_truth', text: 'True answer' },
+      { id: 'opt_f1', text: 'Lie 1' },
+      { id: 'opt_f2', text: 'Lie 2' },
+      { id: 'opt_placeholder', text: 'THE SOUL IS SILENT' }
+    ],
+    votes: {
+      'p_voter': 'opt_truth',
+      'p_f1': 'opt_truth',
+      'p_f2': 'opt_f1'
+    }
+  };
+
+  const answerAuthors: Record<string, string> = {
+    'opt_truth': 'p_target',
+    'opt_f1': 'p_f1',
+    'opt_f2': 'p_f2',
+    'opt_placeholder': 'p_f3'
+  };
+
+  const votes: Record<string, string> = {
+    'p_voter': 'p_target',
+    'p_f1': 'p_target',
+    'p_f2': 'p_f1'
+  };
+
+  it('1. all forgeries correctly guessed -> target receives +1 per forgery, forgers receive no penalty', () => {
+    const targetGuesses: Record<string, string> = {
+      'opt_f1': 'p_f1',
+      'opt_f2': 'p_f2'
+    };
+
+    const baseResult = ScoringLogic.calculateScoresAndBreakdown(createBaseState(1), card, votes);
+    const withGuesses = ScoringLogic.calculateScoresAndBreakdown(
+      createBaseState(1),
+      card,
+      votes,
+      targetGuesses,
+      answerAuthors
+    );
+
+    // Target gains 2 points for the 2 correct guesses
+    expect(withGuesses.deltas['p_target']).to.equal((baseResult.deltas['p_target'] || 0) + 2);
+    // Forgers receive no penalty
+    expect(withGuesses.deltas['p_f1']).to.equal(baseResult.deltas['p_f1']);
+    expect(withGuesses.deltas['p_f2']).to.equal(baseResult.deltas['p_f2']);
+
+    // Breakdown contains target_forger_guess rule with 2 points for target
+    const targetBreakdown = withGuesses.breakdown['p_target'] || [];
+    const guessItem = targetBreakdown.find(i => i.rule === 'target_forger_guess');
+    expect(guessItem).to.not.be.undefined;
+    expect(guessItem!.points).to.equal(2);
+
+    // Invariant holds
+    for (const [pId, delta] of Object.entries(withGuesses.deltas)) {
+      expect(sumBreakdown(withGuesses.breakdown[pId])).to.equal(delta);
+    }
+  });
+
+  it('2. partial map scores only correct entries', () => {
+    const partialGuesses: Record<string, string> = {
+      'opt_f1': 'p_f1', // correct (+1)
+      'opt_f2': 'p_wrong' // incorrect (+0)
+    };
+
+    const baseResult = ScoringLogic.calculateScoresAndBreakdown(createBaseState(1), card, votes);
+    const withGuesses = ScoringLogic.calculateScoresAndBreakdown(
+      createBaseState(1),
+      card,
+      votes,
+      partialGuesses,
+      answerAuthors
+    );
+
+    expect(withGuesses.deltas['p_target']).to.equal((baseResult.deltas['p_target'] || 0) + 1);
+    const guessItem = (withGuesses.breakdown['p_target'] || []).find(i => i.rule === 'target_forger_guess');
+    expect(guessItem!.points).to.equal(1);
+    expect(sumBreakdown(withGuesses.breakdown['p_target'])).to.equal(withGuesses.deltas['p_target']);
+  });
+
+  it('3. placeholder answer or departed player guess scores nothing', () => {
+    const guesses: Record<string, string> = {
+      'opt_placeholder': 'p_f3', // placeholder option
+      'opt_f1': 'p_departed' // departed player
+    };
+    const authorsWithDeparted: Record<string, string> = {
+      ...answerAuthors,
+      'opt_f1': 'p_departed'
+    };
+    const activePlayers = ['p_target', 'p_voter', 'p_f1', 'p_f2']; // p_departed is NOT active
+
+    const baseResult = ScoringLogic.calculateScoresAndBreakdown(createBaseState(1), card, votes);
+    const withGuesses = ScoringLogic.calculateScoresAndBreakdown(
+      createBaseState(1),
+      card,
+      votes,
+      guesses,
+      authorsWithDeparted,
+      activePlayers
+    );
+
+    expect(withGuesses.deltas['p_target']).to.equal(baseResult.deltas['p_target'] || 0);
+    const guessItem = (withGuesses.breakdown['p_target'] || []).find(i => i.rule === 'target_forger_guess');
+    expect(guessItem).to.be.undefined;
+  });
+
+  it('4. round multiplier scales target forgery guess points and satisfies sum invariant', () => {
+    const targetGuesses: Record<string, string> = {
+      'opt_f1': 'p_f1',
+      'opt_f2': 'p_f2'
+    };
+
+    const r3State = createBaseState(3); // multiplier x3
+    const result = ScoringLogic.calculateScoresAndBreakdown(
+      r3State,
+      card,
+      votes,
+      targetGuesses,
+      answerAuthors
+    );
+
+    // Base target points: 2 believable_target + 2 target_forger_guess = 4 base. x3 = 12 total.
+    expect(result.deltas['p_target']).to.equal(12);
+    for (const [pId, delta] of Object.entries(result.deltas)) {
+      expect(sumBreakdown(result.breakdown[pId])).to.equal(delta);
+    }
+  });
+});
+

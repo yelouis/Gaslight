@@ -325,15 +325,9 @@ Your selection: Proceed with Option A.
 
 ### Issue 162: The target has nothing to do while their card is being voted on — SELECTED and REDIRECTED, specced as AA16a / AA16b
 
-**Status**: ⚠️ Confirmed Unresolved — **rewritten September 8, 2026 at the user's direction.** The original three options were not selected. Instead the user proposed a specific mechanic and asked whether it is possible before anything is built:
-
-> *"the target sees all the answers written for them and they can get points guessing which player would select which answer. Maybe something like a drag and drop using the player icon."*
-
-**The underlying defect is unchanged.** When a player's own card is up, `phase3_vote.dart` gives them a read-only `CardGrid` (`onSelect: isTarget ? (_) {} : ...`, `selectedAuthorId: null`), a sealed-ballot counter, and one ready button. Across a full match that is one entire voting phase per player with no input, in the seat that should be the most engaged — the table is arguing about which answer is really theirs.
-
-**⚠️ REDIRECTED by the user on September 9, 2026, after Option A had been selected and specced.** The mechanic changed from *predicting which answer each voter will pick* to **the target guessing who *wrote* each forgery** — *"The target guesses who wrote each lie for points."* The four options below describe the superseded vote-prediction framing and are kept only as the record of how the decision was reached. **The spec that is actually being built is `agent_execution_guide.md` → AA16a / AA16b.**
-
-**What the redirection changed, and what it did not.** The contract became `Record<optionId, guessedAuthorId>`. Everything the feasibility verdict below established still holds and holds *more* strongly: the target already has the option texts, no authorship reaches the client, `sealed` is the right home, and the drag-and-drop is still the wrong interaction for a screen that does not fit. What improved is the mechanic's fit — the game already owns an authorship-guess verb in `submitUnmaskGuess` (P8), and **the target is the one player who can never use it, because they never vote and so are never fooled.** The new version extends an existing beat to the seat it excludes, rather than adding a new kind of guess.
+**Status**: 🔄 In Progress — **AA16a (Server Half) completed; AA16b (Client Half) blocked on Issue 160 layout selection.**
+- **AA16a (Server Half)**: Complete. `submitTargetForgeryGuesses` callable implemented with 9 validations; scoring engine updated (`+1` per correct guess to target, 0 penalty to forger, round multiplier scaling); withholding during `unmaskDeadline` enforced via `sealed/{cardId}.pendingScoreDeltas`; 139 server tests passing including 4 TS scoring fixtures, 12 Dart scoring fixtures, and 9 E2E mocha emulator tests.
+- **AA16b (Client Half)**: Blocked until user selects a layout treatment for Issue 160 (mockups generated in AA15). Tap-to-assign target attribution UI will be built directly onto the chosen option layout.
 
 #### Feasibility verdict (written for the superseded framing; the architectural findings carry over)
 

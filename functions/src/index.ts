@@ -3,7 +3,8 @@ import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomUUID, createHash } from "crypto";
 import { RotationEngine } from "./rotation_engine";
-import { ScoringLogic, GameState, CardModel, CardSummary, MatchSummary, ScoreBreakdownItem } from "./scoring_logic";
+import { ScoringLogic, GameState, CardModel, CardSummary, MatchSummary, ScoreBreakdownItem, kTargetForgeryGuessPoints } from "./scoring_logic";
+export { kTargetForgeryGuessPoints };
 import { PromptDecks } from "./prompt_decks";
 import { isTooSimilar } from "./text_similarity";
 
@@ -175,7 +176,7 @@ export function computeMatchSummary(
   };
 }
 
-const kMissingAnswerPlaceholder = "THE SOUL IS SILENT";
+export const kMissingAnswerPlaceholder = "THE SOUL IS SILENT";
 
 /** How long a player may go unheard from before the server treats them as gone. */
 export const PRESENCE_STALE_MS = 600_000; // 10 minutes (Issue 120 / O5)
@@ -1700,7 +1701,14 @@ async function advancePhaseInternal(
       };
 
       hasFooled = Object.values(resolvedVotes).some(v => v !== card.targetPlayerId);
-      const { deltas, breakdown } = ScoringLogic.calculateScoresAndBreakdown(room, cardWithAnswers, resolvedVotes);
+      const { deltas, breakdown } = ScoringLogic.calculateScoresAndBreakdown(
+        room,
+        cardWithAnswers,
+        resolvedVotes,
+        sealedData.targetForgeryGuesses,
+        answerAuthors,
+        activePlayers.map(p => p.id)
+      );
       calculatedDeltas = deltas;
       calculatedBreakdown = breakdown;
 
@@ -1833,7 +1841,8 @@ async function advancePhaseInternal(
           truthAnswer: sealedData.truthAnswer || kMissingAnswerPlaceholder,
           sabotageAnswers: sealedData.sabotageAnswers || {},
           scoreDeltas: calculatedDeltas,
-          scoreBreakdown: calculatedBreakdown
+          scoreBreakdown: calculatedBreakdown,
+          targetForgeryGuesses: sealedData.targetForgeryGuesses || {}
         });
       }
     }
@@ -1892,7 +1901,8 @@ async function advancePhaseInternal(
         votes: resolvedVotes,
         sabotageAnswers: sealedData.sabotageAnswers || {},
         scoreDeltas: pendingScoreDeltas || currentCard.scoreDeltas || {},
-        scoreBreakdown: pendingScoreBreakdown || currentCard.scoreBreakdown || {}
+        scoreBreakdown: pendingScoreBreakdown || currentCard.scoreBreakdown || {},
+        targetForgeryGuesses: sealedData.targetForgeryGuesses || currentCard.targetForgeryGuesses || {}
       };
 
       transaction.update(roomRef, {
@@ -2071,7 +2081,8 @@ export const advanceToNextResolution = onCall(async (request) => {
             votes: resolvedVotes,
             sabotageAnswers: sealedData.sabotageAnswers || {},
             scoreDeltas: pendingScoreDeltas || currentCard.scoreDeltas || {},
-            scoreBreakdown: pendingScoreBreakdown || currentCard.scoreBreakdown || {}
+            scoreBreakdown: pendingScoreBreakdown || currentCard.scoreBreakdown || {},
+            targetForgeryGuesses: sealedData.targetForgeryGuesses || currentCard.targetForgeryGuesses || {}
           };
           updatedCards = newCards;
         }
@@ -2270,7 +2281,8 @@ export const submitUnmaskGuess = onCall(async (request) => {
         sabotageAnswers: sealedData.sabotageAnswers || {},
         unmaskGuesses,
         scoreDeltas: currentPendingDeltas,
-        scoreBreakdown: currentPendingBreakdown
+        scoreBreakdown: currentPendingBreakdown,
+        targetForgeryGuesses: sealedData.targetForgeryGuesses || currentCard.targetForgeryGuesses || {}
       };
       nextUnmaskDeadline = 0;
     } else {
@@ -2383,7 +2395,8 @@ export const closeUnmaskWindow = onCall(async (request) => {
       votes: resolvedVotes,
       sabotageAnswers: sealedData.sabotageAnswers || {},
       scoreDeltas: pendingScoreDeltas || currentCard.scoreDeltas || {},
-      scoreBreakdown: pendingScoreBreakdown || currentCard.scoreBreakdown || {}
+      scoreBreakdown: pendingScoreBreakdown || currentCard.scoreBreakdown || {},
+      targetForgeryGuesses: sealedData.targetForgeryGuesses || currentCard.targetForgeryGuesses || {}
     };
 
     transaction.update(roomRef, {
@@ -2579,6 +2592,113 @@ export const debugSimulateBotResponses = onCall(async (request) => {
         });
       }
     }
+
+    return { success: true };
+  });
+});
+
+// 15. Submit Target Forgery Guesses (Issue 162 / AA16a)
+export const submitTargetForgeryGuesses = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+
+  const callerUid = request.auth.uid;
+  const { roomCode, cardId, guesses } = request.data || {};
+  if (!roomCode || !cardId || typeof guesses !== "object" || guesses === null) {
+    throw new HttpsError("invalid-argument", "roomCode, cardId, and guesses object are required.");
+  }
+
+  const roomRef = db.collection("rooms").doc(roomCode);
+  const playerRef = roomRef.collection("players").doc(cardId);
+
+  const playerSnap = await playerRef.get();
+  if (!playerSnap.exists || (playerSnap.data() as PlayerState).authUid !== callerUid) {
+    throw new HttpsError("permission-denied", "User does not own this player document.");
+  }
+
+  return await db.runTransaction(async (transaction) => {
+    const roomSnap = await transaction.get(roomRef);
+    if (!roomSnap.exists) {
+      throw new HttpsError("not-found", "Game room not found.");
+    }
+    const room = roomSnap.data() as GameState;
+
+    if (room.currentPhase !== "vote") {
+      throw new HttpsError("failed-precondition", "Target forgery guesses are only allowed during the vote phase.");
+    }
+
+    if (cardId !== room.currentReaderId) {
+      throw new HttpsError("failed-precondition", "You can only guess forgeries on the card currently being read.");
+    }
+
+    const currentCardIdx = room.cards.findIndex(c => c.targetPlayerId === room.currentReaderId);
+    if (currentCardIdx === -1) {
+      throw new HttpsError("failed-precondition", "Current reader card not found.");
+    }
+    const currentCard = room.cards[currentCardIdx];
+    if (currentCard.targetPlayerId !== cardId) {
+      throw new HttpsError("failed-precondition", "Only the card's target player can guess forgery authors.");
+    }
+
+    if (room.readyPlayers?.[cardId] === true) {
+      throw new HttpsError("failed-precondition", "Target has already marked ready; guessing is closed.");
+    }
+
+    const sealedRef = roomRef.collection("sealed").doc(cardId);
+    const sealedSnap = await transaction.get(sealedRef);
+    if (!sealedSnap.exists) {
+      throw new HttpsError("not-found", "Sealed card document not found.");
+    }
+    const sealedData = sealedSnap.data() as any;
+    const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+
+    const playersSnap = await transaction.get(roomRef.collection("players"));
+    const players = playersSnap.docs.map(doc => doc.data() as PlayerState);
+    const activeNonSpectators = new Set(
+      players.filter(p => p.role !== "spectator").map(p => p.id)
+    );
+
+    const cleanGuesses: Record<string, string> = {};
+    for (const [optionId, guessedAuthorId] of Object.entries(guesses)) {
+      if (typeof guessedAuthorId !== "string" || !guessedAuthorId) {
+        throw new HttpsError("invalid-argument", "Guessed author ID must be a non-empty string.");
+      }
+
+      if (!Object.prototype.hasOwnProperty.call(answerAuthors, optionId)) {
+        throw new HttpsError("invalid-argument", "Option ID is not on this card.");
+      }
+
+      // Reject if answerAuthors[optionId] === cardId (Target's own truth).
+      // Paired with the client twin in phase3_vote.dart (AA16b). Change both or neither.
+      if (answerAuthors[optionId] === cardId) {
+        throw new HttpsError("invalid-argument", "Cannot guess author of your own truth.");
+      }
+
+      // Reject placeholder options
+      const option = (currentCard.options || []).find(o => o.id === optionId);
+      if (option && (option.text === kMissingAnswerPlaceholder || option.text.trim() === "")) {
+        throw new HttpsError("invalid-argument", "Cannot guess author of a placeholder answer.");
+      }
+
+      // guessedAuthorId must be an active non-spectator player in the room
+      if (!activeNonSpectators.has(guessedAuthorId)) {
+        throw new HttpsError("invalid-argument", "Guessed author must be an active non-spectator player in the room.");
+      }
+
+      // Reject guessedAuthorId === cardId (Target cannot have authored a forgery on their own card).
+      // Paired with the client twin in phase3_vote.dart (AA16b). Change both or neither.
+      if (guessedAuthorId === cardId) {
+        throw new HttpsError("invalid-argument", "The target cannot have authored a forgery on their own card.");
+      }
+
+      cleanGuesses[optionId] = guessedAuthorId;
+    }
+
+    // Write semantics: replace, not merge.
+    transaction.update(sealedRef, {
+      targetForgeryGuesses: cleanGuesses
+    });
 
     return { success: true };
   });

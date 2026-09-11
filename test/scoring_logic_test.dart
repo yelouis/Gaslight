@@ -236,6 +236,153 @@ void main() {
       expect(sumBreakdown(negativeBreakdown), equals(-1));
     });
   });
+
+  group('ScoringLogic Target Forgery Guesses (AA16a / Issue 162)', () {
+    int sumBreakdown(List<ScoreBreakdownItem>? items) {
+      if (items == null) return 0;
+      return items.fold(0, (acc, item) => acc + item.points);
+    }
+
+    final card = CardModel(
+      targetPlayerId: 'p_target',
+      promptText: 'My secret',
+      truthAnswer: 'True answer',
+      sabotageAnswers: const {
+        'p_f1': 'Lie 1',
+        'p_f2': 'Lie 2',
+      },
+      options: [
+        CardAnswerOption(id: 'opt_truth', text: 'True answer'),
+        CardAnswerOption(id: 'opt_f1', text: 'Lie 1'),
+        CardAnswerOption(id: 'opt_f2', text: 'Lie 2'),
+        CardAnswerOption(id: 'opt_placeholder', text: 'THE SOUL IS SILENT'),
+      ],
+      votes: const {
+        'p_voter': 'opt_truth',
+        'p_f1': 'opt_truth',
+        'p_f2': 'opt_f1',
+      },
+    );
+
+    const answerAuthors = {
+      'opt_truth': 'p_target',
+      'opt_f1': 'p_f1',
+      'opt_f2': 'p_f2',
+      'opt_placeholder': 'p_f3',
+    };
+
+    const votes = {
+      'p_voter': 'p_target',
+      'p_f1': 'p_target',
+      'p_f2': 'p_f1',
+    };
+
+    test('1. all forgeries correctly guessed -> target receives +1 per forgery, forgers receive no penalty', () {
+      final state = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 2, currentRound: 1);
+      const targetGuesses = {
+        'opt_f1': 'p_f1',
+        'opt_f2': 'p_f2',
+      };
+
+      final baseResult = ScoringLogic.calculateScoresAndBreakdown(state: state, currentCard: card, playerVotes: votes);
+      final withGuesses = ScoringLogic.calculateScoresAndBreakdown(
+        state: state,
+        currentCard: card,
+        playerVotes: votes,
+        targetForgeryGuesses: targetGuesses,
+        answerAuthors: answerAuthors,
+      );
+
+      // Target gains 2 points for the 2 correct guesses
+      expect(withGuesses.deltas['p_target'], equals((baseResult.deltas['p_target'] ?? 0) + 2));
+      // Forgers receive no penalty
+      expect(withGuesses.deltas['p_f1'], equals(baseResult.deltas['p_f1']));
+      expect(withGuesses.deltas['p_f2'], equals(baseResult.deltas['p_f2']));
+
+      // Breakdown contains target_forger_guess rule with 2 points for target
+      final targetBreakdown = withGuesses.breakdown['p_target'] ?? [];
+      final guessItem = targetBreakdown.firstWhere((i) => i.rule == 'target_forger_guess');
+      expect(guessItem.points, equals(2));
+
+      // Invariant holds
+      for (final entry in withGuesses.deltas.entries) {
+        expect(sumBreakdown(withGuesses.breakdown[entry.key]), equals(entry.value));
+      }
+    });
+
+    test('2. partial map scores only correct entries', () {
+      final state = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 2, currentRound: 1);
+      const partialGuesses = {
+        'opt_f1': 'p_f1', // correct (+1)
+        'opt_f2': 'p_wrong', // incorrect (+0)
+      };
+
+      final baseResult = ScoringLogic.calculateScoresAndBreakdown(state: state, currentCard: card, playerVotes: votes);
+      final withGuesses = ScoringLogic.calculateScoresAndBreakdown(
+        state: state,
+        currentCard: card,
+        playerVotes: votes,
+        targetForgeryGuesses: partialGuesses,
+        answerAuthors: answerAuthors,
+      );
+
+      expect(withGuesses.deltas['p_target'], equals((baseResult.deltas['p_target'] ?? 0) + 1));
+      final guessItem = (withGuesses.breakdown['p_target'] ?? []).firstWhere((i) => i.rule == 'target_forger_guess');
+      expect(guessItem.points, equals(1));
+      expect(sumBreakdown(withGuesses.breakdown['p_target']), equals(withGuesses.deltas['p_target']));
+    });
+
+    test('3. placeholder answer or departed player guess scores nothing', () {
+      final state = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 2, currentRound: 1);
+      const guesses = {
+        'opt_placeholder': 'p_f3', // placeholder option
+        'opt_f1': 'p_departed', // departed player
+      };
+      const authorsWithDeparted = {
+        'opt_truth': 'p_target',
+        'opt_f1': 'p_departed',
+        'opt_f2': 'p_f2',
+        'opt_placeholder': 'p_f3',
+      };
+      const activePlayers = ['p_target', 'p_voter', 'p_f1', 'p_f2']; // p_departed is NOT active
+
+      final baseResult = ScoringLogic.calculateScoresAndBreakdown(state: state, currentCard: card, playerVotes: votes);
+      final withGuesses = ScoringLogic.calculateScoresAndBreakdown(
+        state: state,
+        currentCard: card,
+        playerVotes: votes,
+        targetForgeryGuesses: guesses,
+        answerAuthors: authorsWithDeparted,
+        activePlayerIds: activePlayers,
+      );
+
+      expect(withGuesses.deltas['p_target'], equals(baseResult.deltas['p_target'] ?? 0));
+      final hasGuessItem = (withGuesses.breakdown['p_target'] ?? []).any((i) => i.rule == 'target_forger_guess');
+      expect(hasGuessItem, isFalse);
+    });
+
+    test('4. round multiplier scales target forgery guess points and satisfies sum invariant', () {
+      final r3State = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 2, currentRound: 3); // multiplier x3
+      const targetGuesses = {
+        'opt_f1': 'p_f1',
+        'opt_f2': 'p_f2',
+      };
+
+      final result = ScoringLogic.calculateScoresAndBreakdown(
+        state: r3State,
+        currentCard: card,
+        playerVotes: votes,
+        targetForgeryGuesses: targetGuesses,
+        answerAuthors: answerAuthors,
+      );
+
+      // Base target points: 2 believable_target + 2 target_forger_guess = 4 base. x3 = 12 total.
+      expect(result.deltas['p_target'], equals(12));
+      for (final entry in result.deltas.entries) {
+        expect(sumBreakdown(result.breakdown[entry.key]), equals(entry.value));
+      }
+    });
+  });
 }
 
 

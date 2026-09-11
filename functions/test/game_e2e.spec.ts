@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import admin from 'firebase-admin';
-import { PRESENCE_STALE_MS } from '../src/index';
+import { PRESENCE_STALE_MS, kMissingAnswerPlaceholder, kTargetForgeryGuessPoints } from '../src/index';
 import { PromptDecks } from '../src/prompt_decks';
 
 // Deck ids are derived from the catalogue, never hardcoded. Renaming a deck in
@@ -5661,6 +5661,568 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         roomSnap = await roomRef.get();
         expect(roomSnap.data()?.currentPhase).to.equal('reveal');
         expect(roomSnap.data()?.readyPlayers).to.deep.equal({});
+      });
+    });
+
+    describe('Issue 162 / AA16a: Target Forgery Author Guessing', () => {
+      async function setupVoteGame(playerCount = 3) {
+        const hostUser = await createAnonUser();
+        const bobUser = await createAnonUser();
+        const charlieUser = await createAnonUser();
+        const daveUser = playerCount >= 4 ? await createAnonUser() : null;
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_alice',
+          forgeriesPerCard: 2,
+          sabotageAnswersCount: 2,
+          totalRounds: 1,
+          isTimerDisabled: true,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', bobUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_bob' });
+        await callFn('joinRoom', charlieUser.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_charlie' });
+        if (daveUser) {
+          await callFn('joinRoom', daveUser.idToken, { roomCode, playerName: 'Dave', playerId: 'p_dave' });
+        }
+
+        await roomRef.collection('players').doc('p_bob').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_charlie').update({ lobbyReady: true });
+        if (daveUser) {
+          await roomRef.collection('players').doc('p_dave').update({ lobbyReady: true });
+        }
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_alice', authorId: 'p_alice', text: 'Alice Truth', isTruth: true });
+        await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: 'p_bob', authorId: 'p_bob', text: 'Bob Truth', isTruth: true });
+        await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: 'p_charlie', authorId: 'p_charlie', text: 'Charlie Truth', isTruth: true });
+        if (daveUser) {
+          await callFn('submitAnswer', daveUser.idToken, { roomCode, targetCardId: 'p_dave', authorId: 'p_dave', text: 'Dave Truth', isTruth: true });
+        }
+
+        const snap = await roomRef.get();
+        const assignments = snap.data()?.currentCardAssignments || {};
+
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_alice'], authorId: 'p_alice', text: 'Alice Forgery 1', isTruth: false });
+        await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: assignments['p_bob'], authorId: 'p_bob', text: 'Bob Forgery 1', isTruth: false });
+        await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: assignments['p_charlie'], authorId: 'p_charlie', text: 'Charlie Forgery 1', isTruth: false });
+        if (daveUser) {
+          await callFn('submitAnswer', daveUser.idToken, { roomCode, targetCardId: assignments['p_dave'], authorId: 'p_dave', text: 'Dave Forgery 1', isTruth: false });
+        }
+
+        // Rotation 2 to complete sabotageAnswersCount = 2
+        const snap2 = await roomRef.get();
+        const assignments2 = snap2.data()?.currentCardAssignments || {};
+
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments2['p_alice'], authorId: 'p_alice', text: 'Alice Forgery 2', isTruth: false });
+        await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: assignments2['p_bob'], authorId: 'p_bob', text: 'Bob Forgery 2', isTruth: false });
+        await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: assignments2['p_charlie'], authorId: 'p_charlie', text: 'Charlie Forgery 2', isTruth: false });
+        if (daveUser) {
+          await callFn('submitAnswer', daveUser.idToken, { roomCode, targetCardId: assignments2['p_dave'], authorId: 'p_dave', text: 'Dave Forgery 2', isTruth: false });
+        }
+
+        const voteSnap = await roomRef.get();
+        expect(voteSnap.data()?.currentPhase).to.equal('vote');
+        const currentReaderId = voteSnap.data()?.currentReaderId;
+
+        const userMap: Record<string, { idToken: string; localId: string }> = {
+          'p_alice': hostUser,
+          'p_bob': bobUser,
+          'p_charlie': charlieUser
+        };
+        const allPlayerIds = ['p_alice', 'p_bob', 'p_charlie'];
+        if (daveUser) {
+          userMap['p_dave'] = daveUser;
+          allPlayerIds.push('p_dave');
+        }
+
+        const targetUser = userMap[currentReaderId];
+        const otherPlayers = allPlayerIds.filter(id => id !== currentReaderId);
+
+        const sealedSnap = await roomRef.collection('sealed').doc(currentReaderId).get();
+        const answerAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+        const currentCard = voteSnap.data()?.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+
+        return {
+          roomCode,
+          roomRef,
+          hostUser,
+          bobUser,
+          charlieUser,
+          daveUser,
+          userMap,
+          currentReaderId,
+          targetUser,
+          otherPlayers,
+          answerAuthors,
+          currentCard
+        };
+      }
+
+      it('1. all forgeries correctly guessed -> target receives +1 per forgery, forgers receive no penalty', async () => {
+        expect(kTargetForgeryGuessPoints).to.equal(1);
+        const { roomCode, roomRef, userMap, currentReaderId, targetUser, otherPlayers, answerAuthors, currentCard } = await setupVoteGame();
+
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+        expect(forgeryOptions.length).to.equal(2);
+
+        const guesses: Record<string, string> = {};
+        for (const opt of forgeryOptions) {
+          guesses[opt.id] = answerAuthors[opt.id];
+        }
+
+        const res = await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses
+        });
+        expect(res.success).to.be.true;
+
+        // Target readies
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: true });
+
+        // Voters vote for truth -> !hasFooled -> immediate deltas
+        const truthOption = currentCard.options.find((opt: any) => answerAuthors[opt.id] === currentReaderId);
+        for (const pId of otherPlayers) {
+          await callFn('castVote', userMap[pId].idToken, {
+            roomCode,
+            targetCardId: currentReaderId,
+            voterId: pId,
+            votedForId: truthOption.id
+          });
+        }
+
+        const revealSnap = await roomRef.get();
+        expect(revealSnap.data()?.currentPhase).to.equal('reveal');
+        const revealedCard = revealSnap.data()?.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+
+        // Target gets 2 believable_target + 2 target_forger_guess = 4
+        expect(revealedCard.scoreDeltas[currentReaderId]).to.equal(4);
+        const targetBreakdown = revealedCard.scoreBreakdown[currentReaderId];
+        const guessItem = targetBreakdown.find((i: any) => i.rule === 'target_forger_guess');
+        expect(guessItem.points).to.equal(2);
+
+        // Forgers receive no penalty
+        for (const pId of otherPlayers) {
+          const pBreakdown = revealedCard.scoreBreakdown[pId] || [];
+          expect(pBreakdown.some((i: any) => i.points < 0)).to.be.false;
+        }
+
+        const targetPlayerSnap = await roomRef.collection('players').doc(currentReaderId).get();
+        expect(targetPlayerSnap.data()?.totalScore).to.equal(4);
+      });
+
+      it('2. partial map scores only correct entries', async () => {
+        const { roomCode, roomRef, userMap, currentReaderId, targetUser, otherPlayers, answerAuthors, currentCard } = await setupVoteGame();
+
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+        const guesses: Record<string, string> = {
+          [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id], // correct (+1)
+          [forgeryOptions[1].id]: otherPlayers.find(id => id !== answerAuthors[forgeryOptions[1].id])! // wrong (+0)
+        };
+
+        await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses
+        });
+
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: true });
+
+        const truthOption = currentCard.options.find((opt: any) => answerAuthors[opt.id] === currentReaderId);
+        for (const pId of otherPlayers) {
+          await callFn('castVote', userMap[pId].idToken, {
+            roomCode,
+            targetCardId: currentReaderId,
+            voterId: pId,
+            votedForId: truthOption.id
+          });
+        }
+
+        const revealSnap = await roomRef.get();
+        const revealedCard = revealSnap.data()?.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+
+        // Target gets 2 believable_target + 1 target_forger_guess = 3
+        expect(revealedCard.scoreDeltas[currentReaderId]).to.equal(3);
+        const guessItem = (revealedCard.scoreBreakdown[currentReaderId] || []).find((i: any) => i.rule === 'target_forger_guess');
+        expect(guessItem.points).to.equal(1);
+      });
+
+      it('3. nine rejections: non-target, wrong phase, wrong card, target ready, bad option, own truth, target as forger, non-room player, placeholder', async () => {
+        const { roomCode, roomRef, userMap, currentReaderId, targetUser, otherPlayers, answerAuthors, currentCard } = await setupVoteGame();
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+        const truthOption = currentCard.options.find((opt: any) => answerAuthors[opt.id] === currentReaderId);
+
+        // 1. Non-target caller -> permission-denied
+        try {
+          await callFn('submitTargetForgeryGuesses', userMap[otherPlayers[0]].idToken, {
+            roomCode,
+            cardId: currentReaderId,
+            guesses: { [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id] }
+          });
+          expect.fail('Non-target caller should have failed');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('PERMISSION_DENIED');
+        }
+
+        // 3. Wrong card -> failed-precondition
+        try {
+          await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+            roomCode,
+            cardId: otherPlayers[0],
+            guesses: { [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id] }
+          });
+          expect.fail('Wrong cardId should have failed');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(['FAILED_PRECONDITION', 'PERMISSION_DENIED']).to.include(err.status);
+        }
+
+        // 5. Option not on card -> invalid-argument
+        try {
+          await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+            roomCode,
+            cardId: currentReaderId,
+            guesses: { 'nonexistent_option_id': otherPlayers[0] }
+          });
+          expect.fail('Nonexistent optionId should have failed');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('INVALID_ARGUMENT');
+        }
+
+        // 6. Guess on target\'s own truth -> invalid-argument
+        try {
+          await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+            roomCode,
+            cardId: currentReaderId,
+            guesses: { [truthOption.id]: otherPlayers[0] }
+          });
+          expect.fail('Guessing own truth should have failed');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('INVALID_ARGUMENT');
+        }
+
+        // 7. Guess naming target as forger -> invalid-argument
+        try {
+          await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+            roomCode,
+            cardId: currentReaderId,
+            guesses: { [forgeryOptions[0].id]: currentReaderId }
+          });
+          expect.fail('Naming target as forger should have failed');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('INVALID_ARGUMENT');
+        }
+
+        // 8. Guess naming player not in room -> invalid-argument
+        try {
+          await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+            roomCode,
+            cardId: currentReaderId,
+            guesses: { [forgeryOptions[0].id]: 'ghost_player_id' }
+          });
+          expect.fail('Naming non-room player should have failed');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('INVALID_ARGUMENT');
+        }
+
+        // 9. Guess on placeholder option -> invalid-argument
+        await roomRef.update({
+          cards: [
+            {
+              ...currentCard,
+              options: [
+                ...currentCard.options,
+                { id: 'opt_placeholder', text: kMissingAnswerPlaceholder }
+              ]
+            }
+          ]
+        });
+        await roomRef.collection('sealed').doc(currentReaderId).update({
+          answerAuthors: {
+            ...answerAuthors,
+            'opt_placeholder': otherPlayers[0]
+          }
+        });
+        try {
+          await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+            roomCode,
+            cardId: currentReaderId,
+            guesses: { 'opt_placeholder': otherPlayers[0] }
+          });
+          expect.fail('Guessing placeholder option should have failed');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('INVALID_ARGUMENT');
+        }
+
+        // Restore clean card
+        await roomRef.update({ cards: [currentCard] });
+        await roomRef.collection('sealed').doc(currentReaderId).update({ answerAuthors });
+
+        // 4. Target already ready -> failed-precondition
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: true });
+        try {
+          await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+            roomCode,
+            cardId: currentReaderId,
+            guesses: { [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id] }
+          });
+          expect.fail('Submitting while ready should have failed');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('FAILED_PRECONDITION');
+        }
+
+        // 2. Wrong phase (reveal) -> failed-precondition
+        for (const pId of otherPlayers) {
+          await callFn('castVote', userMap[pId].idToken, {
+            roomCode,
+            targetCardId: currentReaderId,
+            voterId: pId,
+            votedForId: truthOption.id
+          });
+        }
+        const postSnap = await roomRef.get();
+        expect(postSnap.data()?.currentPhase).to.equal('reveal');
+
+        try {
+          await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+            roomCode,
+            cardId: currentReaderId,
+            guesses: { [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id] }
+          });
+          expect.fail('Submitting during reveal should have failed');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('FAILED_PRECONDITION');
+        }
+      });
+
+      it('4. resubmission replaces rather than merges', async () => {
+        const { roomCode, roomRef, currentReaderId, targetUser, answerAuthors, currentCard } = await setupVoteGame();
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+
+        // Initial submission: 2 guesses
+        await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses: {
+            [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id],
+            [forgeryOptions[1].id]: answerAuthors[forgeryOptions[1].id]
+          }
+        });
+
+        let sealedSnap = await roomRef.collection('sealed').doc(currentReaderId).get();
+        expect(Object.keys(sealedSnap.data()?.targetForgeryGuesses || {}).length).to.equal(2);
+
+        // Resubmission: only 1 guess
+        await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses: {
+            [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id]
+          }
+        });
+
+        sealedSnap = await roomRef.collection('sealed').doc(currentReaderId).get();
+        expect(sealedSnap.data()?.targetForgeryGuesses).to.deep.equal({
+          [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id]
+        });
+      });
+
+      it('5. un-readying reopens the guessing window (pairs with AA8)', async () => {
+        const { roomCode, currentReaderId, targetUser, answerAuthors, currentCard } = await setupVoteGame();
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+
+        // Target marks ready
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: true });
+
+        // Submission rejected
+        try {
+          await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+            roomCode,
+            cardId: currentReaderId,
+            guesses: { [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id] }
+          });
+          expect.fail('Submitting while ready should fail');
+        } catch (err: any) {
+          if (err.name === 'AssertionError') throw err;
+          expect(err.status).to.equal('FAILED_PRECONDITION');
+        }
+
+        // Target un-readies (AA8 toggle)
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: false });
+
+        // Submission now succeeds
+        const res = await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses: { [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id] }
+        });
+        expect(res.success).to.be.true;
+      });
+
+      it('6. leak test: points withheld during active unmaskDeadline, then land upon close', async () => {
+        const { roomCode, roomRef, userMap, currentReaderId, targetUser, otherPlayers, answerAuthors, currentCard } = await setupVoteGame();
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+
+        // Target guesses correctly
+        await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses: {
+            [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id],
+            [forgeryOptions[1].id]: answerAuthors[forgeryOptions[1].id]
+          }
+        });
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: true });
+
+        // Voter 0 votes for truth; Voter 1 votes for a FORGERY authored by Voter 0 (triggering unmask window without self-voting)
+        const truthOption = currentCard.options.find((opt: any) => answerAuthors[opt.id] === currentReaderId);
+        const optAuthoredBy0 = currentCard.options.find((opt: any) => answerAuthors[opt.id] === otherPlayers[0]);
+        await callFn('castVote', userMap[otherPlayers[0]].idToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: otherPlayers[0],
+          votedForId: truthOption.id
+        });
+        await callFn('castVote', userMap[otherPlayers[1]].idToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: otherPlayers[1],
+          votedForId: optAuthoredBy0.id
+        });
+
+        // Phase has advanced to reveal, unmask window is ACTIVE
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+        expect(roomSnap.data()?.unmaskDeadline).to.be.greaterThan(Date.now());
+
+        // CRITICAL INVARIANT ASSERTION: Score deltas and targetForgeryGuesses are WITHHELD from public card!
+        const publicCard = roomSnap.data()?.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+        expect(publicCard.scoreDeltas).to.be.undefined;
+        expect(publicCard.targetForgeryGuesses).to.be.undefined;
+
+        // Player totalScore has NOT moved yet
+        let targetDoc = await roomRef.collection('players').doc(currentReaderId).get();
+        expect(targetDoc.data()?.totalScore).to.equal(0);
+
+        // Private sealed document holds pending deltas
+        let sealedSnap = await roomRef.collection('sealed').doc(currentReaderId).get();
+        expect(sealedSnap.data()?.pendingScoreDeltas[currentReaderId]).to.equal(3); // 1 believable_target + 2 target_forger_guess
+
+        // Close unmask window (fast-forward deadline)
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
+        await callFn('closeUnmaskWindow', targetUser.idToken, { roomCode });
+
+        // Now scores land on public card and player totalScore
+        roomSnap = await roomRef.get();
+        const revealedCard = roomSnap.data()?.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+        expect(revealedCard.scoreDeltas[currentReaderId]).to.equal(3);
+        expect(revealedCard.targetForgeryGuesses).to.not.be.undefined;
+
+        targetDoc = await roomRef.collection('players').doc(currentReaderId).get();
+        expect(targetDoc.data()?.totalScore).to.equal(3);
+
+        // Sealed pending deltas deleted
+        sealedSnap = await roomRef.collection('sealed').doc(currentReaderId).get();
+        expect(sealedSnap.data()?.pendingScoreDeltas).to.be.undefined;
+      });
+
+      it('7. flush site: advanceToNextResolution flushes pending deltas when skipping unmask', async () => {
+        const { roomCode, roomRef, hostUser, userMap, currentReaderId, targetUser, otherPlayers, answerAuthors, currentCard } = await setupVoteGame();
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+
+        await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses: { [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id] }
+        });
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: true });
+
+        // Trigger unmask window
+        // otherPlayers[0] votes for otherPlayers[1]'s forgery
+        // otherPlayers[1] votes for otherPlayers[0]'s forgery
+        const optAuthoredBy1 = currentCard.options.find((opt: any) => answerAuthors[opt.id] === otherPlayers[1]);
+        const optAuthoredBy0 = currentCard.options.find((opt: any) => answerAuthors[opt.id] === otherPlayers[0]);
+
+        await callFn('castVote', userMap[otherPlayers[0]].idToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: otherPlayers[0],
+          votedForId: optAuthoredBy1.id
+        });
+        await callFn('castVote', userMap[otherPlayers[1]].idToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: otherPlayers[1],
+          votedForId: optAuthoredBy0.id
+        });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+
+        // Host advances resolution directly while unmask is open
+        await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+
+        // Verify target received their score deltas
+        const targetDoc = await roomRef.collection('players').doc(currentReaderId).get();
+        expect(targetDoc.data()?.totalScore).to.be.greaterThan(0);
+      });
+
+      it('9. guessed player who left mid-card scores nothing and reveal completes', async () => {
+        const { roomCode, roomRef, userMap, currentReaderId, targetUser, otherPlayers, answerAuthors, currentCard } = await setupVoteGame(4);
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+
+        // Find which player authored forgeryOptions[0]
+        const departedPlayerId = answerAuthors[forgeryOptions[0].id];
+
+        // Target guesses the departed player for forgeryOptions[0]
+        await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses: { [forgeryOptions[0].id]: departedPlayerId }
+        });
+
+        // The guessed player departs mid-card
+        await callFn('handleDisconnect', userMap[departedPlayerId].idToken, {
+          roomCode,
+          disconnectedPlayerId: departedPlayerId
+        });
+
+        // Target readies
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: true });
+
+        // Remaining active players vote for truth
+        const remainingOtherPlayers = otherPlayers.filter(id => id !== departedPlayerId);
+        const truthOption = currentCard.options.find((opt: any) => answerAuthors[opt.id] === currentReaderId);
+        for (const pId of remainingOtherPlayers) {
+          await callFn('castVote', userMap[pId].idToken, {
+            roomCode,
+            targetCardId: currentReaderId,
+            voterId: pId,
+            votedForId: truthOption.id
+          });
+        }
+
+        // Reveal completes without error
+        const snap = await roomRef.get();
+        expect(snap.data()?.currentPhase).to.equal('reveal');
+
+        // Target scores nothing for guessing the departed player
+        const revealedCard = snap.data()?.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+        const guessItem = (revealedCard.scoreBreakdown[currentReaderId] || []).find((i: any) => i.rule === 'target_forger_guess');
+        expect(guessItem).to.be.undefined;
       });
     });
   });

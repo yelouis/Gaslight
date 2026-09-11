@@ -1,6 +1,10 @@
 import '../models/game_state.dart';
 import '../models/card_model.dart';
 
+const int kTargetForgeryGuessPoints = 1;
+const String kMissingAnswerPlaceholderServer = 'THE SOUL IS SILENT';
+const String kMissingAnswerPlaceholderClient = '(The ink ran dry...)';
+
 class ScoreCalculationResult {
   final Map<String, int> deltas;
   final Map<String, List<ScoreBreakdownItem>> breakdown;
@@ -17,6 +21,9 @@ class ScoringLogic {
     required GameState state,
     required CardModel currentCard,
     required Map<String, String> playerVotes, // VoterID -> VotedForAuthorID
+    Map<String, String>? targetForgeryGuesses,
+    Map<String, String>? answerAuthors,
+    List<String>? activePlayerIds,
   }) {
     final Map<String, int> deltas = {};
     final Map<String, List<ScoreBreakdownItem>> breakdown = {};
@@ -61,6 +68,33 @@ class ScoringLogic {
       }
     });
 
+    // Target forgery author guesses (Issue 162 / AA16a)
+    final guesses = targetForgeryGuesses ?? currentCard.targetForgeryGuesses;
+    final authors = answerAuthors ?? currentCard.answerAuthors;
+    if (guesses != null && authors != null) {
+      final targetId = currentCard.targetPlayerId;
+      guesses.forEach((optionId, guessedAuthorId) {
+        if (guessedAuthorId.isEmpty) return;
+        if (guessedAuthorId == targetId) return;
+        final matchingOptions = currentCard.options.where((o) => o.id == optionId);
+        if (matchingOptions.isNotEmpty) {
+          final optText = matchingOptions.first.text.trim();
+          if (optText.isEmpty ||
+              optText == kMissingAnswerPlaceholderServer ||
+              optText == kMissingAnswerPlaceholderClient) {
+            return;
+          }
+        }
+        if (activePlayerIds != null && !activePlayerIds.contains(guessedAuthorId)) {
+          return;
+        }
+        if (authors[optionId] == guessedAuthorId) {
+          deltas[targetId] = (deltas[targetId] ?? 0) + kTargetForgeryGuessPoints;
+          addBreakdown(targetId, 'target_forger_guess', kTargetForgeryGuessPoints);
+        }
+      });
+    }
+
     final multiplier = state.currentRound < 1 ? 1 : state.currentRound;
     if (multiplier > 1) {
       for (final playerId in deltas.keys.toList()) {
@@ -84,11 +118,17 @@ class ScoringLogic {
     required GameState state,
     required CardModel currentCard,
     required Map<String, String> playerVotes, // VoterID -> VotedForAuthorID
+    Map<String, String>? targetForgeryGuesses,
+    Map<String, String>? answerAuthors,
+    List<String>? activePlayerIds,
   }) {
     return calculateScoresAndBreakdown(
       state: state,
       currentCard: currentCard,
       playerVotes: playerVotes,
+      targetForgeryGuesses: targetForgeryGuesses,
+      answerAuthors: answerAuthors,
+      activePlayerIds: activePlayerIds,
     ).deltas;
   }
 
@@ -97,11 +137,17 @@ class ScoringLogic {
     required GameState state,
     required CardModel currentCard,
     required Map<String, String> playerVotes,
+    Map<String, String>? targetForgeryGuesses,
+    Map<String, String>? answerAuthors,
+    List<String>? activePlayerIds,
   }) {
     return calculateScoresAndBreakdown(
       state: state,
       currentCard: currentCard,
       playerVotes: playerVotes,
+      targetForgeryGuesses: targetForgeryGuesses,
+      answerAuthors: answerAuthors,
+      activePlayerIds: activePlayerIds,
     ).breakdown;
   }
 }

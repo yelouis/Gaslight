@@ -9,7 +9,7 @@ This document outlines the Firestore structure, the server-authoritative write a
 * `/rooms/{roomCode}`: the root `GameState` document (phase, cards, votes, readiness, rotation plan).
 * `/rooms/{roomCode}/players/{playerId}`: individual `PlayerState` documents. `playerId` is a client-chosen stable ID; the document stores `authUid` (the Firebase anonymous UID currently bound to that seat) for server-side ownership checks.
 * `/rooms/{roomCode}/embeddings/{answerHash}`: server-managed cache of Gemini embedding vectors (md5 of the normalized answer text → vector) for the semantic-similarity filter. No client rule → default deny; server-only.
-* `/rooms/{roomCode}/sealed/{cardId}`: server-managed answer keys (`truthAnswer` and `sabotageAnswers` forgery map) and per-player prompt history (`seenPrompts` list) stored during `truth`, `forgery`, and `vote` phases to conceal answer origin and prompt history until reveal. No client rule → default deny; server-only.
+* `/rooms/{roomCode}/sealed/{cardId}`: server-managed answer keys (`truthAnswer` and `sabotageAnswers` forgery map, `answerAuthors` option-to-author map), per-player prompt history (`seenPrompts` list), pending score deltas/breakdowns during unmask windows, and target forgery guesses (`targetForgeryGuesses` map) stored during `truth`, `forgery`, and `vote` phases to conceal answer origin, prompt history, and live reads until reveal. No client rule → default deny; server-only.
 
 ---
 
@@ -26,6 +26,7 @@ All game mutations are `onCall` Cloud Functions (`functions/src/index.ts`) that 
 | `getMyOptionId` | `GameService.fetchMyOptionId` | seat owner; reads default-deny `sealed/{cardId}.answerAuthors` server-side, returning **only the caller's own optionId** (`{ optionId }`) or `{ optionId: null }` if none authored; throws `permission-denied` on ownership mismatch |
 | `castVote` | `castVote` | seat owner; enforces the self-vote guard; marks voter ready; auto-advances |
 | `setReady` | `setPlayerReady` | seat owner; auto-advances when all ready |
+| `submitTargetForgeryGuesses` | — | target seat owner only; writes target's `Record<optionId, guessedAuthorId>` to `sealed/{cardId}.targetForgeryGuesses` during vote phase; enforces non-ready target, rejects own truth, placeholders, target self-forgery, and non-room players; replace semantics |
 | `advancePhase` | `forceAdvance`/`evaluateReadyState` | host only; applies timeout placeholders, per-card scoring, honor stats |
 | `advanceToNextResolution` | `advanceToNextResolution` | host only; steps the vote→reveal card sequence / game over |
 | `rerollPrompt` | `rerollMyPrompt` | seat owner; unlimited re-rolls allowed during the `truth` phase |
