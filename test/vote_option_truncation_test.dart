@@ -176,7 +176,7 @@ void main() {
     }
   });
 
-  testWidgets('P9 discoverability: six options at 320x640 portrait exceed viewport height and option at index 3 has non-zero height below fold', (tester) async {
+  testWidgets('Issue 160 / Treatment 3: six options at 320x640 portrait fit within viewport without scroll and all options are discoverable via stacked deck', (tester) async {
     const surfaceSize = Size(320, 640);
     await tester.binding.setSurfaceSize(surfaceSize);
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -217,22 +217,32 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The scroll view scrollable extent should exceed viewport
-    expect(scrollController.position.maxScrollExtent, greaterThan(0.0),
-        reason: 'Content height must exceed 640pt viewport so user can scroll');
+    // Treatment 3 stacked deck eliminates below-the-fold vertical overflow: zero scroll needed
+    expect(scrollController.position.maxScrollExtent, equals(0.0),
+        reason: 'Stacked deck must fit within 640pt viewport without vertical scrolling (Issue 160)');
 
-    // Scroll to reveal index 3 and verify its height is positive
-    await tester.scrollUntilVisible(
-      find.text(answers[3].text),
-      200.0,
-      scrollable: find.byType(Scrollable).first,
-    );
+    // Option 0 is in front and renders in full
+    expect(find.text(answers[0].text), findsOneWidget);
+
+    // Advance to index 3 using stacked deck NEXT navigation
+    await tester.tap(find.byKey(const Key('stacked_deck_next_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('stacked_deck_next_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('stacked_deck_next_button')));
     await tester.pumpAndSettle();
 
+    // Card at index 3 is now front and renders with positive height and zero truncation
     final item3Finder = find.text(answers[3].text);
     expect(item3Finder, findsOneWidget);
     final renderBox = tester.renderObject<RenderBox>(item3Finder);
     expect(renderBox.size.height, greaterThan(0));
+    expectNoTruncation(tester, answers[3].text);
+
+    // Unpeel backward to index 2 using stacked deck PREV navigation
+    await tester.tap(find.byKey(const Key('stacked_deck_prev_button')));
+    await tester.pumpAndSettle();
+    expect(find.text(answers[2].text), findsOneWidget);
   });
 
   testWidgets('P9: SEALED stamp appears on placeholder and own-answer options and tap is disabled', (tester) async {
@@ -270,15 +280,23 @@ void main() {
     // Two SEALED stamps: self answer and placeholder
     expect(find.text('SEALED'), findsNWidgets(2));
 
-    // Tap self answer -> should not select
+    // Tap self answer on front card -> should not select
     await tester.tap(find.text('My own forgery'));
     await tester.pump();
     expect(selectedId, isNull);
+
+    // Peel to placeholder card
+    await tester.tap(find.byKey(const Key('stacked_deck_next_button')));
+    await tester.pumpAndSettle();
 
     // Tap placeholder -> should not select
     await tester.tap(find.text('THE SOUL IS SILENT'));
     await tester.pump();
     expect(selectedId, isNull);
+
+    // Peel to valid candidate card
+    await tester.tap(find.byKey(const Key('stacked_deck_next_button')));
+    await tester.pumpAndSettle();
 
     // Tap valid -> should select
     await tester.tap(find.text('A valid candidate'));
