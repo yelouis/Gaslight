@@ -13,6 +13,7 @@ import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../widgets/auto_advance_timer.dart';
 import '../utils/text_similarity.dart';
+import '../utils/prompt_decks.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/gaslight_route.dart';
@@ -477,6 +478,9 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
         ? 'Write something true about you — the more surprising, the better. Others must be able to believe it.'
         : 'You are writing as $targetName. Make it sound like something they would say, so people pick yours.';
 
+    final stems = PromptDecks.getStemsForPrompt(targetCard.promptText);
+    final String? stem = (stems != null && stems.isNotEmpty) ? stems.first : null;
+
     return Column(
       children: [
         Container(
@@ -636,6 +640,24 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
                             );
                           },
                         ),
+                        if (stem != null) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              isTruthRound
+                                  ? 'Starter: "$stem…"'
+                                  : 'Writing as $targetName: "$stem…"',
+                              key: const ValueKey('sentence_stem_hint'),
+                              style: const TextStyle(
+                                fontFamily: 'Lora',
+                                fontStyle: FontStyle.italic,
+                                fontSize: 13,
+                                color: Color(0xA62C1E16), // ink @ 0.65
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

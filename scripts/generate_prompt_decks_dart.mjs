@@ -62,6 +62,7 @@ w("  final String displayName;");
 w("  final DeckRating rating;");
 w("  final bool isFallback;");
 w("  final List<String> prompts;");
+w("  final Map<String, List<String>> stems;");
 w("");
 w("  const DeckDefinition({");
 w("    required this.id,");
@@ -69,6 +70,7 @@ w("    required this.displayName,");
 w("    required this.rating,");
 w("    required this.isFallback,");
 w("    required this.prompts,");
+w("    this.stems = const {},");
 w("  });");
 w("}");
 w("");
@@ -85,6 +87,17 @@ for (const d of decks) {
   w("      prompts: [");
   for (const p of d.prompts) w(`        ${lit(p)},`);
   w("      ],");
+  if (d.stems && Object.keys(d.stems).length > 0) {
+    w("      stems: {");
+    for (const [p, stemList] of Object.entries(d.stems)) {
+      w(`        ${lit(p)}: [`);
+      for (const s of stemList) {
+        w(`          ${lit(s)},`);
+      }
+      w("        ],");
+    }
+    w("      },");
+  }
   w("    ),");
 }
 w("  ];");
@@ -92,6 +105,17 @@ w("");
 w("  static final Map<String, DeckDefinition> _byId = {");
 w("    for (final d in allDecks) d.id: d,");
 w("  };");
+w("");
+w("  /// Stems for a prompt text, looked up across all decks.");
+w("  static List<String>? getStemsForPrompt(String promptText) {");
+w("    for (final d in allDecks) {");
+w("      final stems = d.stems[promptText];");
+w("      if (stems != null && stems.isNotEmpty) {");
+w("        return stems;");
+w("      }");
+w("    }");
+w("    return null;");
+w("  }");
 w("");
 w("  /// The deck used when no chosen deck applies: the default for a new room,");
 w("  /// the top-up pool for custom decks, and the source for re-rolls in a custom");
