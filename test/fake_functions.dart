@@ -1001,6 +1001,23 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       return FakeHttpsCallableResult({'success': true} as T);
     }
 
+    if (name == 'submitTargetForgeryGuesses') {
+      final roomCode = parameters?['roomCode'] as String?;
+      final cardId = parameters?['cardId'] as String?;
+      final guesses = parameters?['guesses'] as Map<dynamic, dynamic>? ?? {};
+      if (roomCode != null && cardId != null) {
+        await db
+            .collection('rooms')
+            .doc(roomCode)
+            .collection('sealed')
+            .doc(cardId)
+            .set({
+          'targetForgeryGuesses': Map<String, String>.from(guesses),
+        }, SetOptions(merge: true));
+      }
+      return FakeHttpsCallableResult({'success': true} as T);
+    }
+
     throw UnimplementedError('Callable mock handler not found: $name');
   }
 

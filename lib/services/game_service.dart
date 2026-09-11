@@ -620,6 +620,17 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
+  Future<void> submitTargetForgeryGuesses(String cardId, Map<String, String> guesses) async {
+    final rCode = _gameState?.roomCode;
+    if (rCode == null || rCode.isEmpty) return;
+
+    await _functions.httpsCallable('submitTargetForgeryGuesses').call({
+      'roomCode': rCode,
+      'cardId': cardId,
+      'guesses': guesses,
+    });
+  }
+
   Future<void> updatePlayerCustomPrompts(List<String> prompts) async {
     final p = currentPlayer;
     final rCode = _gameState?.roomCode;

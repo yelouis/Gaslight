@@ -842,6 +842,23 @@ class _CardGridState extends State<CardGrid> {
       );
     }
 
+    final isPlaceholder = activeAnswer.text == 'THE SOUL IS SILENT' || activeAnswer.text.trim().isEmpty;
+    if (isPlaceholder) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        alignment: Alignment.center,
+        child: Text(
+          'Silent soul — no author to attribute.',
+          style: TextStyle(
+            fontFamily: 'Lora',
+            fontSize: 12,
+            fontStyle: FontStyle.italic,
+            color: AppColors.brass.withValues(alpha: 0.7),
+          ),
+        ),
+      );
+    }
+
     // 2. Candidate authors: exclude target themselves (Issue 162 rule)
     final candidates = (widget.candidateAuthors ?? [])
         .filter((p) => p.id != widget.currentPlayerId && p.role != PlayerRole.spectator)

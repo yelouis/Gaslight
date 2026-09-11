@@ -39,6 +39,24 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
   final Set<String> _sealedSoundPlayed = {};
   String? _lastReaderId;
   String? _localSelectedAuthorId;
+  final Map<String, String> _targetForgeryGuesses = {};
+
+  void _onAttributeForgery(GameService gs, String cardId, String optionId, String authorId) async {
+    setState(() {
+      if (authorId.isEmpty) {
+        _targetForgeryGuesses.remove(optionId);
+      } else {
+        _targetForgeryGuesses.removeWhere((k, v) => v == authorId);
+        _targetForgeryGuesses[optionId] = authorId;
+      }
+    });
+
+    try {
+      await gs.submitTargetForgeryGuesses(cardId, _targetForgeryGuesses);
+    } catch (e) {
+      debugPrint('submitTargetForgeryGuesses error: $e');
+    }
+  }
 
   void _castVote(GameService gs, String votedForId) async {
     final state = gs.gameState;
@@ -327,6 +345,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
       _submitted = false;
       _localSelectedAuthorId = null;
       _isSettingReady = false;
+      _targetForgeryGuesses.clear();
       if (AppMotion.reduce(context)) {
         for (var voter in expectedVoters) {
           if (state.readyPlayers[voter.id] ?? false) {
@@ -491,6 +510,11 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                         _localSelectedAuthorId = authorId;
                       });
                     },
+                    targetForgeryGuesses: isTarget ? _targetForgeryGuesses : null,
+                    candidateAuthors: isTarget ? gs.players : null,
+                    onAttributeForgery: isTarget
+                        ? (optionId, authorId) => _onAttributeForgery(gs, cardId, optionId, authorId)
+                        : null,
                   ),
                 ],
               ),
@@ -500,16 +524,21 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
           if (isTarget) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const BlinkingEye(size: 18),
                 const SizedBox(width: 8),
-                Text(
-                  '$N of $M ballots sealed',
-                  style: const TextStyle(
-                    fontFamily: 'Lora',
-                    fontSize: 14,
-                    color: AppColors.ivory,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                Flexible(
+                  child: Text(
+                    '$N of $M ballots sealed',
+                    style: const TextStyle(
+                      fontFamily: 'Lora',
+                      fontSize: 14,
+                      color: AppColors.ivory,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],

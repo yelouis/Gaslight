@@ -24,6 +24,7 @@
 - **AA14 — ✅ VERIFIED and RESOLVED.** Placed highlight card titles and badges on separate lines.
 - **AA15 (Issue 160 Mockups) — ✅ VERIFIED and RESOLVED.** Generated 4 authentic Flutter widget mockups for paged vote options in `docs/mockups/vote_options/`.
 - **AA16a (Issue 162 Server Half) — ✅ VERIFIED and RESOLVED.** Implemented `submitTargetForgeryGuesses` callable and scoring in `functions/src/index.ts` and `functions/src/scoring_logic.ts`.
+- **AA16b (Issue 162 Client Half) — ✅ VERIFIED and RESOLVED.** Implemented target forgery author guessing UI (tap-to-assign) on the vote screen (`CardGrid` in `lib/widgets/card_grid.dart` and `Phase3VoteScreen` in `lib/screens/phase3_vote.dart`). Built on top of Treatment 3 (Stacked Deck with Peek), the target can tap candidate author chips on each forgery card with 1:1 mutual exclusivity, instant brass highlight, and immediate sync to Firebase Functions via `GameService.submitTargetForgeryGuesses`. Verified guards for target's own truth and placeholders, reader transition state-clearing, and zero overflow at 320pt viewport with 6 options and 5 players. 7/7 tests pass in `test/phase3_vote_target_forgery_attribution_test.dart`. Independently falsified against reader-change leakage and self-inclusion regressions.
 - **Issue 160 (Vote Option Layout / Treatment 3 Stacked Deck) — ✅ VERIFIED and RESOLVED.** Implemented Treatment 3 (Stacked Deck with Peek) in `lib/widgets/card_grid.dart` with bidirectional navigation (swipe drag left/right, PREV/NEXT buttons, interactive dot indicators). Allows reviewing and re-selecting previously peeled cards without vertical scrolling. Tested across 320–430pt viewports with 100-character answers. Added `test/stacked_deck_navigation_test.dart` and updated `test/vote_option_truncation_test.dart` per §2.0 notice. Falsification confirmed by breaking backward peel navigation.
 
 
@@ -330,11 +331,11 @@ Your selection: Proceed with Option A.
 
 ---
 
-### Issue 162: The target has nothing to do while their card is being voted on — SELECTED and REDIRECTED, specced as AA16a / AA16b
+### Issue 162: The target has nothing to do while their card is being voted on — ✅ VERIFIED and RESOLVED (Resolved - September 11)
 
-**Status**: 🔄 In Progress — **AA16a (Server Half) completed; AA16b (Client Half) blocked on Issue 160 layout selection.**
+**Status**: ✅ Confirmed Resolved — (Resolved - September 11). Implemented end-to-end across AA16a (server callable and scoring) and AA16b (client tap-to-assign on Stacked Deck Treatment 3).
 - **AA16a (Server Half)**: Complete. `submitTargetForgeryGuesses` callable implemented with 9 validations; scoring engine updated (`+1` per correct guess to target, 0 penalty to forger, round multiplier scaling); withholding during `unmaskDeadline` enforced via `sealed/{cardId}.pendingScoreDeltas`; 139 server tests passing including 4 TS scoring fixtures, 12 Dart scoring fixtures, and 9 E2E mocha emulator tests.
-- **AA16b (Client Half)**: Blocked until user selects a layout treatment for Issue 160 (mockups generated in AA15). Tap-to-assign target attribution UI will be built directly onto the chosen option layout.
+- **AA16b (Client Half)**: Complete. Tap-to-assign target attribution UI implemented in `lib/widgets/card_grid.dart` (`_buildTargetAttributionRow`) and wired in `lib/screens/phase3_vote.dart`. Target can assign candidate authors to each forgery card with 1:1 exclusivity, instant chip highlighting, and backend sync via `GameService.submitTargetForgeryGuesses`. Safe against own truth and placeholders. State cleared on reader rotation. All 7 widget tests in `test/phase3_vote_target_forgery_attribution_test.dart` passing with 0 overflow at 320pt. Falsifications verified.
 
 #### Feasibility verdict (written for the superseded framing; the architectural findings carry over)
 
