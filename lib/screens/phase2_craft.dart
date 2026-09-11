@@ -21,6 +21,7 @@ import '../widgets/lamp_loading.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/in_game_app_bar.dart';
 import '../theme/app_icons.dart';
+import '../theme/app_motion.dart';
 
 class Phase2CraftScreen extends StatefulWidget {
   const Phase2CraftScreen({super.key});
@@ -29,12 +30,51 @@ class Phase2CraftScreen extends StatefulWidget {
   State<Phase2CraftScreen> createState() => _Phase2CraftScreenState();
 }
 
-class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
+class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindingObserver {
   final TextEditingController _answerController = TextEditingController();
+  final FocusNode _answerFocusNode = FocusNode();
   bool _isSubmitting = false;
   bool _isNavigating = false;
   GamePhase? _lastPhase;
   int? _lastRotation;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _answerFocusNode.addListener(_handleFocusChange);
+  }
+
+  void _handleFocusChange() {
+    if (_answerFocusNode.hasFocus) {
+      _scrollToFieldIfNeeded();
+    }
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (_answerFocusNode.hasFocus) {
+      _scrollToFieldIfNeeded();
+    }
+  }
+
+  void _scrollToFieldIfNeeded() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final fieldContext = _answerFocusNode.context;
+      if (fieldContext != null &&
+          fieldContext.mounted &&
+          _answerFocusNode.hasFocus &&
+          MediaQuery.viewInsetsOf(context).bottom > 0) {
+        Scrollable.ensureVisible(
+          fieldContext,
+          alignment: 1.0,
+          duration: AppMotion.fast,
+        );
+      }
+    });
+  }
 
   void _confirmLeaveGame(BuildContext context, GameService gs) {
     showDialog<void>(
@@ -538,6 +578,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
                         const SizedBox(height: 24),
                         TextField(
                           key: const ValueKey('answer_field'),
+                          focusNode: _answerFocusNode,
                           controller: _answerController,
                           maxLines: 3,
                           textInputAction: TextInputAction.done,
@@ -667,6 +708,9 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _answerFocusNode.removeListener(_handleFocusChange);
+    _answerFocusNode.dispose();
     _answerController.dispose();
     super.dispose();
   }
