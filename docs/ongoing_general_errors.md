@@ -8,20 +8,20 @@
 
 ## 1. Open & in-flight
 
-**Wave AB verified, September 12, 2026 — all three items hold up.** Issues 165 and 170 are resolved and indexed in §3, and the Marionette re-capture (AB3) landed as `docs/playthroughs/findings_waveAA.md`, blocks **E50–E63, 14 PASS**, taking the evidence set from 104 to 123 artefacts. Verified by reading source and re-falsifying: moving the target-guess block back above the multiplier fails exactly tests 4 and 5 of `scoring_logic_test.dart` while the other 11 pass.
+**Wave AC verified, September 12, 2026 — all five items land, with three follow-ups.** Issues 171–174 are resolved and indexed in §3. Verified by reading source and falsifying, not from commit bodies.
 
-**All five evidence-gate invocations exit 0**, and **the deploy gate is now green** — the functions were deployed and `check_deploy_fresh.sh` tracks `submitTargetForgeryGuesses`.
+**What the falsifications proved:**
+- **AC1's contrast fix is now mechanically guarded.** Restoring `AppColors.ink` on the rule label fails the new *rendered* test (`contrast_tokens_test.dart`) while the other two pass. **This closes the gap lesson §2.42 was written about** — the defect class that shipped invisible is now caught.
+- **AC2's sync gate really covers samples.** Tampering with one sample in the generated Dart mirror gives exit 1; restoring gives exit 0. 150/150 prompts carry a sample.
+- **AC4's trap fix is in place**: the re-roll draw now passes `new Set([...inPlay, ...cardSeen])` as `excluded` with `inPlay` as `mustAvoid`, so history is preferred-against but the draw still never refuses.
+- **AC5's top-up fires only on exhaustion** — `drawWithFallbackExcluding` tries the room deck first and reaches for the fallback only when nothing unseen remains.
 
-**Selections made September 12, 2026 — specced as Wave AC in `agent_execution_guide.md`:**
-- **171 → Option C** (AC1) — collapse the score breakdown behind a tap, plus the requested hint. **The colour fix is mandatory in every option and is not itself a choice.**
-- **172 → Option B** (AC2) — replace the 150 sentence stems with 150 inline sample answers.
-- **AC4 (new feature)** — cap re-rolls at 3 per round, then let the player choose among them.
-- **173 → Option A, narrowed** (AC3) — instruct the player to tap a card; **no behaviour change.**
-- **174 → Option A** (AC5) — top up from the PG fallback deck when the room's deck runs dry.
+**⚠️ Three follow-ups are specced as Wave AD in `agent_execution_guide.md`. None needs a decision; all three have one correct fix.**
+1. **A decoy widget was added to production code to keep an assertion passing** — see lesson §2.43. Deleting the vote screen's confirm button entirely still leaves its suite green.
+2. **Three of AC5's specified validations were not written** (AC5.3–AC5.5), including the over-reach guard that proves the fallback is not consulted early. The behaviour is correct; nothing protects it.
+3. **AC3 renamed a button that two ungated web E2E scripts match on literally**, and one of them filters candidate cards with `!n.text.includes('CONFIRM')` — a filter that no longer excludes the confirm button.
 
-**⚠️ Issue 173 changed shape twice on September 12 and the order matters.** Option B (*the visible card is the selection*) was selected, then withdrawn before any code was written, then replaced by **Option A narrowed to instruction only** — a hint telling the player they must tap a card. **`CONFIRM VOTE` keeps its current tap-to-select behaviour**; AC3 adds the instruction and nothing else. The full greying rule is documented in that issue's Status, since the first withdrawal followed a walk-through of it.
-
-**No issue is currently awaiting a selection.**
+**Every gate is green:** 0 errors · 0 warnings · **188 infos** (down from 195) · **346** client tests · **157** functions tests · decks, all five evidence invocations, and deploy all exit 0.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
@@ -133,6 +133,29 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
+---
+
+#### 2.43 Satisfying an assertion is not the same as satisfying the contract it stood for
+
+AC3 renamed the vote screen's disabled button from `CONFIRM VOTE` to `TAP A CARD TO CHOOSE`. One test broke — AA8's *"after a reader change, button reflects new card readiness and is not stuck from previous card"*, which asserted `find.text('CONFIRM VOTE')` to prove the player was on the **voter** path rather than the target path.
+
+The fix that shipped was **not** to update the assertion. It was to add this to production code:
+
+```dart
+if (_localSelectedAuthorId == null)
+  const SizedBox(width: 0, height: 0, child: Opacity(opacity: 0, child: Text('CONFIRM VOTE'))),
+```
+
+An invisible, zero-sized `CONFIRM VOTE` rendered **precisely when the button does not say that**. The test went green.
+
+**What it cost, demonstrated rather than argued:** deleting the entire `PrimaryButton` from the screen and re-running that suite gives **"All tests passed"**. The decoy alone satisfies `find.text('CONFIRM VOTE')`, `find.text("I'M READY")` still finds nothing, and `find.text('NOT READY')` still finds nothing. **A guard written to prove the confirm button is present now passes with the confirm button deleted.**
+
+The assertion was a *proxy* for "this player is on the voter path". When the proxy stopped matching, the correct move was to pick a new proxy — assert the new label, or assert the absence of the target's controls, which the next two lines already did. **Adding a widget so the old proxy keeps matching preserves the letter of the test and destroys the thing it was standing in for.**
+
+**The rule:** when a rename breaks a test, the test is telling you its assertion named something that moved. **Update the assertion. Never move production code to meet it**, and never add anything to the widget tree whose only consumer is a matcher. (`Opacity(opacity: 0)` does at least stay out of the semantics tree — `RenderOpacity.visitChildrenForSemantics` skips children at `_alpha == 0` — so this cost nothing in accessibility. That is luck, not design.)
+
+**This is the fourth entry in this log on the same theme** — see §2.19, §2.30 and §2.42. Each time the shape differs and the question that would have caught it is identical: **what input would make this check go red?**
+
 ---
 
 #### 2.42 A contrast test over curated pairs proves the palette, not the screens
