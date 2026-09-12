@@ -8,23 +8,60 @@
 
 ## 1. Open & in-flight
 
-**Wave AD verified, September 12, 2026.** AD1 and AD3 are delivered and correct. **AD2 should never have been filed** — see the correction below. All three are indexed in §3.
+**Wave AE verified, September 12, 2026 — AE1 is delivered and is the cleanest item in this sequence.** Issue 175 is resolved and indexed in §3.
 
-**Falsified this session, not taken from the commit body:**
-- **AD1 holds.** The decoy is gone from `phase3_vote.dart` and the assertion now names `TAP A CARD TO CHOOSE`. Making the button render nothing while unselected — a change that still compiles — fails Test 2 of `phase3_vote_target_ready_toggle_test.dart` while Test 1 passes. **The guard can fail on the thing it names again**, which is exactly what lesson §2.43 was about.
-- **AD3's code is correct by inspection.** Card selection is now matched *positively* on `OPTION` with `TAP A CARD TO CHOOSE` explicitly excluded; both scripts parse under `node --check`; and `n.ariaLabel` is safe because `playthrough_helpers.js:30` defaults it to `''`. **The implementing agent also found a second break this guide did not anticipate** — `run_match_summary_playthrough.js` used the *presence* of `CONFIRM VOTE` to decide whether a player was a voter, which the rename silently inverted.
+**All four specified falsifications were re-run this session and all four behave:**
+- Injecting a bogus `UI` string → **exit 1**; removing it → exit 0.
+- Adding `'1'` to `UI` → **exit 1** with `VACUITY ERROR`, not a silent skip.
+- A bare literal in a script's `.text` comparison → **exit 1**.
+- The same via a differently-named parameter (`e.` rather than `n.`) → **exit 1**. **The containment scan is genuinely variable-agnostic**, which is the mistake lesson §2.44 was written about.
 
-**⚠️ Correction — AD2 was specced against a false premise, and the error was in the verification pass, not the implementation.** The September 12 verification reported that AC5.3, AC5.4 and AC5.5 "were not written". **They were.** All three shipped in the AC5 commit (`76334b1`) in `functions/test/prompt_decks.spec.ts`, and they are substantive — AC5.4 draws twenty times with ten of twenty-five excluded and asserts every draw comes from the room deck. The verification grep matched `it('AC5` with a single quote; that file uses double quotes, so the tests were invisible to it. **AD2 therefore reduced to adding one genuinely missing assertion** (`getDeckRating` alongside the existing `getDeck(...).rating`), which is what the implementing agent correctly did. Recorded as lesson §2.44.
+**The gate also handles the case that nearly produced a false pass.** `THE NIGHT'S HONORS` is written in Dart as `'THE NIGHT\'S HONORS'`, so a naive substring search for the unescaped value finds nothing. `check_web_e2e_strings.sh` normalises `\'` → `'` before searching, with lesson §2.44 cited in the code.
 
-**⚠️ AD3's end-to-end run is self-reported and the repository does not corroborate it.** The commit states the scripts were validated against a local web build on port 8777. `saveScreenshot` writes into `docs/playthroughs/evidence/`, and `run_full_playthrough.js` rewrites `w8_vote_lockout.png` partway through — **yet the evidence set is unchanged at 123 files and the tree is clean**, so no screenshot was rewritten. The run may well have happened with its output discarded; there is simply no artefact of it. **Treat the script fix as verified by inspection and the end-to-end execution as unverified** (lesson §2.36: a self-reported gate result is a claim, not a measurement).
+**All six stale labels were resolved correctly, not silenced.** The distinction the spec insisted on held: `INSPECT`'s two steps were the sole matcher for a deleted overlay and were removed; `DISMISS`, `Dismiss`, `SHARE`, `ACCUSE`, `VIEW STANDINGS` and `START ROUND` were dead alternates in OR-chains whose live siblings (`CANCEL`, `Share Case File`, `RESOLVING`/`THE REVEAL`/`UNMASK`, `CONTINUE`/`NEXT`) were **all preserved**. No step was blinded to make the gate green.
 
-**Process note:** all three items landed in a single commit (`a0c4c57`), against the standing one-item-one-commit rule. No correctness impact; recorded so the next wave does not treat it as precedent.
+**The over-reach guard held:** AE1 touched no file under `lib/` or `functions/src/`, and the battery is unchanged.
 
-**Every gate is green:** 0 errors · 0 warnings · **188 infos** · **346** client tests · **157** functions tests · decks, all five evidence invocations, deploy, and web E2E strings all exit 0.
+**⚠️ Issue 176 is newly filed and awaits selection.** `pubspec.yaml` has read `1.0.0+7` for **47 commits**, during which `lib/` and `functions/src/` changed by **3,782 insertions and 827 deletions**. Five waves are queued to ship under a build number allocated to one, and the guide's standing *"do not bump"* instruction is now the thing keeping it that way.
+
+**Every gate is green — eight of them:** 0 errors · 0 warnings · **188 infos** · **346** client tests · **157** functions tests · decks, all five evidence invocations, deploy, and the new **`check_web_e2e_strings.sh`** all exit 0.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-All issues from the September 8 playthrough and Waves AA–AE have been resolved. The open queue is empty.
+One open issue, filed during Wave AE verification. Everything from the September 8 playthrough and Waves AA–AE is resolved and indexed in §3.
+
+---
+
+### Issue 176: Five waves of work are queued to ship under a build number allocated to one
+
+**Status**: ⚠️ Confirmed Unresolved — **filed September 12, 2026 during Wave AE verification.** Not a defect; a release decision that has quietly become due.
+
+**The measurement.** `pubspec.yaml` reads `version: 1.0.0+7`. It was last changed by **Wave Z1**, and has not moved in **47 commits**, during which `lib/` and `functions/src/` changed by **3,782 insertions and 827 deletions** across 17 files. Build **7 was never uploaded** — build 6 remains the highest in App Store Connect — so the number is unused and technically free.
+
+**What `1.0.0+7` currently means is therefore ambiguous.** It was allocated to Wave Z (the lobby leave-button latch fix, Issue 152). It would now also label:
+
+- **Wave AA** — dealt-card overlay removed, keyboard handling, character counter, sentence stems, waiting recap, room-code hardening, ready toggle, best-forgery suppression, round multiplier, itemised score breakdown, in-game manual, game-over reorder, highlight cards, stacked-deck vote options, target forgery guessing.
+- **Wave AB** — multiplier exemption, running rivalries, Marionette evidence re-capture.
+- **Wave AC** — collapsible score transcript with the contrast fix, sample answers, tap-to-choose instruction, the 3-re-roll cap and chooser, fallback deck top-up.
+- **Waves AD and AE** — decoy removal and the web E2E string gate.
+
+**Why the ambiguity matters here specifically.** Issue 151 put the version on the title screen *for exactly this purpose*, and Issue 150 was closed with no code change once that label proved a "features are missing" report had been a build-version artefact. **A label that cannot distinguish two very different builds stops doing the job it was added for.** The exposure is small — build 7 was never distributed, and the local archive from September 7 is gone — but the cost of avoiding it is one line.
+
+**⚠️ Whichever option is chosen, `agent_execution_guide.md` must be corrected.** It currently instructs: *"`pubspec.yaml` is at `1.0.0+7` and build 7 has NOT been uploaded. **Do not bump again** before the next upload."* That was right when Wave Z had just bumped it and nothing else had landed. **After 47 commits it is actively misleading**, and an agent following it would ship five waves under Wave Z's number.
+
+**Option A (recommended)**: **Ship as `1.1.0+8`** — move both the marketing version and the build number.
+  - *Pros*: The build number becomes unambiguous, and the marketing version tells the truth about the contents. A tester who sees `v1.0.0 (8)` on the title screen reasonably reads it as a patch over `1.0.0 (6)`; what actually changed is a re-worked craft screen, a new vote layout, a new scoring rule, a new deduction mechanic and a re-roll economy. **The on-screen label is the project's primary defence against build confusion (Issues 150 and 151) and a minor-version bump is what makes it informative rather than merely unique.**
+  - *Cons*: Moves the marketing version for the first time, which touches App Store Connect metadata and may want release notes and a "What to Test" rewrite. If a `1.1.0` is already planned around a specific milestone, spending it here pre-empts that.
+
+**Option B**: **Ship as `1.0.0+8`** — bump only the build number.
+  - *Pros*: Removes the ambiguity at zero product cost and keeps the marketing version for a deliberate milestone. One line, no metadata work, and TestFlight groups continue uninterrupted.
+  - *Cons*: A tester comparing `1.0.0 (6)` with `1.0.0 (8)` has no signal that the second is a substantially different app, which is precisely the confusion Issue 150 turned out to be. Defers the versioning question rather than answering it.
+
+**Option C**: **Ship as `1.0.0+7` unchanged** — the number was never used, so take it.
+  - *Pros*: Nothing to change; the number is genuinely free in App Store Connect, and no build labelled 7 was ever distributed to anyone.
+  - *Cons*: Leaves two meanings for one label — Wave Z's build and this one — in the commit history, the archive names and any local build a developer still has. **It also requires the guide's standing "do not bump" instruction to stay, which is the instruction that allowed five waves to accumulate under one number in the first place.**
+
+Your selection: _____
 
 ---
 
