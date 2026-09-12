@@ -97,6 +97,7 @@
 ---
 
 ### W6 — Truth Crafting Phase & Quill Submission
+> **Superseded note (Wave AA / Wave AB):** The "THE RECORD OF TRUTH" modal dialog observed here was deleted in Wave AA (AA1, Issue 155); superseded by block E50 in `docs/playthroughs/findings_waveAA.md`.
 - **Verdict:** PASS
 - **Clients:** P1 (Alice), P2 (Bob), P3 (Charlie)
 - **Room Code:** `SMYG`
@@ -113,6 +114,7 @@
 ---
 
 ### W7 — Forgery Crafting & Semantic Duplicate Rejection
+> **Superseded note (Wave AA / Wave AB):** The "DECK OF FORGERIES" modal dialog observed here was deleted in Wave AA (AA1, Issue 155); superseded by block E50 in `docs/playthroughs/findings_waveAA.md`.
 - **Verdict:** PASS
 - **Clients:** P1 (Alice), P2 (Bob), P3 (Charlie)
 - **Room Code:** `SMYG`

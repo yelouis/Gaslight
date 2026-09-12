@@ -19,7 +19,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-All issues from the September 8 playthrough have been resolved (Issues 153–170). Both Wave AB items (Issue 170 / AB1 and Issue 165 / AB2) have landed in code and tests. Production functions deployment and evidence re-capture (AB3) remain in-flight.
+All issues from the September 8 playthrough have been resolved (Issues 153–170). Wave AB (AB1 target guess multiplier exemption, AB2 running rivalries & closest read, production functions deploy with CLEANUP_DRY_RUN=false, and AB3 Marionette evidence re-capture E50–E63) is fully delivered, deployed, and verified. The open queue is empty.
 
 
 
@@ -327,6 +327,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AB / AB3 — Marionette playthrough evidence re-capture (E50–E63)** (captured 19 new PNG screenshots across Match A [5 players, room YPQR] and Match B [3 players, room BYVU]; verified E50–E63 under verbatim manifest R6 contract in `findings_waveAA.md`; annotated superseded blocks in `findings_marionette.md` and `findings_web.md`; falsified R5 and R6 gates; verified all 5 evidence gates exit 0 bare) | Wave AB | `docs/playthroughs/findings_waveAA.md`; `docs/playthroughs/manifest.md`; `docs/playthroughs/evidence/ARTEFACTS.tsv` |
 | **Wave AB / AB2 — running rivalries & closest read superlative** (published `runningRivalries` `{ fools, reads }` with `count >= 1` sliced to top 3 per direction on room at reveal and game over; rendered `THE PARLOUR REMEMBERS` section on reveal after author flip with exact copy and `CLOSEST READ` superlative over reads; displayed reads in game-over `RIVALRIES` container; preserved strict author leak prevention during unmask window; verified leak guard, flush sites, attributions, thresholds, 320 pt responsiveness, and over-reach guards; falsified leak and threshold guards) | 165 | `functions/src/index.ts`; `functions/src/scoring_logic.ts`; `lib/models/game_state.dart`; `lib/screens/phase4_reveal.dart`; `lib/screens/game_over_screen.dart`; `test/running_rivalries_test.dart`; `functions/test/game_e2e.spec.ts`; `design_scoring_and_ui.md`; `design_database_and_security.md`; `design_ui_direction.md` |
 | **Wave AB / AB1 — target forgery guess multiplier exemption** (exempted `target_forger_guess` points from round multiplier by reordering `calculateScoresAndBreakdown` to execute guess points calculation after the multiplier block in both `functions/src/scoring_logic.ts` and `lib/utils/scoring_logic.dart`; verified sum invariant holds; verified 2x3+3=9 at round 3 in TS and Dart suites; inverted test 4 in both suites and falsified with 15 vs 9) | 170 | `functions/src/scoring_logic.ts`; `lib/utils/scoring_logic.dart`; `functions/test/scoring_logic.spec.ts`; `test/scoring_logic_test.dart`; `design_scoring_and_ui.md` |
 | **Wave AA / Issue 160 — stacked-deck vote options** (replaced the scrolling one-per-row portrait list in `card_grid.dart` with Treatment 3, chosen by the user from four rendered mockups in `docs/mockups/vote_options/`; six options fit a 320×640 pt viewport with no vertical scroll while `AutoSizedAnswerText` still renders a full 100-character answer; bidirectional navigation via PREV/NEXT, horizontal swipe and jump dots, as the selection explicitly required; **rewrote** `vote_option_truncation_test.dart`'s P9 discoverability case, which had asserted the below-the-fold behaviour this removes) | 160 | `lib/widgets/card_grid.dart`; `test/stacked_deck_navigation_test.dart`; `test/vote_option_truncation_test.dart`; `design_ui_direction.md` |
@@ -444,7 +445,7 @@ These were designed, costed and consciously **not** selected. Their absence is a
 | Card passing, disconnect recalculation, input validation | `design_rotation_engine.md` |
 | Duplicate-answer heuristic | `design_semantic_integrity.md` |
 | Manual playtest journeys | `e2e_testing_journeys.md` |
-| Playthrough evidence and its provenance | `findings_marionette.md` |
+| Playthrough evidence and its provenance | `docs/playthroughs/` (`findings_waveAA.md`, `findings_5player.md`, `findings_marionette.md`, `findings_web.md`) |
 | Rules assertions | `functions/test/rules.spec.ts` |
 | Callable / authorization assertions | `functions/test/game_e2e.spec.ts` |
 | Full history of any resolved item | `git log` |

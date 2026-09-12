@@ -6,3 +6,22 @@ E48	e48_p5_r2_revenge_result_v2.png	P5 iPhone Air (Erin)	2026-08-29T23:08:08Z	Sa
 E49	r0_u2_p3_reduce_motion.png	P3 iPhone 17 Pro Max (Charlie)	2026-08-31T02:04:12Z	Truth phase dossier input screen with Reduce Motion enabled (ReduceMotionEnabled: 1); particle layer is suppressed, gradient background and content intact
 E49	e49_p1_presence_within_window.png	P1 iPhone 17 (Alice, Host)	2026-08-31T02:07:38Z	Waiting screen at ~2 min mark (7:07) after P5 termination at 02:05:31Z; P5 (Erin) remains seated in the roster
 E49	e49_p1_presence_after_window.png	P1 iPhone 17 (Alice, Host)	2026-08-31T02:16:55Z	Waiting screen at ~11 min mark (7:16) after P5 termination; P5 (Erin) is absent/removed from the roster
+E50	e50_p1_craft_no_modal.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:51:01Z	Truth crafting screen on initial render without overlay modal; answer field immediately interactive
+E51	e51_p1_counter_normal.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:51:27Z	Live character counter displaying normal character count (54/100) below answer field
+E51	e51_p1_counter_overflow.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:51:39Z	Live character counter displaying overflow count (109/100) in error color
+E52	e52_p1_sentence_stem_empty_field.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:51:01Z	Sentence stem hint rendered beneath empty answer field without pre-filling the field
+E53	e53_p1_craft_waiting_recap.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:52:30Z	Craft waiting screen showing player's own submitted truth answer and prompt recap
+E54	e54_p1_field_above_keyboard.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:51:27Z	Answer text field positioned above active on-screen keyboard during typing
+E55	e55_p1_stacked_deck_front.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:54:27Z	Vote screen stacked deck showing active option in front with next option card peeking behind and navigation affordances
+E55	e55_p1_stacked_deck_backward.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:54:45Z	Vote screen stacked deck displaying previous option card brought back to front after right-swipe backward navigation
+E56	e56_p1_target_truth_no_attribution.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:54:54Z	Target's own truth card on vote screen showing absence of attribution chip row
+E56	e56_p1_target_attribution_selected.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:57:15Z	Target view of forgery card with author attribution chip row and selected author chip
+E57	e57_p1_target_ready_toggle_not_ready.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:57:35Z	Target ready button displaying NOT READY after tap toggle interaction
+E58	e58_p1_reveal_score_breakdown.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:59:36Z	Reveal screen score tray showing itemized breakdown with named scoring rules alongside player totals
+E59	e59_p1_reveal_unmask_withheld.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:58:44Z	Reveal screen during active unmask window showing THE PARLOUR REMEMBERS rivalries block withheld
+E59	e59_p1_reveal_rivalries_published.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:59:36Z	Reveal screen after author flip displaying THE PARLOUR REMEMBERS block with running rivalry lines
+E60	e60_p1_game_over_standings_above_honors.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T23:14:02Z	Game Over screen with FINAL RESULTS heading and final standings placed directly above THE NIGHT'S HONORS
+E61	e61_p1_match_highlight_best_lie.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T23:14:26Z	Match highlight card with BEST LIE OF THE NIGHT heading and fooled-players count on a separate line
+E62	e62_p1_manual_appbar_button.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:51:04Z	In-game AppBar showing Game Manual book icon button in trailing slot during active game phase
+E62	e62_p1_manual_open_over_phase.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T20:51:10Z	Game Manual bottom sheet open over active craft screen without disrupting game state
+E63	e63_p1_reveal_suppressed_best_forgery.png	P1 iPhone 17 Pro (Alice, Host)	2026-09-11T23:20:22Z	Three-player reveal screen where forgeries drew only 1 vote and BEST FORGERY OF THE ROUND banner is suppressed

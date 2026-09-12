@@ -44,6 +44,7 @@ updateLobbySettings        2026-08-16T01:39:39.296891474Z
 ## Pre-Demo Ship Assertions (E1 — E12 + Extras E13 — E15)
 
 ### E1 — Match Play & Lifecycle Progression
+> **Superseded note (Wave AA / Wave AB):** The modal dialogs ("THE RECORD OF TRUTH" / "DECK OF FORGERIES") observed here were deleted in Wave AA (AA1, Issue 155); superseded by block E50 in `docs/playthroughs/findings_waveAA.md`.
 - **Verdict:** PASS
 - **Devices:** P1 `iPhone 17 Pro` (Host, Alice), P2 `iPhone 17 Pro Max` (Bob), P3 `iPhone 17` (Charlie)
 - **Room Code:** `GLRD`
