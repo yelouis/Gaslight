@@ -2,7 +2,7 @@
 set -eo pipefail
 
 PROJECT_ID="gaslight-46368"
-EXPECTED_FUNCTION_COUNT=17
+EXPECTED_FUNCTION_COUNT=18
 EXPECTED_FUNCTIONS=(
   "advancePhase"
   "advanceToNextResolution"
@@ -19,6 +19,7 @@ EXPECTED_FUNCTIONS=(
   "setReady"
   "startGame"
   "submitAnswer"
+  "submitTargetForgeryGuesses"
   "submitUnmaskGuess"
   "updateLobbySettings"
 )
