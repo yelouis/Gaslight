@@ -8,62 +8,23 @@
 
 ## 1. Open & in-flight
 
-**Wave AE verified, September 12, 2026 — AE1 is delivered and is the cleanest item in this sequence.** Issue 175 is resolved and indexed in §3.
+**Wave AF verified, September 12, 2026 — AF1 is delivered.** Issue 176 is resolved and indexed in §3.
 
-**All four specified falsifications were re-run this session and all four behave:**
-- Injecting a bogus `UI` string → **exit 1**; removing it → exit 0.
-- Adding `'1'` to `UI` → **exit 1** with `VACUITY ERROR`, not a silent skip.
-- A bare literal in a script's `.text` comparison → **exit 1**.
-- The same via a differently-named parameter (`e.` rather than `n.`) → **exit 1**. **The containment scan is genuinely variable-agnostic**, which is the mistake lesson §2.44 was written about.
+**The release shipped cleanly as `1.1.0+8`:**
+- `pubspec.yaml` was bumped from `1.0.0+7` to `1.1.0+8` (exactly one line of application code).
+- Stale build 6 archive and build 2 ipa were deleted before building.
+- Fresh `.xcarchive` was produced by `flutter build ipa` and verified with `PlistBuddy` (`1.1.0`, `8`) and current timestamp.
+- Web release was compiled and deployed to Firebase Hosting (`https://gaslight-46368.web.app`), with `version.json` confirming `1.1.0 (8)`.
+- On-device acceptance test verified on iOS simulator: runtime title screen displays `v1.1.0 (8)` beneath `READ MANUAL`.
+- Runbook in `README.md` was synchronized with the 8th preflight gate (`check_web_e2e_strings.sh`) and info count aligned to 188.
+- No files under `lib/`, `functions/`, `test/` or `ios/` were touched beyond `pubspec.yaml` and `README.md`.
+- All eight preflight baseline gates are green bare.
 
-**The gate also handles the case that nearly produced a false pass.** `THE NIGHT'S HONORS` is written in Dart as `'THE NIGHT\'S HONORS'`, so a naive substring search for the unescaped value finds nothing. `check_web_e2e_strings.sh` normalises `\'` → `'` before searching, with lesson §2.44 cited in the code.
-
-**All six stale labels were resolved correctly, not silenced.** The distinction the spec insisted on held: `INSPECT`'s two steps were the sole matcher for a deleted overlay and were removed; `DISMISS`, `Dismiss`, `SHARE`, `ACCUSE`, `VIEW STANDINGS` and `START ROUND` were dead alternates in OR-chains whose live siblings (`CANCEL`, `Share Case File`, `RESOLVING`/`THE REVEAL`/`UNMASK`, `CONTINUE`/`NEXT`) were **all preserved**. No step was blinded to make the gate green.
-
-**The over-reach guard held:** AE1 touched no file under `lib/` or `functions/src/`, and the battery is unchanged.
-
-**⚠️ Issue 176 is newly filed and awaits selection.** `pubspec.yaml` has read `1.0.0+7` for **47 commits**, during which `lib/` and `functions/src/` changed by **3,782 insertions and 827 deletions**. Five waves are queued to ship under a build number allocated to one, and the guide's standing *"do not bump"* instruction is now the thing keeping it that way.
-
-**Every gate is green — eight of them:** 0 errors · 0 warnings · **188 infos** · **346** client tests · **157** functions tests · decks, all five evidence invocations, deploy, and the new **`check_web_e2e_strings.sh`** all exit 0.
+**The queue is empty — 0 open items.**
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issue 176 was selected September 12, 2026 — Option A — and is specced as AF1** in `agent_execution_guide.md`. It stays here until the release ships. Everything from the September 8 playthrough and Waves AA–AE is resolved and indexed in §3.
-
-**⚠️ Two stale build artefacts are on disk right now and both will mislead a release check.** `build/ios/archive/Runner.xcarchive` is dated **2026-09-07 21:21** and contains **`1.0.0` / build `6`** — it is not build 7 and never was. `build/ios/ipa/gaslight.ipa` is dated **2026-08-25**, from the build-2 era, and `flutter build ipa` will not overwrite it because the export step fails on this machine. **AF1 deletes both before building**, so that whatever remains under `build/ios/` afterwards was produced by that run.
-
----
-
-### Issue 176: Five waves of work are queued to ship under a build number allocated to one
-
-**Status**: ⚠️ Confirmed Unresolved — **filed September 12, 2026 during Wave AE verification.** Not a defect; a release decision that has quietly become due.
-
-**The measurement.** `pubspec.yaml` reads `version: 1.0.0+7`. It was last changed by **Wave Z1**, and has not moved in **47 commits**, during which `lib/` and `functions/src/` changed by **3,782 insertions and 827 deletions** across 17 files. Build **7 was never uploaded** — build 6 remains the highest in App Store Connect — so the number is unused and technically free.
-
-**What `1.0.0+7` currently means is therefore ambiguous.** It was allocated to Wave Z (the lobby leave-button latch fix, Issue 152). It would now also label:
-
-- **Wave AA** — dealt-card overlay removed, keyboard handling, character counter, sentence stems, waiting recap, room-code hardening, ready toggle, best-forgery suppression, round multiplier, itemised score breakdown, in-game manual, game-over reorder, highlight cards, stacked-deck vote options, target forgery guessing.
-- **Wave AB** — multiplier exemption, running rivalries, Marionette evidence re-capture.
-- **Wave AC** — collapsible score transcript with the contrast fix, sample answers, tap-to-choose instruction, the 3-re-roll cap and chooser, fallback deck top-up.
-- **Waves AD and AE** — decoy removal and the web E2E string gate.
-
-**Why the ambiguity matters here specifically.** Issue 151 put the version on the title screen *for exactly this purpose*, and Issue 150 was closed with no code change once that label proved a "features are missing" report had been a build-version artefact. **A label that cannot distinguish two very different builds stops doing the job it was added for.** The exposure is small — build 7 was never distributed, and the local archive from September 7 is gone — but the cost of avoiding it is one line.
-
-**⚠️ Whichever option is chosen, `agent_execution_guide.md` must be corrected.** It currently instructs: *"`pubspec.yaml` is at `1.0.0+7` and build 7 has NOT been uploaded. **Do not bump again** before the next upload."* That was right when Wave Z had just bumped it and nothing else had landed. **After 47 commits it is actively misleading**, and an agent following it would ship five waves under Wave Z's number.
-
-**Option A (recommended)**: **Ship as `1.1.0+8`** — move both the marketing version and the build number.
-  - *Pros*: The build number becomes unambiguous, and the marketing version tells the truth about the contents. A tester who sees `v1.0.0 (8)` on the title screen reasonably reads it as a patch over `1.0.0 (6)`; what actually changed is a re-worked craft screen, a new vote layout, a new scoring rule, a new deduction mechanic and a re-roll economy. **The on-screen label is the project's primary defence against build confusion (Issues 150 and 151) and a minor-version bump is what makes it informative rather than merely unique.**
-  - *Cons*: Moves the marketing version for the first time, which touches App Store Connect metadata and may want release notes and a "What to Test" rewrite. If a `1.1.0` is already planned around a specific milestone, spending it here pre-empts that.
-
-**Option B**: **Ship as `1.0.0+8`** — bump only the build number.
-  - *Pros*: Removes the ambiguity at zero product cost and keeps the marketing version for a deliberate milestone. One line, no metadata work, and TestFlight groups continue uninterrupted.
-  - *Cons*: A tester comparing `1.0.0 (6)` with `1.0.0 (8)` has no signal that the second is a substantially different app, which is precisely the confusion Issue 150 turned out to be. Defers the versioning question rather than answering it.
-
-**Option C**: **Ship as `1.0.0+7` unchanged** — the number was never used, so take it.
-  - *Pros*: Nothing to change; the number is genuinely free in App Store Connect, and no build labelled 7 was ever distributed to anyone.
-  - *Cons*: Leaves two meanings for one label — Wave Z's build and this one — in the commit history, the archive names and any local build a developer still has. **It also requires the guide's standing "do not bump" instruction to stay, which is the instruction that allowed five waves to accumulate under one number in the first place.**
-
-Your selection: **Proceed with Option A** (September 12, 2026) — ship as **`1.1.0+8`**. Specced as **AF1** in `agent_execution_guide.md`. **Exactly one line of the app changes** (`pubspec.yaml`); iOS reads the version through `$(FLUTTER_BUILD_NAME)`/`$(FLUTTER_BUILD_NUMBER)` and the title-screen label reads the running bundle, so neither needs editing.
+None — the queue is empty. All issues through Issue 176 are resolved and indexed in §3.
 
 ---
 
@@ -414,12 +375,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–175 — August 8 to September 12, 2026
+### Issues 65–176 — August 8 to September 12, 2026
 
-**99 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**100 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AF / AF1 — ship as 1.1.0+8** (bumped `pubspec.yaml` from `1.0.0+7` to `1.1.0+8`, ending 47-commit accumulation across 5 waves under Wave Z's build number; verified `CFBundleShortVersionString` and `CFBundleVersion` derived from build metadata; verified runtime title-screen version label displays `v1.1.0 (8)` on device/simulator; deleted stale build 6 archive and build 2 ipa; built fresh `.xcarchive` verified with timestamp, `1.1.0` and `8`; deployed web hosting to production; added `check_web_e2e_strings.sh` to `README.md` preflight and aligned info count to 188; all 8 gates green bare; 0 open items) | 176 | `pubspec.yaml`; `README.md`; `docs/agent_execution_guide.md` §1 |
 | **Wave AE / AE1 — gate web E2E UI strings against production code** (declared all UI labels matched by web E2E scripts in frozen `UI` map in `test/web_e2e/ui_strings.js`; replaced bare literals in `playthrough_helpers.js`, `run_full_playthrough.js`, and `run_match_summary_playthrough.js` with `UI`/`FIXTURE` references; pruned 6 dead steps/alternates including stale `INSPECT`, `DISMISS`, `ACCUSE`, `SHARE`, `VIEW STANDINGS`, and `START ROUND`; added `scripts/check_web_e2e_strings.sh` gate verifying non-vacuity, presence in `lib/**/*.dart`, and variable-agnostic containment in E2E scripts; battery gate exits 0 bare) | 175 | `test/web_e2e/ui_strings.js`; `scripts/check_web_e2e_strings.sh`; `test/web_e2e/playthrough_helpers.js`; `test/web_e2e/run_full_playthrough.js`; `test/web_e2e/run_match_summary_playthrough.js`; `docs/agent_execution_guide.md` §1 |
 | **Wave AD / AD1 — delete decoy CONFIRM VOTE widget & fix voter assertion** (deleted invisible zero-sized `CONFIRM VOTE` widget from `phase3_vote.dart:580–581` added during AC3; updated `phase3_vote_target_ready_toggle_test.dart:171` to assert `TAP A CARD TO CHOOSE`; audited all other `CONFIRM VOTE` references; falsified by deleting `PrimaryButton` and observing test failure; all 20 over-reach guards passed unedited) | AD1 | `lib/screens/phase3_vote.dart`; `test/phase3_vote_target_ready_toggle_test.dart`; `docs/ongoing_general_errors.md` §2.43 |
 | **Wave AD / AD2 — write & falsify AC5 validations** (asserted `PromptDecks.getDeckRating(PromptDecks.getFallbackDeckId()) === "PG"` in `functions/test/prompt_decks.spec.ts`; falsified AC5.4 via eager fallback consultation, AC5.5 via R-rated fallback deck, and AC5.3 via throwing exhaustion path; documented exhaustion-only ordering and load-bearing PG rating in `design_prompt_system.md` §5) | AD2 | `functions/test/prompt_decks.spec.ts`; `docs/design_prompt_system.md` §5 |
