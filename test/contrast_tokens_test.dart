@@ -2,13 +2,29 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gaslight/theme/app_colors.dart';
+import 'package:gaslight/models/game_state.dart';
+import 'package:gaslight/models/player_state.dart';
+import 'package:gaslight/models/card_model.dart';
+import 'package:gaslight/screens/phase4_reveal.dart';
+import 'package:gaslight/services/game_service.dart';
 import 'helpers/png_decoder.dart';
+import 'fake_functions.dart';
+import 'simulation_test.dart';
 
 void main() {
   double getContrastRatio(Color fg, Color bg) {
-    final l1 = relativeLuminance(fg.red, fg.green, fg.blue);
-    final l2 = relativeLuminance(bg.red, bg.green, bg.blue);
+    final fgR = (fg.r * 255.0).round().clamp(0, 255);
+    final fgG = (fg.g * 255.0).round().clamp(0, 255);
+    final fgB = (fg.b * 255.0).round().clamp(0, 255);
+    final bgR = (bg.r * 255.0).round().clamp(0, 255);
+    final bgG = (bg.g * 255.0).round().clamp(0, 255);
+    final bgB = (bg.b * 255.0).round().clamp(0, 255);
+
+    final l1 = relativeLuminance(fgR, fgG, fgB);
+    final l2 = relativeLuminance(bgR, bgG, bgB);
     return contrastRatio(l1, l2);
   }
 
@@ -121,5 +137,138 @@ void main() {
     final measuredRatio = contrastRatio(bgLum, textLum);
     expect(measuredRatio, greaterThanOrEqualTo(4.5),
         reason: 'Rendered reveal answer text body on groundRaised background must have contrast ratio >= 4.5:1. Got $measuredRatio');
+  });
+
+  testWidgets('rendered score breakdown text widgets in reveal subtree satisfy WCAG AA contrast floor >= 4.5:1', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final mockDb = FakeFirestore();
+    final gameService = GameService(db: mockDb, functions: FakeFirebaseFunctions(mockDb));
+
+    try {
+      final localPlayer = PlayerState(id: 'local_player_id', name: 'Alice', joinedAt: 100);
+      final guest1 = PlayerState(id: 'guest_1', name: 'Bob', joinedAt: 200);
+
+      final card = CardModel(
+        targetPlayerId: 'local_player_id',
+        promptText: 'A prompt for testing contrast',
+        truthAnswer: 'The truth',
+        scoreDeltas: {
+          'guest_1': 3,
+        },
+        scoreBreakdown: {
+          'guest_1': [
+            const ScoreBreakdownItem(rule: 'successful_forgery', points: 3),
+          ],
+        },
+      );
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.reveal,
+        totalPlayers: 2,
+        currentReaderId: 'local_player_id',
+        cards: [card],
+        readyPlayers: {'local_player_id': true, 'guest_1': true},
+        resolutionOrder: ['local_player_id'],
+        unmaskDeadline: 0,
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('local_player_id').set(
+        localPlayer.toMap()..['authUid'] = 'local_auth_uid',
+      );
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('guest_1').set(
+        guest1.toMap()..['authUid'] = 'guest_1_auth_uid',
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('room_code', 'TEST');
+      await prefs.setString('player_id', 'local_player_id');
+      await gameService.tryRejoinSession();
+      gameService.listenToRoom('TEST');
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: const MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(accessibleNavigation: true),
+              child: Phase4RevealScreen(),
+            ),
+          ),
+        ),
+      );
+
+      // Settle reveal stage to >= 4
+      for (int i = 0; i < 25; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+
+      // Tap Bob's chip to expand the breakdown
+      final chipFinder = find.byKey(const ValueKey('score_breakdown_chip_guest_1'));
+      expect(chipFinder, findsOneWidget);
+      await tester.tap(chipFinder);
+      await tester.pump();
+
+      // Find container inside the chip to get its background decoration
+      final containerFinder = find.descendant(of: chipFinder, matching: find.byType(Container)).first;
+      final containerWidget = tester.widget<Container>(containerFinder);
+      final boxDec = containerWidget.decoration as BoxDecoration;
+      final chipTint = boxDec.color ?? Colors.transparent;
+      final effectiveBg = Color.alphaBlend(chipTint, AppColors.ground);
+
+      // Walk all Text widgets inside the expanded breakdown subtree
+      final breakdownItemsFinder = find.byKey(const ValueKey('score_breakdown_items_guest_1'));
+      expect(breakdownItemsFinder, findsOneWidget);
+
+      final textWidgets = tester.widgetList<Text>(
+        find.descendant(of: breakdownItemsFinder, matching: find.byType(Text)),
+      ).toList();
+
+      expect(textWidgets.isNotEmpty, isTrue, reason: 'Must find text widgets in expanded breakdown');
+
+      final List<({String desc, Color color, double ratio})> inspected = [];
+
+      for (final text in textWidgets) {
+        final List<(String, Color)> colors = [];
+        if (text.style?.color != null) {
+          colors.add((text.data ?? 'plain', text.style!.color!));
+        }
+        if (text.textSpan != null) {
+          text.textSpan!.visitChildren((span) {
+            if (span is TextSpan && span.style?.color != null) {
+              colors.add((span.text ?? 'span', span.style!.color!));
+            }
+            return true;
+          });
+        }
+
+        for (final entry in colors) {
+          final label = entry.$1;
+          final color = entry.$2;
+          final effectiveFg = Color.alphaBlend(color, effectiveBg);
+          final ratio = getContrastRatio(effectiveFg, effectiveBg);
+          inspected.add((desc: label, color: color, ratio: ratio));
+          expect(
+            ratio,
+            greaterThanOrEqualTo(4.5),
+            reason: 'Rendered text "$label" with color $color on background $effectiveBg must satisfy WCAG AA ratio >= 4.5:1. Got $ratio',
+          );
+        }
+      }
+
+      // Ensure we actually inspected the breakdown line tokens
+      expect(inspected.any((i) => i.desc.contains('Successful Forgery') || i.desc.contains(': +3')), isTrue,
+          reason: 'Must have inspected the expanded rule lines');
+    } finally {
+      gameService.dispose();
+    }
   });
 }

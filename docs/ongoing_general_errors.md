@@ -29,39 +29,7 @@ All issues from the September 8 playthrough have been resolved (Issues 153–170
 
 
 
-### Issue 171: The score transcript is invisible, and its boxes are ragged
 
-**Status**: ⚠️ Confirmed Unresolved — reported from a device playthrough on September 12, 2026, with the screenshot showing `POINTS AWARDED THIS CARD` where only the player names and totals are legible. **Two separate defects in one widget** (`lib/screens/phase4_reveal.dart`, the `POINTS AWARDED THIS CARD` block).
-
-**Defect 1 — the breakdown text uses the wrong colour token, and this is not a matter of taste.** Each rule line renders with `theme.colorScheme.onSurface.withValues(alpha: 0.8)`. `onSurface` is defined as `AppColors.ink` (`lib/main.dart:99`), which `app_colors.dart:12` documents as **"Text on parchment"** — a near-black brown for use on the light parchment surface. It is being drawn on the dark ground instead. Measured:
-
-| Foreground on `ground` (`0xFF14110E`) | Contrast |
-|---|---|
-| **`ink` @ 0.8 alpha — what ships today** | **1.12 : 1** |
-| `brass` | 7.84 : 1 |
-| `ivory` — the token `app_colors.dart:13` designates "Text on ground" | **16.25 : 1** |
-
-WCAG AA for body text is **4.5 : 1**. At 1.12 : 1 the text is effectively not rendered. **Every option below fixes this; it is not one of the choices.**
-
-**⚠️ `test/contrast_tokens_test.dart` exists and passed throughout.** It checks five hand-curated pairs — `ivory`/`ground`, `ivory`/`groundRaised`, `ink`/`parchment`, `brass`/`ground`, `verdigris`/`ground` — all of which are correct by construction. **It verifies the palette is sound; it cannot catch a widget that reaches for the wrong token**, because the wrong pairing is simply not in its list. Whatever is selected must close that gap, not just recolour the text.
-
-**Defect 2 — the boxes are different sizes.** The chips sit in a `Wrap` and each is a `Column(mainAxisSize: MainAxisSize.min)`, so every box shrinks to its own content. A player with two rule lines gets a tall box and a player with one gets a short box, side by side in the same row. In the screenshot Bob's box is roughly twice Charlie's height, and because the rule lines are invisible the extra height reads as empty space rather than as content.
-
-**Option A (recommended)**: **Fix the token and make it a uniform two-column grid** — switch the rule lines to `AppColors.ivory` (with the rule *name* in `brass` to separate label from value), and replace the `Wrap` with a fixed two-column layout whose cells share one height driven by the longest breakdown in the round.
-  - *Pros*: Fixes both complaints with one layout change and one token change. A grid of equal cells reads as a table, which is what a score transcript is; ragged boxes read as a bug even when nothing is wrong. Equal heights also make the screen stable as rules accumulate through a round rather than reflowing each card. Contained to one widget.
-  - *Cons*: A uniform height is set by the worst case, so cards where one player has four rule lines and everyone else has one will show visible empty space in three cells. At 320 pt two columns leaves each cell narrow, so a long rule name like `Believable Target` may need abbreviating or wrapping — check it at the smallest width before assuming it fits.
-
-**Option B**: **Fix the token and switch to one full-width row per player** — a vertical list, each row showing avatar, name, total, and the rule lines indented beneath.
-  - *Pros*: No width pressure at all, so rule names never need shortening and the layout is identical at every viewport. Ragged heights stop mattering because nothing sits beside anything else. Simplest possible change after the colour fix.
-  - *Cons*: Much taller — five players with breakdowns could add several hundred pixels to a reveal screen that is already long and already scrolls. Pushes the standings and `THE PARLOUR REMEMBERS` further below the fold.
-
-**Option C**: **Fix the token and collapse the breakdown behind a tap** — show only `Name: +N` chips as today, and reveal that player's rule lines when their chip is tapped.
-  - *Pros*: Keeps the reveal compact and the chips uniform, since every chip holds exactly one line. The transcript is still reachable for anyone who wants to know why, which is what Issue 169 asked for. Scales to any number of rules without touching the layout.
-  - *Cons*: Hides the thing Issue 169 was filed to surface — a player who does not know the detail exists will never tap. Adds an interaction to a screen that is on a timer and already carries the unmask window.
-
-Your selection: Proceed with Option C. Maybe write a hint somewhere that says Tap to see score breakdown?
-
----
 
 ### Issue 172: Sentence stems ask the wrong thing; sample answers were requested instead
 
@@ -487,12 +455,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–170 — August 8 to September 11, 2026
+### Issues 65–171 — August 8 to September 12, 2026
 
-**94 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**95 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AC / AC1 — collapse score breakdown behind tap & fix contrast** (collapsed per-player itemised score breakdown behind tap in `phase4_reveal.dart` with uniform collapsed chip height; expanded rule lines use `AppColors.brass` for rule names and `AppColors.ivory` for point deltas, completely eliminating `onSurface`/`ink` contrast defect; added verbatim hint `Tap a player to see their score breakdown` in `brass` 11pt; reset expansion state on card advance keyed on `currentReaderId`; added rendered contrast test asserting ratio >= 4.5:1 on rendered `Text` widgets in `contrast_tokens_test.dart` and 4 widget tests in `phase4_reveal_breakdown_test.dart`; falsified contrast with `onSurface` at 1.01:1 and card advance reset) | 171 | `lib/screens/phase4_reveal.dart`; `test/contrast_tokens_test.dart`; `test/phase4_reveal_breakdown_test.dart`; `design_ui_direction.md` |
 | **Wave AB / AB3 — Marionette playthrough evidence re-capture (E50–E63)** (captured 19 new PNG screenshots across Match A [5 players, room YPQR] and Match B [3 players, room BYVU]; verified E50–E63 under verbatim manifest R6 contract in `findings_waveAA.md`; annotated superseded blocks in `findings_marionette.md` and `findings_web.md`; falsified R5 and R6 gates; verified all 5 evidence gates exit 0 bare) | Wave AB | `docs/playthroughs/findings_waveAA.md`; `docs/playthroughs/manifest.md`; `docs/playthroughs/evidence/ARTEFACTS.tsv` |
 | **Wave AB / AB2 — running rivalries & closest read superlative** (published `runningRivalries` `{ fools, reads }` with `count >= 1` sliced to top 3 per direction on room at reveal and game over; rendered `THE PARLOUR REMEMBERS` section on reveal after author flip with exact copy and `CLOSEST READ` superlative over reads; displayed reads in game-over `RIVALRIES` container; preserved strict author leak prevention during unmask window; verified leak guard, flush sites, attributions, thresholds, 320 pt responsiveness, and over-reach guards; falsified leak and threshold guards) | 165 | `functions/src/index.ts`; `functions/src/scoring_logic.ts`; `lib/models/game_state.dart`; `lib/screens/phase4_reveal.dart`; `lib/screens/game_over_screen.dart`; `test/running_rivalries_test.dart`; `functions/test/game_e2e.spec.ts`; `design_scoring_and_ui.md`; `design_database_and_security.md`; `design_ui_direction.md` |
 | **Wave AB / AB1 — target forgery guess multiplier exemption** (exempted `target_forger_guess` points from round multiplier by reordering `calculateScoresAndBreakdown` to execute guess points calculation after the multiplier block in both `functions/src/scoring_logic.ts` and `lib/utils/scoring_logic.dart`; verified sum invariant holds; verified 2x3+3=9 at round 3 in TS and Dart suites; inverted test 4 in both suites and falsified with 15 vs 9) | 170 | `functions/src/scoring_logic.ts`; `lib/utils/scoring_logic.dart`; `functions/test/scoring_logic.spec.ts`; `test/scoring_logic_test.dart`; `design_scoring_and_ui.md` |
