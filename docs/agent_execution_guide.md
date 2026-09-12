@@ -1,22 +1,22 @@
-# Agent Execution Guide — Awaiting Selections: no approved work — September 12, 2026
+# Agent Execution Guide — Wave AC: 4 approved items — September 12, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Every number and literal string in this document is a decision, not a suggestion.**
 
-**Wave AB is delivered and independently verified.** AB1 (Issue 170), AB2 (Issue 165) and AB3 (the Marionette evidence re-capture) all landed and hold up under re-falsification. Every gate is green, **including the deploy gate for the first time in a week.**
+Three selections were made in `docs/ongoing_general_errors.md` on September 12, 2026, and the user added one new feature. They are **AC1–AC4**.
 
-**⚠️ Three issues — 171, 172 and 173 — are open in `docs/ongoing_general_errors.md` and NONE is selected.** Each ends in a blank `Your selection: _____`. **That line belongs to the user and an agent must never fill it in.** An unselected issue is a question, not an instruction, and a `(recommended)` label is not approval.
+**Do only what is specified here.** A `(recommended)` label is not approval; a filled `Your selection:` line is. **Never fill one in.**
 
-**One of them is a live defect you should know about even though you must not start it.** Issue 171: the score transcript added by Issue 169 renders its rule lines at **1.12 : 1** contrast against a 4.5 : 1 floor — the feature is on screen and unreadable. It is filed with options because the *layout* half needs a decision; the colour half does not, and every option fixes it.
+**⚠️ Issue 174 is filed and UNSELECTED.** It is the deck-capacity question AC4 raises. **AC4 ships without waiting for it** — the spec below degrades safely on a small deck — but do not implement Issue 174's options until a selection exists.
 
-**Do not invent work.** The only legitimate actions are in §3.1.
+**Implement in order.** AC2 and AC4 both edit the craft screen; AC2 first so AC4 builds on settled copy.
 
 ---
 
-## 1. Verified baseline — measured this session on `d726790`
+## 1. Verified baseline — measured on `ff0b9cd`
 
-Every number was run bare. **This is the regression bar.**
+**This is the regression bar.** Every number was run bare.
 
 | Gate | Result |
 |---|---|
@@ -25,30 +25,205 @@ Every number was run bare. **This is the regression bar.**
 | `npm --prefix functions run build` | clean, exit 0 |
 | `npm --prefix functions test` | **144 passing**, exit 0 |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
-| `./scripts/check_playthrough_evidence.sh` — **all five** invocations | **exit 0** (no-arg, marionette, web, 5player, **waveAA**) |
-| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH.** Functions deployed; the gate now tracks `submitTargetForgeryGuesses`. |
+| `./scripts/check_playthrough_evidence.sh` — **all five** invocations | **exit 0** |
+| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH** |
 
-**⚠️ `flutter analyze lib test` exits 1 even when clean** — it exits non-zero on *infos*. The bar is **0 errors / 0 warnings / 195 infos**, never `exit 0`. Use `lib test`, never bare `flutter analyze`.
+**⚠️ `flutter analyze lib test` exits 1 even when clean.** The bar is **0 errors / 0 warnings / 195 infos**, never `exit 0`. Use `lib test`.
 
-**⚠️ Read every exit code bare, never through a pipe.** `flutter analyze … | tail` reports `tail`'s status, which is always 0.
-
-**⚠️ `pubspec.yaml` is at `1.0.0+7` and build 7 has NOT been uploaded.** TestFlight builds 5 and 6 are live; **6 carries the Issue 152 leave bug**, so once 7 ships, expire both. `flutter build ipa` fails at the *export* step here (no Apple Distribution certificate) — **expected, not a build failure**. Verify the **archive's** timestamp and `CFBundleVersion`, never the `.ipa`. See `README.md` → Releasing.
+**⚠️ Read exit codes bare, never through a pipe.** `… | tail` reports `tail`'s status, always 0.
 
 ---
 
-## 2. Wave AB — delivered and verified September 12, 2026
+## 2.0 Standing constraints
 
-| Item | What shipped | How it was verified this session |
-|---|---|---|
-| **AB1** (Issue 170 → B) | The target's forgery guesses are exempt from the round multiplier. The guess block now runs **after** the multiplier block in both `functions/src/scoring_logic.ts` and the test-only mirror. | Moved the block back above the multiplier: **exactly tests 4 and 5** of `scoring_logic_test.dart` fail, the other 11 pass. Both suites carry the mirrored `2 × 3 + 3 = 9` case. |
-| **AB2** (Issue 165, scoped) | `runningRivalries` `{fools, reads}` published at the flush sites and rendered as `THE PARLOUR REMEMBERS` on the reveal, plus `CLOSEST READ`. | `index.ts:1941` filters the **current card out** while `unmaskDeadline != null`, so no pair from an unflipped card is ever published. A leak test and a threshold test both exist. |
-| **AB3** (evidence re-capture) | `docs/playthroughs/findings_waveAA.md`, blocks **E50–E63**, all **14 PASS**; evidence set grew 104 → **123** artefacts. | All five gate invocations exit 0 bare. The older reports' tallies are unchanged, so no verdict was edited. |
+**⚠️ Colour tokens name a SURFACE, not a role.** `colorScheme.onSurface` is `AppColors.ink` (`lib/main.dart:99`) — *"Text on parchment"*. On the dark `ground` it measures **1.12 : 1** against a 4.5 : 1 floor. **Text on ground is `AppColors.ivory`** (16.25 : 1); `brass` is 7.84 : 1 for accents. This is AC1's subject and applies to every item.
 
-**The scoped half of Issue 165 held.** AB2 built the clause after *"by"* — rivalries each reveal and who reads whom — and did **not** re-cut the prompt decks or add a trust economy. Those remain unselected; **do not build them.**
+**⚠️ `lib/utils/scoring_logic.dart` is a TEST-ONLY mirror** of `functions/src/scoring_logic.ts`. Change one without the other and the client suite stays green while computing different numbers from production.
+
+**⚠️ Never let a client bound exceed the server's.** A client-side limit is a suggestion; the server's is the limit. AC4 adds a cap and must enforce it in both places.
+
+**⚠️ `lib/utils/prompt_decks.dart` is GENERATED.** Never hand-edit. Regenerate with `./scripts/generate_prompt_decks_dart.sh`; `check_decks_in_sync.sh` fails the battery when it is stale.
+
+**One item = one commit.** Conventional Commit, WHY in the body. Deploy functions after AC4 and re-apply `CLEANUP_DRY_RUN=false`, reading it back.
 
 ---
 
-## 3. Already delivered — do NOT rework
+## 3. AC1 — Issue 171 → Option C: collapse the transcript behind a tap, and make it legible
+
+**What this means for the user.** The per-rule score breakdown shipped in Issue 169 is drawn in near-black on a near-black background — it is on screen and cannot be read. Today the reveal shows four differently-sized boxes with what looks like empty space in them; that "space" is the breakdown.
+
+**The gap.** `lib/screens/phase4_reveal.dart`, the `POINTS AWARDED THIS CARD` block. Two defects:
+
+1. Each rule line renders `theme.colorScheme.onSurface.withValues(alpha: 0.8)` — `AppColors.ink` on the dark ground, **1.12 : 1**.
+2. The chips sit in a `Wrap`, each a `Column(mainAxisSize: MainAxisSize.min)`, so every box shrinks to its own content and a player with two rule lines gets a box twice the height of a player with one.
+
+**Implementation.**
+
+1. **Collapse the breakdown behind a tap.** Each chip shows only `avatar · {name}: {±N}` — one line, so **every chip is the same height and the ragged-box defect disappears as a consequence of Option C rather than needing its own fix.** Tapping a chip expands that player's rule lines; tapping again collapses. Expansion state is local to the reveal screen.
+2. **Fix the colour.** Expanded rule lines use `AppColors.ivory` for the value and `AppColors.brass` for the rule name. **Do not use `onSurface` anywhere on this screen.**
+3. **Add the hint the user asked for.** Beneath the `POINTS AWARDED THIS CARD` heading, render exactly: `Tap a player to see their score breakdown`, in `brass` at 11 pt. Without it, Option C's cost — that a player who does not know the detail exists will never tap — is unmitigated.
+4. **⚠️ Expansion state lives on a `State` that survives card changes.** Reset it in the same place the reveal already resets per-card state, keyed on `currentReaderId`. This is the lesson §2.40 trap; three Wave AA items hit it.
+
+**Validation.**
+
+1. **A RENDERED contrast test, not another curated pair.** This is the durable half of this item. Pump the reveal with a breakdown expanded, walk the rendered `Text` widgets in that subtree, resolve each one's effective colour against the colour actually painted behind it, and assert **≥ 4.5 : 1**. `test/contrast_tokens_test.dart` already contains one test of this shape for the reveal answer and prompt — extend that approach; **do not add a sixth hand-curated pair, which is exactly why this defect shipped (lesson §2.42).**
+2. Widget test: breakdown lines are absent before tapping a chip and present after.
+3. Widget test: the hint string renders verbatim.
+4. Widget test: all chips report equal height when players have differing rule counts.
+5. Widget test: expand a chip, advance `currentReaderId` **without re-pumping**, assert the expansion is cleared.
+6. **Over-reach guards, unedited:** all 7 tests in `test/phase4_reveal_test.dart`, including `O2: renders published scoreDeltas …` — **totals must remain visible at all times**; Option C hides the rules, never the total.
+7. **Falsification:** restore `onSurface` on the rule lines; test 1 must fail with a ratio near 1.1. Then remove the reset; test 5 must fail.
+
+**Blast radius:** `docs/design_ui_direction.md` — record the collapse-on-tap contract and the colour rule.
+
+---
+
+## 4. AC2 — Issue 172 → Option B: replace stems with inline sample answers
+
+**What this means for the user.** A stuck player is currently shown half of somebody else's sentence to continue, which is harder than answering the prompt. They will instead see a complete example answer, always visible, so the shape of a good answer is obvious.
+
+**The gap.** `functions/src/prompt_decks.ts` carries `stems?: Record<string, string[]>` — 150 openers across 150 prompts — rendered beneath the answer field as `Starter: "…"`.
+
+**Implementation.**
+
+1. **Rename the field to `samples`** and replace all 150 entries with complete sample answers. A rename rather than a content swap, because `stems` would then be a lie about what the data is, and the next reader would rely on the name.
+2. Keep **every** structural property of AA5 — they were the reason it shipped safely:
+   - `samples?: Record<string, string[]>`, keyed by **exact prompt text**.
+   - **`validateDeckStems`** (rename to `validateDeckSamples`) still **throws at module load** if a key matches no prompt in its deck. **Never soften to a warning:** a detached key fails invisibly.
+   - Emitted into the generated Dart mirror by `scripts/generate_prompt_decks_dart.mjs`; `check_decks_in_sync.sh` must still catch a samples-only divergence.
+   - Resolved client-side by prompt text; a custom-deck prompt finds nothing and renders nothing.
+3. **⚠️ Display only. Never write a sample into `_answerController`.** Unchanged from AA5 and still the most important rule here.
+4. Copy: render exactly `For example: "{sample}"` beneath the field, replacing the `Starter: "…"` line.
+
+**⚠️ Option B's known consequence, which you must not try to engineer away.** Every player writing on a card sees the *same* prompt and therefore the *same* sample. `TextSimilarity.isTooSimilar` compares a new answer against the other answers already on that card, so **if two players both lean on the sample, the second one is rejected with *"Too similar to an existing answer! Be more creative."*** That is the heuristic working correctly. It was named in Issue 172's cons and the user selected Option B anyway. **Write a test that documents this behaviour rather than a mitigation that weakens the duplicate check** — the duplicate check protects the whole game and a writing aid does not outrank it.
+
+**Validation.**
+
+1. Widget test: a catalogue prompt renders `For example: "…"`; `_answerController.text` is still empty after pump.
+2. Widget test: a prompt absent from the catalogue renders no sample and does not throw.
+3. Functions test: a `samples` key matching no prompt throws at module load. **Falsify with a bogus key.**
+4. `./scripts/check_decks_in_sync.sh` exits 0 bare; **then falsify it** by hand-editing one sample in the Dart mirror and confirming exit 1. **If it still exits 0 the generator is not emitting samples and the mirror can drift silently** — this exact falsification is what proved AA5's gate was real.
+5. Test documenting the collision: two answers both derived from the sample on one card — the second is rejected by the similarity check.
+6. **Over-reach guard, unedited:** `test/guidance_strings_test.dart` — its four verbatim phase strings are untouched by this item.
+7. Count check: **150 samples across 150 prompts**, no prompt left uncovered.
+
+**Blast radius:** `docs/design_prompt_system.md` §6 — currently describes stems and the phase-framing decision. Rewrite it for samples, and **keep the paragraph explaining why an aid is never pre-filled**, which still applies.
+
+---
+
+## 5. AC3 — Issue 173 → Option B: the visible card is the selection
+
+**What this means for the user.** Today `CONFIRM VOTE` is dead until you tap a card, and nothing says so. After this, whatever card is in front of you is your choice, the button names it, and the screen tells you there are more to see.
+
+**The gap.** `phase3_vote.dart:582` disables the button while `_localSelectedAuthorId == null`. Selection works (`card_grid.dart:169`) but the stacked deck reads as a viewer, not a chooser.
+
+**Implementation.**
+
+1. **The visible card is the selection.** As the active index changes — by swipe, `PREV`/`NEXT`, or a jump dot — the selection follows it. Tapping a card still selects it; that path stays.
+2. **⚠️ The button must name what it will do.** Render `CONFIRM OPTION {numeral}` using the same numeral shown on the card (`OPTION I`, `OPTION II`, …), not a bare `CONFIRM VOTE`. **This is the mitigation for Option B's real cost** — with an always-live selection, a mistimed tap casts a vote that cannot be undone, and a button that names its target is what makes that mistake visible before it happens rather than after.
+3. **⚠️ An unvotable card must not become a live selection.** The player's own answer and placeholder options are unvotable (`_isAnswerUnvotable`). When the visible card is one of those, **clear the selection and disable the button with the reason** — exactly the dead-button state Issue 173 is about, but now explained: `YOU CANNOT VOTE FOR YOUR OWN ANSWER`. **Getting this wrong is the one way Option B ships a worse bug than the one it fixes**, because the model "what you see is what you vote for" silently breaks on the one card where it must not hold.
+4. **Add the hints the user asked for.** Beneath the deck: exactly `Swipe to see all options`, in `brass` at 11 pt. The existing `CARD I OF III` counter stays and is the option count — **verify it reads correctly at every option count before assuming it satisfies the request.**
+
+**Validation.**
+
+1. Widget test: on first render with no interaction, the button is enabled and reads `CONFIRM OPTION I`.
+2. Widget test: swipe to the next card; the button reads `CONFIRM OPTION II` and confirming casts a vote for **that** option.
+3. Widget test: navigate to the player's own answer; the selection is cleared, the button is disabled and shows the reason. Then navigate away; the button re-enables for the new card.
+4. Widget test: both hint strings render verbatim; the counter reports the true total.
+5. **Over-reach guards, unedited:** all 4 tests in `test/stacked_deck_navigation_test.dart` and all 11 in `test/phase3_vote_test.dart`, **including `O9`** — the target still never sees a vote button.
+6. **Falsification:** remove the unvotable handling from (3); test 3 must fail by casting a self-vote, which the server rejects — **so assert the client state, not the server's refusal**, or the test will pass for the wrong reason.
+
+**Blast radius:** `docs/design_ui_direction.md` — the stacked-deck section gains the selection model and the named-confirm rule.
+
+---
+## 6. AC4 — NEW FEATURE: cap re-rolls at 3 per round, then let the player choose
+
+**The request, verbatim:**
+
+> *"I want reroll to be a max of 3 per round. After 3, the player can see the 3 prompts that they rerolled on and select one of those 3 to answer. However, make sure to not fall into the trap of using the same 3 prompts per round for the same player"*
+
+**What this means for the user.** Re-rolls are unlimited today, so a player can spin forever and the button never resolves anything. After this they get three, and if none of the three suits them they are not stuck with the last one — they pick whichever of the three they liked best. The trap named in the request is the important half: a player must not be shown prompts they have already seen this match.
+
+### 6.1 The trap is real and already in the code — fix it first
+
+**⚠️ The re-roll draw ignores the player's history.** `rerollPrompt` reads the player's `seenPrompts` into `cardSeen` and then **never uses it**: both branches draw with `inPlay` as *both* the `excluded` and `mustAvoid` argument. `inPlay` is only *"prompts sitting on a card right now"*. A prompt the player saw and rerolled away from is no longer on a card, so **it is immediately eligible to come back** — within the same round, and again in the next.
+
+This is exactly the failure the user anticipated, and it is **load-bearing for this feature**: with a cap of three and a chooser, players now have a reason to use all three re-rolls every round, so a repeat that used to be a rare annoyance becomes the common case.
+
+**The fix, in both branches of the draw:**
+
+- Deck branch: `PromptDecks.drawOneExcluding(deckId, new Set([...inPlay, ...cardSeen]), inPlay)`.
+- Custom-pool branch: the candidate filter must drop `cardSeen` as well as `inPlay`.
+
+**⚠️ Pass history in `excluded`, never in `mustAvoid`.** `design_prompt_system.md` §5 records the contract: `drawOneExcluding` **prefers** a prompt outside `excluded`, relaxes to anything outside `mustAvoid` when that is impossible, and **never refuses**. History belongs in the soft set so an exhausted deck still returns something; `inPlay` stays in the hard set so two players can never share a prompt. **Putting history in `mustAvoid` would make the draw throw on a small deck.**
+
+### 6.2 Server — the cap and the candidates
+
+**State.** Two new fields on `sealed/{playerId}`, which is default-deny and already holds `seenPrompts`:
+
+- `rerollsThisRound: number`
+- `rerollCandidates: string[]` — the prompts produced by this round's re-rolls, in order.
+
+**Cap.** `rerollPrompt` rejects with `failed-precondition` when `rerollsThisRound >= 3`. Define the bound as a named constant, `kMaxRerollsPerRound = 3`, exported so the client and the tests reference it rather than repeating a literal.
+
+**On each successful re-roll:** increment `rerollsThisRound`, append the new prompt to both `seenPrompts` and `rerollCandidates`.
+
+**⚠️ The per-round reset currently works by accident and is one word away from breaking.** `concludeResolutionRound` resets each sealed doc with `transaction.set(sealedRef, { seenPrompts: updatedSeen, truthAnswer: "", … })` — **a `set` with no `{ merge: true }`**, so it replaces the document and any new field vanishes. That happens to be the behaviour we want, but it is invisible. **Write `rerollsThisRound: 0` and `rerollCandidates: []` into that object explicitly**, so the reset is a decision a reader can see. Note that `rerollPrompt` itself writes with `{ merge: true }` — if anyone ever "harmonises" the round-advance write to match, an un-reset counter would silently carry a player's exhausted re-rolls into the next round, and the symptom would be a button that is dead from the first moment of a round.
+
+**The chooser callable.** `selectRerolledPrompt({ roomCode, playerId, promptText })`, following `castVote`'s authorization shape (`index.ts:942`) — `request.auth`, then `authUid` on the player doc, then checks inside the transaction. `playerId` is not a credential.
+
+Validation, in order:
+
+1. `room.currentPhase === "truth"` → else `failed-precondition`. Re-rolls and this chooser are truth-phase only, matching `rerollPrompt`.
+2. The caller owns the card (`cardIdx` found for `playerId`).
+3. `rerollsThisRound >= kMaxRerollsPerRound` → else `failed-precondition`. **The chooser only opens once the cap is spent**; before that the player still has re-rolls and does not need it.
+4. `promptText` is a member of `rerollCandidates` → else `invalid-argument`. **Never trust a prompt string from the client** — this is the whole reason candidates are stored server-side.
+5. **⚠️ Re-validate `inPlay` at selection time.** A candidate is not on any card while it sits in the list, so **another player's re-roll can legitimately draw it in the meantime.** If the chosen prompt is now in play, reject with `failed-precondition` and a message naming the collision; the client removes it from the chooser and the player picks another. **Do not silently substitute a different prompt** — the player chose a specific one and a silent swap is indistinguishable from a bug.
+6. The player has not already submitted a truth answer this round.
+
+On success: set the card's `promptText`, and leave `rerollsThisRound` at its cap so the chooser stays available if they change their mind before submitting.
+
+### 6.3 Which three prompts the chooser shows — a decision, recorded
+
+A player who re-rolls three times has seen **four** prompts: the original `P0` they were dealt, and `P1`, `P2`, `P3` from the three re-rolls. *"The 3 prompts that they rerolled on"* admits more than one reading, so this spec fixes one:
+
+**The chooser shows `P1`, `P2`, `P3` — the three prompts the re-rolls produced.** `P0` is excluded because the player actively rejected it before spending any re-roll. This is what `rerollCandidates` accumulates, and it is exactly three entries.
+
+**If the user wants `P0` included, that is a one-line change**: seed `rerollCandidates` with the dealt prompt when the round begins, and the chooser becomes four. **Do not make that change without a selection** — flag it and leave it.
+
+### 6.4 Graceful degradation on a small deck
+
+With the history fix, candidates are drawn preferring prompts the player has not seen. **On a small deck the unseen pool can run out**, at which point `drawOneExcluding` relaxes and may return a seen prompt; it may also return the same prompt twice across two re-rolls.
+
+**De-duplicate `rerollCandidates` on append.** If a re-roll produces a prompt already in the list, still consume the re-roll and still change the card, but do not add a duplicate entry — **a chooser offering the same prompt twice is the visible form of the exact complaint this feature was asked to prevent.** The chooser therefore shows *up to* three distinct prompts, and fewer when the deck cannot supply three.
+
+**This is the safe degradation, not the fix.** The underlying capacity problem is **Issue 174**, filed and unselected: four catalogue decks hold 25 prompts, and five players using all three re-rolls consume **20 of them in a single round**, while the capacity check at `index.ts:733` only requires `players × rounds`. **AC4 ships without waiting for that selection** — de-duplication keeps the feature honest on a small deck — but do not implement any of Issue 174's options here.
+
+### 6.5 Client
+
+`lib/screens/phase2_craft.dart` and `lib/services/game_service.dart`.
+
+1. The `RE-ROLL PROMPT` button shows what is left: `RE-ROLL PROMPT ({n} LEFT)`, disabled at zero. Keep the existing disabled conditions (`isTimerLast5Sec`, `_isSubmitting`).
+2. At zero, show the chooser: the distinct `rerollCandidates`, each tappable, the current one marked. Selecting calls `selectRerolledPrompt`.
+3. Error surfaces **match on `e.code`, never on the message** — a standing invariant. The collision in 6.2(5) arrives as `failed-precondition`; show a specific sentence for it and the generic *"Something went wrong. Try again."* for everything else.
+4. The client must read the cap from the shared constant, **and must not be the only thing enforcing it.**
+
+### 6.6 Validation
+
+1. Emulator: three re-rolls succeed; the fourth is rejected with `failed-precondition`.
+2. Emulator, **the trap test**: with a player's `seenPrompts` pre-loaded with most of the deck, repeated re-rolls return prompts outside that set for as long as any remain. **Falsify by reverting the `excluded` argument to `inPlay`** and confirm this test fails — it is the only test that proves the reported trap is closed.
+3. Emulator: `rerollsThisRound` and `rerollCandidates` are both reset by `concludeResolutionRound`. **Falsify by removing the two explicit fields** — and note whether the test still passes, since the non-merge `set` also resets them; **if it passes either way, assert the fields are present in the written object**, or the guard is measuring nothing.
+4. Emulator: `selectRerolledPrompt` sets the card's prompt to the chosen candidate.
+5. Emulator, the five rejections: wrong phase; cap not yet spent; prompt not in `rerollCandidates`; prompt now in play (collision); caller not the card owner.
+6. Emulator: a duplicate draw does not produce a duplicate chooser entry.
+7. Widget: the button shows `3 LEFT`, `2 LEFT`, `1 LEFT`, then disables and the chooser appears with the distinct candidates.
+8. Widget: choosing a candidate updates the displayed prompt.
+9. **Over-reach guards, unedited:** `test/reroll_deck_exhaustion_test.dart` and `test/phase2_craft_test.dart`'s `Issue 88.1` re-roll error case. **The "re-rolls never refuse" contract in `design_prompt_system.md` §5 is about the draw, not the cap** — the draw still never throws; the *callable* now refuses past three. Keep those distinct in the commit body.
+
+**Blast radius:** `docs/design_prompt_system.md` §5 (the cap, the chooser, and the corrected exclusion), `docs/design_database_and_security.md` (two new `sealed` fields and the new callable row), `docs/design_ui_direction.md` (the chooser).
+
+---
+## 7. Already delivered — do NOT rework
 
 ### Wave AA — sixteen items, verified September 11, 2026
 
@@ -68,7 +243,7 @@ Verified by reading source and re-falsifying, not by reading commit bodies. Full
 - Injecting `scoreDeltas` into the withheld branch fails **4** emulator tests including AA16a's leak test and the pre-existing P4 guard, with 135 still passing.
 - Tampering with one stem key in the generated Dart mirror makes `check_decks_in_sync.sh` exit **1**; restoring makes it exit **0**. The gate genuinely covers stems rather than passing vacuously on two empty sides.
 
-### 3.1 The only legitimate actions now
+### 7.1 Standing maintenance — alongside Wave AC, not instead of it
 
 1. **Deploy the functions after any `functions/src` change, then restore the cleanup flag.** The gate is green today; it goes red the moment server code changes. `functions/src` changed under AA10, AA11 and AA16a, and **`submitTargetForgeryGuesses` is not deployed at all** — production runs 17 functions and the new callable is absent. **Target forgery guessing does not work in production today, and a client build shipped before this deploy would call a function that is not there.**
    ```
@@ -108,7 +283,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 4. Invariants & intentional decisions — do NOT change
+## 8. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.**
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty.
@@ -168,7 +343,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 5. Where the contracts live
+## 9. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -185,7 +360,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 6. Validation standard
+## 10. Validation standard
 
 **A guard flag lives as long as the object holding it.** `_isLeaving` guards "a leave is in flight", but it sits on a `State` that outlives every room. When a flag's lifetime is longer than the thing it guards, it needs an explicit reset — and the reset belongs in a `finally`, because the failure path is exactly when it matters.
 
@@ -217,36 +392,41 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ```
 (1) A selection exists? If NO -- stop. Never fill in a `Your selection:` line.
-    Issues 171, 172 and 173 are filed and UNSELECTED. None of them is work.
-(2) Read exit codes BARE. `flutter analyze ... | tail` reports tail's status,
-    which is always 0.
-(3) Changing scoring? Change BOTH functions/src/scoring_logic.ts AND the
-    test-only mirror lib/utils/scoring_logic.dart, then re-run the sum
-    invariant in both suites.
-(4) Publishing anything derived from authorship? It may only carry cards whose
-    author flip has already happened, at all THREE flush sites. Write the leak
-    test first.
-(5) Adding a callable? Copy castVote's authorization shape (index.ts:880).
-    playerId is NOT a credential.
-(6) COLOUR: never take a token from colorScheme without checking which SURFACE
-    it is for. onSurface is AppColors.ink -- text on PARCHMENT. On the dark
-    ground it measures 1.12:1. Text on ground is AppColors.ivory. A passing
-    contrast_tokens_test does NOT cover you -- see lesson 2.42.
-(7) WRITE the falsifying validation. Run it. OBSERVE IT FAIL. Record the exact
+    Wave AC (sections 3-6) is selected. Issue 174 is FILED and UNSELECTED --
+    AC4 ships without it, but do NOT implement its options.
+(2) ORDER: AC1, AC2, AC3, AC4. AC2 and AC4 both edit the craft screen.
+(3) Read exit codes BARE. `... | tail` reports tail's status, always 0.
+(4) COLOUR: check which SURFACE a token is for. onSurface is AppColors.ink --
+    text on PARCHMENT; on the dark ground it is 1.12:1. Text on ground is
+    ivory. A passing contrast_tokens_test does NOT cover you (lesson 2.42):
+    a curated pair list cannot fail on a wrong-token widget. Assert on the
+    RENDERED tree.
+(5) Changing scoring? Change BOTH implementations and re-run the sum invariant.
+(6) Adding a callable? Copy castVote's authorization shape (index.ts:942).
+    playerId is NOT a credential. Validate every client-supplied string
+    against server state -- AC4 validates the chosen prompt against
+    rerollCandidates for exactly this reason.
+(7) Server bound first, client bound second. A client-side limit is a
+    suggestion. AC4's cap must exist in both and the client reads the constant.
+(8) WRITE the falsifying validation. Run it. OBSERVE IT FAIL. Record the exact
     output in the commit body. A DELETION STILL NEEDS ONE.
-(8) Ask what input would make your new check go red. If the answer is "a value
-    that is not in its list", the list IS the test and it proves nothing.
-(9) State bugs: the test must NOT re-pump the widget between steps.
-(10) Changing two things that write to the SAME number, document or screen
+(9) Ask what input would make your new check go red. If the answer is "a value
+    not in its list", the list IS the test. If a guard passes with the fix
+    removed, it is measuring nothing -- see AC4 validation 3.
+(10) State bugs: the test must NOT re-pump the widget between steps. AC1's
+     expansion state and AC3's selection both live on a State that outlives
+     the card.
+(11) Changing two things that write to the SAME number, document or screen
      region? Compute the COMBINED worst case as a table of real figures first.
-(11) Playthroughs: evidence records an observation, not current behaviour.
-     NEVER edit a verdict or a specified assertion. Annotate as superseded and
-     capture a NEW block. Open every screenshot and ask what it SHOWS.
-(12) RE-RUN THE FULL BATTERY -- bare, except flutter analyze, where the bar is
+(12) Playthroughs: evidence records an observation, not current behaviour.
+     NEVER edit a verdict or a specified assertion.
+(13) RE-RUN THE FULL BATTERY -- bare, except flutter analyze, where the bar is
      0 errors / 0 warnings / 195 infos and the code is always 1.
-(13) COMMIT: one item, one Conventional Commit, WHY in the body. Move the issue
+(14) DEPLOY after AC4: firebase deploy --only functions, then re-apply
+     CLEANUP_DRY_RUN=false and READ IT BACK. Revision-scoped.
+(15) COMMIT: one item, one Conventional Commit, WHY in the body. Move the issue
      to the SINGLE existing Resolved heading, leave ONE line there, and put the
      durable consequence in the design doc.
 ```
 
-**The queue is empty. Do not invent work.** The only legitimate actions are in §3.1.
+**When AC1-AC4 are done the queue is empty again. Do not invent work.**

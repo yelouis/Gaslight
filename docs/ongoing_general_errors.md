@@ -12,7 +12,13 @@
 
 **All five evidence-gate invocations exit 0**, and **the deploy gate is now green** — the functions were deployed and `check_deploy_fresh.sh` tracks `submitTargetForgeryGuesses`.
 
-**Three new issues (171–173) are filed below from a September 12 device playthrough** and await selection. One of them, **Issue 171, is a live legibility defect** — the score transcript renders at **1.12 : 1** contrast against a 4.5 : 1 floor, which means the feature Issue 169 shipped is on screen but unreadable.
+**Issues 171, 172 and 173 were selected on September 12, 2026** and are specced as **Wave AC** in `agent_execution_guide.md`, together with a new feature:
+- **171 → Option C** — collapse the score breakdown behind a tap, plus the requested *"tap to see score breakdown"* hint. **The colour fix is mandatory in every option and is not itself a choice.**
+- **172 → Option B** — replace the 150 sentence stems with 150 inline sample answers.
+- **173 → Option B** — the visible card is the selection, plus the requested swipe hint and option count.
+- **AC4 (new)** — cap re-rolls at 3 per round, then let the player choose among them.
+
+**Issue 174 is newly filed below and awaits selection.** It is the deck-capacity question AC4 exposes; **AC4 ships without it** because its chooser de-duplicates, but the underlying arithmetic needs a decision.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
@@ -50,7 +56,7 @@ WCAG AA for body text is **4.5 : 1**. At 1.12 : 1 the text is effectively not re
   - *Pros*: Keeps the reveal compact and the chips uniform, since every chip holds exactly one line. The transcript is still reachable for anyone who wants to know why, which is what Issue 169 asked for. Scales to any number of rules without touching the layout.
   - *Cons*: Hides the thing Issue 169 was filed to surface — a player who does not know the detail exists will never tap. Adds an interaction to a screen that is on a timer and already carries the unmask window.
 
-Your selection: _____
+Your selection: Proceed with Option C. Maybe write a hint somewhere that says Tap to see score breakdown?
 
 ---
 
@@ -82,7 +88,7 @@ Your selection: _____
   - *Pros*: Deletes the complaint and 150 stems of content; simplifies the craft screen and recovers its vertical space.
   - *Cons*: Re-roll exists only on truth rounds, so forgery rounds — the harder task, writing in another player's voice — would again have no aid at all. That is the exact gap Issue 166 was filed to close, so this reopens it.
 
-Your selection: _____
+Your selection: Proceed with Option B.
 
 ---
 
@@ -105,6 +111,44 @@ Your selection: _____
 **Option C**: **Move the action onto the card** — replace the separate `CONFIRM VOTE` button with a `CHOOSE THIS ONE` control inside the active card.
   - *Pros*: Puts the decision on the object being decided about, which removes the two-step model altogether and makes the dead-button state impossible. Reads naturally in a one-card-at-a-time layout.
   - *Cons*: Loses the deliberate two-step confirm that currently separates "I pick this" from "I am sure", which matters because a vote cannot be changed once cast. Consumes vertical space inside the card, competing with the answer text that Issue 160 was fought to keep legible. A larger change to a layout that shipped four days ago and is otherwise working.
+
+Your selection: Proceed with Option B. However, make sure that there is a hint to swipe to see other options and see the amount of options to go through.
+
+---
+
+### Issue 174: Three re-rolls per player can drain a deck inside one round
+
+**Status**: ⚠️ Confirmed Unresolved — **filed September 12, 2026 while speccing AC4** (the 3-re-roll cap). Not a defect in anything shipped; a capacity question the new feature makes unavoidable, and it is the structural half of the trap the user named when requesting it.
+
+**The arithmetic.** Four of the five catalogue decks hold **25** prompts; only the fallback, `hypotheticals`, holds 50. A player consumes **1 dealt prompt + up to 3 re-rolls = 4** per round.
+
+| Players | Round 1 | Rounds 1–2 | Rounds 1–3 |
+|---|---|---|---|
+| 3 | 12 | 24 | 36 |
+| 5 | **20** | 40 | 60 |
+| 7 | **28** | 56 | 84 |
+
+Against a 25-prompt deck, **five players exhaust 20 of 25 in a single round**, and **seven players need 28 before round 1 ends** — more than the deck contains. Even the 50-prompt fallback cannot serve seven players for two rounds.
+
+**Why the cap makes this new.** Re-rolls are unlimited today, but nobody spins more than once or twice, so consumption sits near `players × rounds`. **A cap of three plus a chooser turns three re-rolls into the rational play** — you spend them all to widen your choice — so average consumption approaches the worst case rather than the best.
+
+**What the code does today.** `startGame` (`index.ts:733`) refuses to start when `deckSize < activePlayers.length * totalRounds` — it budgets **one prompt per player per round** and knows nothing about re-rolls. Past that point `PromptDecks.drawOneExcluding` **never refuses**: it relaxes from "unseen" to "not currently in play" and hands back a prompt the player has already seen. **AC4 de-duplicates the chooser so the same prompt never appears twice in one list, which keeps the feature honest, but it cannot manufacture prompts that do not exist.**
+
+**Option A (recommended)**: **Top up from the fallback deck when the chosen deck runs dry** — when a re-roll finds no unseen prompt in the room's deck, draw from `hypotheticals` instead.
+  - *Pros*: No game is ever blocked from starting and no player is ever handed a repeat while any unseen prompt exists anywhere. The mechanism already exists and is already trusted — the custom-deck branch of `rerollPrompt` falls back to `getFallbackDeckId()` exactly this way, so this extends a shipped pattern rather than inventing one. Invisible to players until it is needed.
+  - *Cons*: Silently mixes registers — a `love_life` room could be handed a `hypotheticals` prompt mid-round, and a table that deliberately chose a rated deck may notice the tone change. Needs a rule for what happens when the fallback is *also* exhausted, which at seven players over three rounds it will be.
+
+**Option B**: **Tighten the capacity check to budget re-rolls** — require `deckSize >= players × rounds × (1 + kMaxRerollsPerRound)` at `startGame`.
+  - *Pros*: Turns a silent late-game degradation into an honest refusal at the only moment it can still be acted on, when the host can pick a bigger deck or fewer rounds. Exactly the shape of the existing check, so it is a one-line change to a guard that already exists and already has an error message players see.
+  - *Cons*: Brutally restrictive — a 25-prompt deck would support **one** 6-player round and nothing more, and no 25-prompt deck could host 7 players at all. It would block many configurations that play perfectly well today, because it budgets for a worst case that only occurs if every player spends every re-roll.
+
+**Option C**: **Scale the cap to what the deck can afford** — compute the per-round allowance at `startGame` as `floor((deckSize / rounds - players) / players)`, clamped to 0–3, and publish it on the room.
+  - *Pros*: Never blocks a game and never degrades into repeats; a big deck gives the full three and a small one gives one or none, which is honest about what the content can support. The cap is already a named constant and already read by the client, so publishing it per-room is a small change.
+  - *Cons*: The feature silently varies between rooms, so a player who gets three re-rolls one night and none the next has no way to know why — and an allowance of 0 removes a button that Issue 166 and AC4 both exist to provide. The formula is a third scoring-ish rule to explain, which cuts against Issue 169's goal.
+
+**Option D**: **Accept the degradation and say so** — keep the current check, let the draw relax, and surface a one-line notice when a re-roll returns a previously seen prompt.
+  - *Pros*: No new constraints, no blocked games, no register mixing. Cheapest by far, and the honesty of the notice arguably beats a silent substitution. AC4's de-duplication already prevents the worst symptom.
+  - *Cons*: Does the least about the thing the user actually asked for — *"not the same 3 prompts per round for the same player"* — and on a 25-prompt deck at five players, round 2 would be mostly repeats. A notice explaining that the deck is exhausted is a worse experience than not running out.
 
 Your selection: _____
 
