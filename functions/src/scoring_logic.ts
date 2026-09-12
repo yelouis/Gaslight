@@ -44,6 +44,10 @@ export interface GameState {
   expiresAt?: any;
   unmaskDeadline?: number | null;
   matchSummary?: MatchSummary;
+  runningRivalries?: {
+    fools: Array<{ deceiverId: string; deceiverName: string; victimId: string; victimName: string; count: number }>;
+    reads: Array<{ readerId: string; readerName: string; forgerId: string; forgerName: string; count: number }>;
+  };
 }
 
 export interface CardSummary {
@@ -60,6 +64,8 @@ export interface CardSummary {
     fooledVoters?: string[];
   }>;
   truthFinders: string[];
+  /** Forger ids this card's target correctly attributed. Issue 165. */
+  targetCorrectAttributions?: string[];
 }
 
 export interface MatchSummary {

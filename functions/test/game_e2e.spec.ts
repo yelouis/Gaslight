@@ -6225,6 +6225,308 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         expect(guessItem).to.be.undefined;
       });
     });
+
+    describe('Issue 165 / AB2: Running Rivalries & Closest Read', () => {
+      async function setupVoteGame(playerCount = 3) {
+        const hostUser = await createAnonUser();
+        const bobUser = await createAnonUser();
+        const charlieUser = await createAnonUser();
+        const daveUser = playerCount >= 4 ? await createAnonUser() : null;
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_alice',
+          forgeriesPerCard: 2,
+          sabotageAnswersCount: 2,
+          totalRounds: 1,
+          isTimerDisabled: true,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', bobUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_bob' });
+        await callFn('joinRoom', charlieUser.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_charlie' });
+        if (daveUser) {
+          await callFn('joinRoom', daveUser.idToken, { roomCode, playerName: 'Dave', playerId: 'p_dave' });
+        }
+
+        await roomRef.collection('players').doc('p_bob').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_charlie').update({ lobbyReady: true });
+        if (daveUser) {
+          await roomRef.collection('players').doc('p_dave').update({ lobbyReady: true });
+        }
+
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_alice', authorId: 'p_alice', text: 'Alice Truth', isTruth: true });
+        await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: 'p_bob', authorId: 'p_bob', text: 'Bob Truth', isTruth: true });
+        await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: 'p_charlie', authorId: 'p_charlie', text: 'Charlie Truth', isTruth: true });
+        if (daveUser) {
+          await callFn('submitAnswer', daveUser.idToken, { roomCode, targetCardId: 'p_dave', authorId: 'p_dave', text: 'Dave Truth', isTruth: true });
+        }
+
+        const snap = await roomRef.get();
+        const assignments = snap.data()?.currentCardAssignments || {};
+
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_alice'], authorId: 'p_alice', text: 'Alice Forgery 1', isTruth: false });
+        await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: assignments['p_bob'], authorId: 'p_bob', text: 'Bob Forgery 1', isTruth: false });
+        await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: assignments['p_charlie'], authorId: 'p_charlie', text: 'Charlie Forgery 1', isTruth: false });
+        if (daveUser) {
+          await callFn('submitAnswer', daveUser.idToken, { roomCode, targetCardId: assignments['p_dave'], authorId: 'p_dave', text: 'Dave Forgery 1', isTruth: false });
+        }
+
+        // Rotation 2 to complete sabotageAnswersCount = 2
+        const snap2 = await roomRef.get();
+        const assignments2 = snap2.data()?.currentCardAssignments || {};
+
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments2['p_alice'], authorId: 'p_alice', text: 'Alice Forgery 2', isTruth: false });
+        await callFn('submitAnswer', bobUser.idToken, { roomCode, targetCardId: assignments2['p_bob'], authorId: 'p_bob', text: 'Bob Forgery 2', isTruth: false });
+        await callFn('submitAnswer', charlieUser.idToken, { roomCode, targetCardId: assignments2['p_charlie'], authorId: 'p_charlie', text: 'Charlie Forgery 2', isTruth: false });
+        if (daveUser) {
+          await callFn('submitAnswer', daveUser.idToken, { roomCode, targetCardId: assignments2['p_dave'], authorId: 'p_dave', text: 'Dave Forgery 2', isTruth: false });
+        }
+
+        const voteSnap = await roomRef.get();
+        expect(voteSnap.data()?.currentPhase).to.equal('vote');
+        const currentReaderId = voteSnap.data()?.currentReaderId;
+
+        const userMap: Record<string, { idToken: string; localId: string }> = {
+          'p_alice': hostUser,
+          'p_bob': bobUser,
+          'p_charlie': charlieUser
+        };
+        const allPlayerIds = ['p_alice', 'p_bob', 'p_charlie'];
+        if (daveUser) {
+          userMap['p_dave'] = daveUser;
+          allPlayerIds.push('p_dave');
+        }
+
+        const targetUser = userMap[currentReaderId];
+        const otherPlayers = allPlayerIds.filter(id => id !== currentReaderId);
+
+        const sealedSnap = await roomRef.collection('sealed').doc(currentReaderId).get();
+        const answerAuthors = sealedSnap.data()?.answerAuthors as Record<string, string>;
+        const currentCard = voteSnap.data()?.cards.find((c: any) => c.targetPlayerId === currentReaderId);
+
+        return {
+          roomCode,
+          roomRef,
+          hostUser,
+          bobUser,
+          charlieUser,
+          daveUser,
+          userMap,
+          currentReaderId,
+          targetUser,
+          otherPlayers,
+          answerAuthors,
+          currentCard
+        };
+      }
+
+      it('1. leak test: no current card pairs in room.runningRivalries during unmask window, appear upon closeUnmaskWindow', async () => {
+        const { roomCode, roomRef, userMap, currentReaderId, targetUser, otherPlayers, answerAuthors, currentCard } = await setupVoteGame(3);
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+
+        // Target correctly guesses otherPlayers[0]'s forgery
+        await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses: { [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id] }
+        });
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: true });
+
+        // otherPlayers[0] votes for otherPlayers[1]'s forgery
+        // otherPlayers[1] votes for otherPlayers[0]'s forgery
+        // (both are fooled -> unmask window opens)
+        const opt1 = currentCard.options.find((opt: any) => answerAuthors[opt.id] === otherPlayers[1]);
+        const opt0 = currentCard.options.find((opt: any) => answerAuthors[opt.id] === otherPlayers[0]);
+
+        await callFn('castVote', userMap[otherPlayers[0]].idToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: otherPlayers[0],
+          votedForId: opt1.id
+        });
+        await callFn('castVote', userMap[otherPlayers[1]].idToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: otherPlayers[1],
+          votedForId: opt0.id
+        });
+
+        // Current phase is reveal with unmaskDeadline active
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+        expect(roomSnap.data()?.unmaskDeadline).to.be.greaterThan(0);
+
+        // LEAK GUARD: runningRivalries MUST NOT contain pairs from this card while unmask window is open
+        const runningDuring = roomSnap.data()?.runningRivalries;
+        expect(runningDuring).to.not.be.undefined;
+        expect(runningDuring.fools).to.be.an('array');
+        expect(runningDuring.reads).to.be.an('array');
+        expect(runningDuring.fools.length).to.equal(0);
+        expect(runningDuring.reads.length).to.equal(0);
+
+        // Close unmask window
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
+        await callFn('closeUnmaskWindow', targetUser.idToken, { roomCode });
+
+        // After window closes, pairs from this card appear!
+        roomSnap = await roomRef.get();
+        const runningAfter = roomSnap.data()?.runningRivalries;
+        expect(runningAfter).to.not.be.undefined;
+        expect(runningAfter.fools.length).to.be.greaterThan(0);
+        expect(runningAfter.reads.length).to.be.greaterThan(0);
+        const readEntry = runningAfter.reads.find((r: any) => r.readerId === currentReaderId && r.forgerId === answerAuthors[forgeryOptions[0].id]);
+        expect(readEntry).to.not.be.undefined;
+        expect(readEntry.count).to.equal(1);
+      });
+
+      it('2. all three flush sites publish runningRivalries', async () => {
+        // Site A: advancePhaseInternal (transition to reveal with no unmask window)
+        const g1 = await setupVoteGame(3);
+        const truthOpt = g1.currentCard.options.find((opt: any) => g1.answerAuthors[opt.id] === g1.currentReaderId);
+        await callFn('setReady', g1.targetUser.idToken, { roomCode: g1.roomCode, playerId: g1.currentReaderId, ready: true });
+        for (const pId of g1.otherPlayers) {
+          await callFn('castVote', g1.userMap[pId].idToken, {
+            roomCode: g1.roomCode,
+            targetCardId: g1.currentReaderId,
+            voterId: pId,
+            votedForId: truthOpt.id
+          });
+        }
+        let snap1 = await g1.roomRef.get();
+        expect(snap1.data()?.currentPhase).to.equal('reveal');
+        expect(snap1.data()?.runningRivalries).to.not.be.undefined;
+
+        // Site B: advanceToNextResolution
+        await callFn('advanceToNextResolution', g1.hostUser.idToken, { roomCode: g1.roomCode });
+        let snap2 = await g1.roomRef.get();
+        expect(snap2.data()?.runningRivalries).to.not.be.undefined;
+
+        // Site C: closeUnmaskWindow tested in leak test above
+      });
+
+      it('3. targetCorrectAttributions is populated from real guesses and empty array when no guesses', async () => {
+        // Case with guesses:
+        const g1 = await setupVoteGame(3);
+        const forgeryOpts = g1.currentCard.options.filter((opt: any) => g1.answerAuthors[opt.id] !== g1.currentReaderId);
+        const forgerId = g1.answerAuthors[forgeryOpts[0].id];
+
+        await callFn('submitTargetForgeryGuesses', g1.targetUser.idToken, {
+          roomCode: g1.roomCode,
+          cardId: g1.currentReaderId,
+          guesses: { [forgeryOpts[0].id]: forgerId }
+        });
+        await callFn('setReady', g1.targetUser.idToken, { roomCode: g1.roomCode, playerId: g1.currentReaderId, ready: true });
+        const truthOpt = g1.currentCard.options.find((opt: any) => g1.answerAuthors[opt.id] === g1.currentReaderId);
+        for (const pId of g1.otherPlayers) {
+          await callFn('castVote', g1.userMap[pId].idToken, {
+            roomCode: g1.roomCode,
+            targetCardId: g1.currentReaderId,
+            voterId: pId,
+            votedForId: truthOpt.id
+          });
+        }
+        const summarySnap = await g1.roomRef.collection('sealed').doc('_summary').get();
+        const cards = summarySnap.data()?.cards || [];
+        const cardSummary = cards.find((c: any) => c.targetPlayerId === g1.currentReaderId);
+        expect(cardSummary.targetCorrectAttributions).to.deep.equal([forgerId]);
+
+        // Case without guesses:
+        const g2 = await setupVoteGame(3);
+        await callFn('setReady', g2.targetUser.idToken, { roomCode: g2.roomCode, playerId: g2.currentReaderId, ready: true });
+        const truthOpt2 = g2.currentCard.options.find((opt: any) => g2.answerAuthors[opt.id] === g2.currentReaderId);
+        for (const pId of g2.otherPlayers) {
+          await callFn('castVote', g2.userMap[pId].idToken, {
+            roomCode: g2.roomCode,
+            targetCardId: g2.currentReaderId,
+            voterId: pId,
+            votedForId: truthOpt2.id
+          });
+        }
+        const summarySnap2 = await g2.roomRef.collection('sealed').doc('_summary').get();
+        const cards2 = summarySnap2.data()?.cards || [];
+        const cardSummary2 = cards2.find((c: any) => c.targetPlayerId === g2.currentReaderId);
+        expect(cardSummary2.targetCorrectAttributions).to.deep.equal([]);
+      });
+
+      it('4. thresholds: pair with count == 1 appears in runningRivalries and does not appear in game-over headToHead', async () => {
+        const { roomCode, roomRef, hostUser, userMap, currentReaderId, targetUser, otherPlayers, answerAuthors, currentCard } = await setupVoteGame(3);
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+
+        // Target correctly guesses 1 forgery -> read count 1
+        await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses: { [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id] }
+        });
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: true });
+
+        // otherPlayers[0] votes for otherPlayers[1]'s forgery -> fool count 1
+        // otherPlayers[1] votes for truth
+        const opt1 = currentCard.options.find((opt: any) => answerAuthors[opt.id] === otherPlayers[1]);
+        const truthOpt = currentCard.options.find((opt: any) => answerAuthors[opt.id] === currentReaderId);
+        await callFn('castVote', userMap[otherPlayers[0]].idToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: otherPlayers[0],
+          votedForId: opt1.id
+        });
+        await callFn('castVote', userMap[otherPlayers[1]].idToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: otherPlayers[1],
+          votedForId: truthOpt.id
+        });
+
+        // Close unmask window
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
+        await callFn('closeUnmaskWindow', targetUser.idToken, { roomCode });
+
+        // Advance to resolution card 2
+        await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+        let snap = await roomRef.get();
+        let reader2 = snap.data()?.currentReaderId;
+        await callFn('setReady', userMap[reader2].idToken, { roomCode, playerId: reader2, ready: true });
+        let c2 = snap.data()?.cards.find((c: any) => c.targetPlayerId === reader2);
+        let sealed2 = await roomRef.collection('sealed').doc(reader2).get();
+        let truthOptCard2 = c2.options.find((opt: any) => sealed2.data()?.answerAuthors[opt.id] === reader2);
+        for (const pId of Object.keys(userMap).filter(id => id !== reader2)) {
+          await callFn('castVote', userMap[pId].idToken, { roomCode, targetCardId: reader2, voterId: pId, votedForId: truthOptCard2.id });
+        }
+        await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+
+        // Advance to resolution card 3
+        snap = await roomRef.get();
+        let reader3 = snap.data()?.currentReaderId;
+        await callFn('setReady', userMap[reader3].idToken, { roomCode, playerId: reader3, ready: true });
+        let c3 = snap.data()?.cards.find((c: any) => c.targetPlayerId === reader3);
+        let sealed3 = await roomRef.collection('sealed').doc(reader3).get();
+        let truthOptCard3 = c3.options.find((opt: any) => sealed3.data()?.answerAuthors[opt.id] === reader3);
+        for (const pId of Object.keys(userMap).filter(id => id !== reader3)) {
+          await callFn('castVote', userMap[pId].idToken, { roomCode, targetCardId: reader3, voterId: pId, votedForId: truthOptCard3.id });
+        }
+        await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+
+        // Now game is in gameOver!
+        snap = await roomRef.get();
+        expect(snap.data()?.currentPhase).to.equal('gameOver');
+
+        // Pair with count == 1 appears in runningRivalries
+        const running = snap.data()?.runningRivalries;
+        expect(running).to.not.be.undefined;
+        const foolPair = running.fools.find((f: any) => f.count === 1);
+        expect(foolPair).to.not.be.undefined;
+
+        // But does NOT appear in matchSummary.headToHead (requires count >= 2)
+        const headToHead = snap.data()?.matchSummary?.headToHead || [];
+        const h2hPair = headToHead.find((h: any) => h.deceiverId === foolPair.deceiverId && h.victimId === foolPair.victimId);
+        expect(h2hPair).to.be.undefined;
+      });
+    });
   });
 });
 });

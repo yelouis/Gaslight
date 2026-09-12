@@ -6,7 +6,7 @@ This document outlines the Firestore structure, the server-authoritative write a
 
 ## 1. Document Hierarchies
 
-* `/rooms/{roomCode}`: the root `GameState` document (phase, cards, votes, readiness, rotation plan).
+* `/rooms/{roomCode}`: the root `GameState` document (phase, cards, votes, readiness, rotation plan, `runningRivalries`). `runningRivalries` holds `{ fools: [...], reads: [...] }` with `count >= 1` sliced to the top 3 per direction. **Author leak prevention invariant**: during an active unmask window (`unmaskDeadline != null`), pairs from the resolving card are strictly withheld from `runningRivalries` until `closeUnmaskWindow` authoritatively flips the card, ensuring authorship is never leaked to unmask guessers.
 * `/rooms/{roomCode}/players/{playerId}`: individual `PlayerState` documents. `playerId` is a client-chosen stable ID; the document stores `authUid` (the Firebase anonymous UID currently bound to that seat) for server-side ownership checks.
 * `/rooms/{roomCode}/embeddings/{answerHash}`: server-managed cache of Gemini embedding vectors (md5 of the normalized answer text → vector) for the semantic-similarity filter. No client rule → default deny; server-only.
 * `/rooms/{roomCode}/sealed/{cardId}`: server-managed answer keys (`truthAnswer` and `sabotageAnswers` forgery map, `answerAuthors` option-to-author map), per-player prompt history (`seenPrompts` list), pending score deltas/breakdowns during unmask windows, and target forgery guesses (`targetForgeryGuesses` map) stored during `truth`, `forgery`, and `vote` phases to conceal answer origin, prompt history, and live reads until reveal. No client rule → default deny; server-only.

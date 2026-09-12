@@ -206,6 +206,125 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     );
   }
 
+  Widget? _buildRunningRivalries(GameState state, GameService gs, ThemeData theme) {
+    final rivalries = state.runningRivalries;
+    if (rivalries == null) return null;
+
+    final fools = (rivalries['fools'] as List<dynamic>? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    final reads = (rivalries['reads'] as List<dynamic>? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
+    if (fools.isEmpty && reads.isEmpty) return null;
+
+    final topRead = reads.isNotEmpty ? reads.first : null;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.groundRaised,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.brass.withValues(alpha: 0.3), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const ThematicIcon(type: ThematicIconType.ledger, size: 18, color: AppColors.brass),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'THE PARLOUR REMEMBERS',
+                  style: TextStyle(
+                    fontFamily: 'CormorantGaramond',
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.secondary,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (topRead != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.ground,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppColors.brass.withValues(alpha: 0.4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Row(
+                    children: [
+                      ThematicIcon(type: ThematicIconType.observe, size: 14, color: AppColors.brass),
+                      SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'CLOSEST READ',
+                          style: TextStyle(
+                            fontFamily: 'CormorantGaramond',
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                            color: AppColors.brass,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${topRead['readerName']} has read ${topRead['forgerName']} ×${topRead['count']}',
+                    style: const TextStyle(
+                      fontFamily: 'Lora',
+                      fontSize: 12,
+                      color: AppColors.parchment,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (fools.isNotEmpty || reads.isNotEmpty) const SizedBox(height: 8),
+          for (final pair in fools)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                '${pair['deceiverName']} has fooled ${pair['victimName']} ×${pair['count']}',
+                style: const TextStyle(
+                  fontFamily: 'Lora',
+                  fontSize: 12,
+                  color: AppColors.parchment,
+                ),
+              ),
+            ),
+          for (final pair in reads)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                '${pair['readerName']} has read ${pair['forgerName']} ×${pair['count']}',
+                style: const TextStyle(
+                  fontFamily: 'Lora',
+                  fontSize: 12,
+                  color: AppColors.parchment,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
 
 
   void _confirmLeaveGame(BuildContext context, GameService gs) {
@@ -585,6 +704,20 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                 );
                               }).toList(),
                             ],
+
+                            // Running Rivalries (THE PARLOUR REMEMBERS) - Issue 165 / AB2
+                            () {
+                              final rivalriesWidget = _buildRunningRivalries(state, gs, theme);
+                              if (rivalriesWidget != null) {
+                                return Column(
+                                  children: [
+                                    const SizedBox(height: 24),
+                                    rivalriesWidget,
+                                  ],
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            }(),
                             
                             // Best Forgery Banner
                             () {
@@ -1147,7 +1280,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                     alignment: WrapAlignment.end,
                     children: voters.map((v) => Tooltip(
                       message: v.name,
-                      child: PlayerAvatar(player: v, size: 28),
+                      child: PlayerAvatar(player: v, size: 28, showName: false),
                     )).toList(),
                   ),
                 ],

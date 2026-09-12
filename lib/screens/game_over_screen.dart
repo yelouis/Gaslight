@@ -253,7 +253,11 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                             _buildHonorCards(theme, mastermind, trickster, runnerUp, gullible),
                             if (gs.gameState?.matchSummary != null) ...[
                               const SizedBox(height: 32),
-                              _buildMatchHighlights(theme, gs.gameState!.matchSummary!),
+                              _buildMatchHighlights(
+                                theme,
+                                gs.gameState!.matchSummary!,
+                                runningRivalries: gs.gameState?.runningRivalries,
+                              ),
                             ],
                           ],
                         ),
@@ -691,15 +695,18 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
     );
   }
 
-  Widget _buildMatchHighlights(ThemeData theme, Map<String, dynamic> summary) {
+  Widget _buildMatchHighlights(ThemeData theme, Map<String, dynamic> summary, {Map<String, dynamic>? runningRivalries}) {
     final bestLie = summary['bestLie'] != null ? Map<String, dynamic>.from(summary['bestLie'] as Map) : null;
     final cleanestTruth = summary['cleanestTruth'] != null ? Map<String, dynamic>.from(summary['cleanestTruth'] as Map) : null;
     final theSting = summary['theSting'] != null ? Map<String, dynamic>.from(summary['theSting'] as Map) : null;
     final headToHead = (summary['headToHead'] as List<dynamic>? ?? [])
         .map((h) => Map<String, dynamic>.from(h as Map))
         .toList();
+    final reads = (runningRivalries?['reads'] as List<dynamic>? ?? [])
+        .map((r) => Map<String, dynamic>.from(r as Map))
+        .toList();
 
-    if (bestLie == null && cleanestTruth == null && theSting == null && headToHead.isEmpty) {
+    if (bestLie == null && cleanestTruth == null && theSting == null && headToHead.isEmpty && reads.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -748,7 +755,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
           ),
           const SizedBox(height: 12),
         ],
-        if (headToHead.isNotEmpty) ...[
+        if (headToHead.isNotEmpty || reads.isNotEmpty) ...[
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -781,6 +788,18 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                     padding: const EdgeInsets.symmetric(vertical: 2),
                     child: Text(
                       '${pair['deceiverName']} fooled ${pair['victimName']} ${pair['count']} times',
+                      style: const TextStyle(
+                        fontFamily: 'Lora',
+                        fontSize: 12,
+                        color: AppColors.parchment,
+                      ),
+                    ),
+                  ),
+                for (final pair in reads)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      '${pair['readerName']} has read ${pair['forgerName']} ×${pair['count']}',
                       style: const TextStyle(
                         fontFamily: 'Lora',
                         fontSize: 12,

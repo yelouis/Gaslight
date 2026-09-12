@@ -137,6 +137,21 @@ export function computeMatchSummary(
   } : null;
 
   // 4. Head to Head
+  const headToHeadPairs = countFoolsPairs(cards, playerNameMap, 2);
+
+  return {
+    bestLie,
+    cleanestTruth,
+    theSting,
+    headToHead: headToHeadPairs.slice(0, 3)
+  };
+}
+
+export function countFoolsPairs(
+  cards: CardSummary[],
+  playerNameMap: Record<string, string>,
+  minCount: number = 2
+): Array<{ deceiverId: string; deceiverName: string; victimId: string; victimName: string; count: number }> {
   const pairCounts: Record<string, { deceiverId: string; victimId: string; count: number }> = {};
   for (const card of cards) {
     for (const f of card.forgeries) {
@@ -152,8 +167,8 @@ export function computeMatchSummary(
     }
   }
 
-  const headToHeadPairs = Object.values(pairCounts)
-    .filter(p => p.count >= 2)
+  const pairs = Object.values(pairCounts)
+    .filter(p => p.count >= minCount)
     .map(p => ({
       deceiverId: p.deceiverId,
       deceiverName: playerNameMap[p.deceiverId] || p.deceiverId,
@@ -162,17 +177,63 @@ export function computeMatchSummary(
       count: p.count
     }));
 
-  headToHeadPairs.sort((a, b) => {
+  pairs.sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count;
     if (a.deceiverId !== b.deceiverId) return a.deceiverId.localeCompare(b.deceiverId);
     return a.victimId.localeCompare(b.victimId);
   });
 
+  return pairs;
+}
+
+export function countReadsPairs(
+  cards: CardSummary[],
+  playerNameMap: Record<string, string>,
+  minCount: number = 1
+): Array<{ readerId: string; readerName: string; forgerId: string; forgerName: string; count: number }> {
+  const pairCounts: Record<string, { readerId: string; forgerId: string; count: number }> = {};
+  for (const card of cards) {
+    const readerId = card.targetPlayerId;
+    for (const forgerId of card.targetCorrectAttributions || []) {
+      if (readerId !== forgerId) {
+        const key = `${readerId}:::${forgerId}`;
+        if (!pairCounts[key]) {
+          pairCounts[key] = { readerId, forgerId, count: 0 };
+        }
+        pairCounts[key].count++;
+      }
+    }
+  }
+
+  const pairs = Object.values(pairCounts)
+    .filter(p => p.count >= minCount)
+    .map(p => ({
+      readerId: p.readerId,
+      readerName: playerNameMap[p.readerId] || p.readerId,
+      forgerId: p.forgerId,
+      forgerName: playerNameMap[p.forgerId] || p.forgerId,
+      count: p.count
+    }));
+
+  pairs.sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    if (a.readerId !== b.readerId) return a.readerId.localeCompare(b.readerId);
+    return a.forgerId.localeCompare(b.forgerId);
+  });
+
+  return pairs;
+}
+
+export function computeRunningRivalries(
+  cards: CardSummary[],
+  playerNameMap: Record<string, string>
+): {
+  fools: Array<{ deceiverId: string; deceiverName: string; victimId: string; victimName: string; count: number }>;
+  reads: Array<{ readerId: string; readerName: string; forgerId: string; forgerName: string; count: number }>;
+} {
   return {
-    bestLie,
-    cleanestTruth,
-    theSting,
-    headToHead: headToHeadPairs.slice(0, 3)
+    fools: countFoolsPairs(cards, playerNameMap, 1).slice(0, 3),
+    reads: countReadsPairs(cards, playerNameMap, 1).slice(0, 3)
   };
 }
 
@@ -1441,6 +1502,8 @@ async function concludeResolutionRound(
     const { truthDuration } = getPhaseDurations(room.timerSeconds);
     const endTime = room.isTimerDisabled ? null : Date.now() + truthDuration;
 
+    const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames);
+
     transaction.update(roomRef, {
       currentPhase: "truth",
       currentRound: nextRound,
@@ -1452,14 +1515,17 @@ async function concludeResolutionRound(
       endTime,
       resolutionOrder: [],
       unmaskDeadline: null,
+      runningRivalries,
       expiresAt: ttlFrom(Date.now())
     });
   } else {
     const matchSummary = computeMatchSummary(accumulatedCards, players, snapshottedPlayerNames);
+    const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames);
     transaction.update(roomRef, {
       currentPhase: "gameOver",
       unmaskDeadline: null,
-      matchSummary
+      matchSummary,
+      runningRivalries
     });
   }
 }
@@ -1782,6 +1848,29 @@ async function advancePhaseInternal(
         }
       }
 
+      // Target correct attributions (Issue 165 / AB2)
+      const targetCorrectAttributions: string[] = [];
+      const guesses = sealedData.targetForgeryGuesses;
+      if (guesses && answerAuthors) {
+        const targetId = card.targetPlayerId;
+        const activeIds = activePlayers.map(p => p.id);
+        for (const [optionId, guessedAuthorId] of Object.entries(guesses)) {
+          const guessedAuthor = guessedAuthorId as string;
+          if (!guessedAuthor) continue;
+          if (guessedAuthor === targetId) continue;
+          const opt = card.options?.find(o => o.id === optionId);
+          if (opt && (opt.text === kMissingAnswerPlaceholder || opt.text.trim() === "")) {
+            continue;
+          }
+          if (activeIds && !activeIds.includes(guessedAuthor)) {
+            continue;
+          }
+          if (answerAuthors[optionId] === guessedAuthor) {
+            targetCorrectAttributions.push(guessedAuthor);
+          }
+        }
+      }
+
       const newCardSummary: CardSummary = {
         round: room.currentRound || 1,
         targetPlayerId: card.targetPlayerId,
@@ -1789,7 +1878,8 @@ async function advancePhaseInternal(
         promptText: (card.promptText || "").slice(0, 100),
         truthAnswer: (cardWithAnswers.truthAnswer || "").slice(0, 100),
         forgeries: forgeriesSummary,
-        truthFinders
+        truthFinders,
+        targetCorrectAttributions
       };
 
       if (accumulatedCards.length < 60) {
@@ -1847,12 +1937,19 @@ async function advancePhaseInternal(
       }
     }
 
+    // Only publish cards whose authorship has already flipped (Issue 165 / AB2)
+    const publicCardsForRivalries = unmaskDeadline !== null
+      ? accumulatedCards.filter(c => c.targetPlayerId !== room.currentReaderId || c.round !== (room.currentRound || 1))
+      : accumulatedCards;
+    const runningRivalries = computeRunningRivalries(publicCardsForRivalries, accumulatedPlayerNames);
+
     transaction.update(roomRef, {
       currentPhase: "reveal",
       cards: mergedCards,
       readyPlayers: nextReadyPlayers,
       endTime: null,
       unmaskDeadline,
+      runningRivalries,
       expiresAt: ttlFrom(Date.now())
     });
   } else if (room.currentPhase === "reveal") {
@@ -1905,9 +2002,11 @@ async function advancePhaseInternal(
         targetForgeryGuesses: sealedData.targetForgeryGuesses || currentCard.targetForgeryGuesses || {}
       };
 
+      const runningRivalries = computeRunningRivalries(accumulatedCards, accumulatedPlayerNames);
       transaction.update(roomRef, {
         cards: updatedCards,
-        unmaskDeadline: 0
+        unmaskDeadline: 0,
+        runningRivalries
       });
     }
   }
@@ -2113,13 +2212,15 @@ export const advanceToNextResolution = onCall(async (request) => {
       const nextReaderId = order[nextIdx];
       const { voteDuration } = getPhaseDurations(room.timerSeconds);
       const endTime = room.isTimerDisabled ? null : Date.now() + voteDuration;
+      const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames);
       transaction.update(roomRef, {
         currentPhase: "vote",
         currentReaderId: nextReaderId,
         readyPlayers: {},
         endTime: endTime,
         unmaskDeadline: null,
-        cards: updatedCards
+        cards: updatedCards,
+        runningRivalries
       });
     } else {
       await concludeResolutionRound(
@@ -2188,6 +2289,17 @@ export const submitUnmaskGuess = onCall(async (request) => {
     }
     const sealedData = sealedSnap.data() as any;
     const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
+
+    const summaryRef = roomRef.collection("sealed").doc("_summary");
+    const summarySnap = await transaction.get(summaryRef);
+    const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [], playerNames: {} };
+    const accumulatedCards: CardSummary[] = Array.isArray(summaryDoc.cards) ? summaryDoc.cards : [];
+    const snapshottedPlayerNames: Record<string, string> = { ...(summaryDoc.playerNames || {}) };
+    for (const p of players) {
+      if (p && p.id && p.name) {
+        snapshottedPlayerNames[p.id] = p.name;
+      }
+    }
 
     const voterId = guesserId;
     const votedOptionId = currentCard.votes?.[voterId];
@@ -2300,10 +2412,14 @@ export const submitUnmaskGuess = onCall(async (request) => {
     const newCards = [...room.cards];
     newCards[currentCardIdx] = updatedCard;
 
-    transaction.update(roomRef, {
+    const updatePayload: Record<string, any> = {
       cards: newCards,
       unmaskDeadline: nextUnmaskDeadline
-    });
+    };
+    if (allFooledGuessed) {
+      updatePayload.runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames);
+    }
+    transaction.update(roomRef, updatePayload);
 
     return { success: true };
   });
@@ -2361,6 +2477,17 @@ export const closeUnmaskWindow = onCall(async (request) => {
     const pendingScoreBreakdown = sealedData.pendingScoreBreakdown;
     const answerAuthors: Record<string, string> = sealedData.answerAuthors || {};
 
+    const summaryRef = roomRef.collection("sealed").doc("_summary");
+    const summarySnap = await transaction.get(summaryRef);
+    const summaryDoc = summarySnap.exists ? (summarySnap.data() as any) : { cards: [], playerNames: {} };
+    const accumulatedCards: CardSummary[] = Array.isArray(summaryDoc.cards) ? summaryDoc.cards : [];
+    const snapshottedPlayerNames: Record<string, string> = { ...(summaryDoc.playerNames || {}) };
+    for (const p of players) {
+      if (p && p.id && p.name) {
+        snapshottedPlayerNames[p.id] = p.name;
+      }
+    }
+
     if (pendingScoreDeltas) {
       for (const p of players) {
         const sDelta = pendingScoreDeltas[p.id] || 0;
@@ -2399,9 +2526,12 @@ export const closeUnmaskWindow = onCall(async (request) => {
       targetForgeryGuesses: sealedData.targetForgeryGuesses || currentCard.targetForgeryGuesses || {}
     };
 
+    const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames);
+
     transaction.update(roomRef, {
       cards: updatedCards,
-      unmaskDeadline: 0
+      unmaskDeadline: 0,
+      runningRivalries
     });
 
     return { success: true };

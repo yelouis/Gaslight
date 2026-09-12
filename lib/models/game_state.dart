@@ -59,6 +59,9 @@ class GameState {
   // Published match summary for game over screen
   final Map<String, dynamic>? matchSummary;
 
+  // Running rivalries published during reveal and at game over
+  final Map<String, dynamic>? runningRivalries;
+
   GameState({
     required this.roomCode,
     this.currentPhase = GamePhase.lobby,
@@ -82,6 +85,7 @@ class GameState {
     this.debugEnabled = false,
     this.unmaskDeadline,
     this.matchSummary,
+    this.runningRivalries,
   }) : forgeriesPerCard = forgeriesPerCard ?? sabotageAnswersCount;
 
   GameState copyWith({
@@ -107,11 +111,13 @@ class GameState {
     bool? debugEnabled,
     int? unmaskDeadline,
     Map<String, dynamic>? matchSummary,
+    Map<String, dynamic>? runningRivalries,
     bool clearReaderId = false,
     bool clearEndTime = false,
     bool clearUnmaskDeadline = false,
     bool clearEffectiveDeckId = false,
     bool clearMatchSummary = false,
+    bool clearRunningRivalries = false,
   }) {
     return GameState(
       roomCode: roomCode ?? this.roomCode,
@@ -135,6 +141,7 @@ class GameState {
       debugEnabled: debugEnabled ?? this.debugEnabled,
       unmaskDeadline: clearUnmaskDeadline ? null : (unmaskDeadline ?? this.unmaskDeadline),
       matchSummary: clearMatchSummary ? null : (matchSummary ?? this.matchSummary),
+      runningRivalries: clearRunningRivalries ? null : (runningRivalries ?? this.runningRivalries),
     );
   }
 
@@ -162,6 +169,7 @@ class GameState {
       'debugEnabled': debugEnabled,
       'unmaskDeadline': unmaskDeadline,
       if (matchSummary != null) 'matchSummary': matchSummary,
+      if (runningRivalries != null) 'runningRivalries': runningRivalries,
     };
   }
 
@@ -202,6 +210,9 @@ class GameState {
       unmaskDeadline: map['unmaskDeadline']?.toInt(),
       matchSummary: map['matchSummary'] != null
           ? Map<String, dynamic>.from(map['matchSummary'] as Map)
+          : null,
+      runningRivalries: map['runningRivalries'] != null
+          ? Map<String, dynamic>.from(map['runningRivalries'] as Map)
           : null,
     );
   }

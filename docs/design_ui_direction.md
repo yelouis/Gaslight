@@ -122,6 +122,7 @@ Your selection (motif intensity): Option A
 **Vote grid (`card_grid.dart`).** Answers as **evidence cards** on the table. Selected = wax seal (keep). Add: the disabled "(Your Forgery)" card gets a subtle **"SEALED — your own hand" ribbon** so it reads as intentional, not broken.
 
 **Reveal (`phase4_reveal.dart`).** This is the money screen — give it the most craft: staggered vote-chip landing, Truth revealed last in verdigris with a **stamped "THE TRUTH" seal**, forgery cards **flip to unmask** authors, and a **"Best Forgery of the Round"** banner. (Ties directly to the honor-stats work selected in `design_scoring_and_ui.md` Clarification 2.)
+- **Running Rivalries (`THE PARLOUR REMEMBERS`) — shipped Wave AB2 (Issue 165), September 2026:** Gated strictly on `revealStage >= 4` (after author flip). Renders a parchment-styled container near `POINTS AWARDED THIS CARD` containing the `CLOSEST READ` superlative over `reads` (omitted if nobody has correctly attributed forgeries yet), followed by fools lines (`{deceiver} has fooled {victim} ×{count}`) and reads lines (`{reader} has read {forger} ×{count}`). Header and badge titles use `Flexible` to preserve responsiveness at 320 pt.
 
 **In-game header sizing — shipped Wave R (Issue 136, Option A modified), August 2026.** In-game screen AppBars across Craft (`Phase2CraftScreen`), Vote (`Phase3VoteScreen`), and Reveal (`Phase4RevealScreen`) derive their `toolbarHeight` dynamically via `inGameAppBarHeight` from measured text (`TextPainter.layout`) scaled by live `MediaQuery.textScalerOf(context)` constrained to the title box, rather than using arbitrary literals or screen-height fractions. A minimum floor of `kToolbarHeight` (56.0) is enforced. Forgery phase multi-line headers (`FORGERY`, `ROOM: XXXX`, `Rotation N of M`) fit cleanly across all viewport widths and accessibility text scaling settings without clipping.
 
@@ -129,7 +130,7 @@ Your selection (motif intensity): Option A
 
 **Dealt-card overlay removed — shipped Wave AA (Issue 155, Option A), September 2026; supersedes Wave R (Issue 137).** `DealtCardOverlay` was removed because it gated every phase and rotation change behind a full-screen modal whose content was a strict subset of the writing screen behind it, carried misleading button labels (`DISMISS` on truth rounds, `INSPECT` on forgery rounds), and obstructed the `RE-ROLL PROMPT` button on truth rounds. Players now transition directly to the writing screen on phase and rotation changes.
 
-**Game Over (`game_over_screen.dart`).** Present honors as **framed portraits on a parlor wall** (brass frames, engraved plaques) rather than flat cards. The stubbed "Share to Instagram" becomes an exportable **"Case Closed" dossier card** (see Proposal P6).
+**Game Over (`game_over_screen.dart`).** Present honors as **framed portraits on a parlor wall** (brass frames, engraved plaques) rather than flat cards. The stubbed "Share to Instagram" becomes an exportable **"Case Closed" dossier card** (see Proposal P6). The existing `RIVALRIES` highlight card container displays the `reads` direction alongside the match-summary `headToHead` fools pairs (Issue 165 / AB2).
 
 ---
 

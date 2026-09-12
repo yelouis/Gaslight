@@ -118,13 +118,21 @@ To allow seamless recovery from app restarts, device sleep, or connection losses
   * **Authoritative Window Close & Client Triggers (Issue 133, August 2026)**: The `closeUnmaskWindow` callable authoritatively enforces `Date.now() > room.unmaskDeadline`, rejecting early close attempts with `failed-precondition` to prevent players from aborting the unmask guessing window or revealing forgers early. The callable is open to any authenticated room member (not only the host). On the client, `Phase4RevealScreen` countdown timer triggers `closeUnmaskWindow` with a 1500 ms safety margin past `unmaskDeadline` and bounds retries to at most 5 attempts per card, resetting upon transition to a new target card.
 * **Cleanup**: Returning to the lobby triggers `leaveRoom()`, deleting active player records and shutting down subscriptions.
 
-### 4. Phase 5 (Game Over Screen) — Standings, Match Highlights & Case File Export (Wave K)
+### 3. Phase 4 (Reveal Screen) — Score Breakdown & Running Rivalries (Waves K, AA, AB)
+* **Author Flip & Revenge Timing**: Authorship of forgeries is strictly sealed until stage 4 (`revealStage >= 4`). In stage 3, unmask window is active for fooled players.
+* **Running Rivalries (`THE PARLOUR REMEMBERS` - Issue 165 / AB2)**: Rendered after the author flip (`revealStage >= 4`), near `POINTS AWARDED THIS CARD`:
+  * **Thresholds vs Final**: Uses `count >= 1` sliced to top 3 per direction (`fools` and `reads`). A threshold of `>= 2` mid-game would remain empty for most of the match. Game over `headToHead` retains `count >= 2`.
+  * **Superlative (`CLOSEST READ`)**: The pair with the highest read count in `reads`. If `reads` is empty (no correct forger attributions yet), the superlative is completely omitted rather than displaying an empty state.
+  * **Exact Copy**: Heading `THE PARLOUR REMEMBERS`; fools lines read `{deceiver} has fooled {victim} ×{count}`; reads lines read `{reader} has read {forger} ×{count}`.
+  * **Author Leak Prevention**: Pairs from the current card are withheld from `room.runningRivalries` while `unmaskDeadline` is active; only previously flipped cards are included. Once the window closes, the current card's pairs are published.
+
+### 4. Phase 5 (Game Over Screen) — Standings, Match Highlights & Case File Export (Wave K, AB)
 * **Full Ranked Standings (`_buildStandings`)**: Renders all active players ranked 1st through Nth, with podium trophies/ribbons, avatar, name, and stat lines (`Fooled X · Fooled by Y`), ensuring every player sees their final placement and stats.
 * **Match Summary & Answer Quoting (`_buildMatchHighlights`)**: Displays server-computed awards quoting actual answers:
   * **Best Lie of the Night**: Forgery with the highest number of fooled voters, quoting the exact lie text, author name, and prompt.
   * **Cleanest Truth**: Truth answer that went unnoticed / had the fewest finder votes.
   * **The Sting**: The single card that caused the highest total wrong votes.
-  * **Rivalries (Head to Head)**: Deceiver/victim pairs where player A fooled player B two or more times.
+  * **Rivalries (Head to Head)**: Deceiver/victim pairs where player A fooled player B two or more times (`headToHead`). In addition, the `RIVALRIES` container displays the reads direction from `state.runningRivalries.reads` (Issue 165 / AB2).
 * **Accumulation & Security Invariant (`sealed/_summary`)**: Because answer text is wiped across single-card reveals and round advances, resolved card summaries and display names are accumulated into `room.collection("sealed").doc("_summary")` (default-deny to clients) during `advancePhaseInternal`. The summary is only computed and written to public `room.matchSummary` at game over (`advanceToNextResolution` and `handleDisconnect`), guaranteeing zero answer/author leakage mid-game. Display names are frozen into `matchSummary` awards (`authorName`, `targetPlayerName`, `deceiverName`, `victimName`) so match highlights remain self-contained even if players depart before or after game over (Issue 115).
 * **Responsive Badge Pills (`_highlightCard`)**: Highlight card titles are wrapped in `Expanded` with text ellipsis alongside `Flexible` badge containers to preserve badge visibility without clipping or RenderFlex overflow on narrow devices (Issue 114).
 * **Case File Delivery (`_shareCaseFile`)**:

@@ -19,33 +19,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-Two issues, **both now selected** and specced as Wave AB — they stay here until the code lands, then move to §3. Everything else from the September 8 playthrough shipped in Wave AA and is indexed in §3.
-
----
-
-### Issue 165: The game reads as Quiplash across all four axes
-
-**Status**: ⚠️ Confirmed Unresolved — Reported after a full playthrough. On filing, the user was asked which axis drove the comparison and selected **all four**: the core loop, the tone and presentation, the scoring and progression, and the social dynamics. That answer matters: it means the Victorian parlour framing is not currently doing differentiating work, and no single mechanic tweak will change the impression. **This is a product-direction question, not a defect**, and it is the parent of Issues 162 and 163 — both are partial answers to it. Decide this one first; a selection here may change what you want from those.
-
-The structural asset the game already has and does not exploit: **the answers are impersonations of a specific person at the table, and that person is in the room.** Quiplash has no target. Every option below is a way of leaning on that.
-
-**Option A (recommended)**: **Make the game about knowing the target, and say so everywhere** — re-weight scoring toward the target relationship (points for a forgery the *target themselves* rates as plausible; points for the target when their truth is found), give the target an active role during their own card (Issue 162), and re-cut the prompt decks toward personal history rather than absurdist invention.
-  - *Pros*: Differentiates on the one axis Quiplash structurally cannot follow — it has no target and no relationships between players. Reuses the entire existing phase structure, so it is a re-weighting rather than a rewrite. Directly absorbs Issue 162, and gives Issue 163's escalation something to escalate.
-  - *Cons*: Adds scoring terms, worsening the explainability problem in Issues 164 and 169 — those should be selected alongside it. Changes the deck's character, so `design_prompt_system.md` and the deck content both need revision, which is content work with no test to prove it landed. Weakest with strangers, where nobody knows the target well enough for the mechanic to bite.
-
-**Option B**: **Make deception continuous rather than per-card** — carry accusation and trust across the whole match (a standing suspicion economy, unmasking that persists, running rivalries) instead of resetting every card.
-  - *Pros*: Replaces the round-by-round arc that reads as Quiplash's with a match-long social one; the `headToHead` "RIVALRIES" data in the match summary already computes the raw material, so the game is halfway to tracking it. Answers Issue 163 without reviving P7/P9/P11.
-  - *Cons*: The largest design change in this queue, touching scoring, the reveal beats, and the game-over screen simultaneously. Cross-card state introduces exactly the kind of long-lived state lesson 2.40 warns about, at server scale. Long feedback loops are hard to playtest and harder to explain.
-
-**Option C**: **Differentiate on presentation and content only** — keep every mechanic and invest in the parlour framing: prompt decks, reveal theatre, the raven, the copy.
-  - *Pros*: No mechanical risk whatsoever, no scoring or server change, and nothing to re-explain to players; the theming assets and vocabulary already exist and are strong. Fastest path to a *felt* difference.
-  - *Cons*: The user reported presentation as one of the four axes that already feels same-y, so this option addresses the complaint least — it doubles down on the thing that was named as not working. Tone alone has never separated a party game from its ancestor.
-
-**Option D**: **Accept the resemblance and compete on execution** — treat Quiplash-likeness as acceptable and spend the effort on Issues 153–162, which are all concrete usability defects.
-  - *Pros*: Every one of those issues is a known, verifiable fix with a clear done condition, and the playthrough found nine of them — a game that is same-y but flawless beats a differentiated one that is hard to type into. No design risk, no doc churn, no reversal of Section 4.
-  - *Cons*: Leaves the strategic concern unanswered, and it will be raised again by the next playtester; the longer the phase structure hardens, the more expensive Options A and B become.
-
-Your selection: I think it is already different enough now but if needed lets proceed with Option A and B by showing and updating the rivaleries each reveal and making it clear who knows who best.
+All issues from the September 8 playthrough have been resolved (Issues 153–170). Both Wave AB items (Issue 170 / AB1 and Issue 165 / AB2) have landed in code and tests. Production functions deployment and evidence re-capture (AB3) remain in-flight.
 
 
 
@@ -353,6 +327,7 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AB / AB2 — running rivalries & closest read superlative** (published `runningRivalries` `{ fools, reads }` with `count >= 1` sliced to top 3 per direction on room at reveal and game over; rendered `THE PARLOUR REMEMBERS` section on reveal after author flip with exact copy and `CLOSEST READ` superlative over reads; displayed reads in game-over `RIVALRIES` container; preserved strict author leak prevention during unmask window; verified leak guard, flush sites, attributions, thresholds, 320 pt responsiveness, and over-reach guards; falsified leak and threshold guards) | 165 | `functions/src/index.ts`; `functions/src/scoring_logic.ts`; `lib/models/game_state.dart`; `lib/screens/phase4_reveal.dart`; `lib/screens/game_over_screen.dart`; `test/running_rivalries_test.dart`; `functions/test/game_e2e.spec.ts`; `design_scoring_and_ui.md`; `design_database_and_security.md`; `design_ui_direction.md` |
 | **Wave AB / AB1 — target forgery guess multiplier exemption** (exempted `target_forger_guess` points from round multiplier by reordering `calculateScoresAndBreakdown` to execute guess points calculation after the multiplier block in both `functions/src/scoring_logic.ts` and `lib/utils/scoring_logic.dart`; verified sum invariant holds; verified 2x3+3=9 at round 3 in TS and Dart suites; inverted test 4 in both suites and falsified with 15 vs 9) | 170 | `functions/src/scoring_logic.ts`; `lib/utils/scoring_logic.dart`; `functions/test/scoring_logic.spec.ts`; `test/scoring_logic_test.dart`; `design_scoring_and_ui.md` |
 | **Wave AA / Issue 160 — stacked-deck vote options** (replaced the scrolling one-per-row portrait list in `card_grid.dart` with Treatment 3, chosen by the user from four rendered mockups in `docs/mockups/vote_options/`; six options fit a 320×640 pt viewport with no vertical scroll while `AutoSizedAnswerText` still renders a full 100-character answer; bidirectional navigation via PREV/NEXT, horizontal swipe and jump dots, as the selection explicitly required; **rewrote** `vote_option_truncation_test.dart`'s P9 discoverability case, which had asserted the below-the-fold behaviour this removes) | 160 | `lib/widgets/card_grid.dart`; `test/stacked_deck_navigation_test.dart`; `test/vote_option_truncation_test.dart`; `design_ui_direction.md` |
 | **Wave AA / AA16a+AA16b — target unmasks the forgers** (new `submitTargetForgeryGuesses` callable modelled on `submitUnmaskGuess`, storing `Record<optionId, guessedAuthorId>` in `sealed/{cardId}` with thirteen rejections and replace-not-merge semantics; `+1` per correct attribution via `kTargetForgeryGuessPoints`, forgers deliberately unpenalised; points inherit the unmask withholding contract; tap-to-assign chip row on the vote screen, rendered **beside** the option grid rather than making it interactive, so the O9 read-only assertion stayed true and unedited) | 162 | `functions/src/index.ts`; `functions/src/scoring_logic.ts`; `lib/widgets/card_grid.dart`; `lib/screens/phase3_vote.dart`; `design_scoring_and_ui.md`; `design_database_and_security.md` |
