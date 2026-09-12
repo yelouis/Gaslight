@@ -12,13 +12,15 @@
 
 **All five evidence-gate invocations exit 0**, and **the deploy gate is now green** — the functions were deployed and `check_deploy_fresh.sh` tracks `submitTargetForgeryGuesses`.
 
-**Issues 171, 172 and 173 were selected on September 12, 2026** and are specced as **Wave AC** in `agent_execution_guide.md`, together with a new feature:
-- **171 → Option C** — collapse the score breakdown behind a tap, plus the requested *"tap to see score breakdown"* hint. **The colour fix is mandatory in every option and is not itself a choice.**
-- **172 → Option B** — replace the 150 sentence stems with 150 inline sample answers.
-- **173 → Option B** — the visible card is the selection, plus the requested swipe hint and option count.
-- **AC4 (new)** — cap re-rolls at 3 per round, then let the player choose among them.
+**Selections made September 12, 2026 — specced as Wave AC in `agent_execution_guide.md`:**
+- **171 → Option C** (AC1) — collapse the score breakdown behind a tap, plus the requested hint. **The colour fix is mandatory in every option and is not itself a choice.**
+- **172 → Option B** (AC2) — replace the 150 sentence stems with 150 inline sample answers.
+- **AC4 (new feature)** — cap re-rolls at 3 per round, then let the player choose among them.
+- **174 → Option A** (AC5) — top up from the PG fallback deck when the room's deck runs dry.
 
-**Issue 174 is newly filed below and awaits selection.** It is the deck-capacity question AC4 exposes; **AC4 ships without it** because its chooser de-duplicates, but the underlying arithmetic needs a decision.
+**⚠️ Issue 173 was selected and then WITHDRAWN the same day**, before any code was written — *"scrap AC3. Lets not make this change."* **`CONFIRM VOTE` keeps its current behaviour.** The rule it follows is now documented in full in that issue's Status, since the withdrawal followed a walk-through of it. The options are kept intact in case the user re-selects; **none is approved.**
+
+**No issue is currently awaiting a selection.**
 
 ## ⚠️ Unresolved Issues & Suggestions
 
@@ -96,6 +98,26 @@ Your selection: Proceed with Option B.
 
 **Status**: ⚠️ Confirmed Unresolved — reported from a device playthrough on September 12, 2026, with the screenshot showing the stacked deck on `CARD I OF III` and `CONFIRM VOTE` disabled. **The code is behaving as designed; the affordance is the defect.**
 
+**The current rule, traced in source September 12, 2026 — no change was made, this documents what ships.**
+
+`CONFIRM VOTE` exists only for a **voter**. The card's target sees `I'M READY` in its place, and once you have voted the whole voting UI is replaced by the waiting screen (`phase3_vote.dart:242`), so the button is *gone*, never greyed, after a vote.
+
+For a voter, the button is greyed **exactly when `_localSelectedAuthorId == null`** (`phase3_vote.dart:582`), and that field is null in exactly two situations:
+
+1. **On arrival at every card.** It is declared null and is **reset on every reader change** (`phase3_vote.dart:346`), so each new card starts greyed.
+2. **After tapping a card that cannot be voted for** — because that tap never registers a selection at all.
+
+It becomes non-null **only** through `onSelect` (`phase3_vote.dart:510`), which fires **only** from a tap on a card. **Navigating does not select**: swipe, `PREV`, `NEXT` and the jump dots all change which card is in front and nothing else. A player who pages through every option and never taps one keeps a greyed button throughout — which is what the September 12 screenshot shows.
+
+**Three tap sites, all gated the same way** — `card_grid.dart:507` (landscape grid), `:674` and `:740` (the stacked deck's cards). Each reads `onTap: isUnvotable ? null : …`, so on an unvotable card there is **no tap handler at all**: tapping does nothing, produces no ripple, and does not even bring that card to the front.
+
+`_isAnswerUnvotable` (`card_grid.dart:180`) is true when **any** of these hold:
+- the viewer is the card's **target** (who never sees this button anyway);
+- the answer is the viewer's **own** — their forgery on this card, matched by `myOptionIdForThisCard`;
+- the answer is a **placeholder** — `THE SOUL IS SILENT`, or empty, left by a player who did not answer in time.
+
+**So the two ways to meet a greyed button are:** you have not tapped any card yet, or the only card you tapped was your own answer or a placeholder. **The second is the confusing one** — the tap is silently ignored and nothing explains why.
+
 **Verified in source.** `phase3_vote.dart:582` disables the button while `_localSelectedAuthorId == null`, and `card_grid.dart:169` (`_onCardTap`) does call `onSelect` when the active card is tapped. **Selection works — the player simply has no way to know it is required.**
 
 **Why this arrived with Issue 160 and not before.** The old portrait layout listed every option as a row, where tapping a row to choose it is the only thing a list of choices affords. The stacked deck replaced that with one card at a time plus `PREV`/`NEXT` buttons and jump dots, so the screen now reads as a *viewer* — the controls present are for navigating, and nothing distinguishes "looking at card I" from "choosing card I". A player who navigates with the buttons, as the UI invites, never taps the card and finds the confirm button dead with no explanation. **This is a discoverability regression introduced by an otherwise successful change, and `test/stacked_deck_navigation_test.dart` cannot catch it** — it taps cards directly, which is precisely the step a real player does not know to take.
@@ -112,7 +134,7 @@ Your selection: Proceed with Option B.
   - *Pros*: Puts the decision on the object being decided about, which removes the two-step model altogether and makes the dead-button state impossible. Reads naturally in a one-card-at-a-time layout.
   - *Cons*: Loses the deliberate two-step confirm that currently separates "I pick this" from "I am sure", which matters because a vote cannot be changed once cast. Consumes vertical space inside the card, competing with the answer text that Issue 160 was fought to keep legible. A larger change to a layout that shipped four days ago and is otherwise working.
 
-Your selection: Proceed with Option B. However, make sure that there is a hint to swipe to see other options and see the amount of options to go through.
+Your selection: Option B was selected on September 12, 2026 and **WITHDRAWN the same day, before any code was written** — *"scrap AC3. Lets not make this change."* **No option is approved. Do not implement any of them.** The withdrawal followed a walk-through of the current greying rule, which is now recorded in the Status above; the user may re-select later, so the options are kept intact.
 
 ---
 
@@ -150,7 +172,7 @@ Against a 25-prompt deck, **five players exhaust 20 of 25 in a single round**, a
   - *Pros*: No new constraints, no blocked games, no register mixing. Cheapest by far, and the honesty of the notice arguably beats a silent substitution. AC4's de-duplication already prevents the worst symptom.
   - *Cons*: Does the least about the thing the user actually asked for — *"not the same 3 prompts per round for the same player"* — and on a 25-prompt deck at five players, round 2 would be mostly repeats. A notice explaining that the deck is exhausted is a worse experience than not running out.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 

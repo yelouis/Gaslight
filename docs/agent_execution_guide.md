@@ -4,13 +4,15 @@
 
 **Every number and literal string in this document is a decision, not a suggestion.**
 
-Three selections were made in `docs/ongoing_general_errors.md` on September 12, 2026, and the user added one new feature. They are **AC1–AC4**.
+Two selections were made in `docs/ongoing_general_errors.md` on September 12, 2026, and the user added one new feature. They are **AC1, AC2, AC4 and AC5** — the numbering is deliberately non-contiguous, see below.
+
+**⚠️ AC3 was specced and then WITHDRAWN by the user on September 12, before any code was written.** Issue 173 selected Option B, then the user reversed it: *"scrap AC3. Lets not make this change."* **`CONFIRM VOTE` keeps its current behaviour — greyed until an option is tapped. Do not implement Option B, and do not treat Issue 173's selection line as live;** it records the withdrawal. The item number is left as a hole rather than renumbered, so that anything referring to "AC4" still means the re-roll feature.
 
 **Do only what is specified here.** A `(recommended)` label is not approval; a filled `Your selection:` line is. **Never fill one in.**
 
-**⚠️ Issue 174 is filed and UNSELECTED.** It is the deck-capacity question AC4 raises. **AC4 ships without waiting for it** — the spec below degrades safely on a small deck — but do not implement Issue 174's options until a selection exists.
+**Issue 174 was selected on September 12 (Option A) and is specced as AC5.** AC4 still ships first and still de-duplicates its chooser; AC5 then removes the underlying cause. **There are no unselected issues.**
 
-**Implement in order.** AC2 and AC4 both edit the craft screen; AC2 first so AC4 builds on settled copy.
+**Implement in order: AC1, AC2, AC4, AC5.** AC2 and AC4 both edit the craft screen; AC2 first so AC4 builds on settled copy.
 
 ---
 
@@ -111,47 +113,7 @@ Three selections were made in `docs/ongoing_general_errors.md` on September 12, 
 
 ---
 
-## 5. AC3 — Issue 173 → Option B: the visible card is the selection
-
-**What this means for the user.** Today `CONFIRM VOTE` is dead until you tap a card, and nothing says so. After this, whatever card is in front of you is your choice, the button names it, and the screen tells you there are more to see.
-
-**The gap.** `phase3_vote.dart:582` disables the button while `_localSelectedAuthorId == null`. Selection works (`card_grid.dart:169`) but the stacked deck reads as a viewer, not a chooser.
-
-**Implementation.**
-
-1. **The visible card is the selection.** As the active index changes — by swipe, `PREV`/`NEXT`, or a jump dot — the selection follows it. Tapping a card still selects it; that path stays.
-2. **The button must name what it will do.** Render `CONFIRM OPTION {numeral}` using the same numeral shown on the card (`OPTION I`, `OPTION II`, …), not a bare `CONFIRM VOTE`. **This mitigates a *misinformed* tap — a player confirming the wrong option because nothing said which one was live. It does nothing for a *mistimed* tap, which is a separate risk and is handled in 2a and 2b.**
-
-2a. **⚠️ A 400 ms cool-down after every index change — this is the primary mistimed-tap mitigation.** `CONFIRM` must be inert for 400 ms after *any* change of active card (swipe, `PREV`, `NEXT`, or a jump dot), and for 400 ms after the deck first renders.
-
-   **Why this specific defence.** Measure the shipped layout: for a voter the `PREV` / dots / `NEXT` row is the **last** element of `CardGrid` (`card_grid.dart:455–478`), and `phase3_vote.dart:523` puts exactly **`SizedBox(height: 16)`** between it and the confirm button. **A player paging through options has their thumb 16 logical pixels above a control that, under Option B, casts an irreversible vote on the first tap.** The accident is a tap in a repeat-tap burst landing slightly low, and repeat taps arrive 150–300 ms apart — so a 400 ms window covers the burst while a deliberate user, who reads an option before confirming, never encounters it. **The cool-down must be invisible in normal use; if a tester notices it, it is too long.**
-
-   **Do not implement this as a disabled button.** A control that greys out every time you swipe reintroduces exactly the dead-button confusion Issue 173 was filed about. Keep it visually enabled and **ignore the tap**.
-
-2b. **Separate the two controls spatially — defence in depth, not the primary fix.** Raise the gap at `phase3_vote.dart:523` to **24 pt** and give the confirm button a visual separator so it does not read as the next item in the navigation row. **Do not solve this by adding large vertical space**: the vote screen's scarcity of vertical room is what Issue 160 was fought over, and 6 options at 320 pt is the case that must still fit. Verify at 320 pt before choosing any value above 24.
-
-**Two heavier mitigations were considered and are NOT specified — do not add them without a selection.** *Slide-to-confirm* would make an accidental vote near-impossible but introduces a gesture that appears nowhere else in this app. *An undo window* is the obvious idea and is the expensive one: `castVote` sets `readyPlayers[voterId] = true` and **calls `advancePhaseInternal` when that completes the readiness gate**, so a retraction would race the phase advance and needs a server-side retract path with its own guard. **If a mistimed vote is still reported after 2a and 2b ship, the undo window is the next step and should be filed with options rather than improvised.**
-3. **⚠️ An unvotable card must not become a live selection.** The player's own answer and placeholder options are unvotable (`_isAnswerUnvotable`). When the visible card is one of those, **clear the selection and disable the button with the reason** — exactly the dead-button state Issue 173 is about, but now explained: `YOU CANNOT VOTE FOR YOUR OWN ANSWER`. **Getting this wrong is the one way Option B ships a worse bug than the one it fixes**, because the model "what you see is what you vote for" silently breaks on the one card where it must not hold.
-4. **Add the hints the user asked for.** Beneath the deck: exactly `Swipe to see all options`, in `brass` at 11 pt. The existing `CARD I OF III` counter stays and is the option count — **verify it reads correctly at every option count before assuming it satisfies the request.**
-
-**Validation.**
-
-1. Widget test: on first render with no interaction, the button is enabled and reads `CONFIRM OPTION I`.
-2. Widget test: swipe to the next card; the button reads `CONFIRM OPTION II` and confirming casts a vote for **that** option.
-
-2a. Widget test, **the mistimed-tap guard**: change the active card, then tap `CONFIRM` after **200 ms** — assert **no vote was cast**. Advance to **450 ms** and tap again — assert the vote *is* cast. **Assert on the vote actually reaching `GameService`, not on the button's enabled flag**, because 2a deliberately keeps the button looking enabled.
-
-2b. Widget test: the same guard applies on first render — a tap 200 ms after the deck appears casts nothing.
-3. Widget test: navigate to the player's own answer; the selection is cleared, the button is disabled and shows the reason. Then navigate away; the button re-enables for the new card.
-4. Widget test: both hint strings render verbatim; the counter reports the true total.
-5. **Over-reach guards, unedited:** all 4 tests in `test/stacked_deck_navigation_test.dart` and all 11 in `test/phase3_vote_test.dart`, **including `O9`** — the target still never sees a vote button.
-6. **Falsification:** remove the unvotable handling from (3); test 3 must fail by casting a self-vote, which the server rejects — **so assert the client state, not the server's refusal**, or the test will pass for the wrong reason.
-7. **Falsification:** remove the cool-down; tests 2a and 2b must fail, and every other test in this item must still pass. **If test 2 also fails, the cool-down window is leaking into deliberate use and is too long.**
-
-**Blast radius:** `docs/design_ui_direction.md` — the stacked-deck section gains the selection model and the named-confirm rule.
-
----
-## 6. AC4 — NEW FEATURE: cap re-rolls at 3 per round, then let the player choose
+## 5. AC4 — NEW FEATURE: cap re-rolls at 3 per round, then let the player choose
 
 **The request, verbatim:**
 
@@ -212,7 +174,7 @@ With the history fix, candidates are drawn preferring prompts the player has not
 
 **De-duplicate `rerollCandidates` on append.** If a re-roll produces a prompt already in the list, still consume the re-roll and still change the card, but do not add a duplicate entry — **a chooser offering the same prompt twice is the visible form of the exact complaint this feature was asked to prevent.** The chooser therefore shows *up to* three distinct prompts, and fewer when the deck cannot supply three.
 
-**This is the safe degradation, not the fix.** The underlying capacity problem is **Issue 174**, filed and unselected: four catalogue decks hold 25 prompts, and five players using all three re-rolls consume **20 of them in a single round**, while the capacity check at `index.ts:733` only requires `players × rounds`. **AC4 ships without waiting for that selection** — de-duplication keeps the feature honest on a small deck — but do not implement any of Issue 174's options here.
+**This is the safe degradation, not the fix.** The underlying capacity problem is **Issue 174**, now selected and specced as **AC5**: four catalogue decks hold 25 prompts, and five players using all three re-rolls consume **20 of them in a single round**, while the capacity check at `index.ts:733` only requires `players × rounds`. **Keep the de-duplication anyway** — AC5 removes the cause, but the terminal case where every deck is exhausted still exists and de-duplication is what keeps the chooser honest there.
 
 ### 6.5 Client
 
@@ -236,6 +198,37 @@ With the history fix, candidates are drawn preferring prompts the player has not
 9. **Over-reach guards, unedited:** `test/reroll_deck_exhaustion_test.dart` and `test/phase2_craft_test.dart`'s `Issue 88.1` re-roll error case. **The "re-rolls never refuse" contract in `design_prompt_system.md` §5 is about the draw, not the cap** — the draw still never throws; the *callable* now refuses past three. Keep those distinct in the commit body.
 
 **Blast radius:** `docs/design_prompt_system.md` §5 (the cap, the chooser, and the corrected exclusion), `docs/design_database_and_security.md` (two new `sealed` fields and the new callable row), `docs/design_ui_direction.md` (the chooser).
+
+---
+## 6. AC5 — Issue 174 → Option A: top up from the fallback deck when the room's deck runs dry
+
+**Do AC4 first.** AC5 modifies the same draw AC4 corrects, and its whole purpose is to catch the case AC4's de-duplication can only paper over.
+
+**What this means for the user.** With three re-rolls each, a five-player table burns 20 of a 25-prompt deck in one round. Today the draw quietly starts handing back prompts people have already seen — which is the exact complaint that prompted the re-roll cap. After this, the game reaches into the large fallback deck instead, and a player only ever sees a repeat when there is genuinely nothing new left anywhere.
+
+**The gap.** `PromptDecks.drawOneExcluding(deckId, excluded, mustAvoid)` **never refuses** — it prefers a prompt outside `excluded`, then relaxes to anything outside `mustAvoid` (`design_prompt_system.md` §5). That relaxation is what silently produces repeats. The check at `index.ts:733` only budgets `players × rounds`, so it never sees this coming.
+
+**Implementation.**
+
+1. **Extend the existing pattern, do not invent one.** `rerollPrompt`'s custom-deck branch already does exactly this shape: when its pool is empty it calls `PromptDecks.drawOneExcluding(promptSource.fallbackDeckId, …)`. Give the catalogue-deck branch the same escape.
+2. **The rule:** attempt the draw against the room's deck excluding the player's history. **If that yields nothing the player has not seen**, draw from `PromptDecks.getFallbackDeckId()` — again excluding history and `inPlay` — before falling back to relaxation.
+3. **⚠️ Apply this to the round-advance deal as well, not only to re-rolls.** Issue 174's Option A speaks about re-rolls, but `concludeResolutionRound` draws each player's next-round prompt with the same `drawOneExcluding(deckId, seen, assignedThisRound)` and relaxes the same way. **The dealt prompt matters more than a re-roll result** — it is the prompt the player actually answers — so protecting re-rolls while leaving the deal to repeat would fix the lesser path and leave the greater one broken. **This is a deliberate extension of the option's letter to its intent; record it in the commit body.**
+4. **The terminal case.** When the room's deck *and* the fallback are both exhausted for this player, **let `drawOneExcluding` relax exactly as it does today.** It must still never refuse — that contract is load-bearing and is what keeps a long match playable. A repeat at that point is correct behaviour, not a bug.
+5. **Do not touch the capacity check at `index.ts:733`.** Tightening it was Option B and was **not** selected; it would block configurations that play perfectly well.
+
+**⚠️ The content-rating property that makes this safe — verify it rather than assuming it.** The fallback deck is `hypotheticals`, rated **PG** (`prompt_decks.ts:40–41`), and it is the only deck marked `isFallback`. Every other deck is PG except `rated_r_nsfw`. **Topping up therefore can only make content milder, never more explicit**, so a room that selected a family-friendly deck cannot be handed something stronger by this mechanism. `lobby_screen.dart:309` defines family-friendly as exactly `rating == PG`. **If a future deck is ever marked `isFallback` with a rating above PG, this property silently inverts and a PG room starts receiving R content** — assert the fallback's rating in a test so that change cannot land quietly.
+
+**Validation.**
+
+1. Functions test: a player whose `seenPrompts` covers the entire room deck receives a **fallback-deck** prompt on re-roll, not a repeat.
+2. Functions test: the same holds for the round-advance deal — a player whose history covers the room deck is dealt from the fallback, not a repeat.
+3. Functions test, the terminal case: history covering **both** decks still returns a prompt and **does not throw**. This is the guard on the never-refuses contract.
+4. Functions test: while the room deck still has unseen prompts, the fallback is **never** consulted. **This is the over-reach guard** — a top-up that fires early would quietly homogenise every room onto one deck and erase the deck choice entirely.
+5. Functions test: `getFallbackDeckId()`'s deck is rated PG. Cheap, and it is what stops the safety property above from inverting unnoticed.
+6. **Over-reach guards, unedited:** `test/reroll_deck_exhaustion_test.dart`, and the custom-deck branch's existing fallback behaviour — **this item must not change how custom decks already top up.**
+7. **Falsification:** remove the catalogue-deck top-up; tests 1 and 2 must fail with a repeat, while tests 3 and 4 still pass.
+
+**Blast radius:** `docs/design_prompt_system.md` §5 — record the top-up, that it applies to both the re-roll and the deal, and the PG-fallback property.
 
 ---
 ## 7. Already delivered — do NOT rework
@@ -409,7 +402,9 @@ Each of these reaches the specified outcome by a different structure than the sp
 (1) A selection exists? If NO -- stop. Never fill in a `Your selection:` line.
     Wave AC (sections 3-6) is selected. Issue 174 is FILED and UNSELECTED --
     AC4 ships without it, but do NOT implement its options.
-(2) ORDER: AC1, AC2, AC3, AC4. AC2 and AC4 both edit the craft screen.
+(2) ORDER: AC1, AC2, AC4, AC5. AC3 was WITHDRAWN -- the vote screen is
+    untouched this wave. AC2 and AC4 both edit the craft screen; AC5 modifies
+    the same draw AC4 corrects, so it must follow AC4.
 (3) Read exit codes BARE. `... | tail` reports tail's status, always 0.
 (4) COLOUR: check which SURFACE a token is for. onSurface is AppColors.ink --
     text on PARCHMENT; on the dark ground it is 1.12:1. Text on ground is
@@ -429,8 +424,7 @@ Each of these reaches the specified outcome by a different structure than the sp
     not in its list", the list IS the test. If a guard passes with the fix
     removed, it is measuring nothing -- see AC4 validation 3.
 (10) State bugs: the test must NOT re-pump the widget between steps. AC1's
-     expansion state and AC3's selection both live on a State that outlives
-     the card.
+     expansion state lives on a State that outlives the card.
 (11) Changing two things that write to the SAME number, document or screen
      region? Compute the COMBINED worst case as a table of real figures first.
 (12) Playthroughs: evidence records an observation, not current behaviour.
@@ -444,4 +438,4 @@ Each of these reaches the specified outcome by a different structure than the sp
      durable consequence in the design doc.
 ```
 
-**When AC1-AC4 are done the queue is empty again. Do not invent work.**
+**When AC1, AC2, AC4 and AC5 are done the queue is empty again. Do not invent work.**
