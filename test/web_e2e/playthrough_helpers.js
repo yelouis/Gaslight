@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const { UI } = require('./ui_strings');
 
 const EVIDENCE_DIR = path.resolve(__dirname, '../../docs/playthroughs/evidence');
 if (!fs.existsSync(EVIDENCE_DIR)) {
@@ -45,7 +46,7 @@ async function dismissAnyDialog(page) {
   await enableSemantics(page);
   const elements = await getSemanticsElements(page);
   const dismissBtn = elements.find(e => 
-    e.role === 'button' && (e.text === 'CANCEL' || e.text === 'DISMISS' || e.text === 'Dismiss')
+    e.role === 'button' && e.text === UI.CANCEL
   );
   if (dismissBtn) {
     console.log(`[DISMISS] Dismissing dialog via button "${dismissBtn.text}"`);

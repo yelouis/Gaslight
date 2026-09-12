@@ -23,7 +23,7 @@ Issue 175 was selected on September 12, 2026 (**Option A**) and is specced as **
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
 | `./scripts/check_playthrough_evidence.sh` — **all five** invocations | **exit 0** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH** |
-| `test/web_e2e/*.js` | **DID NOT RUN and has never been gated.** AE1 is the fix. |
+| `./scripts/check_web_e2e_strings.sh` | **exit 0** |
 
 **⚠️ The bar is 188 infos and no new ones.** `flutter analyze lib test` exits 1 even when clean — it exits non-zero on infos, so the bar is **0 errors / 0 warnings**, never `exit 0`.
 

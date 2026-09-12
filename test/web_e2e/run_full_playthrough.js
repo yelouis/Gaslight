@@ -12,6 +12,7 @@ const {
   tryTypeIntoInput,
   saveScreenshot
 } = require('./playthrough_helpers');
+const { UI, FIXTURE } = require('./ui_strings');
 
 const APP_URL = 'http://127.0.0.1:8777';
 
@@ -25,11 +26,11 @@ async function advanceMatchToGameOver(p1, p2, p3) {
     // Check if GameOver reached on P1
     const p1Els = await getSemanticsElements(p1);
     const isGameOver = p1Els.some(e => 
-      e.text.includes("NIGHT'S HONORS") || 
-      e.text.includes('GAME OVER') || 
-      e.text.includes('FINAL STANDINGS') || 
-      e.text.includes('Share Case File') || 
-      e.text.includes('Engraving')
+      e.text.includes(UI.NIGHTS_HONORS) || 
+      e.text.includes(UI.GAME_OVER) || 
+      e.text.includes(UI.FINAL_STANDINGS) || 
+      e.text.includes(UI.SHARE_CASE_FILE) || 
+      e.text.includes(UI.ENGRAVING)
     );
     if (isGameOver) {
       console.log('GameOver reached!');
@@ -40,29 +41,29 @@ async function advanceMatchToGameOver(p1, p2, p3) {
     for (const [idx, page] of [p1, p2, p3].entries()) {
       const typed = await tryTypeIntoInput(page, 'quill', `Answer by P${idx+1} step ${tick}`);
       if (typed) {
-        await tryClickElement(page, n => n.role === 'button' && n.text.includes('SUBMIT DOSSIER'), `P${idx+1} Submit Dossier`);
+        await tryClickElement(page, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER), `P${idx+1} Submit Dossier`);
       }
     }
 
     // Phase: Vote
     for (const [idx, page] of [p1, p2, p3].entries()) {
-      const readyBtn = await findSemanticsElement(page, n => n.role === 'button' && n.text === "I'M READY");
+      const readyBtn = await findSemanticsElement(page, n => n.role === 'button' && n.text === UI.IM_READY);
       if (readyBtn) {
-        await tryClickElement(page, n => n.role === 'button' && n.text === "I'M READY", `P${idx+1} Ready`);
+        await tryClickElement(page, n => n.role === 'button' && n.text === UI.IM_READY, `P${idx+1} Ready`);
       } else {
-        await tryClickElement(page, n => n.role === 'button' && (n.text.includes('OPTION') || n.ariaLabel.includes('OPTION')) && !n.text.includes('Leave') && !n.text.includes('Mute') && !n.text.includes('CONFIRM') && !n.text.includes('TAP A CARD TO CHOOSE') && !n.text.includes('CONTINUE'), `P${idx+1} Card Select`);
+        await tryClickElement(page, n => n.role === 'button' && (n.text.includes(UI.OPTION) || n.ariaLabel.includes(UI.OPTION)) && !n.text.includes(UI.LEAVE) && !n.text.includes(UI.MUTE) && !n.text.includes(UI.CONFIRM) && !n.text.includes(UI.TAP_A_CARD_TO_CHOOSE) && !n.text.includes(UI.CONTINUE), `P${idx+1} Card Select`);
         await page.waitForTimeout(300);
-        await tryClickElement(page, n => n.role === 'button' && n.text === 'CONFIRM VOTE', `P${idx+1} Confirm Vote`);
+        await tryClickElement(page, n => n.role === 'button' && n.text === UI.CONFIRM_VOTE, `P${idx+1} Confirm Vote`);
       }
     }
 
     // Phase: Reveal / Unmask
     for (const [idx, page] of [p1, p2, p3].entries()) {
-      await tryClickElement(page, n => n.role === 'button' && (n.text === 'Alice' || n.text === 'Bob' || n.text === 'Charlie' || n.text === 'ALICE' || n.text === 'BOB' || n.text === 'CHARLIE'), `P${idx+1} Accuse`);
+      await tryClickElement(page, n => n.role === 'button' && (n.text === FIXTURE.ALICE || n.text === FIXTURE.BOB || n.text === FIXTURE.CHARLIE || n.text === FIXTURE.ALICE_UPPER || n.text === FIXTURE.BOB_UPPER || n.text === FIXTURE.CHARLIE_UPPER), `P${idx+1} Accuse`);
     }
 
     // Host continues reveal / standings / next round
-    await tryClickElement(p1, n => n.role === 'button' && (n.text === 'CONTINUE' || n.text.includes('CONTINUE') || n.text.includes('START ROUND') || n.text.includes('VIEW STANDINGS') || n.text.includes('NEXT')), 'P1 Continue');
+    await tryClickElement(p1, n => n.role === 'button' && (n.text === UI.CONTINUE || n.text.includes(UI.CONTINUE) || n.text.includes(UI.NEXT)), 'P1 Continue');
     
     await p1.waitForTimeout(2000);
   }
@@ -137,13 +138,13 @@ async function main() {
   // =========================================================================
   console.log('\n--- [W1 & W4] Context Isolation & Room Creation ---');
   await typeIntoInput(p1, 'Your Name', 'Alice');
-  await clickElement(p1, n => n.text === 'CREATE ROOM' || n.ariaLabel === 'CREATE ROOM', 'CREATE ROOM');
+  await clickElement(p1, n => n.text === UI.CREATE_ROOM || n.ariaLabel === UI.CREATE_ROOM, 'CREATE ROOM');
   await p1.waitForTimeout(4000);
   await enableSemantics(p1);
 
   // Extract room code
   const p1Elements = await getSemanticsElements(p1);
-  const roomCodeElement = p1Elements.find(e => e.text.includes('ROOM CODE') || e.ariaLabel.includes('ROOM CODE'));
+  const roomCodeElement = p1Elements.find(e => e.text.includes(UI.ROOM_CODE) || e.ariaLabel.includes(UI.ROOM_CODE));
   if (!roomCodeElement) {
     throw new Error('Failed to find ROOM CODE on P1 lobby');
   }
@@ -176,7 +177,7 @@ async function main() {
   await enableSemantics(p2);
   await typeIntoInput(p2, 'Your Name', 'Bob');
   await typeIntoInput(p2, 'Room Code', roomCode);
-  await clickElement(p2, n => n.text === 'JOIN ROOM', 'JOIN ROOM');
+  await clickElement(p2, n => n.text === UI.JOIN_ROOM, 'JOIN ROOM');
   await p2.waitForTimeout(4000);
   await enableSemantics(p2);
 
@@ -190,7 +191,7 @@ async function main() {
   await enableSemantics(p3);
   await typeIntoInput(p3, 'Your Name', 'Charlie');
   await typeIntoInput(p3, 'Room Code', roomCode);
-  await clickElement(p3, n => n.text === 'JOIN ROOM', 'JOIN ROOM');
+  await clickElement(p3, n => n.text === UI.JOIN_ROOM, 'JOIN ROOM');
   await p3.waitForTimeout(4000);
   await enableSemantics(p3);
 
@@ -206,11 +207,11 @@ async function main() {
   // =========================================================================
   console.log('\n--- [W5] Readiness Gate & Timers Disabled ---');
   // P1 selects 1 round (checkbox at y:554)
-  await tryClickElement(p1, n => n.role === 'checkbox' && n.ariaLabel === '1', '1 Round Checkbox', { x: 20, y: 17 });
+  await tryClickElement(p1, n => n.role === 'checkbox' && n.ariaLabel === FIXTURE.ROUNDS_1, '1 Round Checkbox', { x: 20, y: 17 });
   await p1.waitForTimeout(500);
 
   // P1 disables game timers (click on the left side of switch)
-  await clickElement(p1, n => n.role === 'switch' && n.ariaLabel === 'Disable Game Timers', 'Disable Game Timers switch', { x: 25, y: 24 });
+  await clickElement(p1, n => n.role === 'switch' && n.ariaLabel === UI.DISABLE_GAME_TIMERS, 'Disable Game Timers switch', { x: 25, y: 24 });
   await p1.waitForTimeout(1000);
 
   // Capture readiness gate with 0/2 ready
@@ -218,16 +219,16 @@ async function main() {
 
   // P2 and P3 mark ready
   console.log('P2 and P3 clicking ready...');
-  await clickElement(p2, n => n.text === "I'M READY", "P2 I'M READY");
+  await clickElement(p2, n => n.text === UI.IM_READY, "P2 I'M READY");
   await p2.waitForTimeout(1000);
 
-  await clickElement(p3, n => n.text === "I'M READY", "P3 I'M READY");
+  await clickElement(p3, n => n.text === UI.IM_READY, "P3 I'M READY");
   await p3.waitForTimeout(1500);
 
   // Host P1 clicks START GAME
   console.log('Host P1 clicking START GAME...');
   await dismissAnyDialog(p1);
-  await clickElement(p1, n => n.role === 'button' && n.text === 'START GAME', 'START GAME');
+  await clickElement(p1, n => n.role === 'button' && n.text === UI.START_GAME, 'START GAME');
   await p1.waitForTimeout(6000);
 
   // =========================================================================
@@ -246,15 +247,15 @@ async function main() {
 
   console.log('Submitting truth answers...');
   await typeIntoInput(p1, 'quill', 'AAA Paris Story about getting lost near Eiffel Tower');
-  await clickElement(p1, n => n.role === 'button' && n.text.includes('SUBMIT DOSSIER'), 'P1 SUBMIT DOSSIER');
+  await clickElement(p1, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER), 'P1 SUBMIT DOSSIER');
   await p1.waitForTimeout(1000);
 
   await typeIntoInput(p2, 'quill', 'BBB Dog Story about rescuing a puppy in the rain');
-  await clickElement(p2, n => n.role === 'button' && n.text.includes('SUBMIT DOSSIER'), 'P2 SUBMIT DOSSIER');
+  await clickElement(p2, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER), 'P2 SUBMIT DOSSIER');
   await p2.waitForTimeout(1000);
 
   await typeIntoInput(p3, 'quill', 'CCC Arm Story about breaking my wrist on a bike');
-  await clickElement(p3, n => n.role === 'button' && n.text.includes('SUBMIT DOSSIER'), 'P3 SUBMIT DOSSIER');
+  await clickElement(p3, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER), 'P3 SUBMIT DOSSIER');
   await p3.waitForTimeout(6000);
 
   // =========================================================================
@@ -272,17 +273,17 @@ async function main() {
   // Test duplicate rejection on P2
   console.log('Testing duplicate rejection on P2...');
   await typeIntoInput(p2, 'quill', 'AAA Paris Story about getting lost near Eiffel Tower');
-  await clickElement(p2, n => n.role === 'button' && n.text.includes('SUBMIT DOSSIER'), 'P2 Submit Duplicate');
+  await clickElement(p2, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER), 'P2 Submit Duplicate');
   await p2.waitForTimeout(1500);
   await saveScreenshot(p2, 'w7_duplicate_reject.png');
 
   // Submit valid forgeries
   await typeIntoInput(p2, 'quill', 'BBB Fake Lie about Louvre museum heist');
-  await clickElement(p2, n => n.role === 'button' && n.text.includes('SUBMIT DOSSIER'), 'P2 Submit Forgery');
+  await clickElement(p2, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER), 'P2 Submit Forgery');
   await p2.waitForTimeout(1000);
 
   await typeIntoInput(p3, 'quill', 'CCC Fake Lie about climbing Notre Dame roof');
-  await clickElement(p3, n => n.role === 'button' && n.text.includes('SUBMIT DOSSIER'), 'P3 Submit Forgery');
+  await clickElement(p3, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER), 'P3 Submit Forgery');
   await p3.waitForTimeout(1000);
 
   await saveScreenshot(p1, 'w7_forgery_craft.png');
@@ -295,7 +296,7 @@ async function main() {
       const prefix = idx === 0 ? 'AAA' : (idx === 1 ? 'BBB' : 'CCC');
       const typed = await tryTypeIntoInput(page, 'quill', `${prefix} Forgery Option Card ${step + 1}`);
       if (typed) {
-        await tryClickElement(page, n => n.role === 'button' && n.text.includes('SUBMIT DOSSIER'), `P${idx+1} Submit Forgery Step`);
+        await tryClickElement(page, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER), `P${idx+1} Submit Forgery Step`);
         await page.waitForTimeout(1000);
       }
     }
@@ -317,21 +318,21 @@ async function main() {
   for (let voteRound = 0; voteRound < 5; voteRound++) {
     // Bob votes
     await enableSemantics(p2);
-    await tryClickElement(p2, n => n.text.includes('Paris') || n.text.includes('AAA') || n.text.includes('Story'), 'P2 Select Option');
+    await tryClickElement(p2, n => n.text.includes(FIXTURE.PARIS) || n.text.includes(FIXTURE.AAA) || n.text.includes(FIXTURE.STORY), 'P2 Select Option');
     await p2.waitForTimeout(400);
-    await tryClickElement(p2, n => n.role === 'button' && n.text === 'CONFIRM VOTE', 'P2 CONFIRM VOTE');
+    await tryClickElement(p2, n => n.role === 'button' && n.text === UI.CONFIRM_VOTE, 'P2 CONFIRM VOTE');
 
     // Charlie votes
     await enableSemantics(p3);
-    await tryClickElement(p3, n => n.text.includes('Louvre') || n.text.includes('BBB') || n.text.includes('Story'), 'P3 Select Option');
+    await tryClickElement(p3, n => n.text.includes(FIXTURE.LOUVRE) || n.text.includes(FIXTURE.BBB) || n.text.includes(FIXTURE.STORY), 'P3 Select Option');
     await p3.waitForTimeout(400);
-    await tryClickElement(p3, n => n.role === 'button' && n.text === 'CONFIRM VOTE', 'P3 CONFIRM VOTE');
+    await tryClickElement(p3, n => n.role === 'button' && n.text === UI.CONFIRM_VOTE, 'P3 CONFIRM VOTE');
 
     // Alice votes / ready
     await enableSemantics(p1);
-    await tryClickElement(p1, n => n.text.includes('Fake') || n.text.includes('CCC') || n.text.includes('BBB'), 'P1 Select Option');
+    await tryClickElement(p1, n => n.text.includes(FIXTURE.FAKE) || n.text.includes(FIXTURE.CCC) || n.text.includes(FIXTURE.BBB), 'P1 Select Option');
     await p1.waitForTimeout(400);
-    await tryClickElement(p1, n => n.role === 'button' && n.text === 'CONFIRM VOTE', 'P1 CONFIRM VOTE');
+    await tryClickElement(p1, n => n.role === 'button' && n.text === UI.CONFIRM_VOTE, 'P1 CONFIRM VOTE');
 
     await p1.waitForTimeout(3000);
   }
@@ -351,9 +352,9 @@ async function main() {
   for (let c = 0; c < 6; c++) {
     await enableSemantics(p1);
     for (const [idx, page] of [p1, p2, p3].entries()) {
-      await tryClickElement(page, n => n.role === 'button' && (n.text === 'Alice' || n.text === 'Bob' || n.text === 'Charlie' || n.text === 'ALICE' || n.text === 'BOB' || n.text === 'CHARLIE'), `P${idx+1} Accuse`);
+      await tryClickElement(page, n => n.role === 'button' && (n.text === FIXTURE.ALICE || n.text === FIXTURE.BOB || n.text === FIXTURE.CHARLIE || n.text === FIXTURE.ALICE_UPPER || n.text === FIXTURE.BOB_UPPER || n.text === FIXTURE.CHARLIE_UPPER), `P${idx+1} Accuse`);
     }
-    await tryClickElement(p1, n => n.role === 'button' && (n.text === 'CONTINUE' || n.text.includes('CONTINUE')), 'P1 Continue Reveal');
+    await tryClickElement(p1, n => n.role === 'button' && (n.text === UI.CONTINUE || n.text.includes(UI.CONTINUE)), 'P1 Continue Reveal');
     await p1.waitForTimeout(3000);
   }
 
@@ -394,7 +395,7 @@ async function main() {
   let downloadedFile = null;
   try {
     const downloadPromise = p1.waitForEvent('download', { timeout: 10000 });
-    await tryClickElement(p1, n => n.role === 'button' && (n.text.includes('Share Case File') || n.text.includes('SHARE')), 'Share Case File button');
+    await tryClickElement(p1, n => n.role === 'button' && n.text.includes(UI.SHARE_CASE_FILE), 'Share Case File button');
     downloadedFile = await downloadPromise;
   } catch (e) {
     console.log('Download event waiting caught error or timeout:', e.message);
@@ -433,12 +434,12 @@ async function main() {
   await dP1.waitForTimeout(2000);
   await enableSemantics(dP1);
   await typeIntoInput(dP1, 'Your Name', 'Alice');
-  await clickElement(dP1, n => n.text === 'CREATE ROOM', 'CREATE ROOM');
+  await clickElement(dP1, n => n.text === UI.CREATE_ROOM, 'CREATE ROOM');
   await dP1.waitForTimeout(4000);
   await enableSemantics(dP1);
 
   const dP1Els = await getSemanticsElements(dP1);
-  const dCodeEl = dP1Els.find(e => e.text.includes('ROOM CODE') || e.ariaLabel.includes('ROOM CODE'));
+  const dCodeEl = dP1Els.find(e => e.text.includes(UI.ROOM_CODE) || e.ariaLabel.includes(UI.ROOM_CODE));
   const dRoomCode = (dCodeEl.text + ' ' + dCodeEl.ariaLabel).match(/ROOM CODE\s+([A-Z]{4})/)[1];
   console.log(`Auto-End test room created: ${dRoomCode}`);
 
@@ -449,7 +450,7 @@ async function main() {
   await enableSemantics(dP2);
   await typeIntoInput(dP2, 'Your Name', 'Bob');
   await typeIntoInput(dP2, 'Room Code', dRoomCode);
-  await clickElement(dP2, n => n.text === 'JOIN ROOM', 'JOIN ROOM');
+  await clickElement(dP2, n => n.text === UI.JOIN_ROOM, 'JOIN ROOM');
   await dP2.waitForTimeout(3000);
 
   const dCtx3 = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -459,30 +460,30 @@ async function main() {
   await enableSemantics(dP3);
   await typeIntoInput(dP3, 'Your Name', 'Charlie');
   await typeIntoInput(dP3, 'Room Code', dRoomCode);
-  await clickElement(dP3, n => n.text === 'JOIN ROOM', 'JOIN ROOM');
+  await clickElement(dP3, n => n.text === UI.JOIN_ROOM, 'JOIN ROOM');
   await dP3.waitForTimeout(3000);
 
   // Disable timers and ready up
-  await clickElement(dP1, n => n.role === 'switch' && n.ariaLabel === 'Disable Game Timers', 'Disable Game Timers', { x: 25, y: 24 });
+  await clickElement(dP1, n => n.role === 'switch' && n.ariaLabel === UI.DISABLE_GAME_TIMERS, 'Disable Game Timers', { x: 25, y: 24 });
   await dP1.waitForTimeout(500);
-  await clickElement(dP2, n => n.text === "I'M READY", 'P2 Ready');
+  await clickElement(dP2, n => n.text === UI.IM_READY, 'P2 Ready');
   await dP2.waitForTimeout(500);
-  await clickElement(dP3, n => n.text === "I'M READY", 'P3 Ready');
+  await clickElement(dP3, n => n.text === UI.IM_READY, 'P3 Ready');
   await dP3.waitForTimeout(500);
 
-  await clickElement(dP1, n => n.role === 'button' && n.text === 'START GAME', 'START GAME');
+  await clickElement(dP1, n => n.role === 'button' && n.text === UI.START_GAME, 'START GAME');
   await dP1.waitForTimeout(5000);
 
   // In TRUTH phase, P3 clicks in-game Leave game in AppBar leading slot
   console.log('In TRUTH phase, P3 clicking in-game Leave game button in AppBar...');
   await enableSemantics(dP3);
-  await clickElement(dP3, n => n.role === 'button' && n.text === 'Leave game', 'Leave game button');
+  await clickElement(dP3, n => n.role === 'button' && n.text === UI.LEAVE_GAME, 'Leave game button');
   await dP3.waitForTimeout(1000);
   await enableSemantics(dP3);
 
   // Confirm leave in dialog: "LEAVE GAME"
   console.log('P3 confirming in dialog...');
-  await clickElement(dP3, n => n.role === 'button' && (n.text === 'LEAVE GAME' || n.text === 'LEAVE'), 'LEAVE GAME button');
+  await clickElement(dP3, n => n.role === 'button' && (n.text === UI.LEAVE_GAME_DIALOG || n.text === UI.LEAVE_DIALOG), 'LEAVE GAME button');
   await dP3.waitForTimeout(5000);
 
   // Verify both dP1 and dP2 land on GameOverScreen
@@ -525,7 +526,7 @@ async function main() {
 
     // Create room to capture Parlor & in-match screens at this viewport
     await typeIntoInput(rPage, 'Your Name', 'Tester');
-    await clickElement(rPage, n => n.text === 'CREATE ROOM', 'CREATE ROOM');
+    await clickElement(rPage, n => n.text === UI.CREATE_ROOM, 'CREATE ROOM');
     await rPage.waitForTimeout(4000);
     await enableSemantics(rPage);
 

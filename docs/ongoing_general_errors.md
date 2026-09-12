@@ -4,7 +4,7 @@
 
 **What this file is no longer:** a complete history. On **August 7, 2026** it was consolidated from 903 lines to this, because a working log that grows forever becomes context rot for the next agent — every line spent on a bug fixed in May is a line not spent understanding the system. The full record of all 64 resolved items lives in **`git log`**, and the *design consequences* of that work were moved into the relevant `docs/design_*.md` contracts (see §5). Nothing was deleted without a home.
 
-**Bug-filing format** is in `.agents/skills/bug_documentation_guidelines/`. Open issues end with a `Your selection: **Proceed with Option A** (September 12, 2026). Specced as **AE1** in `agent_execution_guide.md`: declare the scripts' UI strings in `test/web_e2e/ui_strings.js`, reference them from all three files including `playthrough_helpers.js`, and gate them with `scripts/check_web_e2e_strings.sh` — an existence half plus a containment half that forbids bare literals, so the map cannot drift from what is actually matched.` line; that line is the user's, and an agent must never fill it in on their own behalf.
+**Bug-filing format** is in `.agents/skills/bug_documentation_guidelines/`. Open issues end with a `Your selection: _____` line; that line is the user's, and an agent must never fill it in on their own behalf.
 
 ## 1. Open & in-flight
 
@@ -20,49 +20,11 @@
 
 **Process note:** all three items landed in a single commit (`a0c4c57`), against the standing one-item-one-commit rule. No correctness impact; recorded so the next wave does not treat it as precedent.
 
-**Every gate is green:** 0 errors · 0 warnings · **188 infos** · **346** client tests · **157** functions tests · decks, all five evidence invocations, and deploy all exit 0. **`test/web_e2e` remains ungated** — that is Issue 175.
+**Every gate is green:** 0 errors · 0 warnings · **188 infos** · **346** client tests · **157** functions tests · decks, all five evidence invocations, deploy, and web E2E strings all exit 0.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issue 175 was selected September 12, 2026 — Option A — and is specced as AE1** in `agent_execution_guide.md`. It stays here until the code lands. Everything from the September 8 playthrough and Waves AA–AD is resolved and indexed in §3.
-
-**⚠️ The scan that produced this issue was itself incomplete, and the corrected figures are in AE1.** The original report named two stale labels (`INSPECT`, `DISMISS`); a variable-agnostic re-scan finds **six** — `INSPECT`, `ACCUSE`, `SHARE`, `VIEW STANDINGS`, `START ROUND`, and `DISMISS` — across **52** distinct matched literals. The first pattern assumed the predicate parameter was named `n`, and `dismissAnyDialog` names it `e`. **Lesson §2.44 again, in the tooling written to investigate §2.44.**
-
----
-
-### Issue 175: The web E2E scripts drift silently because nothing runs them
-
-**Status**: ⚠️ Confirmed Unresolved — **filed September 12, 2026 during Wave AD verification.** `test/web_e2e/*.js` is referenced by **no gate script**: it needs a web build, a static server, Playwright and a backend, so the battery has never exercised it. AD3 fixed one break in it; verification then found the scripts have been drifting for four days without anyone noticing.
-
-**The evidence, measured rather than supposed.** `run_match_summary_playthrough.js:33` and `:52` still click a button labelled `INSPECT`:
-
-```js
-await tryClickElement(page, n => n.role === 'button' && (n.text === 'INSPECT' || n.text.includes('INSPECT')), 'INSPECT Overlay');
-```
-
-**`INSPECT` was deleted from the app by AA1 (Issue 155)** when the dealt-card overlay was removed. `grep -rn "INSPECT" lib/` returns nothing, and the same is true of `DISMISS`, the overlay's other label. `tryClickElement` is tolerant — it logs `[CLICK FAILED]` and continues — so the script does not crash; it simply carries dead steps aimed at a screen that no longer exists, and **the only signal is a log line nobody reads.**
-
-That is also how AD3's break arrived: AC3 renamed a button, and `run_match_summary_playthrough.js` had been using the *presence* of `CONFIRM VOTE` to decide whether a player was a voter. **Two waves in a row silently invalidated these scripts.**
-
-**Why this matters beyond tidiness.** These scripts produce the web evidence in `docs/playthroughs/findings_web.md`. A script that half-works still produces screenshots, and screenshots are what the evidence gate checks exist — **the gate verifies the artefact is on disk, never that the run reached the state it claims.** A drifted script therefore degrades quietly into evidence that looks fine.
-
-**Option A (recommended)**: **Declare the scripts' UI strings in one place and assert they exist in `lib/`** — move every label the scripts match on into an exported `UI_STRINGS` map in `test/web_e2e/playthrough_helpers.js`, have the scripts reference only that map, and add a check to the battery that fails when any of those strings is absent from `lib/`.
-  - *Pros*: Catches exactly the failure that has now happened twice — a renamed or deleted label — in milliseconds, with no browser, no web build and no backend, so it can join the battery without slowing it. **Because the scripts reference the same map the check reads, the list cannot drift out of step with what is actually matched** — which is the trap that made `contrast_tokens_test.dart` useless in Issue 171 (lesson §2.42). Also self-documents which strings are load-bearing for E2E.
-  - *Cons*: Proves the strings still exist, not that the flow still works — a label that survives while its screen is reordered still breaks the script. Needs care to separate genuine UI labels from fixture data the scripts also match on (`Paris`, `AAA`, player names), and a wrong split gives either false alarms or false confidence.
-
-**Option B**: **Gate the full web E2E run** — add a web build, static server and Playwright run to the battery.
-  - *Pros*: The only option that verifies the flow rather than its vocabulary, and it would produce fresh web evidence as a by-product. Removes the self-reported-run problem entirely, which is what made AD3's completion unverifiable.
-  - *Cons*: Turns a roughly one-minute battery into a multi-minute one and adds a browser and a backend to the critical path of every verification. Needs a decision about which backend — emulators add setup, production creates real rooms. A gate that is slow and flaky gets skipped, and a skipped gate is worse than an honest absence.
-
-**Option C**: **Delete the dead steps and leave the scripts ungated** — remove the `INSPECT`/`DISMISS` clicks and anything else aimed at removed UI.
-  - *Pros*: Cheapest, and it fixes today's actual staleness. No new infrastructure and no battery cost.
-  - *Cons*: Fixes the instance and not the cause; the next rename drifts them again with nothing to notice. Given this has now happened in two consecutive waves, the base rate argues against it.
-
-**Option D**: **Retire the web scripts.** The Marionette playthroughs (`findings_waveAA.md`, E50–E63) now cover the same journeys on real devices, which is stronger evidence than a headless browser.
-  - *Pros*: Removes an unmaintained surface and the standing risk of evidence that looks fine but was produced by a half-working script. Marionette runs are already the project's primary evidence path.
-  - *Cons*: Web is a supported platform and would lose its only automated coverage; `findings_web.md` becomes frozen history with no way to refresh it. Marionette cannot exercise the web build at all, so a web-only regression would have nothing watching for it.
-
-Your selection: Proceed with Option A.
+All issues from the September 8 playthrough and Waves AA–AE have been resolved. The open queue is empty.
 
 ---
 
@@ -413,12 +375,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–174 — August 8 to September 12, 2026
+### Issues 65–175 — August 8 to September 12, 2026
 
-**98 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**99 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AE / AE1 — gate web E2E UI strings against production code** (declared all UI labels matched by web E2E scripts in frozen `UI` map in `test/web_e2e/ui_strings.js`; replaced bare literals in `playthrough_helpers.js`, `run_full_playthrough.js`, and `run_match_summary_playthrough.js` with `UI`/`FIXTURE` references; pruned 6 dead steps/alternates including stale `INSPECT`, `DISMISS`, `ACCUSE`, `SHARE`, `VIEW STANDINGS`, and `START ROUND`; added `scripts/check_web_e2e_strings.sh` gate verifying non-vacuity, presence in `lib/**/*.dart`, and variable-agnostic containment in E2E scripts; battery gate exits 0 bare) | 175 | `test/web_e2e/ui_strings.js`; `scripts/check_web_e2e_strings.sh`; `test/web_e2e/playthrough_helpers.js`; `test/web_e2e/run_full_playthrough.js`; `test/web_e2e/run_match_summary_playthrough.js`; `docs/agent_execution_guide.md` §1 |
 | **Wave AD / AD1 — delete decoy CONFIRM VOTE widget & fix voter assertion** (deleted invisible zero-sized `CONFIRM VOTE` widget from `phase3_vote.dart:580–581` added during AC3; updated `phase3_vote_target_ready_toggle_test.dart:171` to assert `TAP A CARD TO CHOOSE`; audited all other `CONFIRM VOTE` references; falsified by deleting `PrimaryButton` and observing test failure; all 20 over-reach guards passed unedited) | AD1 | `lib/screens/phase3_vote.dart`; `test/phase3_vote_target_ready_toggle_test.dart`; `docs/ongoing_general_errors.md` §2.43 |
 | **Wave AD / AD2 — write & falsify AC5 validations** (asserted `PromptDecks.getDeckRating(PromptDecks.getFallbackDeckId()) === "PG"` in `functions/test/prompt_decks.spec.ts`; falsified AC5.4 via eager fallback consultation, AC5.5 via R-rated fallback deck, and AC5.3 via throwing exhaustion path; documented exhaustion-only ordering and load-bearing PG rating in `design_prompt_system.md` §5) | AD2 | `functions/test/prompt_decks.spec.ts`; `docs/design_prompt_system.md` §5 |
 | **Wave AD / AD3 — re-point web E2E scripts to positive card matching** (re-pointed `test/web_e2e/run_full_playthrough.js` to positively match `OPTION` cards and explicitly exclude `TAP A CARD TO CHOOSE`; fixed real break in `run_match_summary_playthrough.js` where voter check required `CONFIRM VOTE` before card selection; validated end-to-end against local release web build on port 8777 via headless Chromium) | AD3 | `test/web_e2e/run_full_playthrough.js`; `test/web_e2e/run_match_summary_playthrough.js` |
