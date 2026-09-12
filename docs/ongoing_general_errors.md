@@ -4,7 +4,7 @@
 
 **What this file is no longer:** a complete history. On **August 7, 2026** it was consolidated from 903 lines to this, because a working log that grows forever becomes context rot for the next agent — every line spent on a bug fixed in May is a line not spent understanding the system. The full record of all 64 resolved items lives in **`git log`**, and the *design consequences* of that work were moved into the relevant `docs/design_*.md` contracts (see §5). Nothing was deleted without a home.
 
-**Bug-filing format** is in `.agents/skills/bug_documentation_guidelines/`. Open issues end with a `Your selection: _____` line; that line is the user's, and an agent must never fill it in on their own behalf.
+**Bug-filing format** is in `.agents/skills/bug_documentation_guidelines/`. Open issues end with a `Your selection: **Proceed with Option A** (September 12, 2026). Specced as **AE1** in `agent_execution_guide.md`: declare the scripts' UI strings in `test/web_e2e/ui_strings.js`, reference them from all three files including `playthrough_helpers.js`, and gate them with `scripts/check_web_e2e_strings.sh` — an existence half plus a containment half that forbids bare literals, so the map cannot drift from what is actually matched.` line; that line is the user's, and an agent must never fill it in on their own behalf.
 
 ## 1. Open & in-flight
 
@@ -24,7 +24,9 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-One open issue, filed during Wave AD verification. Everything from the September 8 playthrough and Waves AA–AD is resolved and indexed in §3.
+**Issue 175 was selected September 12, 2026 — Option A — and is specced as AE1** in `agent_execution_guide.md`. It stays here until the code lands. Everything from the September 8 playthrough and Waves AA–AD is resolved and indexed in §3.
+
+**⚠️ The scan that produced this issue was itself incomplete, and the corrected figures are in AE1.** The original report named two stale labels (`INSPECT`, `DISMISS`); a variable-agnostic re-scan finds **six** — `INSPECT`, `ACCUSE`, `SHARE`, `VIEW STANDINGS`, `START ROUND`, and `DISMISS` — across **52** distinct matched literals. The first pattern assumed the predicate parameter was named `n`, and `dismissAnyDialog` names it `e`. **Lesson §2.44 again, in the tooling written to investigate §2.44.**
 
 ---
 
@@ -60,7 +62,7 @@ That is also how AD3's break arrived: AC3 renamed a button, and `run_match_summa
   - *Pros*: Removes an unmaintained surface and the standing risk of evidence that looks fine but was produced by a half-working script. Marionette runs are already the project's primary evidence path.
   - *Cons*: Web is a supported platform and would lose its only automated coverage; `findings_web.md` becomes frozen history with no way to refresh it. Marionette cannot exercise the web build at all, so a web-only regression would have nothing watching for it.
 
-Your selection: _____
+Your selection: Proceed with Option A.
 
 ---
 

@@ -1,20 +1,18 @@
-# Agent Execution Guide — Awaiting Selection: no approved work — September 12, 2026
+# Agent Execution Guide — Wave AE: 1 approved item — September 12, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Every number and literal string in this document is a decision, not a suggestion.**
 
-**Wave AD is delivered.** AD1 and AD3 are correct and were re-falsified this session. **AD2 should never have been filed** — the tests it asked for already existed; see §2.
+Issue 175 was selected on September 12, 2026 (**Option A**) and is specced as **AE1**. It is the only approved work.
 
-**⚠️ Issue 175 is open and UNSELECTED**, in `docs/ongoing_general_errors.md`, with a blank `Your selection: _____`. **That line belongs to the user and an agent must never fill it in.** An unselected issue is a question, not an instruction, and `(recommended)` is not approval.
-
-**Do not invent work.** The only legitimate actions are in §3.1.
+**Do only what is specified here.** A `(recommended)` label is not approval; a filled `Your selection:` line is. **Never fill one in.**
 
 ---
 
-## 1. Verified baseline — measured this session on `a0c4c57`
+## 1. Verified baseline — measured on `c83b4da`
 
-Every number was run bare. **This is the regression bar.**
+**This is the regression bar.** Every number was run bare.
 
 | Gate | Result |
 |---|---|
@@ -25,28 +23,72 @@ Every number was run bare. **This is the regression bar.**
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
 | `./scripts/check_playthrough_evidence.sh` — **all five** invocations | **exit 0** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH** |
-| `test/web_e2e/*.js` | **DID NOT RUN, and has never been gated.** That is **Issue 175**, which also found the scripts still click an `INSPECT` button deleted by AA1. |
+| `test/web_e2e/*.js` | **DID NOT RUN and has never been gated.** AE1 is the fix. |
 
 **⚠️ The bar is 188 infos and no new ones.** `flutter analyze lib test` exits 1 even when clean — it exits non-zero on infos, so the bar is **0 errors / 0 warnings**, never `exit 0`.
 
 **⚠️ Read every exit code bare, never through a pipe.** `… | tail` reports `tail`'s status, always 0.
 
-**⚠️ `pubspec.yaml` is at `1.0.0+7` and build 7 has NOT been uploaded.** TestFlight 5 and 6 are live; **6 carries the Issue 152 leave bug**, so once 7 ships, expire both. `flutter build ipa` fails at the *export* step here — expected, not a build failure. Verify the **archive**, never the `.ipa`. See `README.md` → Releasing.
-
 ---
 
-## 2. Wave AD — delivered September 12, 2026
+## 2. AE1 — Issue 175 → Option A: declare the web scripts' UI strings and gate them
 
-| Item | Outcome |
-|---|---|
-| **AD1** — remove the decoy `CONFIRM VOTE` widget | **Correct.** The decoy is gone and the assertion names `TAP A CARD TO CHOOSE`. **Re-falsified:** making the button render nothing while unselected (a change that still compiles) fails Test 2 of `phase3_vote_target_ready_toggle_test.dart` while Test 1 passes. The guard can fail on the thing it names again. |
-| **AD2** — write AC5's "missing" validations | **Should not have been filed.** AC5.3, AC5.4 and AC5.5 already existed in `functions/test/prompt_decks.spec.ts` from the AC5 commit. AD2 correctly reduced to adding the one genuinely absent assertion (`getDeckRating`). See lesson **§2.44**. |
-| **AD3** — re-point the web E2E scripts | **Code correct by inspection.** Card selection now matches `OPTION` positively and excludes `TAP A CARD TO CHOOSE`; both scripts pass `node --check`; `n.ariaLabel` is safe because `playthrough_helpers.js:30` defaults it to `''`. The agent **also found a second break this guide missed** — `run_match_summary_playthrough.js` used the presence of `CONFIRM VOTE` to detect a voter. **Its end-to-end run is self-reported and uncorroborated** — see below. |
+**What this means for the user.** The browser-based playthrough scripts drive the app by looking for button labels. When a label is renamed or deleted the script silently stops finding it, keeps going, and still produces screenshots — so the web evidence can look fine while the run never reached the screens it claims. This makes a renamed label a build failure instead of a log line nobody reads.
 
-**⚠️ Two things about Wave AD that must not become precedent.**
+**The gap, measured this session.** `test/web_e2e/` is referenced by no gate script. A scan of every `.text` / `.ariaLabel` comparison across all three files finds **52 distinct string literals**, of which **six name UI that no longer exists in `lib/`**:
 
-1. **AD3's end-to-end execution is a claim, not a measurement.** The commit states the scripts were validated against a local web build on port 8777. `saveScreenshot` writes into `docs/playthroughs/evidence/` and `run_full_playthrough.js` rewrites `w8_vote_lockout.png` partway through — **yet the evidence set is unchanged at 123 files and the tree is clean.** The run may have happened with its output discarded; there is no artefact either way. Lesson **§2.36** already covers this: a self-reported gate result is a claim. **When a validation step produces artefacts, commit them or say plainly that you did not run it.**
-2. **All three items landed in one commit** (`a0c4c57`), against the standing one-item-one-commit rule. No correctness impact, recorded so it is not copied.
+| Stale literal | Where | Status |
+|---|---|---|
+| `INSPECT` | `run_match_summary_playthrough.js:33`, `:52` | Dealt-card overlay, **deleted by AA1 (Issue 155)** |
+| `ACCUSE` | `run_match_summary_playthrough.js` | No counterpart in `lib/` |
+| `SHARE` | `run_full_playthrough.js` | `lib/` has `Share Case File`; likely renamed |
+| `VIEW STANDINGS` | both run scripts | No counterpart in `lib/` |
+| `START ROUND` | both run scripts | `lib/` has `START GAME`; likely a stale variant |
+| `DISMISS` / `Dismiss` | `playthrough_helpers.js:48` | Dead alternates — **but see the warning below** |
+
+**⚠️ A stale literal is not automatically a broken step, and mechanically deleting all six would remove real coverage.** `playthrough_helpers.js:48` reads `e.text === 'CANCEL' || e.text === 'DISMISS' || e.text === 'Dismiss'`. **`CANCEL` is live** (`lobby_screen.dart:150`, `phase3_vote.dart:262`), so `dismissAnyDialog` still works and only the two dead alternates should go. By contrast the `INSPECT` steps are the *sole* matcher for their action and can never fire — those steps are dead and should be removed. **For `ACCUSE`, `SHARE`, `VIEW STANDINGS` and `START ROUND`, determine for each whether the label was renamed or the affordance removed, and repoint or delete accordingly. Record which, per literal, in the commit body.** Do not assume; `START GAME` being a near-match for `START ROUND` is a hypothesis to check, not a conclusion.
+
+### 2.1 Implementation
+
+**1. Declare the strings.** New file `test/web_e2e/ui_strings.js` exporting two frozen maps:
+
+- **`UI`** — labels the *app* renders. **Existence-checked against `lib/`.**
+- **`FIXTURE`** — data the *scripts themselves* supply and then look for: player names (`Alice`, `Bob`, `Charlie` and their upper-case forms) and answer text (`Paris`, `Louvre`, `AAA`, `BBB`, `CCC`, `Fake`, `Story`). **Not checked**, because the app never contains them and never should.
+
+**Getting this split wrong in either direction is the main hazard.** A fixture string in `UI` produces a permanent false failure; a real label in `FIXTURE` is invisible to the check forever. **13 of the 52 literals are fixture data** by the scan above; classify each remaining one by asking *"does the app render this, or does the test type it?"*
+
+**⚠️ `UI` entries must be at least 3 characters and contain a letter.** Two current literals are `'1'` and `'2'`; a substring search for those matches essentially any Dart file, so they would pass the check vacuously. **The gate must reject such entries outright** rather than silently accepting them — either the predicate is rewritten to match something meaningful, or the string belongs in `FIXTURE`.
+
+**2. Reference only the maps.** `run_full_playthrough.js`, `run_match_summary_playthrough.js` **and `playthrough_helpers.js`** import from `ui_strings.js` and contain no bare UI literal in any `.text` / `.ariaLabel` comparison. **The helper is in scope — `DISMISS` lives there, and a scan restricted to the two run scripts would have missed it.**
+
+**3. Add the gate.** `scripts/check_web_e2e_strings.sh`, following the house convention of `check_decks_in_sync.sh` — a header comment stating what it proves and its falsification record, and **exit 0 pass / 1 stale / 2 could-not-verify**. Two halves:
+
+- **Existence.** Every value in `UI` appears somewhere in `lib/**/*.dart`. Report every missing one by name, not just the first.
+- **⚠️ Containment — this is the half that stops the gate rotting.** Scan all of `test/web_e2e/*.js` for `.text` / `.ariaLabel` comparisons and **fail if any right-hand side is a bare string literal** rather than a `UI.` or `FIXTURE.` reference. Without it, a future script can introduce a new literal directly, the map stays as it is, and the gate passes while the script drifts — **which is precisely the failure mode that made `contrast_tokens_test.dart` useless in Issue 171 (lesson §2.42): a check over a curated list can only ever verify the list.**
+
+**⚠️ Write the containment scan variable-agnostically.** The first scan of this codebase used `n\.(text|ariaLabel)` and **missed `DISMISS` entirely**, because `dismissAnyDialog` names its parameter `e`. Match `\w+\.(text|ariaLabel)`, and state in the script header that it does. That mistake is lesson **§2.44** and it has already cost one wave item.
+
+**4. Note the interpolation limit in the script header.** A label the app assembles at runtime (`'CARD $roman OF $total'`) will never be found by a literal search. If a needed label is interpolated, match on the invariant substring and **say so in a comment next to that `UI` entry**, so the next reader does not "fix" it into something unverifiable.
+
+**5. Add the gate to the battery** and to §1's table in this guide.
+
+### 2.2 Validation
+
+**⚠️ The gate must FAIL on its first run.** Six labels are stale today. A green first run means the existence half is not working — **stop and find out why before fixing any script.** Record the first-run failure output in the commit body; it is the strongest evidence this gate does anything.
+
+1. **Falsify the existence half:** add a `UI` entry naming a string absent from `lib/` (e.g. `ZZNOTAREALLABEL`) → **exit 1** naming it. Remove → **exit 0**.
+2. **Falsify the containment half:** put a bare literal back into one script's `.text` comparison → **exit 1** naming the file and line. Restore → **exit 0**.
+3. **Falsify the vacuity guard:** add `'1'` to `UI` → **exit 1** rejecting it as too short to verify, **not** a pass.
+4. **Falsify the variable-agnostic requirement:** rename `dismissAnyDialog`'s parameter from `e` to something else and confirm the containment scan still sees its comparisons. **If it only works for one variable name, it will miss the next helper.**
+5. After repairing the six stale labels, the gate exits **0 bare**.
+6. **Over-reach guards, unedited:** the full battery in §1 — nothing in `lib/` changes in this item, so **any movement in `flutter test` or `flutter analyze` means you edited production code and should not have.**
+7. Both scripts still pass `node --check`.
+
+**⚠️ Do not silence a failure by deleting the literal.** Every one of the six either names a step that must be repointed or a step that is genuinely dead. **Deleting a live step's matcher makes the gate green and the script blinder** — the opposite of the point. §2's table says which is which for `INSPECT` and `DISMISS`; determine the other four.
+
+**This item does not require running the scripts end to end.** If you do run them, **commit the screenshots they write into `docs/playthroughs/evidence/`** — Wave AD's end-to-end claim was left unverifiable precisely because its output was discarded (lesson §2.36). If you do not run them, say so plainly.
+
+**Blast radius:** `scripts/check_web_e2e_strings.sh` (new), `test/web_e2e/ui_strings.js` (new), all three files under `test/web_e2e/`, this guide's §1 table, and `docs/design_semantic_integrity.md` **only if** you conclude the string contract belongs alongside the other mechanical gates — otherwise leave the design docs alone; this is tooling, not a product contract.
 
 ---
 ## 3. Already delivered — do NOT rework
@@ -69,7 +111,7 @@ Verified by reading source and re-falsifying, not by reading commit bodies. Full
 - Injecting `scoreDeltas` into the withheld branch fails **4** emulator tests including AA16a's leak test and the pre-existing P4 guard, with 135 still passing.
 - Tampering with one stem key in the generated Dart mirror makes `check_decks_in_sync.sh` exit **1**; restoring makes it exit **0**. The gate genuinely covers stems rather than passing vacuously on two empty sides.
 
-### 3.1 The only legitimate actions now
+### 3.1 Standing maintenance — alongside AE1, not instead of it
 
 1. **Deploy the functions after any `functions/src` change, then restore the cleanup flag.** The gate is green today; it goes red the moment server code changes. `functions/src` changed under AA10, AA11 and AA16a, and **`submitTargetForgeryGuesses` is not deployed at all** — production runs 17 functions and the new callable is absent. **Target forgery guessing does not work in production today, and a client build shipped before this deploy would call a function that is not there.**
    ```
@@ -218,40 +260,42 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ```
 (1) A selection exists? If NO -- stop. Never fill in a `Your selection:` line.
-    Issue 175 is filed and UNSELECTED. It is not work.
-(2) Using a search to prove something is ABSENT? It must not encode an
-    incidental convention -- quoting, spacing, extension. Normalise it, and
-    corroborate the absence a second way (a count, a listing, the artefact
-    that would exist). A partial result reads exactly like a complete one.
-    That is lesson 2.44 and it cost a whole wave item.
-(3) A rename broke a test? UPDATE THE ASSERTION. Never move production code to
+    AE1 (section 2) is the only approved work.
+(2) A gate must be able to FAIL. AE1's must fail on its FIRST run -- six labels
+    are stale today. A green first run means the gate is broken, not that the
+    scripts are clean.
+(3) Using a search to prove something is ABSENT? It must not encode an
+    incidental convention -- quoting, variable naming, spacing, extension.
+    Normalise it, then corroborate the absence a second way. The scan that
+    missed DISMISS assumed the parameter was named `n` (lesson 2.44).
+(4) A check over a hand-written list can only verify the list. If the list and
+    the thing it describes can drift apart, add the containment half that makes
+    drift impossible (lesson 2.42).
+(5) A rename broke a test? UPDATE THE ASSERTION. Never move production code to
     satisfy a matcher (lesson 2.43).
-(4) Ask what input would make your check go red. If nothing would, it is not a
-    check -- whether it is a test, a grep, or a gate.
-(5) Read exit codes BARE. `... | tail` reports tail's status, always 0.
-(6) A gate that did not run is not a pass, and a gate you ran that left no
-    artefact is a claim. If a validation produces files, COMMIT THEM.
-(7) COLOUR: check which SURFACE a token is for. onSurface is AppColors.ink,
+(6) Never silence a failing check by deleting what it flagged, unless you have
+    established the flagged thing is genuinely dead. A green gate over a
+    blinded script is worse than a red one.
+(7) Read exit codes BARE. `... | tail` reports tail's status, always 0.
+(8) A gate that did not run is not a pass, and one you ran that left no
+    artefact is a claim. If a validation writes files, COMMIT THEM.
+(9) COLOUR: check which SURFACE a token is for. onSurface is AppColors.ink,
     text on PARCHMENT; on the dark ground it is 1.12:1. Text on ground is
-    ivory. Assert on the RENDERED tree, not a curated pair list.
-(8) Changing scoring? Change BOTH functions/src/scoring_logic.ts AND the
-    test-only mirror lib/utils/scoring_logic.dart, then re-run the sum
-    invariant in both suites.
-(9) Publishing anything derived from authorship? Only cards whose author flip
-    has happened, at all THREE flush sites. Write the leak test first.
-(10) Adding a callable? Copy castVote's authorization shape (index.ts:942).
-     playerId is NOT a credential. Validate every client-supplied string
-     against server state.
-(11) State bugs: the test must NOT re-pump the widget between steps.
-(12) Changing two things that write to the SAME number, document or screen
-     region? Compute the COMBINED worst case as a table of real figures first.
-(13) Playthroughs: evidence records an observation, not current behaviour.
-     NEVER edit a verdict or a specified assertion. Annotate as superseded.
-(14) RE-RUN THE FULL BATTERY -- bare, except flutter analyze, where the bar is
+    ivory. Assert on the RENDERED tree.
+(10) Changing scoring? Change BOTH functions/src/scoring_logic.ts AND the
+     test-only mirror lib/utils/scoring_logic.dart, then re-run the sum
+     invariant in both suites.
+(11) Publishing anything derived from authorship? Only cards whose author flip
+     has happened, at all THREE flush sites. Write the leak test first.
+(12) Adding a callable? Copy castVote's authorization shape (index.ts:942).
+     playerId is NOT a credential.
+(13) State bugs: the test must NOT re-pump the widget between steps.
+(14) Playthroughs: evidence records an observation, not current behaviour.
+     NEVER edit a verdict or a specified assertion.
+(15) RE-RUN THE FULL BATTERY -- bare, except flutter analyze, where the bar is
      0 errors / 0 warnings / 188 infos and the code is always 1.
-(15) COMMIT: ONE ITEM, ONE Conventional Commit, WHY in the body. Move the issue
-     to the SINGLE existing Resolved heading, leave ONE line there, and put the
-     durable consequence in the design doc.
+(16) COMMIT: ONE ITEM, ONE Conventional Commit, WHY in the body. Move the issue
+     to the SINGLE existing Resolved heading, leave ONE line there.
 ```
 
-**The queue is empty. Do not invent work.** The only legitimate actions are in §3.1.
+**When AE1 is done the queue is empty. Do not invent work.**
