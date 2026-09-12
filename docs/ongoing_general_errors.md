@@ -10,15 +10,16 @@
 
 **Wave AA independently verified, September 11, 2026 — all 16 delivered items hold up.** Issues 153–164 and 166–169 are resolved and indexed in §3. Verification was done by reading source and falsifying guards, not by reading commit bodies; the falsifications are recorded in §2.41.
 
-**Two things remain open and neither is a defect:**
-- **Issue 165 (Quiplash differentiation) is deferred at the user's direction** — *"Lets put this off for now but don't lose this issue."* It keeps a blank selection line below. **Do not close it and do not let a consolidation drop it.**
-- **Issue 170 (target-seat scoring ceiling) is newly filed** below and awaits a selection.
+**Both remaining issues were selected on September 11, 2026 and are specced as Wave AB in `agent_execution_guide.md`:**
+- **Issue 170 → Option B** — exempt the target's forgery guesses from the round multiplier. **AB1.**
+- **Issue 165 → scoped Option A + B** — *"I think it is already different enough now but if needed lets proceed with Option A and B by showing and updating the rivalries each reveal and making it clear who knows who best."* **AB2 builds exactly the clause after "by".** The re-cut decks (Option A) and the match-long trust economy (Option B) are **not** selected and must not be built.
+- **AB3** re-captures the playthrough evidence with Marionette, at the user's request, because Wave AA left 104 screenshots depicting screens that no longer exist. **It runs last** — AB2 changes the reveal screen.
 
 **⚠️ The deploy gate is RED and this is expected, not a regression.** `./scripts/check_deploy_fresh.sh` exits **1**: AA10, AA11 and AA16a changed `functions/src`, and **`submitTargetForgeryGuesses` is not deployed at all** — production still runs 17 functions and the new callable is absent. **The target forgery-guessing feature therefore does not work in production yet**, and a client build shipped before the deploy would call a function that is not there. Deploy functions, then **re-apply `CLEANUP_DRY_RUN=false` and read it back** — it is revision-scoped and a deploy silently drops it.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-Two open items. Everything else from the September 8 playthrough shipped in Wave AA and is indexed in §3.
+Two issues, **both now selected** and specced as Wave AB — they stay here until the code lands, then move to §3. Everything else from the September 8 playthrough shipped in Wave AA and is indexed in §3.
 
 ---
 
@@ -44,7 +45,7 @@ The structural asset the game already has and does not exploit: **the answers ar
   - *Pros*: Every one of those issues is a known, verifiable fix with a clear done condition, and the playthrough found nine of them — a game that is same-y but flawless beats a differentiated one that is hard to type into. No design risk, no doc churn, no reversal of Section 4.
   - *Cons*: Leaves the strategic concern unanswered, and it will be raised again by the next playtester; the longer the phase structure hardens, the more expensive Options A and B become.
 
-Your selection: Lets put this off for now but don't lose this issue.
+Your selection: I think it is already different enough now but if needed lets proceed with Option A and B by showing and updating the rivaleries each reveal and making it clear who knows who best.
 
 ---
 
@@ -78,7 +79,7 @@ At round 3 those become **12**, **24** and **33** against a voter's 6. **The rat
   - *Pros*: Bounds the ceiling directly at the source and scales with table size rather than fighting the multiplier; the target still gains a real reason to play the seat. Keeps every rule multiplied, so the manual stays uniform.
   - *Cons*: A cap is the least explainable of the three on a scoring screen — "you got 5 right, we counted 3" is exactly the kind of rule Issue 169 was filed about. Adds a third scoring concept to a game already carrying six.
 
-Your selection: _____
+Your selection: Proceed with Option B.
 
 ## 2. Lessons that still bite
 
