@@ -125,6 +125,8 @@ Your selection (motif intensity): Option A
 
 **In-game header sizing — shipped Wave R (Issue 136, Option A modified), August 2026.** In-game screen AppBars across Craft (`Phase2CraftScreen`), Vote (`Phase3VoteScreen`), and Reveal (`Phase4RevealScreen`) derive their `toolbarHeight` dynamically via `inGameAppBarHeight` from measured text (`TextPainter.layout`) scaled by live `MediaQuery.textScalerOf(context)` constrained to the title box, rather than using arbitrary literals or screen-height fractions. A minimum floor of `kToolbarHeight` (56.0) is enforced. Forgery phase multi-line headers (`FORGERY`, `ROOM: XXXX`, `Rotation N of M`) fit cleanly across all viewport widths and accessibility text scaling settings without clipping.
 
+**⚠️ The trailing reserve is a parameter, not a constant — Wave AA12 (Issue 164), September 2026.** `inGameAppBarHeight` reserves `56.0 + (56.0 * trailingSlots)` of width before measuring the title, where `trailingSlots` defaults to **1** and all three in-game screens now pass **2** (the round timer plus the manual button). **Any screen that adds or removes a trailing `AppBar` action MUST update its `trailingSlots` argument in the same change.** Getting this wrong does not throw — it measures the title against width the screen does not have, and the header clips silently at narrow widths or high text scale. `test/in_game_app_bar_test.dart` asserts both the 1-slot and 2-slot cases and `test/phase4_header_overflow_test.dart` exercises the 2-slot path; **extend both whenever the slot count changes.**
+
 **Dealt-card overlay removed — shipped Wave AA (Issue 155, Option A), September 2026; supersedes Wave R (Issue 137).** `DealtCardOverlay` was removed because it gated every phase and rotation change behind a full-screen modal whose content was a strict subset of the writing screen behind it, carried misleading button labels (`DISMISS` on truth rounds, `INSPECT` on forgery rounds), and obstructed the `RE-ROLL PROMPT` button on truth rounds. Players now transition directly to the writing screen on phase and rotation changes.
 
 **Game Over (`game_over_screen.dart`).** Present honors as **framed portraits on a parlor wall** (brass frames, engraved plaques) rather than flat cards. The stubbed "Share to Instagram" becomes an exportable **"Case Closed" dossier card** (see Proposal P6).
@@ -261,3 +263,25 @@ All durations come from `AppMotion`: `fast` 180 ms (presses, stamps) · `standar
 - **Why Compile-Time Constants / Code-Gen were Rejected**: Compile-time constants (`--dart-define` or code-gen from `pubspec.yaml`) report what the source or build command claimed, not what the installed bundle actually contains. A version display that can disagree with the installed binary is worse than none because it will be trusted during testing. Reading the bundle at runtime physically guarantees agreement with TestFlight.
 - **Resilience & Layout Invariants**: Bootstrap wraps `PackageInfo.fromPlatform()` in `try/catch` and falls back to an empty string (rendering `SizedBox.shrink()`), guaranteeing bootstrap failures cannot crash the app. The affordance is permanently visible on first pump without gestures, menus, or long presses, and fits small viewports (320×568) and high text scales without clipping or pushing primary actions offscreen.
 
+
+---
+
+### Vote Options — Stacked Deck with Peek (Issue 160 — Wave AA, September 2026)
+
+**Chosen from rendered mockups, not from description.** Four paged treatments were built as real Flutter widgets and captured at 320 pt and 430 pt with six options and a maximum-length 100-character answer — the worst case — and the user selected **Treatment 3, with backward navigation**. The artefacts are kept in `docs/mockups/vote_options/`. **When a layout decision is contested, render it before choosing**: the mockups cost one commit and settled the question with evidence rather than adjectives.
+
+**The contract.** In portrait, `CardGrid` presents one active option in the foreground with following cards peeking from behind (offset, rotation, border accents). **Six options fit inside a 320×640 pt viewport with no vertical scrolling**, while `AutoSizedAnswerText` still renders the longest legal answer in full.
+
+**Navigation is bidirectional and offered three ways** — PREV/NEXT buttons, horizontal swipe (left peels forward, right unpeels back), and tappable jump dots for random access. **The backward path is a user requirement, not a convenience**: the selection explicitly asked to review and select previously peeled cards. `test/stacked_deck_navigation_test.dart` covers all three paths plus selection persistence across navigation.
+
+**⚠️ This replaced an assertion, not just an implementation.** `vote_option_truncation_test.dart` previously asserted the opposite — that six options *exceed* the viewport and index 3 sits below the fold. That test now asserts viewport containment and discoverability. The no-ellipsis truncation guarantees around it are untouched and must stay.
+
+### Game Over — standings first (Issue 167 / AA13) and highlight card layout (Issue 168 / AA14)
+
+**Order is standings → honors → match highlights**, under a page heading of **`FINAL RESULTS`**. The heading was renamed from `THE NIGHT'S HONORS` deliberately: once the honors are no longer first, a heading that announces them is describing a screen that no longer exists. The honors keep their own heading and their staggered reveal.
+
+**Highlight card titles own the full card width.** The title and its badge previously shared one `Row`, where a 14 pt `CormorantGaramond` title with `letterSpacing: 1.2` lost to a variable-length badge and was ellipsised — `BEST LIE OF THE NIGHT` was the casualty. The badge now sits on its own line beneath the title, and the title's `maxLines`/ellipsis are gone because nothing competes with it. **Auto-sizing the title was explicitly rejected**: a letter-spaced display face at 14 pt has almost no headroom before it becomes unreadable, which trades a truncation bug for a legibility one. `test/highlight_card_truncation_test.dart` asserts `RenderParagraph.didExceedMaxLines == false` at 320 pt across text scales — the same mechanical technique as the vote-option truncation suite, and the reason this cannot regress silently.
+
+### In-game rules access (Issue 164 / AA12)
+
+`READ MANUAL` used to exist only on the lobby entry screen, so once a match began there was no route back to the rules. All three in-game screens now carry a manual affordance in the `AppBar` alongside a short per-phase guidance line. **There is one rules source, not two** — the in-game sheet renders the same manual content, so phase copy and manual copy cannot drift apart. `test/guidance_strings_test.dart` asserts the phase strings **verbatim**; keep it that way rather than relaxing to substring matching, because the value of that file is that copy cannot change silently.
