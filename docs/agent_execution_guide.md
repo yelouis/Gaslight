@@ -1,16 +1,18 @@
-# Agent Execution Guide — Wave AD: 3 cleanup items — September 12, 2026
+# Agent Execution Guide — Awaiting Selection: no approved work — September 12, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Every number and literal string in this document is a decision, not a suggestion.**
 
-**Wave AC is delivered and verified.** All five items (Issues 171–174 and the re-roll feature) work as specified, and their guards were re-falsified this session. **Wave AD is the cleanup that verification found** — three items, none of which needs a decision, each with exactly one correct fix.
+**Wave AD is delivered.** AD1 and AD3 are correct and were re-falsified this session. **AD2 should never have been filed** — the tests it asked for already existed; see §2.
 
-**There are no open issues and nothing awaits a selection.** Do not invent work beyond AD1–AD3 and §5.1.
+**⚠️ Issue 175 is open and UNSELECTED**, in `docs/ongoing_general_errors.md`, with a blank `Your selection: _____`. **That line belongs to the user and an agent must never fill it in.** An unselected issue is a question, not an instruction, and `(recommended)` is not approval.
+
+**Do not invent work.** The only legitimate actions are in §3.1.
 
 ---
 
-## 1. Verified baseline — measured this session on `76334b1`
+## 1. Verified baseline — measured this session on `a0c4c57`
 
 Every number was run bare. **This is the regression bar.**
 
@@ -23,86 +25,31 @@ Every number was run bare. **This is the regression bar.**
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
 | `./scripts/check_playthrough_evidence.sh` — **all five** invocations | **exit 0** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH** |
-| `test/web_e2e/*.js` | **VERIFIED.** Ran against release web build (`build/web`) on port 8777 via Playwright headless Chromium. Both voters selected cards and cast votes successfully. |
+| `test/web_e2e/*.js` | **DID NOT RUN, and has never been gated.** That is **Issue 175**, which also found the scripts still click an `INSPECT` button deleted by AA1. |
 
-**⚠️ Infos are now 188, down from 195.** The bar is **188 and no new infos**.
-
-**⚠️ `flutter analyze lib test` exits 1 even when clean.** The bar is 0 errors / 0 warnings, never `exit 0`.
+**⚠️ The bar is 188 infos and no new ones.** `flutter analyze lib test` exits 1 even when clean — it exits non-zero on infos, so the bar is **0 errors / 0 warnings**, never `exit 0`.
 
 **⚠️ Read every exit code bare, never through a pipe.** `… | tail` reports `tail`'s status, always 0.
 
-**⚠️ `pubspec.yaml` is at `1.0.0+7` and build 7 has NOT been uploaded.** TestFlight 5 and 6 are live; **6 carries the Issue 152 leave bug**, so once 7 ships, expire both. `flutter build ipa` fails at the *export* step here — expected. Verify the **archive**, never the `.ipa`. See `README.md` → Releasing.
+**⚠️ `pubspec.yaml` is at `1.0.0+7` and build 7 has NOT been uploaded.** TestFlight 5 and 6 are live; **6 carries the Issue 152 leave bug**, so once 7 ships, expire both. `flutter build ipa` fails at the *export* step here — expected, not a build failure. Verify the **archive**, never the `.ipa`. See `README.md` → Releasing.
 
 ---
 
-## 2. AD1 — Delete the decoy `CONFIRM VOTE` widget and fix the assertion it was propping up
+## 2. Wave AD — delivered September 12, 2026
 
-**What this means for the user.** Nothing visible. This removes an invisible widget that exists only to keep a test green, and restores that test's ability to catch a real regression.
+| Item | Outcome |
+|---|---|
+| **AD1** — remove the decoy `CONFIRM VOTE` widget | **Correct.** The decoy is gone and the assertion names `TAP A CARD TO CHOOSE`. **Re-falsified:** making the button render nothing while unselected (a change that still compiles) fails Test 2 of `phase3_vote_target_ready_toggle_test.dart` while Test 1 passes. The guard can fail on the thing it names again. |
+| **AD2** — write AC5's "missing" validations | **Should not have been filed.** AC5.3, AC5.4 and AC5.5 already existed in `functions/test/prompt_decks.spec.ts` from the AC5 commit. AD2 correctly reduced to adding the one genuinely absent assertion (`getDeckRating`). See lesson **§2.44**. |
+| **AD3** — re-point the web E2E scripts | **Code correct by inspection.** Card selection now matches `OPTION` positively and excludes `TAP A CARD TO CHOOSE`; both scripts pass `node --check`; `n.ariaLabel` is safe because `playthrough_helpers.js:30` defaults it to `''`. The agent **also found a second break this guide missed** — `run_match_summary_playthrough.js` used the presence of `CONFIRM VOTE` to detect a voter. **Its end-to-end run is self-reported and uncorroborated** — see below. |
 
-**The gap.** `lib/screens/phase3_vote.dart:580–581`:
+**⚠️ Two things about Wave AD that must not become precedent.**
 
-```dart
-if (_localSelectedAuthorId == null)
-  const SizedBox(width: 0, height: 0, child: Opacity(opacity: 0, child: Text('CONFIRM VOTE'))),
-```
-
-An invisible, zero-sized `CONFIRM VOTE` rendered **precisely when the visible button says `TAP A CARD TO CHOOSE`**. It was added during AC3 so that `test/phase3_vote_target_ready_toggle_test.dart:171` — `expect(find.text('CONFIRM VOTE'), findsOneWidget)` — kept passing after the rename.
-
-**⚠️ Measured this session, not argued:** delete the entire `PrimaryButton` from that screen, leave the decoy, and `flutter test test/phase3_vote_target_ready_toggle_test.dart` reports **"All tests passed"**. **A guard written to prove the confirm button is present now passes with the confirm button deleted.** See lesson §2.43.
-
-**Implementation.**
-
-1. **Delete the decoy** — both lines, including the `if`.
-2. **Fix the assertion it was propping up.** That test's own comment states its intent: *"As a voter on Card 2, Alice sees CONFIRM VOTE (not target ready buttons)"* — it is proving the player is on the **voter** path, not the target path. Replace `expect(find.text('CONFIRM VOTE'), findsOneWidget)` with an assertion on the label that is actually rendered in that state: **`expect(find.text('TAP A CARD TO CHOOSE'), findsOneWidget)`**. The two following lines already assert the target's controls are absent; **keep them** — together they are the real proof.
-3. **Audit every other `find.text('CONFIRM VOTE')` for the same vacuity.** `test/phase3_vote_target_forgery_attribution_test.dart:557` and `test/vote_tap_cue_test.dart:127` both reference the string. **For each, determine whether it is reached with something selected** — if not, it was matching the decoy and must be repointed the same way. `test/phase3_vote_test.dart:802` asserts `findsNothing` on the *target* path where the decoy never rendered; it is sound and should be left alone.
-
-**Do not** re-add a hidden widget, a `Semantics` label, a test-only key, or any other affordance whose sole consumer is a matcher.
-
-**Validation.**
-
-1. With the decoy deleted and the assertion fixed, the full suite is green at **346**.
-2. **Falsification, and this is the point of the item:** delete the `PrimaryButton` again. `phase3_vote_target_ready_toggle_test.dart` must now **FAIL**. **If it still passes, another proxy is standing in for the button and you have not finished.**
-3. **Over-reach guards, unedited:** all 5 in `test/vote_tap_cue_test.dart`, all 11 in `test/phase3_vote_test.dart`, all 4 in `test/stacked_deck_navigation_test.dart`.
+1. **AD3's end-to-end execution is a claim, not a measurement.** The commit states the scripts were validated against a local web build on port 8777. `saveScreenshot` writes into `docs/playthroughs/evidence/` and `run_full_playthrough.js` rewrites `w8_vote_lockout.png` partway through — **yet the evidence set is unchanged at 123 files and the tree is clean.** The run may have happened with its output discarded; there is no artefact either way. Lesson **§2.36** already covers this: a self-reported gate result is a claim. **When a validation step produces artefacts, commit them or say plainly that you did not run it.**
+2. **All three items landed in one commit** (`a0c4c57`), against the standing one-item-one-commit rule. No correctness impact, recorded so it is not copied.
 
 ---
-
-## 3. AD2 — Write AC5's three missing validations
-
-**What this means for the user.** Nothing visible. The deck top-up behaves correctly; nothing currently stops a future change from breaking it silently.
-
-**The gap.** AC5 specified five tests. Two were written (`AC5.1`, `AC5.2`); **three were not.** The behaviour they cover is *currently correct* — `drawWithFallbackExcluding` (`functions/src/prompt_decks.ts:822`) tries the room deck first at `:834–835` and only reaches the fallback at `:838–839` when nothing unseen remains — **which is exactly why the tests matter: nothing marks that ordering as load-bearing.**
-
-**Implementation — three tests in `functions/test/`, no production change.**
-
-1. **AC5.3 — the terminal case.** A player whose history covers **both** the room deck and the fallback still receives a prompt and **does not throw**. This guards the never-refuses contract in `design_prompt_system.md` §5, which is what keeps a long match playable.
-2. **AC5.4 — the over-reach guard, and the most important of the three.** While the room deck still has unseen prompts for this player, the fallback is **never consulted**. Assert the returned prompt is a member of the room's deck. **A top-up that fired eagerly would quietly drift every room onto `hypotheticals` and make the lobby's deck selection meaningless — and no existing test would notice.**
-3. **AC5.5 — the rating property.** Assert `PromptDecks.getDeckRating(PromptDecks.getFallbackDeckId()) === "PG"`. Cheap, and it is the guard on a safety property: because the fallback is PG, a top-up can only make content **milder**, never more explicit, so a family-friendly room cannot be handed something stronger. **If a future deck is ever marked `isFallback` with a rating above PG that property inverts silently**, and this assertion is what stops it landing unnoticed.
-
-**Validation.** Each of the three must be falsified: make the top-up eager and **AC5.4 must fail**; point `isFallback` at `rated_r_nsfw` in a scratch copy and **AC5.5 must fail**; give `drawOneExcluding` a throwing path and **AC5.3 must fail**. **A test you have not seen fail is a test you have not written.**
-
-**Blast radius:** `docs/design_prompt_system.md` §5 — state that the top-up is exhaustion-only and that the fallback's PG rating is load-bearing.
-
----
-
-## 4. AD3 — Re-point the web E2E scripts at the renamed button
-
-**What this means for the user.** Nothing visible. It keeps the web playthrough scripts able to run, which is how the web evidence in `docs/playthroughs/findings_web.md` gets produced.
-
-**The gap, and why nothing caught it.** AC3 renamed the vote screen's disabled button to `TAP A CARD TO CHOOSE`. **`test/web_e2e/*.js` is in no gate script** — it needs a web server and Chromium — so the battery has never exercised it. Two scripts match that area literally:
-
-- `test/web_e2e/run_full_playthrough.js:53` picks a card with a filter that **excludes buttons containing `CONFIRM`**: `!n.text.includes('CONFIRM')`. The confirm button no longer contains that word, **so it is now a candidate for the "Card Select" click** — the script may click the disabled confirm button instead of a card, after which the `CONFIRM VOTE` click at `:55` finds nothing because nothing was selected.
-- `run_match_summary_playthrough.js:82` and `:110` match `text === 'CONFIRM VOTE'` directly. These run **after** an option is selected, where the label has reverted, so they are expected to be sound — **confirm that rather than assuming it.**
-
-**⚠️ State plainly whether this is a real break or only a latent one.** It depends on whether a disabled `PrimaryButton` is exposed with `role === 'button'` in the semantics tree and on traversal order. **Determine that first and record the answer**; do not "fix" a script that was never broken, and do not declare it fine without checking.
-
-**Implementation.** Make the card-select filter select cards positively rather than by exclusion — match the option card's own text or its `OPTION` label — instead of relying on a blacklist of button words. **A filter defined by what it excludes breaks every time a label changes; one defined by what it includes does not.** Exclude `TAP A CARD TO CHOOSE` explicitly as well, so the immediate hazard is closed regardless.
-
-**Validation.** Run the affected script end to end against a local web build and confirm a vote is cast on every card. **This is the one item in this wave whose validation is not a unit test**; if the script cannot be run in your environment, **say so explicitly and leave the item open rather than marking it done** — a "gate that did not run" recorded as passing is what created AD3 in the first place.
-
-**Blast radius:** `docs/playthroughs/findings_web.md` is produced by these scripts; do not edit its existing blocks — evidence records an observation and is never retro-edited.
-
----
-## 5. Already delivered — do NOT rework
+## 3. Already delivered — do NOT rework
 
 ### Wave AA — sixteen items, verified September 11, 2026
 
@@ -122,7 +69,7 @@ Verified by reading source and re-falsifying, not by reading commit bodies. Full
 - Injecting `scoreDeltas` into the withheld branch fails **4** emulator tests including AA16a's leak test and the pre-existing P4 guard, with 135 still passing.
 - Tampering with one stem key in the generated Dart mirror makes `check_decks_in_sync.sh` exit **1**; restoring makes it exit **0**. The gate genuinely covers stems rather than passing vacuously on two empty sides.
 
-### 5.1 Standing maintenance — alongside Wave AD, not instead of it
+### 3.1 The only legitimate actions now
 
 1. **Deploy the functions after any `functions/src` change, then restore the cleanup flag.** The gate is green today; it goes red the moment server code changes. `functions/src` changed under AA10, AA11 and AA16a, and **`submitTargetForgeryGuesses` is not deployed at all** — production runs 17 functions and the new callable is absent. **Target forgery guessing does not work in production today, and a client build shipped before this deploy would call a function that is not there.**
    ```
@@ -162,7 +109,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 6. Invariants & intentional decisions — do NOT change
+## 4. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.**
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty.
@@ -222,7 +169,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 7. Where the contracts live
+## 5. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -239,7 +186,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 8. Validation standard
+## 6. Validation standard
 
 **A guard flag lives as long as the object holding it.** `_isLeaving` guards "a leave is in flight", but it sits on a `State` that outlives every room. When a flag's lifetime is longer than the thing it guards, it needs an explicit reset — and the reset belongs in a `finally`, because the failure path is exactly when it matters.
 
@@ -271,29 +218,30 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ```
 (1) A selection exists? If NO -- stop. Never fill in a `Your selection:` line.
-    Wave AD (sections 2-4) needs no selection: each item has one correct fix.
-(2) A rename broke a test? UPDATE THE ASSERTION. Never move production code to
-    satisfy a matcher, and never add a widget whose only consumer is a test --
-    that is AD1 and lesson 2.43.
-(3) Ask what input would make your check go red. If nothing would, it is not a
-    check. AD1's falsification is exactly this: delete the button and the
-    suite must fail.
-(4) Read exit codes BARE. `... | tail` reports tail's status, always 0.
-(5) A gate that did not run is not a pass. Say so in the baseline table --
-    web_e2e has never been gated and that is how AD3 shipped unnoticed.
-(6) COLOUR: check which SURFACE a token is for. onSurface is AppColors.ink,
+    Issue 175 is filed and UNSELECTED. It is not work.
+(2) Using a search to prove something is ABSENT? It must not encode an
+    incidental convention -- quoting, spacing, extension. Normalise it, and
+    corroborate the absence a second way (a count, a listing, the artefact
+    that would exist). A partial result reads exactly like a complete one.
+    That is lesson 2.44 and it cost a whole wave item.
+(3) A rename broke a test? UPDATE THE ASSERTION. Never move production code to
+    satisfy a matcher (lesson 2.43).
+(4) Ask what input would make your check go red. If nothing would, it is not a
+    check -- whether it is a test, a grep, or a gate.
+(5) Read exit codes BARE. `... | tail` reports tail's status, always 0.
+(6) A gate that did not run is not a pass, and a gate you ran that left no
+    artefact is a claim. If a validation produces files, COMMIT THEM.
+(7) COLOUR: check which SURFACE a token is for. onSurface is AppColors.ink,
     text on PARCHMENT; on the dark ground it is 1.12:1. Text on ground is
-    ivory. Assert on the RENDERED tree, not a curated pair list (lesson 2.42).
-(7) Changing scoring? Change BOTH functions/src/scoring_logic.ts AND the
+    ivory. Assert on the RENDERED tree, not a curated pair list.
+(8) Changing scoring? Change BOTH functions/src/scoring_logic.ts AND the
     test-only mirror lib/utils/scoring_logic.dart, then re-run the sum
     invariant in both suites.
-(8) Publishing anything derived from authorship? Only cards whose author flip
+(9) Publishing anything derived from authorship? Only cards whose author flip
     has happened, at all THREE flush sites. Write the leak test first.
-(9) Adding a callable? Copy castVote's authorization shape (index.ts:942).
-    playerId is NOT a credential. Validate every client-supplied string
-    against server state.
-(10) Server bound first, client bound second. A client-side limit is a
-     suggestion.
+(10) Adding a callable? Copy castVote's authorization shape (index.ts:942).
+     playerId is NOT a credential. Validate every client-supplied string
+     against server state.
 (11) State bugs: the test must NOT re-pump the widget between steps.
 (12) Changing two things that write to the SAME number, document or screen
      region? Compute the COMBINED worst case as a table of real figures first.
@@ -301,9 +249,9 @@ Each of these reaches the specified outcome by a different structure than the sp
      NEVER edit a verdict or a specified assertion. Annotate as superseded.
 (14) RE-RUN THE FULL BATTERY -- bare, except flutter analyze, where the bar is
      0 errors / 0 warnings / 188 infos and the code is always 1.
-(15) COMMIT: one item, one Conventional Commit, WHY in the body. Move the issue
+(15) COMMIT: ONE ITEM, ONE Conventional Commit, WHY in the body. Move the issue
      to the SINGLE existing Resolved heading, leave ONE line there, and put the
      durable consequence in the design doc.
 ```
 
-**When AD1-AD3 are done the queue is empty. Do not invent work.**
+**The queue is empty. Do not invent work.** The only legitimate actions are in §3.1.

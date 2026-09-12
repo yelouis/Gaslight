@@ -8,25 +8,59 @@
 
 ## 1. Open & in-flight
 
-**Wave AD verified, September 12, 2026 — all three cleanup items delivered and verified.** AD1–AD3 are resolved and indexed in §3. Verified by reading source and falsifying, not from commit bodies.
+**Wave AD verified, September 12, 2026.** AD1 and AD3 are delivered and correct. **AD2 should never have been filed** — see the correction below. All three are indexed in §3.
 
-**What the falsifications proved:**
-- **AD1's decoy widget is deleted and the test assertion updated to 'TAP A CARD TO CHOOSE'.** Falsification: deleting `PrimaryButton` from `phase3_vote.dart` causes `phase3_vote_target_ready_toggle_test.dart` to fail with 0 widgets found matching 'TAP A CARD TO CHOOSE'. No decoy or proxy stands in for the button. All 20 over-reach guards passed unedited.
-- **AD2's three AC5 validations (AC5.3, AC5.4, AC5.5) are fully guarded and falsified:**
-  - Eager top-up fails AC5.4 (room deck preferred while unseen prompts remain).
-  - Marking `rated_r_nsfw` as fallback fails AC5.5 (fallback deck is PG rating property, asserting `PromptDecks.getDeckRating(PromptDecks.getFallbackDeckId()) === "PG"`).
-  - Throwing path on exhaustion fails AC5.3 (terminal never-refuses contract).
-  - Design doc `design_prompt_system.md` §5 updated with exhaustion-only ordering and load-bearing PG safety.
-- **AD3's web E2E scripts are repointed:**
-  - Real break in `run_match_summary_playthrough.js` resolved: voter check updated to recognize `TAP A CARD TO CHOOSE` alongside `CONFIRM VOTE`.
-  - Negative filter hazard in `run_full_playthrough.js` resolved: candidate cards matched positively via `OPTION` and explicitly exclude `TAP A CARD TO CHOOSE`.
-  - Verified against local release web build served on port 8777 via Playwright headless Chromium.
+**Falsified this session, not taken from the commit body:**
+- **AD1 holds.** The decoy is gone from `phase3_vote.dart` and the assertion now names `TAP A CARD TO CHOOSE`. Making the button render nothing while unselected — a change that still compiles — fails Test 2 of `phase3_vote_target_ready_toggle_test.dart` while Test 1 passes. **The guard can fail on the thing it names again**, which is exactly what lesson §2.43 was about.
+- **AD3's code is correct by inspection.** Card selection is now matched *positively* on `OPTION` with `TAP A CARD TO CHOOSE` explicitly excluded; both scripts parse under `node --check`; and `n.ariaLabel` is safe because `playthrough_helpers.js:30` defaults it to `''`. **The implementing agent also found a second break this guide did not anticipate** — `run_match_summary_playthrough.js` used the *presence* of `CONFIRM VOTE` to decide whether a player was a voter, which the rename silently inverted.
 
-**Every gate is green:** 0 errors · 0 warnings · **188 infos** · **346** client tests · **157** functions tests · decks, all five evidence invocations, and deploy all exit 0.
+**⚠️ Correction — AD2 was specced against a false premise, and the error was in the verification pass, not the implementation.** The September 12 verification reported that AC5.3, AC5.4 and AC5.5 "were not written". **They were.** All three shipped in the AC5 commit (`76334b1`) in `functions/test/prompt_decks.spec.ts`, and they are substantive — AC5.4 draws twenty times with ten of twenty-five excluded and asserts every draw comes from the room deck. The verification grep matched `it('AC5` with a single quote; that file uses double quotes, so the tests were invisible to it. **AD2 therefore reduced to adding one genuinely missing assertion** (`getDeckRating` alongside the existing `getDeck(...).rating`), which is what the implementing agent correctly did. Recorded as lesson §2.44.
+
+**⚠️ AD3's end-to-end run is self-reported and the repository does not corroborate it.** The commit states the scripts were validated against a local web build on port 8777. `saveScreenshot` writes into `docs/playthroughs/evidence/`, and `run_full_playthrough.js` rewrites `w8_vote_lockout.png` partway through — **yet the evidence set is unchanged at 123 files and the tree is clean**, so no screenshot was rewritten. The run may well have happened with its output discarded; there is simply no artefact of it. **Treat the script fix as verified by inspection and the end-to-end execution as unverified** (lesson §2.36: a self-reported gate result is a claim, not a measurement).
+
+**Process note:** all three items landed in a single commit (`a0c4c57`), against the standing one-item-one-commit rule. No correctness impact; recorded so the next wave does not treat it as precedent.
+
+**Every gate is green:** 0 errors · 0 warnings · **188 infos** · **346** client tests · **157** functions tests · decks, all five evidence invocations, and deploy all exit 0. **`test/web_e2e` remains ungated** — that is Issue 175.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-All issues from the September 8 playthrough and Waves AA, AB, AC, and AD have been resolved. The open queue is empty.
+One open issue, filed during Wave AD verification. Everything from the September 8 playthrough and Waves AA–AD is resolved and indexed in §3.
+
+---
+
+### Issue 175: The web E2E scripts drift silently because nothing runs them
+
+**Status**: ⚠️ Confirmed Unresolved — **filed September 12, 2026 during Wave AD verification.** `test/web_e2e/*.js` is referenced by **no gate script**: it needs a web build, a static server, Playwright and a backend, so the battery has never exercised it. AD3 fixed one break in it; verification then found the scripts have been drifting for four days without anyone noticing.
+
+**The evidence, measured rather than supposed.** `run_match_summary_playthrough.js:33` and `:52` still click a button labelled `INSPECT`:
+
+```js
+await tryClickElement(page, n => n.role === 'button' && (n.text === 'INSPECT' || n.text.includes('INSPECT')), 'INSPECT Overlay');
+```
+
+**`INSPECT` was deleted from the app by AA1 (Issue 155)** when the dealt-card overlay was removed. `grep -rn "INSPECT" lib/` returns nothing, and the same is true of `DISMISS`, the overlay's other label. `tryClickElement` is tolerant — it logs `[CLICK FAILED]` and continues — so the script does not crash; it simply carries dead steps aimed at a screen that no longer exists, and **the only signal is a log line nobody reads.**
+
+That is also how AD3's break arrived: AC3 renamed a button, and `run_match_summary_playthrough.js` had been using the *presence* of `CONFIRM VOTE` to decide whether a player was a voter. **Two waves in a row silently invalidated these scripts.**
+
+**Why this matters beyond tidiness.** These scripts produce the web evidence in `docs/playthroughs/findings_web.md`. A script that half-works still produces screenshots, and screenshots are what the evidence gate checks exist — **the gate verifies the artefact is on disk, never that the run reached the state it claims.** A drifted script therefore degrades quietly into evidence that looks fine.
+
+**Option A (recommended)**: **Declare the scripts' UI strings in one place and assert they exist in `lib/`** — move every label the scripts match on into an exported `UI_STRINGS` map in `test/web_e2e/playthrough_helpers.js`, have the scripts reference only that map, and add a check to the battery that fails when any of those strings is absent from `lib/`.
+  - *Pros*: Catches exactly the failure that has now happened twice — a renamed or deleted label — in milliseconds, with no browser, no web build and no backend, so it can join the battery without slowing it. **Because the scripts reference the same map the check reads, the list cannot drift out of step with what is actually matched** — which is the trap that made `contrast_tokens_test.dart` useless in Issue 171 (lesson §2.42). Also self-documents which strings are load-bearing for E2E.
+  - *Cons*: Proves the strings still exist, not that the flow still works — a label that survives while its screen is reordered still breaks the script. Needs care to separate genuine UI labels from fixture data the scripts also match on (`Paris`, `AAA`, player names), and a wrong split gives either false alarms or false confidence.
+
+**Option B**: **Gate the full web E2E run** — add a web build, static server and Playwright run to the battery.
+  - *Pros*: The only option that verifies the flow rather than its vocabulary, and it would produce fresh web evidence as a by-product. Removes the self-reported-run problem entirely, which is what made AD3's completion unverifiable.
+  - *Cons*: Turns a roughly one-minute battery into a multi-minute one and adds a browser and a backend to the critical path of every verification. Needs a decision about which backend — emulators add setup, production creates real rooms. A gate that is slow and flaky gets skipped, and a skipped gate is worse than an honest absence.
+
+**Option C**: **Delete the dead steps and leave the scripts ungated** — remove the `INSPECT`/`DISMISS` clicks and anything else aimed at removed UI.
+  - *Pros*: Cheapest, and it fixes today's actual staleness. No new infrastructure and no battery cost.
+  - *Cons*: Fixes the instance and not the cause; the next rename drifts them again with nothing to notice. Given this has now happened in two consecutive waves, the base rate argues against it.
+
+**Option D**: **Retire the web scripts.** The Marionette playthroughs (`findings_waveAA.md`, E50–E63) now cover the same journeys on real devices, which is stronger evidence than a headless browser.
+  - *Pros*: Removes an unmaintained surface and the standing risk of evidence that looks fine but was produced by a half-working script. Marionette runs are already the project's primary evidence path.
+  - *Cons*: Web is a supported platform and would lose its only automated coverage; `findings_web.md` becomes frozen history with no way to refresh it. Marionette cannot exercise the web build at all, so a web-only regression would have nothing watching for it.
+
+Your selection: _____
 
 ---
 
@@ -134,6 +168,20 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
+---
+
+#### 2.44 A grep that assumes a quoting style is a search with a silent filter on it
+
+The September 12 verification pass concluded that three of AC5's five specified tests "were not written", and a whole wave item (**AD2**) was specced to write them. **All three already existed** — in `functions/test/prompt_decks.spec.ts`, and substantial: AC5.4 draws twenty times with ten of twenty-five prompts excluded and asserts every draw came from the room deck.
+
+The search was `grep -ho "it('AC5[^']*'"`. That file writes `it("AC5.4: …")` with **double** quotes. The pattern could not match it, and a search that returns nothing looks identical to an absence.
+
+**Why it survived a careful pass:** the same command *did* find `AC5.1` and `AC5.2` in `game_e2e.spec.ts`, which use single quotes. **A partial result is the most dangerous kind of empty result** — it reads as "the search works and these are all there are", when it actually means "the search works on one of the two files you needed".
+
+**The rule:** when a search is being used to establish that something is **absent**, it must not encode an incidental convention — quoting, indentation, spacing, file extension. Either normalise (`grep -rn "AC5\.[0-9]" functions/test/`) or **corroborate the absence a second way**: a count, a listing, or the artefact that would exist if the thing did. Here, the functions test count was **157 before and after AD2** — a number already on the baseline table, which would have contradicted "three tests added" immediately.
+
+**And the general form, which this log has now recorded four times** (§2.19, §2.30, §2.42, §2.43): **a check is only evidence if it could have produced the other answer.** This one is the verifier's version of the same mistake — the earlier three were about tests that could not fail, this is about a search that could not find.
+
 ---
 
 #### 2.43 Satisfying an assertion is not the same as satisfying the contract it stood for
