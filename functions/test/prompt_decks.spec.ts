@@ -60,4 +60,64 @@ describe("Prompt Decks & Samples Tests (TS)", () => {
       /Sample prompt key "Bogus prompt that does not exist" does not match any prompt in deck "test_deck"/
     );
   });
+
+  describe("Fallback Deck & Top-up on Exhaustion (AC5 / Issue 174)", () => {
+    it("AC5.5: getFallbackDeckId()'s deck is rated PG", () => {
+      const fallbackId = PromptDecks.getFallbackDeckId();
+      const fallbackDeck = PromptDecks.getDeck(fallbackId);
+      expect(fallbackDeck).to.exist;
+      expect(fallbackDeck!.rating).to.equal("PG");
+      expect(fallbackDeck!.isFallback).to.be.true;
+    });
+
+    it("AC5.4: while the room deck still has unseen prompts, the fallback is never consulted", () => {
+      const roomDeckId = "real_life"; // 25 prompts
+      const roomDeck = PromptDecks.getDeck(roomDeckId)!;
+
+      // Exclude 10 prompts out of 25 from roomDeck
+      const excluded = new Set(roomDeck.prompts.slice(0, 10));
+
+      for (let i = 0; i < 20; i++) {
+        const drawn = PromptDecks.drawWithFallbackExcluding(roomDeckId, excluded);
+        expect(roomDeck.prompts).to.include(drawn);
+        expect(excluded.has(drawn)).to.be.false;
+      }
+    });
+
+    it("AC5.3: history covering both decks still returns a prompt and does not throw (terminal case)", () => {
+      const roomDeckId = "real_life";
+      const roomDeck = PromptDecks.getDeck(roomDeckId)!;
+      const fallbackDeckId = PromptDecks.getFallbackDeckId();
+      const fallbackDeck = PromptDecks.getDeck(fallbackDeckId)!;
+
+      // Exclude all prompts in BOTH decks
+      const allPrompts = new Set([...roomDeck.prompts, ...fallbackDeck.prompts]);
+      const inPlay = new Set(roomDeck.prompts.slice(0, 3)); // 3 in play
+
+      let drawn: string | undefined;
+      expect(() => {
+        drawn = PromptDecks.drawWithFallbackExcluding(roomDeckId, allPrompts, inPlay);
+      }).to.not.throw();
+
+      expect(drawn).to.be.a("string");
+      expect(drawn!.length).to.be.greaterThan(0);
+      // It relaxed, but must avoid prompts in play
+      expect(inPlay.has(drawn!)).to.be.false;
+    });
+
+    it("AC5: draws from fallback deck when room deck unseen pool is completely exhausted", () => {
+      const roomDeckId = "real_life";
+      const roomDeck = PromptDecks.getDeck(roomDeckId)!;
+      const fallbackDeckId = PromptDecks.getFallbackDeckId();
+      const fallbackDeck = PromptDecks.getDeck(fallbackDeckId)!;
+
+      // Exclude all prompts in room deck, none in fallback deck
+      const excluded = new Set(roomDeck.prompts);
+      const drawn = PromptDecks.drawWithFallbackExcluding(roomDeckId, excluded);
+
+      expect(fallbackDeck.prompts).to.include(drawn);
+      expect(roomDeck.prompts).to.not.include(drawn);
+    });
+  });
 });
+

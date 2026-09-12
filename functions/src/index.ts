@@ -1194,7 +1194,7 @@ export const rerollPrompt = onCall(async (request) => {
         newPrompt = PromptDecks.drawOneExcluding(promptSource.fallbackDeckId, excluded, inPlay);
       }
     } else {
-      newPrompt = PromptDecks.drawOneExcluding(promptSource.deckId, excluded, inPlay);
+      newPrompt = PromptDecks.drawWithFallbackExcluding(promptSource.deckId, excluded, inPlay);
     }
 
     const updatedCard = {
@@ -1578,7 +1578,8 @@ async function concludeResolutionRound(
       const assignedThisRound = new Set<string>();
       for (const p of activePlayers) {
         const seen = finalPlayerSeenMap[p.id] || new Set<string>();
-        const chosen = PromptDecks.drawOneExcluding(promptSource.deckId, seen, assignedThisRound);
+        const excluded = new Set([...seen, ...assignedThisRound]);
+        const chosen = PromptDecks.drawWithFallbackExcluding(promptSource.deckId, excluded, assignedThisRound);
         assignedPrompts[p.id] = chosen;
         assignedThisRound.add(chosen);
       }

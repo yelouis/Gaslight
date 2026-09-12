@@ -6919,6 +6919,137 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         expect(finalCandidates.length).to.equal(uniqueSet.size);
       });
     });
+
+    describe('AC5: Fallback deck top-up on exhaustion (Issue 174)', () => {
+      it('AC5.1: a player whose seenPrompts covers the entire room deck receives a fallback-deck prompt on re-roll, not a repeat', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await roomRef.collection('players').doc('p_guest').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_guest2').update({ lobbyReady: true });
+
+        const roomDeckId = 'real_life'; // 25 prompts
+        const roomDeck = PromptDecks.getDeck(roomDeckId)!;
+        const fallbackDeckId = PromptDecks.getFallbackDeckId(); // 'hypotheticals', 50 prompts
+        const fallbackDeck = PromptDecks.getDeck(fallbackDeckId)!;
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: roomDeckId });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: roomDeckId });
+
+        // Pre-load p_host's seenPrompts with ALL prompts from the room's deck
+        await roomRef.collection('sealed').doc('p_host').update({
+          seenPrompts: [...roomDeck.prompts]
+        });
+
+        const res = await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        expect(res.success).to.be.true;
+        const rerolledPrompt = res.newPrompt;
+
+        // Must NOT be a repeat from the room's deck
+        expect(roomDeck.prompts).to.not.include(rerolledPrompt);
+        // Must BE from the fallback deck
+        expect(fallbackDeck.prompts).to.include(rerolledPrompt);
+      });
+
+      it('AC5.2: round-advance deal deals from fallback deck when history covers room deck, not a repeat', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          totalRounds: 2,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await roomRef.collection('players').doc('p_guest').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_guest2').update({ lobbyReady: true });
+
+        const roomDeckId = 'real_life'; // 25 prompts
+        const roomDeck = PromptDecks.getDeck(roomDeckId)!;
+        const fallbackDeckId = PromptDecks.getFallbackDeckId(); // 'hypotheticals'
+        const fallbackDeck = PromptDecks.getDeck(fallbackDeckId)!;
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: roomDeckId });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: roomDeckId });
+
+        // Submit truth answers for all players
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice truth answer 1', isTruth: true });
+        await callFn('submitAnswer', guestUser.idToken, { roomCode, targetCardId: 'p_guest', authorId: 'p_guest', text: 'Bob truth answer 1', isTruth: true });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: 'p_guest2', authorId: 'p_guest2', text: 'Charlie truth answer 1', isTruth: true });
+
+        // Pre-load p_host's seenPrompts with ALL prompts from the room's deck before round transition
+        await roomRef.collection('sealed').doc('p_host').update({
+          seenPrompts: [...roomDeck.prompts]
+        });
+
+        // Submit forgeries for all players
+        let snapForgeries = await roomRef.get();
+        expect(snapForgeries.data()?.currentPhase).to.equal('forgery');
+        const assignments = snapForgeries.data()?.currentCardAssignments || {};
+
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: assignments['p_host'], authorId: 'p_host', text: 'Alice forgery 1', isTruth: false });
+        await callFn('submitAnswer', guestUser.idToken, { roomCode, targetCardId: assignments['p_guest'], authorId: 'p_guest', text: 'Bob forgery 1', isTruth: false });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: assignments['p_guest2'], authorId: 'p_guest2', text: 'Charlie forgery 1', isTruth: false });
+
+        let snap = await roomRef.get();
+        expect(snap.data()?.currentPhase).to.equal('vote');
+
+        const players = ['p_host', 'p_guest', 'p_guest2'];
+        const userTokens: Record<string, string> = { p_host: hostUser.idToken, p_guest: guestUser.idToken, p_guest2: guest2User.idToken };
+
+        // Resolve 3 cards
+        for (let r = 0; r < 3; r++) {
+          snap = await roomRef.get();
+          const reader = snap.data()?.currentReaderId;
+          await callFn('setReady', userTokens[reader], { roomCode, playerId: reader, ready: true });
+          snap = await roomRef.get();
+          const card = snap.data()?.cards.find((c: any) => c.targetPlayerId === reader);
+          const sealedReader = await roomRef.collection('sealed').doc(reader).get();
+          const answerAuthors = sealedReader.data()?.answerAuthors as Record<string, string>;
+          for (const voter of players) {
+            if (voter !== reader) {
+              const optToVote = card.options.find((o: any) => answerAuthors[o.id] !== voter);
+              if (optToVote) {
+                await callFn('castVote', userTokens[voter], { roomCode, targetCardId: reader, voterId: voter, votedForId: optToVote.id });
+              }
+            }
+          }
+          await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+        }
+
+        snap = await roomRef.get();
+        expect(snap.data()?.currentRound).to.equal(2);
+        expect(snap.data()?.currentPhase).to.equal('truth');
+
+        const round2Cards = snap.data()?.cards as any[];
+        const hostCardR2 = round2Cards.find(c => c.targetPlayerId === 'p_host');
+        expect(hostCardR2).to.exist;
+
+        // The prompt dealt to p_host in Round 2 must NOT be from real_life (which was fully seen)
+        expect(roomDeck.prompts).to.not.include(hostCardR2.promptText);
+        // It must be from the fallback deck
+        expect(fallbackDeck.prompts).to.include(hostCardR2.promptText);
+      });
+    });
   });
 });
 });

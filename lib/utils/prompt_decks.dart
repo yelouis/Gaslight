@@ -768,4 +768,33 @@ class PromptDecks {
 
     return pick(deck);
   }
+
+  /// Draws one prompt from [deckId], preferring anything outside [excludedPrompts].
+  /// If no unseen prompts remain in [deckId], attempts to draw an unseen prompt
+  /// from the fallback deck before relaxing to [mustAvoid] (Issue 174 / Wave AC5).
+  static String drawWithFallbackExcluding(
+    String deckId,
+    Set<String> excludedPrompts, [
+    Set<String> mustAvoid = const {},
+  ]) {
+    final entry = _byId[deckId];
+    if (entry == null) {
+      throw Exception('Failed to load deck: \$deckId. Ensure it is defined in PromptDecks.');
+    }
+
+    final deck = entry.prompts;
+    String pick(List<String> xs) => (xs.toList()..shuffle(Random())).first;
+
+    final preferred = deck.where((p) => !excludedPrompts.contains(p)).toList();
+    if (preferred.isNotEmpty) return pick(preferred);
+
+    if (deckId != fallbackDeckId) {
+      return drawOneExcluding(fallbackDeckId, excludedPrompts, mustAvoid);
+    }
+
+    final relaxed = deck.where((p) => !mustAvoid.contains(p)).toList();
+    if (relaxed.isNotEmpty) return pick(relaxed);
+
+    return pick(deck);
+  }
 }

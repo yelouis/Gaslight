@@ -815,4 +815,34 @@ export class PromptDecks {
     // Deck smaller than the table: nothing left to vary by.
     return pick(deck);
   }
+
+  /// Draws one prompt from [deckId], preferring anything not in [excludedPrompts].
+  /// If no unseen prompts remain in [deckId], attempts to draw an unseen prompt
+  /// from the fallback deck before relaxing to [mustAvoid] (Issue 174 / Wave AC5).
+  static drawWithFallbackExcluding(
+    deckId: string,
+    excludedPrompts: Set<string>,
+    mustAvoid: Set<string> = new Set()
+  ): string {
+    if (!DECKS[deckId]) {
+      throw new HttpsError("not-found", `Failed to load deck: ${deckId}. Ensure it is defined in PromptDecks.`);
+    }
+
+    const deck = DECKS[deckId];
+    const pick = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+
+    const preferred = deck.filter((p) => !excludedPrompts.has(p));
+    if (preferred.length > 0) return pick(preferred);
+
+    const fallbackId = this.getFallbackDeckId();
+    if (deckId !== fallbackId) {
+      return this.drawOneExcluding(fallbackId, excludedPrompts, mustAvoid);
+    }
+
+    const relaxed = deck.filter((p) => !mustAvoid.has(p));
+    if (relaxed.length > 0) return pick(relaxed);
+
+    return pick(deck);
+  }
 }
+

@@ -25,51 +25,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-All issues from the September 8 playthrough have been resolved (Issues 153–170). Wave AB (AB1 target guess multiplier exemption, AB2 running rivalries & closest read, production functions deploy with CLEANUP_DRY_RUN=false, and AB3 Marionette evidence re-capture E50–E63) is fully delivered, deployed, and verified. The open queue is empty.
-
-
-
-
-
-
-
-
-
-### Issue 174: Three re-rolls per player can drain a deck inside one round
-
-**Status**: ⚠️ Confirmed Unresolved — **filed September 12, 2026 while speccing AC4** (the 3-re-roll cap). Not a defect in anything shipped; a capacity question the new feature makes unavoidable, and it is the structural half of the trap the user named when requesting it.
-
-**The arithmetic.** Four of the five catalogue decks hold **25** prompts; only the fallback, `hypotheticals`, holds 50. A player consumes **1 dealt prompt + up to 3 re-rolls = 4** per round.
-
-| Players | Round 1 | Rounds 1–2 | Rounds 1–3 |
-|---|---|---|---|
-| 3 | 12 | 24 | 36 |
-| 5 | **20** | 40 | 60 |
-| 7 | **28** | 56 | 84 |
-
-Against a 25-prompt deck, **five players exhaust 20 of 25 in a single round**, and **seven players need 28 before round 1 ends** — more than the deck contains. Even the 50-prompt fallback cannot serve seven players for two rounds.
-
-**Why the cap makes this new.** Re-rolls are unlimited today, but nobody spins more than once or twice, so consumption sits near `players × rounds`. **A cap of three plus a chooser turns three re-rolls into the rational play** — you spend them all to widen your choice — so average consumption approaches the worst case rather than the best.
-
-**What the code does today.** `startGame` (`index.ts:733`) refuses to start when `deckSize < activePlayers.length * totalRounds` — it budgets **one prompt per player per round** and knows nothing about re-rolls. Past that point `PromptDecks.drawOneExcluding` **never refuses**: it relaxes from "unseen" to "not currently in play" and hands back a prompt the player has already seen. **AC4 de-duplicates the chooser so the same prompt never appears twice in one list, which keeps the feature honest, but it cannot manufacture prompts that do not exist.**
-
-**Option A (recommended)**: **Top up from the fallback deck when the chosen deck runs dry** — when a re-roll finds no unseen prompt in the room's deck, draw from `hypotheticals` instead.
-  - *Pros*: No game is ever blocked from starting and no player is ever handed a repeat while any unseen prompt exists anywhere. The mechanism already exists and is already trusted — the custom-deck branch of `rerollPrompt` falls back to `getFallbackDeckId()` exactly this way, so this extends a shipped pattern rather than inventing one. Invisible to players until it is needed.
-  - *Cons*: Silently mixes registers — a `love_life` room could be handed a `hypotheticals` prompt mid-round, and a table that deliberately chose a rated deck may notice the tone change. Needs a rule for what happens when the fallback is *also* exhausted, which at seven players over three rounds it will be.
-
-**Option B**: **Tighten the capacity check to budget re-rolls** — require `deckSize >= players × rounds × (1 + kMaxRerollsPerRound)` at `startGame`.
-  - *Pros*: Turns a silent late-game degradation into an honest refusal at the only moment it can still be acted on, when the host can pick a bigger deck or fewer rounds. Exactly the shape of the existing check, so it is a one-line change to a guard that already exists and already has an error message players see.
-  - *Cons*: Brutally restrictive — a 25-prompt deck would support **one** 6-player round and nothing more, and no 25-prompt deck could host 7 players at all. It would block many configurations that play perfectly well today, because it budgets for a worst case that only occurs if every player spends every re-roll.
-
-**Option C**: **Scale the cap to what the deck can afford** — compute the per-round allowance at `startGame` as `floor((deckSize / rounds - players) / players)`, clamped to 0–3, and publish it on the room.
-  - *Pros*: Never blocks a game and never degrades into repeats; a big deck gives the full three and a small one gives one or none, which is honest about what the content can support. The cap is already a named constant and already read by the client, so publishing it per-room is a small change.
-  - *Cons*: The feature silently varies between rooms, so a player who gets three re-rolls one night and none the next has no way to know why — and an allowance of 0 removes a button that Issue 166 and AC4 both exist to provide. The formula is a third scoring-ish rule to explain, which cuts against Issue 169's goal.
-
-**Option D**: **Accept the degradation and say so** — keep the current check, let the draw relax, and surface a one-line notice when a re-roll returns a previously seen prompt.
-  - *Pros*: No new constraints, no blocked games, no register mixing. Cheapest by far, and the honesty of the notice arguably beats a silent substitution. AC4's de-duplication already prevents the worst symptom.
-  - *Cons*: Does the least about the thing the user actually asked for — *"not the same 3 prompts per round for the same player"* — and on a 25-prompt deck at five players, round 2 would be mostly repeats. A notice explaining that the deck is exhausted is a worse experience than not running out.
-
-Your selection: Proceed with Option A.
+All issues from the September 8 playthrough have been resolved (Issues 153–170). Wave AB (AB1 target guess multiplier exemption, AB2 running rivalries & closest read, production functions deploy with CLEANUP_DRY_RUN=false, and AB3 Marionette evidence re-capture E50–E63) and Wave AC (AC1–AC5) are fully delivered and verified. The open queue is empty.
 
 ---
 
@@ -383,12 +339,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–171 — August 8 to September 12, 2026
+### Issues 65–174 — August 8 to September 12, 2026
 
-**97 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**98 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AC / AC5 — fallback deck top-up on deck exhaustion** (implemented `PromptDecks.drawWithFallbackExcluding` in TS and Dart generator; tops up from `hypotheticals` when room deck has no unseen prompts remaining on both re-rolls and round-advance deals before relaxing; verified fallback deck is PG-rated; verified unseen preference on room deck and terminal non-throwing relaxation; emulator tested re-rolls and round deals; falsified by removing top-up) | 174 | `functions/src/prompt_decks.ts`; `functions/src/index.ts`; `lib/utils/prompt_decks.dart`; `test/fake_functions.dart`; `functions/test/prompt_decks.spec.ts`; `functions/test/game_e2e.spec.ts`; `design_prompt_system.md` §5 |
 | **Wave AC / AC4 — cap re-rolls at 3 per round & candidate chooser** (enforced `kMaxRerollsPerRound = 3` on server and client; fixed draw history trap in catalogue and custom draws by excluding `cardSeen`; tracked `rerollsThisRound` and distinct `rerollCandidates` in `sealed/{cardId}` with explicit round-advance reset in `concludeResolutionRound`; implemented `selectRerolledPrompt` callable with 6 validation steps; rendered `RE-ROLL PROMPT ({n} LEFT)` disabled at 0; rendered prompt chooser at cap with active indicator and collision handling; verified 320pt responsiveness with `FittedBox`; emulator and widget tested; falsified cap and exclusion trap) | AC4 (New Feature) | `functions/src/index.ts`; `lib/screens/phase2_craft.dart`; `test/phase2_craft_reroll_test.dart`; `functions/test/game_e2e.spec.ts`; `design_prompt_system.md` §5; `design_database_and_security.md`; `design_ui_direction.md` |
 | **Wave AC / AC3 — tap-to-choose instruction on vote deck** (rendered disabled button copy as `TAP A CARD TO CHOOSE` when `_localSelectedAuthorId == null` in `phase3_vote.dart`, reverting to `CONFIRM VOTE` upon selection; added `Tap to choose this one` cue in `AppColors.brass` 11pt on active card in `card_grid.dart` only when votable and unselected; strictly suppressed cue on unvotable cards [own forgery/truth and placeholders] and target view; zero behaviour changes; verified layout at 320pt across text scales 1.0 and 1.3 in `vote_option_truncation_test.dart` and 5 widget tests in `vote_tap_cue_test.dart`; falsified button copy and unvotable suppression) | 173 | `lib/screens/phase3_vote.dart`; `lib/widgets/card_grid.dart`; `test/vote_tap_cue_test.dart`; `design_ui_direction.md` |
 | **Wave AC / AC2 — inline sample answers replace sentence stems** (replaced 150 sentence stems with 150 complete sample answers in `functions/src/prompt_decks.ts` under `samples` field; enforced module load validation with `validateDeckSamples`; regenerated `lib/utils/prompt_decks.dart`; rendered `For example: "$sample"` with `sentence_sample_hint` key in `phase2_craft.dart` without prefilling `_answerController`; documented similarity check collision on derived answers in `craft_sentence_stem_test.dart` and `design_prompt_system.md` §6; falsified module load validation and sync gate) | 172 | `functions/src/prompt_decks.ts`; `lib/utils/prompt_decks.dart`; `lib/screens/phase2_craft.dart`; `test/craft_sentence_stem_test.dart`; `functions/test/prompt_decks.spec.ts`; `design_prompt_system.md` §6 |

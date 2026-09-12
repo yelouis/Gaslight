@@ -559,13 +559,16 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
           final deckId = currentState.selectedDeckId == 'custom' ? PromptDecks.fallbackDeckId : currentState.selectedDeckId;
 
           final newCards = <CardModel>[];
+          final assignedThisRound = <String>{};
           for (var p in activePlayers) {
             final sealedRef = roomRef.collection('sealed').doc(p.id);
             final sealedSnap = await sealedRef.get();
             final cardSeenPrompts = (sealedSnap.exists && sealedSnap.data()?['seenPrompts'] != null)
                 ? List<String>.from(sealedSnap.data()!['seenPrompts'])
                 : <String>[];
-            final newPrompt = PromptDecks.drawOneExcluding(deckId, cardSeenPrompts.toSet());
+            final excluded = {...cardSeenPrompts, ...assignedThisRound};
+            final newPrompt = PromptDecks.drawWithFallbackExcluding(deckId, excluded, assignedThisRound);
+            assignedThisRound.add(newPrompt);
             final updatedSeen = [...cardSeenPrompts, newPrompt];
             await sealedRef.set({
               'seenPrompts': updatedSeen,
@@ -675,7 +678,7 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
 
         String newPromptText;
         try {
-          newPromptText = PromptDecks.drawOneExcluding(deckId, excludedPrompts, inPlay);
+          newPromptText = PromptDecks.drawWithFallbackExcluding(deckId, excludedPrompts, inPlay);
         } catch (e) {
           throw FirebaseFunctionsException(
             message: 'No more prompts left in this deck.',
