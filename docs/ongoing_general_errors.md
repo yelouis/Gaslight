@@ -28,7 +28,9 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-One open issue, filed during Wave AE verification. Everything from the September 8 playthrough and Waves AA–AE is resolved and indexed in §3.
+**Issue 176 was selected September 12, 2026 — Option A — and is specced as AF1** in `agent_execution_guide.md`. It stays here until the release ships. Everything from the September 8 playthrough and Waves AA–AE is resolved and indexed in §3.
+
+**⚠️ Two stale build artefacts are on disk right now and both will mislead a release check.** `build/ios/archive/Runner.xcarchive` is dated **2026-09-07 21:21** and contains **`1.0.0` / build `6`** — it is not build 7 and never was. `build/ios/ipa/gaslight.ipa` is dated **2026-08-25**, from the build-2 era, and `flutter build ipa` will not overwrite it because the export step fails on this machine. **AF1 deletes both before building**, so that whatever remains under `build/ios/` afterwards was produced by that run.
 
 ---
 
@@ -61,7 +63,7 @@ One open issue, filed during Wave AE verification. Everything from the September
   - *Pros*: Nothing to change; the number is genuinely free in App Store Connect, and no build labelled 7 was ever distributed to anyone.
   - *Cons*: Leaves two meanings for one label — Wave Z's build and this one — in the commit history, the archive names and any local build a developer still has. **It also requires the guide's standing "do not bump" instruction to stay, which is the instruction that allowed five waves to accumulate under one number in the first place.**
 
-Your selection: _____
+Your selection: **Proceed with Option A** (September 12, 2026) — ship as **`1.1.0+8`**. Specced as **AF1** in `agent_execution_guide.md`. **Exactly one line of the app changes** (`pubspec.yaml`); iOS reads the version through `$(FLUTTER_BUILD_NAME)`/`$(FLUTTER_BUILD_NUMBER)` and the title-screen label reads the running bundle, so neither needs editing.
 
 ---
 

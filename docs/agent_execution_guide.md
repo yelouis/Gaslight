@@ -1,22 +1,18 @@
-# Agent Execution Guide — Awaiting Selection: no approved work — September 12, 2026
+# Agent Execution Guide — Wave AF: 1 approved item (a release) — September 12, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Every number and literal string in this document is a decision, not a suggestion.**
 
-**Wave AE is delivered and verified.** AE1 (Issue 175) landed with all four of its specified falsifications behaving, no production code touched, and all six stale web-E2E labels resolved rather than silenced.
+Issue 176 was selected on September 12, 2026 (**Option A**) and is specced as **AF1**. It is the only approved work.
 
-**⚠️ Issue 176 is open and UNSELECTED**, in `docs/ongoing_general_errors.md`, with a blank `Your selection: _____`. **That line belongs to the user and an agent must never fill it in.** An unselected issue is a question, not an instruction, and `(recommended)` is not approval.
-
-**⚠️ Do not release before Issue 176 is answered.** `pubspec.yaml` has read `1.0.0+7` for **47 commits**, across which `lib/` and `functions/src/` changed by **3,782 insertions and 827 deletions**. Five waves of work are queued to ship under a build number that was allocated to one. **Earlier revisions of this guide instructed "do not bump again before the next upload" — that instruction is superseded and was correct only while Wave Z was the sole occupant of build 7.**
-
-**Do not invent work.** The only legitimate actions are in §3.1.
+**⚠️ AF1 is a release, not a code change.** Exactly **one line** of the repository changes. Everything else is procedure and verification. **If you find yourself editing a test, a screen or a plist, stop — you have left the item.**
 
 ---
 
-## 1. Verified baseline — measured this session on `9552b1d`
+## 1. Verified baseline — measured on `4a6aee7`
 
-Every number was run bare. **This is the regression bar.**
+**This is the regression bar.** Every number was run bare. **All eight gates must be green before AF1 ships.**
 
 | Gate | Result |
 |---|---|
@@ -27,32 +23,103 @@ Every number was run bare. **This is the regression bar.**
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
 | `./scripts/check_playthrough_evidence.sh` — **all five** invocations | **exit 0** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH** |
-| **`./scripts/check_web_e2e_strings.sh`** | **exit 0** — 32 UI strings verified, 3 scripts containment-clean. **New in Wave AE.** |
-| `test/web_e2e/*.js` executed end to end | **STILL DOES NOT RUN.** AE1 gates the scripts' *vocabulary*, not their *flow* — that limit was named in Issue 175 Option A's cons and accepted. |
+| `./scripts/check_web_e2e_strings.sh` | **exit 0** — 32 UI strings, 3 scripts containment-clean |
 
-**⚠️ The bar is 188 infos and no new ones.** `flutter analyze lib test` exits 1 even when clean — it exits non-zero on infos, so the bar is **0 errors / 0 warnings**, never `exit 0`.
+**⚠️ `flutter analyze lib test` exits 1 even when clean.** The bar is **0 errors / 0 warnings / 188 infos**, never `exit 0`. Use `lib test`, never bare `flutter analyze`.
 
 **⚠️ Read every exit code bare, never through a pipe.** `… | tail` reports `tail`'s status, always 0.
 
 ---
 
-## 2. Wave AE — delivered September 12, 2026
+## 2. AF1 — Issue 176 → Option A: ship as `1.1.0+8`
 
-**AE1 (Issue 175 → Option A)** — `test/web_e2e/ui_strings.js` declares `UI` (app-rendered, existence-checked against `lib/`) and `FIXTURE` (script-supplied, not checked); `scripts/check_web_e2e_strings.sh` enforces a vacuity guard, the existence check and a containment check; all three script files reference only the maps.
+**What this means for the user.** Five waves of work — the re-worked craft screen, stacked-deck voting, target forgery guessing, running rivalries, the score transcript, sample answers, the re-roll cap — are currently queued to ship under `1.0.0+7`, a build number allocated to Wave Z's single leave-button fix. After this they ship as **`1.1.0 (8)`**, and the title-screen label tells a tester they are holding a genuinely different app.
 
-**Re-falsified this session, all four behaving:**
+### 2.1 The only code change
 
-| Injected fault | Result |
-|---|---|
-| Bogus `UI` string | **exit 1**, named; removing it → exit 0 |
-| `'1'` added to `UI` | **exit 1** with `VACUITY ERROR` — rejected, not silently skipped |
-| Bare literal in a `.text` comparison | **exit 1** |
-| Same via a `e.`-named parameter instead of `n.` | **exit 1** — the scan is genuinely variable-agnostic |
+`pubspec.yaml`: `version: 1.0.0+7` → **`version: 1.1.0+8`**.
 
-**Two details worth keeping in view.**
+**That is the entire diff to the application.** Two things make it sufficient, and both were verified this session:
 
-1. **The escape normalisation is load-bearing.** `THE NIGHT'S HONORS` is written in Dart as `'THE NIGHT\'S HONORS'`, so a naive search for the unescaped value finds nothing and the gate would report a false absence. The script normalises `\'` → `'` first, citing lesson §2.44.
-2. **The six stale labels were resolved, not silenced** — the distinction the spec insisted on. `INSPECT`'s two steps were the sole matcher for an overlay deleted by AA1 and were removed; `DISMISS`, `Dismiss`, `SHARE`, `ACCUSE`, `VIEW STANDINGS` and `START ROUND` were dead alternates in OR-chains, and **every live sibling was preserved** — `CANCEL`, `Share Case File`, `RESOLVING`/`THE REVEAL`/`UNMASK`, and `CONTINUE`/`NEXT`. **Deleting a live matcher to make the gate green would have made the scripts blinder; it did not happen.**
+- **iOS needs no plist edit.** `ios/Runner/Info.plist` sets `CFBundleShortVersionString` to `$(FLUTTER_BUILD_NAME)` and `CFBundleVersion` to `$(FLUTTER_BUILD_NUMBER)`, both fed from `pubspec.yaml` at build time.
+- **The title-screen label needs no code change.** It reads the *running bundle* via `PackageInfo.fromPlatform()` in `initAppVersion()`, which is the whole point of Issue 151 — it reports what is installed, not what the source claimed. It will read `v1.1.0 (8)` with no further work.
+
+### 2.2 ⚠️ The one test you must not touch
+
+`test/lobby_version_test.dart` contains `version: '1.0.0'` and `expect(find.text('v1.0.0 (6)'), findsOneWidget)`. **Leave both exactly as they are.**
+
+Those values come from `PackageInfo.setMockInitialValues(...)` — the test **mocks** the bundle and asserts the *formatting* (`v{version} ({buildNumber})`), deliberately independent of whatever the app is actually versioned at. **Updating them to `1.1.0`/`8` would couple the test to the shipped version and guarantee churn on every future bump, for no gain.** A test that must be edited to stay green is a test that has stopped being a check.
+
+**`flutter test` must still report 346 after the bump.** Any movement means something was edited that should not have been.
+
+### 2.3 ⚠️ Delete two stale artefacts before building
+
+Both exist on disk right now and both will mislead verification:
+
+| Path | Contents | Why it is dangerous |
+|---|---|---|
+| `build/ios/archive/Runner.xcarchive` | dated **2026-09-07 21:21**, `CFBundleShortVersionString` **1.0.0**, `CFBundleVersion` **6** | It is the *build 6* archive. If the new build fails, this is what an inattentive check finds — and it reports a plausible-looking version. |
+| `build/ios/ipa/gaslight.ipa` | dated **2026-08-25 19:16** | Eighteen days old, from the build-2 era. **`flutter build ipa` will not overwrite it**, because the export step fails on this machine. |
+
+**Delete both first.** After that, anything present under `build/ios/` was produced by your run, and the timestamp check in §2.5 cannot be satisfied by an old file.
+
+### 2.4 Build
+
+Run the **full eight-gate preflight** from §1 first — a release is the one moment the whole battery has to be green simultaneously.
+
+```bash
+flutter build ipa
+```
+
+**⚠️ This will end in an error and that is expected, not a failure.** The *export* step fails with `No Accounts` / `No signing certificate "iOS Distribution" found` because this machine has **no Apple Distribution certificate**. **The `.xcarchive` is still produced**, and Organizer distributes it. Do not "fix" the signing configuration.
+
+### 2.5 Verify the ARCHIVE, never the `.ipa`
+
+```bash
+stat -f "%Sm" -t "%Y-%m-%d %H:%M" build/ios/archive/Runner.xcarchive
+/usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleShortVersionString" build/ios/archive/Runner.xcarchive/Info.plist
+/usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleVersion" build/ios/archive/Runner.xcarchive/Info.plist
+```
+
+**All three must hold: the timestamp is from your run, the short version is `1.1.0`, and the build version is `8`.** If any is wrong, the archive is not yours — go back to §2.3. **This is the check that has caught a stale archive before**, when one predated the fix it was supposed to contain by 27 minutes.
+
+### 2.6 Distribute and confirm
+
+1. `open build/ios/archive/Runner.xcarchive` → Organizer → **Distribute App** → **App Store Connect** → **Upload**.
+2. TestFlight: add build **8** to the **ME** and **FR** groups.
+3. **Expire builds 5 and 6.** Build 6 carries the Issue 152 leave bug and this has been pending since Wave Z. Build 7 never existed as an upload, so there is nothing to expire there.
+4. **Confirm on device: the title screen reads `v1.1.0 (8)` beneath `READ MANUAL`.** This is the acceptance test for the whole item — everything else is plumbing.
+
+### 2.7 Web, and what does NOT need doing
+
+**Deploy hosting.** The web app serves the same client code and is equally far behind:
+
+```bash
+flutter build web --release
+npx firebase-tools deploy --only hosting
+```
+
+Heed `README.md` §1's warnings — `.env` is a declared asset and must hold real keys with `USE_EMULATOR` not true, because it is baked in at build time.
+
+**⚠️ Do NOT deploy functions, and do NOT re-apply `CLEANUP_DRY_RUN`.** `check_deploy_fresh.sh` is **exit 0 — FRESH**, and AF1 changes no file under `functions/src/`. The flag is revision-scoped, so it only needs re-applying *after a functions deploy*; touching it without one is unnecessary risk on a live service. **The runbook's conditional is "if touched" — and nothing is touched.**
+
+### 2.8 Fix the runbook while you are in it
+
+`README.md` → Releasing has drifted and a release is exactly when someone follows it:
+
+- **§0 Preflight lists seven commands and there are now eight gates** — `./scripts/check_web_e2e_strings.sh` is missing.
+- **The note says infos are "~206"; the bar is 188.** It already says the guide's §1 is the source of truth, so make the number agree rather than adding a second one to maintain.
+
+### 2.9 Validation
+
+1. `git diff` after the bump touches **exactly one line in one file**.
+2. All **eight** gates green, read bare. **`flutter test` still reports 346** — see §2.2.
+3. The archive's timestamp, `1.1.0` and `8` all verified per §2.5, with the output recorded in the commit body.
+4. **On-device: `v1.1.0 (8)`.** Record it; a screenshot is ideal, and if you take one, **commit it** — a validation that leaves no artefact is a claim (lesson §2.36).
+5. **Over-reach guard:** `git status` shows no modification under `lib/`, `functions/`, `test/` or `ios/` beyond the README and `pubspec.yaml`.
+6. **Falsification is not available for a release**, and saying so is better than inventing one. **What replaces it is §2.5's three assertions** — they are the reason a wrong archive cannot be shipped silently. **If you cannot run a step (no Xcode, no Apple ID), say so plainly and leave the item open rather than reporting it done.**
+
+**Blast radius:** `pubspec.yaml`, `README.md` → Releasing, this guide's §1, and `docs/ongoing_general_errors.md` when the item resolves.
 
 ---
 ## 3. Already delivered — do NOT rework
@@ -75,7 +142,7 @@ Verified by reading source and re-falsifying, not by reading commit bodies. Full
 - Injecting `scoreDeltas` into the withheld branch fails **4** emulator tests including AA16a's leak test and the pre-existing P4 guard, with 135 still passing.
 - Tampering with one stem key in the generated Dart mirror makes `check_decks_in_sync.sh` exit **1**; restoring makes it exit **0**. The gate genuinely covers stems rather than passing vacuously on two empty sides.
 
-### 3.1 The only legitimate actions now
+### 3.1 Standing maintenance — alongside AF1, not instead of it
 
 1. **Deploy the functions after any `functions/src` change, then restore the cleanup flag.** The gate is green today; it goes red the moment server code changes. `functions/src` changed under AA10, AA11 and AA16a, and **`submitTargetForgeryGuesses` is not deployed at all** — production runs 17 functions and the new callable is absent. **Target forgery guessing does not work in production today, and a client build shipped before this deploy would call a function that is not there.**
    ```
@@ -230,42 +297,47 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ```
 (1) A selection exists? If NO -- stop. Never fill in a `Your selection:` line.
-    Issue 176 is filed and UNSELECTED. It is not work.
-(2) RELEASING? Issue 176 must be answered first. pubspec has read 1.0.0+7 for
-    47 commits and five waves. Any older "do not bump" instruction is stale.
-(3) A gate must be able to FAIL. Ask what input would make yours go red; if
+    AF1 (section 2) is the only approved work. It is a RELEASE: exactly one
+    line of the app changes.
+(2) AF1 specifically: do NOT edit test/lobby_version_test.dart. Its 1.0.0 / 6
+    values are a MOCK asserting the label's FORMAT. flutter test must still
+    report 346 after the bump.
+(3) AF1 specifically: delete the stale archive (2026-09-07, build 6) and the
+    stale ipa (2026-08-25) BEFORE building, then verify the ARCHIVE's
+    timestamp, 1.1.0 and 8. Never verify the .ipa.
+(4) Deploy functions ONLY if functions/src changed. AF1 does not touch it, so
+    do not deploy and do not re-apply CLEANUP_DRY_RUN. The flag is
+    revision-scoped -- it needs re-applying after a deploy, not instead of one.
+(5) A gate must be able to FAIL. Ask what input would make yours go red; if
     nothing would, it is not a gate. Record the failing run, not just the pass.
-(4) Using a search to prove ABSENCE? It must not encode an incidental
-    convention -- quoting, escaping, variable naming, spacing. Normalise, then
-    corroborate the absence a second way (lesson 2.44).
-(5) A check over a hand-written list can only verify the list. Add the
+(6) Using a search to prove ABSENCE? It must not encode an incidental
+    convention -- quoting, escaping, variable naming. And do not read a
+    truncated listing as a complete one: `ls | head -3` hid a stale archive
+    from this very verification pass (lesson 2.44).
+(7) A check over a hand-written list can only verify the list. Add the
     containment half that makes drift impossible (lesson 2.42).
-(6) A rename broke a test? UPDATE THE ASSERTION. Never move production code to
+(8) A rename broke a test? UPDATE THE ASSERTION. Never move production code to
     satisfy a matcher (lesson 2.43).
-(7) Never silence a failing check by deleting what it flagged unless you have
-    established the flagged thing is genuinely dead. A dead ALTERNATE in an OR
-    whose siblings are live is deleted; a SOLE matcher for a live affordance is
-    repointed. Say which, per case, in the commit body.
-(8) Read exit codes BARE. `... | tail` reports tail's status, always 0.
-(9) A gate that did not run is not a pass, and one you ran that left no
-    artefact is a claim. If a validation writes files, COMMIT THEM.
-(10) COLOUR: check which SURFACE a token is for. onSurface is AppColors.ink,
-     text on PARCHMENT; on the dark ground it is 1.12:1. Text on ground is
-     ivory. Assert on the RENDERED tree.
-(11) Changing scoring? Change BOTH functions/src/scoring_logic.ts AND the
-     test-only mirror lib/utils/scoring_logic.dart, then re-run the sum
+(9) Never silence a failing check by deleting what it flagged unless the
+    flagged thing is genuinely dead. A dead ALTERNATE in an OR with live
+    siblings is deleted; a SOLE matcher for a live affordance is repointed.
+(10) Read exit codes BARE. `... | tail` reports tail's status, always 0.
+(11) A gate that did not run is not a pass, and one you ran that left no
+     artefact is a claim. If a validation writes files, COMMIT THEM. If you
+     cannot run a step, say so and leave the item OPEN.
+(12) COLOUR: onSurface is AppColors.ink, text on PARCHMENT; on the dark ground
+     it is 1.12:1. Text on ground is ivory. Assert on the RENDERED tree.
+(13) Changing scoring? Change BOTH implementations and re-run the sum
      invariant in both suites.
-(12) Publishing anything derived from authorship? Only cards whose author flip
+(14) Publishing anything derived from authorship? Only cards whose author flip
      has happened, at all THREE flush sites. Write the leak test first.
-(13) Adding a callable? Copy castVote's authorization shape (index.ts:942).
-     playerId is NOT a credential.
-(14) State bugs: the test must NOT re-pump the widget between steps.
-(15) Playthroughs: evidence records an observation, not current behaviour.
+(15) State bugs: the test must NOT re-pump the widget between steps.
+(16) Playthroughs: evidence records an observation, not current behaviour.
      NEVER edit a verdict or a specified assertion.
-(16) RE-RUN THE FULL BATTERY -- all EIGHT gates, bare, except flutter analyze,
+(17) RE-RUN THE FULL BATTERY -- all EIGHT gates, bare, except flutter analyze,
      where the bar is 0 errors / 0 warnings / 188 infos and the code is 1.
-(17) COMMIT: ONE ITEM, ONE Conventional Commit, WHY in the body. Move the issue
+(18) COMMIT: ONE ITEM, ONE Conventional Commit, WHY in the body. Move the issue
      to the SINGLE existing Resolved heading, leave ONE line there.
 ```
 
-**The queue is empty. Do not invent work.** The only legitimate actions are in §3.1.
+**When AF1 is done the queue is empty. Do not invent work.**
