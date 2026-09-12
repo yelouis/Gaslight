@@ -120,7 +120,17 @@ Three selections were made in `docs/ongoing_general_errors.md` on September 12, 
 **Implementation.**
 
 1. **The visible card is the selection.** As the active index changes — by swipe, `PREV`/`NEXT`, or a jump dot — the selection follows it. Tapping a card still selects it; that path stays.
-2. **⚠️ The button must name what it will do.** Render `CONFIRM OPTION {numeral}` using the same numeral shown on the card (`OPTION I`, `OPTION II`, …), not a bare `CONFIRM VOTE`. **This is the mitigation for Option B's real cost** — with an always-live selection, a mistimed tap casts a vote that cannot be undone, and a button that names its target is what makes that mistake visible before it happens rather than after.
+2. **The button must name what it will do.** Render `CONFIRM OPTION {numeral}` using the same numeral shown on the card (`OPTION I`, `OPTION II`, …), not a bare `CONFIRM VOTE`. **This mitigates a *misinformed* tap — a player confirming the wrong option because nothing said which one was live. It does nothing for a *mistimed* tap, which is a separate risk and is handled in 2a and 2b.**
+
+2a. **⚠️ A 400 ms cool-down after every index change — this is the primary mistimed-tap mitigation.** `CONFIRM` must be inert for 400 ms after *any* change of active card (swipe, `PREV`, `NEXT`, or a jump dot), and for 400 ms after the deck first renders.
+
+   **Why this specific defence.** Measure the shipped layout: for a voter the `PREV` / dots / `NEXT` row is the **last** element of `CardGrid` (`card_grid.dart:455–478`), and `phase3_vote.dart:523` puts exactly **`SizedBox(height: 16)`** between it and the confirm button. **A player paging through options has their thumb 16 logical pixels above a control that, under Option B, casts an irreversible vote on the first tap.** The accident is a tap in a repeat-tap burst landing slightly low, and repeat taps arrive 150–300 ms apart — so a 400 ms window covers the burst while a deliberate user, who reads an option before confirming, never encounters it. **The cool-down must be invisible in normal use; if a tester notices it, it is too long.**
+
+   **Do not implement this as a disabled button.** A control that greys out every time you swipe reintroduces exactly the dead-button confusion Issue 173 was filed about. Keep it visually enabled and **ignore the tap**.
+
+2b. **Separate the two controls spatially — defence in depth, not the primary fix.** Raise the gap at `phase3_vote.dart:523` to **24 pt** and give the confirm button a visual separator so it does not read as the next item in the navigation row. **Do not solve this by adding large vertical space**: the vote screen's scarcity of vertical room is what Issue 160 was fought over, and 6 options at 320 pt is the case that must still fit. Verify at 320 pt before choosing any value above 24.
+
+**Two heavier mitigations were considered and are NOT specified — do not add them without a selection.** *Slide-to-confirm* would make an accidental vote near-impossible but introduces a gesture that appears nowhere else in this app. *An undo window* is the obvious idea and is the expensive one: `castVote` sets `readyPlayers[voterId] = true` and **calls `advancePhaseInternal` when that completes the readiness gate**, so a retraction would race the phase advance and needs a server-side retract path with its own guard. **If a mistimed vote is still reported after 2a and 2b ship, the undo window is the next step and should be filed with options rather than improvised.**
 3. **⚠️ An unvotable card must not become a live selection.** The player's own answer and placeholder options are unvotable (`_isAnswerUnvotable`). When the visible card is one of those, **clear the selection and disable the button with the reason** — exactly the dead-button state Issue 173 is about, but now explained: `YOU CANNOT VOTE FOR YOUR OWN ANSWER`. **Getting this wrong is the one way Option B ships a worse bug than the one it fixes**, because the model "what you see is what you vote for" silently breaks on the one card where it must not hold.
 4. **Add the hints the user asked for.** Beneath the deck: exactly `Swipe to see all options`, in `brass` at 11 pt. The existing `CARD I OF III` counter stays and is the option count — **verify it reads correctly at every option count before assuming it satisfies the request.**
 
@@ -128,10 +138,15 @@ Three selections were made in `docs/ongoing_general_errors.md` on September 12, 
 
 1. Widget test: on first render with no interaction, the button is enabled and reads `CONFIRM OPTION I`.
 2. Widget test: swipe to the next card; the button reads `CONFIRM OPTION II` and confirming casts a vote for **that** option.
+
+2a. Widget test, **the mistimed-tap guard**: change the active card, then tap `CONFIRM` after **200 ms** — assert **no vote was cast**. Advance to **450 ms** and tap again — assert the vote *is* cast. **Assert on the vote actually reaching `GameService`, not on the button's enabled flag**, because 2a deliberately keeps the button looking enabled.
+
+2b. Widget test: the same guard applies on first render — a tap 200 ms after the deck appears casts nothing.
 3. Widget test: navigate to the player's own answer; the selection is cleared, the button is disabled and shows the reason. Then navigate away; the button re-enables for the new card.
 4. Widget test: both hint strings render verbatim; the counter reports the true total.
 5. **Over-reach guards, unedited:** all 4 tests in `test/stacked_deck_navigation_test.dart` and all 11 in `test/phase3_vote_test.dart`, **including `O9`** — the target still never sees a vote button.
 6. **Falsification:** remove the unvotable handling from (3); test 3 must fail by casting a self-vote, which the server rejects — **so assert the client state, not the server's refusal**, or the test will pass for the wrong reason.
+7. **Falsification:** remove the cool-down; tests 2a and 2b must fail, and every other test in this item must still pass. **If test 2 also fails, the cool-down window is leaking into deliberate use and is too long.**
 
 **Blast radius:** `docs/design_ui_direction.md` — the stacked-deck section gains the selection model and the named-confirm rule.
 
