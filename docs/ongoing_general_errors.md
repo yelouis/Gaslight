@@ -8,20 +8,107 @@
 
 ## 1. Open & in-flight
 
-**Wave AA independently verified, September 11, 2026 — all 16 delivered items hold up.** Issues 153–164 and 166–169 are resolved and indexed in §3. Verification was done by reading source and falsifying guards, not by reading commit bodies; the falsifications are recorded in §2.41.
+**Wave AB verified, September 12, 2026 — all three items hold up.** Issues 165 and 170 are resolved and indexed in §3, and the Marionette re-capture (AB3) landed as `docs/playthroughs/findings_waveAA.md`, blocks **E50–E63, 14 PASS**, taking the evidence set from 104 to 123 artefacts. Verified by reading source and re-falsifying: moving the target-guess block back above the multiplier fails exactly tests 4 and 5 of `scoring_logic_test.dart` while the other 11 pass.
 
-**Both remaining issues were selected on September 11, 2026 and are specced as Wave AB in `agent_execution_guide.md`:**
-- **Issue 170 → Option B** — exempt the target's forgery guesses from the round multiplier. **AB1.**
-- **Issue 165 → scoped Option A + B** — *"I think it is already different enough now but if needed lets proceed with Option A and B by showing and updating the rivalries each reveal and making it clear who knows who best."* **AB2 builds exactly the clause after "by".** The re-cut decks (Option A) and the match-long trust economy (Option B) are **not** selected and must not be built.
-- **AB3** re-captures the playthrough evidence with Marionette, at the user's request, because Wave AA left 104 screenshots depicting screens that no longer exist. **It runs last** — AB2 changes the reveal screen.
+**All five evidence-gate invocations exit 0**, and **the deploy gate is now green** — the functions were deployed and `check_deploy_fresh.sh` tracks `submitTargetForgeryGuesses`.
 
-**⚠️ The deploy gate is RED and this is expected, not a regression.** `./scripts/check_deploy_fresh.sh` exits **1**: AA10, AA11 and AA16a changed `functions/src`, and **`submitTargetForgeryGuesses` is not deployed at all** — production still runs 17 functions and the new callable is absent. **The target forgery-guessing feature therefore does not work in production yet**, and a client build shipped before the deploy would call a function that is not there. Deploy functions, then **re-apply `CLEANUP_DRY_RUN=false` and read it back** — it is revision-scoped and a deploy silently drops it.
+**Three new issues (171–173) are filed below from a September 12 device playthrough** and await selection. One of them, **Issue 171, is a live legibility defect** — the score transcript renders at **1.12 : 1** contrast against a 4.5 : 1 floor, which means the feature Issue 169 shipped is on screen but unreadable.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
 All issues from the September 8 playthrough have been resolved (Issues 153–170). Wave AB (AB1 target guess multiplier exemption, AB2 running rivalries & closest read, production functions deploy with CLEANUP_DRY_RUN=false, and AB3 Marionette evidence re-capture E50–E63) is fully delivered, deployed, and verified. The open queue is empty.
 
 
+
+### Issue 171: The score transcript is invisible, and its boxes are ragged
+
+**Status**: ⚠️ Confirmed Unresolved — reported from a device playthrough on September 12, 2026, with the screenshot showing `POINTS AWARDED THIS CARD` where only the player names and totals are legible. **Two separate defects in one widget** (`lib/screens/phase4_reveal.dart`, the `POINTS AWARDED THIS CARD` block).
+
+**Defect 1 — the breakdown text uses the wrong colour token, and this is not a matter of taste.** Each rule line renders with `theme.colorScheme.onSurface.withValues(alpha: 0.8)`. `onSurface` is defined as `AppColors.ink` (`lib/main.dart:99`), which `app_colors.dart:12` documents as **"Text on parchment"** — a near-black brown for use on the light parchment surface. It is being drawn on the dark ground instead. Measured:
+
+| Foreground on `ground` (`0xFF14110E`) | Contrast |
+|---|---|
+| **`ink` @ 0.8 alpha — what ships today** | **1.12 : 1** |
+| `brass` | 7.84 : 1 |
+| `ivory` — the token `app_colors.dart:13` designates "Text on ground" | **16.25 : 1** |
+
+WCAG AA for body text is **4.5 : 1**. At 1.12 : 1 the text is effectively not rendered. **Every option below fixes this; it is not one of the choices.**
+
+**⚠️ `test/contrast_tokens_test.dart` exists and passed throughout.** It checks five hand-curated pairs — `ivory`/`ground`, `ivory`/`groundRaised`, `ink`/`parchment`, `brass`/`ground`, `verdigris`/`ground` — all of which are correct by construction. **It verifies the palette is sound; it cannot catch a widget that reaches for the wrong token**, because the wrong pairing is simply not in its list. Whatever is selected must close that gap, not just recolour the text.
+
+**Defect 2 — the boxes are different sizes.** The chips sit in a `Wrap` and each is a `Column(mainAxisSize: MainAxisSize.min)`, so every box shrinks to its own content. A player with two rule lines gets a tall box and a player with one gets a short box, side by side in the same row. In the screenshot Bob's box is roughly twice Charlie's height, and because the rule lines are invisible the extra height reads as empty space rather than as content.
+
+**Option A (recommended)**: **Fix the token and make it a uniform two-column grid** — switch the rule lines to `AppColors.ivory` (with the rule *name* in `brass` to separate label from value), and replace the `Wrap` with a fixed two-column layout whose cells share one height driven by the longest breakdown in the round.
+  - *Pros*: Fixes both complaints with one layout change and one token change. A grid of equal cells reads as a table, which is what a score transcript is; ragged boxes read as a bug even when nothing is wrong. Equal heights also make the screen stable as rules accumulate through a round rather than reflowing each card. Contained to one widget.
+  - *Cons*: A uniform height is set by the worst case, so cards where one player has four rule lines and everyone else has one will show visible empty space in three cells. At 320 pt two columns leaves each cell narrow, so a long rule name like `Believable Target` may need abbreviating or wrapping — check it at the smallest width before assuming it fits.
+
+**Option B**: **Fix the token and switch to one full-width row per player** — a vertical list, each row showing avatar, name, total, and the rule lines indented beneath.
+  - *Pros*: No width pressure at all, so rule names never need shortening and the layout is identical at every viewport. Ragged heights stop mattering because nothing sits beside anything else. Simplest possible change after the colour fix.
+  - *Cons*: Much taller — five players with breakdowns could add several hundred pixels to a reveal screen that is already long and already scrolls. Pushes the standings and `THE PARLOUR REMEMBERS` further below the fold.
+
+**Option C**: **Fix the token and collapse the breakdown behind a tap** — show only `Name: +N` chips as today, and reveal that player's rule lines when their chip is tapped.
+  - *Pros*: Keeps the reveal compact and the chips uniform, since every chip holds exactly one line. The transcript is still reachable for anyone who wants to know why, which is what Issue 169 asked for. Scales to any number of rules without touching the layout.
+  - *Cons*: Hides the thing Issue 169 was filed to surface — a player who does not know the detail exists will never tap. Adds an interaction to a screen that is on a timer and already carries the unmask window.
+
+Your selection: _____
+
+---
+
+### Issue 172: Sentence stems ask the wrong thing; sample answers were requested instead
+
+**Status**: ⚠️ Confirmed Unresolved — reported from a device playthrough on September 12, 2026. Delivered in Wave AA5 (Issue 166) as **150 stems across 150 prompts**, rendered beneath the answer field as `Starter: "…"`.
+
+**What was observed.** For the prompt *"The weird luxury I would insist on putting in my personal doomsday bunker."* the stem rendered as `Starter: "The bunker is non-negotiable without a custom..."`. The user's objection is conceptual rather than a complaint about that one string:
+
+> *"These sentence stems don't really make sense. Maybe instead of sentence stems, write some sample answers in case of the player can't think of anything"*
+
+**The diagnosis is that a stem and an answer are different cognitive tasks.** A stem asks the player to continue someone else's half-finished sentence, which is harder than answering the prompt outright, not easier — and the rendered form (quoted, trailing ellipsis) reads like a fragment of somebody else's answer rather than a scaffold for your own. Some stems are genuinely serviceable (`"I'd be banished for constantly"`), which is why this shipped; the ones that are not are the ones a stuck player meets at the worst moment.
+
+**⚠️ The reason stems were chosen over samples in the first place still applies and must be designed around.** `design_prompt_system.md` §6 records it: an aid that is *displayed* to every player for the same prompt invites copying, and copying feeds the duplicate-answer heuristic in `design_semantic_integrity.md` — **the game would start rejecting answers for a similarity it had itself created.** A complete sample answer is far more copyable than an opener. Any option below must say how it avoids that.
+
+**Option A (recommended)**: **Replace stems with full sample answers, shown on demand behind a `STUCK?` control** — the field stays clean by default and the sample appears only when asked for.
+  - *Pros*: Exactly what was requested, and *"in case the player can't think of anything"* describes an on-demand affordance rather than a permanent one. Because the default path shows nothing, the homogenisation risk is confined to the players who actually ask — which is the minority, and the ones for whom a nudge beats a blank page. Reclaims the vertical space the stem currently occupies on a screen that is already tight (Issues 157 and 160).
+  - *Cons*: 150 sample answers is the same content bill AA5 just paid, and the stems would be deleted. Adds a control to the craft screen. A player who taps it can still copy, so the duplicate heuristic may occasionally fire on someone who was trying to follow the example.
+
+**Option B**: **Replace stems with sample answers shown inline, always visible** — same content, no control.
+  - *Pros*: Maximum help with zero interaction; the player who needs it does not have to know a control exists, which is the same reasoning that put the rules on every phase screen in Issue 164. No new widget.
+  - *Cons*: Every player sees the same complete answer for the same prompt every time, which is the strongest possible version of the homogenisation and duplicate-rejection risk above. Keeps consuming the vertical space the stem already consumes.
+
+**Option C**: **Keep the per-prompt mechanism but change what it shows — a sample answer for a *different* prompt**, presented as an example of the *shape* of a good answer rather than content for this one.
+  - *Pros*: Teaches the register — specific, surprising, plausible — with nothing copyable, so the duplicate risk goes to zero. One example could serve an entire deck rather than needing 150, which is roughly a fifth of the content bill of A or B.
+  - *Cons*: Does not help with the prompt actually in front of the player, which is what they asked for; an unrelated example on screen during a timed round may read as a mistake. The weakest answer to the original Issue 166 problem.
+
+**Option D**: **Remove the writing aid entirely** and rely on `RE-ROLL PROMPT`.
+  - *Pros*: Deletes the complaint and 150 stems of content; simplifies the craft screen and recovers its vertical space.
+  - *Cons*: Re-roll exists only on truth rounds, so forgery rounds — the harder task, writing in another player's voice — would again have no aid at all. That is the exact gap Issue 166 was filed to close, so this reopens it.
+
+Your selection: _____
+
+---
+
+### Issue 173: `CONFIRM VOTE` is greyed out with nothing saying an option must be tapped
+
+**Status**: ⚠️ Confirmed Unresolved — reported from a device playthrough on September 12, 2026, with the screenshot showing the stacked deck on `CARD I OF III` and `CONFIRM VOTE` disabled. **The code is behaving as designed; the affordance is the defect.**
+
+**Verified in source.** `phase3_vote.dart:582` disables the button while `_localSelectedAuthorId == null`, and `card_grid.dart:169` (`_onCardTap`) does call `onSelect` when the active card is tapped. **Selection works — the player simply has no way to know it is required.**
+
+**Why this arrived with Issue 160 and not before.** The old portrait layout listed every option as a row, where tapping a row to choose it is the only thing a list of choices affords. The stacked deck replaced that with one card at a time plus `PREV`/`NEXT` buttons and jump dots, so the screen now reads as a *viewer* — the controls present are for navigating, and nothing distinguishes "looking at card I" from "choosing card I". A player who navigates with the buttons, as the UI invites, never taps the card and finds the confirm button dead with no explanation. **This is a discoverability regression introduced by an otherwise successful change, and `test/stacked_deck_navigation_test.dart` cannot catch it** — it taps cards directly, which is precisely the step a real player does not know to take.
+
+**Option A (recommended)**: **Give the active card an explicit choose affordance and tell the player why the button is dead** — label the active card with a tap hint (and a clear selected state once tapped), and replace the disabled `CONFIRM VOTE` with the same button carrying a short instruction such as `TAP A CARD TO CHOOSE` until a selection exists.
+  - *Pros*: Fixes the immediate confusion at both places the player is looking — the card and the dead button — without changing the interaction model that was chosen from mockups and is otherwise working. A disabled control that explains itself is the smallest honest fix. Cheap to test: assert the hint is present before selection and gone after.
+  - *Cons*: Adds copy to a card whose whole purpose is to show an answer legibly at 320 pt, so the hint must be small and must be checked against the 100-character worst case. Two labels to keep in sync with the selected state.
+
+**Option B**: **Treat the visible card as the selection** — whatever card is in front is selected, so `CONFIRM VOTE` is enabled from the moment the deck renders.
+  - *Pros*: Removes the dead state entirely and matches how a pager is normally read: the thing in front of you is the thing you are choosing. No instruction needed because there is nothing extra to learn. Fewest taps to vote.
+  - *Cons*: Makes an accidental vote much easier — a player idly swiping to read all options has a live selection the whole time, and one mistimed tap on `CONFIRM VOTE` locks it in with no undo, on a screen that has no undo by design. It also silently defaults every player's vote to option I, which will skew results for anyone who confirms without navigating.
+
+**Option C**: **Move the action onto the card** — replace the separate `CONFIRM VOTE` button with a `CHOOSE THIS ONE` control inside the active card.
+  - *Pros*: Puts the decision on the object being decided about, which removes the two-step model altogether and makes the dead-button state impossible. Reads naturally in a one-card-at-a-time layout.
+  - *Cons*: Loses the deliberate two-step confirm that currently separates "I pick this" from "I am sure", which matters because a vote cannot be changed once cast. Consumes vertical space inside the card, competing with the answer text that Issue 160 was fought to keep legible. A larger change to a layout that shipped four days ago and is otherwise working.
+
+Your selection: _____
+
+---
 
 ## 2. Lessons that still bite
 
@@ -127,6 +214,18 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
+---
+
+#### 2.42 A contrast test over curated pairs proves the palette, not the screens
+
+`test/contrast_tokens_test.dart` checks five token pairs — `ivory`/`ground`, `ivory`/`groundRaised`, `ink`/`parchment`, `brass`/`ground`, `verdigris`/`ground` — and **every one of them passes, because every one of them is a pairing someone chose deliberately.** It is a test that the palette is internally sound.
+
+It has never been able to fail on the defect that matters. Issue 169's score transcript reached for `theme.colorScheme.onSurface`, which this app defines as `AppColors.ink` — the near-black brown labelled *"Text on parchment"* — and drew it on the dark ground at **1.12 : 1** against a 4.5 : 1 floor. The text was effectively not rendered, the widget test asserted the strings were present and passed, and the contrast test passed too, **because `ink`-on-`ground` is not a pair anybody would put in a curated list.** It shipped and was found by a human looking at a phone.
+
+**The rule:** a check over a hand-written list of *intended* combinations cannot catch an *unintended* one — it enumerates the right answers rather than sampling the real ones. To catch this class you must measure what the widget tree actually renders: walk the rendered `Text` widgets, resolve each one's effective colour against the colour actually painted behind it, and assert the floor. The same file already contains one test that does this for the reveal answer and prompt; the gap was that it covered two specific strings rather than the screen.
+
+**The general shape, and it is the third time this log has recorded it** (see §2.19 and §2.30): **a passing check is only evidence if it was capable of failing.** Ask what input would have made it red, and if the answer is "a value that is not in its list", the list is the test.
+
 ---
 
 #### 2.41 A feature interaction is nobody's item, so it ships unreviewed
