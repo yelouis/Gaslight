@@ -1,18 +1,18 @@
-# Agent Execution Guide — Wave AC: 4 approved items — September 12, 2026
+# Agent Execution Guide — Wave AC: 5 approved items — September 12, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Every number and literal string in this document is a decision, not a suggestion.**
 
-Two selections were made in `docs/ongoing_general_errors.md` on September 12, 2026, and the user added one new feature. They are **AC1, AC2, AC4 and AC5** — the numbering is deliberately non-contiguous, see below.
+Two selections were made in `docs/ongoing_general_errors.md` on September 12, 2026, and the user added one new feature. They are **AC1–AC5**.
 
-**⚠️ AC3 was specced and then WITHDRAWN by the user on September 12, before any code was written.** Issue 173 selected Option B, then the user reversed it: *"scrap AC3. Lets not make this change."* **`CONFIRM VOTE` keeps its current behaviour — greyed until an option is tapped. Do not implement Option B, and do not treat Issue 173's selection line as live;** it records the withdrawal. The item number is left as a hole rather than renumbered, so that anything referring to "AC4" still means the re-roll feature.
+**⚠️ AC3 changed shape twice on September 12 and the history matters.** Issue 173 first selected **Option B** — *the visible card is the selection* — which was then withdrawn before any code was written (*"scrap AC3. Lets not make this change."*). It was replaced by a narrowed **Option A**: add an instruction, change no behaviour. **`CONFIRM VOTE` still requires a tap on a card. Do not implement Option B.** If you find a spec describing an always-live selection, a `CONFIRM OPTION {numeral}` label, or a 400 ms tap cool-down, it is the withdrawn version.
 
 **Do only what is specified here.** A `(recommended)` label is not approval; a filled `Your selection:` line is. **Never fill one in.**
 
 **Issue 174 was selected on September 12 (Option A) and is specced as AC5.** AC4 still ships first and still de-duplicates its chooser; AC5 then removes the underlying cause. **There are no unselected issues.**
 
-**Implement in order: AC1, AC2, AC4, AC5.** AC2 and AC4 both edit the craft screen; AC2 first so AC4 builds on settled copy.
+**Implement in order: AC1, AC2, AC3, AC4, AC5.** AC2 and AC4 both edit the craft screen; AC2 first so AC4 builds on settled copy.
 
 ---
 
@@ -113,7 +113,40 @@ Two selections were made in `docs/ongoing_general_errors.md` on September 12, 20
 
 ---
 
-## 5. AC4 — NEW FEATURE: cap re-rolls at 3 per round, then let the player choose
+## 5. AC3 — Issue 173 → Option A (narrowed): tell the player they must tap a card
+
+**⚠️ This item changes NO behaviour.** Selection still requires a tap on a card; navigating still does not select; `CONFIRM VOTE` is still disabled until something is selected. **Option B — "the visible card is the selection" — was selected on September 12 and withdrawn the same day. Do not implement it.** This item adds instruction and nothing else, which is Issue 173's Option A reduced to its first half.
+
+**What this means for the user.** Today you can page through every option and the confirm button stays dead, because selecting requires a tap on the card and nothing says so. After this, the screen tells you.
+
+**The gap.** `CONFIRM VOTE` is greyed exactly when `_localSelectedAuthorId == null` (`phase3_vote.dart:582`), which is the state on arrival at every card and after any tap on a card that cannot be voted for. Selection is set only by `onSelect`, reached only from a tap (`card_grid.dart:169`) — swipe, `PREV`, `NEXT` and the jump dots change the front card and nothing else.
+
+**What already exists — do not rebuild it.** The active card is **not** short of state signals; it is short of one instruction:
+- **Selected** already renders a thickened accent border (`card_grid.dart:517–520`) and a wax seal (`:650`, key `active_card_wax_seal_stamp`).
+- **Unvotable** already renders a diagonal `SEALED` ribbon (`:805`) and a `(Your Forgery)` / `(Your Truth)` label (`:621`).
+
+**Implementation.**
+
+1. **The disabled button carries the instruction.** While `_localSelectedAuthorId == null`, render the `PrimaryButton` with the text `TAP A CARD TO CHOOSE` instead of `CONFIRM VOTE`. It stays disabled. Once something is selected it reverts to `CONFIRM VOTE`, enabled.
+   **This is the primary half of the fix and the one to ship if only one lands.** It costs zero layout space, and it puts the explanation exactly where the player is looking at the moment they are confused — at the control that appears broken.
+2. **The active card carries a tap cue**, rendered **only when that card is votable and not currently selected**: the exact string `Tap to choose this one`, in `brass` at 11 pt, beneath the answer text inside the active card.
+3. **⚠️ Suppress the cue on an unvotable card — this is the part that is easy to get wrong and would make the screen worse than it is now.** On the player's own answer or a placeholder, a tap is silently ignored: all three tap sites read `onTap: isUnvotable ? null : …` (`card_grid.dart:507`, `:674`, `:740`), so there is **no handler at all** and the tap produces nothing, not even a ripple. **Printing "Tap to choose this one" on a card that cannot be tapped instructs an action that does nothing** — strictly worse than saying nothing, because the player will conclude the app is broken rather than that the card is sealed. The existing `SEALED` ribbon and `(Your Forgery)` label already explain that card; leave them to do it.
+4. **The button keeps saying `TAP A CARD TO CHOOSE` even when the front card is unvotable.** That remains true and actionable — the player can tap a *different* card. Do not special-case it into a second message; two competing explanations on one screen is how the reveal got unreadable.
+
+**Validation.**
+
+1. Widget test: on arrival, with nothing selected, the button reads `TAP A CARD TO CHOOSE` and is disabled, and the active card shows `Tap to choose this one`.
+2. Widget test: tap the active card — the cue disappears, the wax seal appears, and the button reads `CONFIRM VOTE` and is enabled.
+3. Widget test, **the over-reach guard for point 3**: navigate to the player's own answer; **assert `Tap to choose this one` is absent** while the `SEALED` ribbon is present, and the button still reads `TAP A CARD TO CHOOSE`.
+4. Widget test: the same for a placeholder option (`THE SOUL IS SILENT`).
+5. **⚠️ Layout guard — this item adds a line to the most space-constrained screen in the app.** Re-run `test/vote_option_truncation_test.dart` **unedited**, and assert no overflow at **320 pt with six options** at text scale 1.0 and 1.3. Issue 160 was fought over exactly this viewport; **a hint that pushes the confirm button off screen would be a worse defect than the one being fixed.**
+6. **Over-reach guards, unedited:** all 4 tests in `test/stacked_deck_navigation_test.dart` and all 11 in `test/phase3_vote_test.dart`, **including `O9`** — the target sees no vote button and must see no tap cue either.
+7. **Falsification:** remove the button's conditional label; test 1 fails. Remove the unvotable suppression; test 3 fails by finding the cue on a sealed card.
+
+**Blast radius:** `docs/design_ui_direction.md` — record, in the stacked-deck section, that selection is tap-only and that the instruction lives on the disabled button.
+
+---
+## 6. AC4 — NEW FEATURE: cap re-rolls at 3 per round, then let the player choose
 
 **The request, verbatim:**
 
@@ -200,7 +233,7 @@ With the history fix, candidates are drawn preferring prompts the player has not
 **Blast radius:** `docs/design_prompt_system.md` §5 (the cap, the chooser, and the corrected exclusion), `docs/design_database_and_security.md` (two new `sealed` fields and the new callable row), `docs/design_ui_direction.md` (the chooser).
 
 ---
-## 6. AC5 — Issue 174 → Option A: top up from the fallback deck when the room's deck runs dry
+## 7. AC5 — Issue 174 → Option A: top up from the fallback deck when the room's deck runs dry
 
 **Do AC4 first.** AC5 modifies the same draw AC4 corrects, and its whole purpose is to catch the case AC4's de-duplication can only paper over.
 
@@ -231,7 +264,7 @@ With the history fix, candidates are drawn preferring prompts the player has not
 **Blast radius:** `docs/design_prompt_system.md` §5 — record the top-up, that it applies to both the re-roll and the deal, and the PG-fallback property.
 
 ---
-## 7. Already delivered — do NOT rework
+## 8. Already delivered — do NOT rework
 
 ### Wave AA — sixteen items, verified September 11, 2026
 
@@ -251,7 +284,7 @@ Verified by reading source and re-falsifying, not by reading commit bodies. Full
 - Injecting `scoreDeltas` into the withheld branch fails **4** emulator tests including AA16a's leak test and the pre-existing P4 guard, with 135 still passing.
 - Tampering with one stem key in the generated Dart mirror makes `check_decks_in_sync.sh` exit **1**; restoring makes it exit **0**. The gate genuinely covers stems rather than passing vacuously on two empty sides.
 
-### 7.1 Standing maintenance — alongside Wave AC, not instead of it
+### 8.1 Standing maintenance — alongside Wave AC, not instead of it
 
 1. **Deploy the functions after any `functions/src` change, then restore the cleanup flag.** The gate is green today; it goes red the moment server code changes. `functions/src` changed under AA10, AA11 and AA16a, and **`submitTargetForgeryGuesses` is not deployed at all** — production runs 17 functions and the new callable is absent. **Target forgery guessing does not work in production today, and a client build shipped before this deploy would call a function that is not there.**
    ```
@@ -291,7 +324,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 8. Invariants & intentional decisions — do NOT change
+## 9. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.**
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty.
@@ -351,7 +384,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 9. Where the contracts live
+## 10. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -368,7 +401,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 10. Validation standard
+## 11. Validation standard
 
 **A guard flag lives as long as the object holding it.** `_isLeaving` guards "a leave is in flight", but it sits on a `State` that outlives every room. When a flag's lifetime is longer than the thing it guards, it needs an explicit reset — and the reset belongs in a `finally`, because the failure path is exactly when it matters.
 
@@ -402,9 +435,9 @@ Each of these reaches the specified outcome by a different structure than the sp
 (1) A selection exists? If NO -- stop. Never fill in a `Your selection:` line.
     Wave AC (sections 3-6) is selected. Issue 174 is FILED and UNSELECTED --
     AC4 ships without it, but do NOT implement its options.
-(2) ORDER: AC1, AC2, AC4, AC5. AC3 was WITHDRAWN -- the vote screen is
-    untouched this wave. AC2 and AC4 both edit the craft screen; AC5 modifies
-    the same draw AC4 corrects, so it must follow AC4.
+(2) ORDER: AC1, AC2, AC3, AC4, AC5. AC2 and AC4 both edit the craft screen;
+    AC5 modifies the same draw AC4 corrects, so it must follow AC4. AC3 adds
+    instruction only and changes no vote behaviour.
 (3) Read exit codes BARE. `... | tail` reports tail's status, always 0.
 (4) COLOUR: check which SURFACE a token is for. onSurface is AppColors.ink --
     text on PARCHMENT; on the dark ground it is 1.12:1. Text on ground is
@@ -438,4 +471,4 @@ Each of these reaches the specified outcome by a different structure than the sp
      durable consequence in the design doc.
 ```
 
-**When AC1, AC2, AC4 and AC5 are done the queue is empty again. Do not invent work.**
+**When AC1-AC5 are done the queue is empty again. Do not invent work.**

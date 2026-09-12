@@ -16,9 +16,10 @@
 - **171 → Option C** (AC1) — collapse the score breakdown behind a tap, plus the requested hint. **The colour fix is mandatory in every option and is not itself a choice.**
 - **172 → Option B** (AC2) — replace the 150 sentence stems with 150 inline sample answers.
 - **AC4 (new feature)** — cap re-rolls at 3 per round, then let the player choose among them.
+- **173 → Option A, narrowed** (AC3) — instruct the player to tap a card; **no behaviour change.**
 - **174 → Option A** (AC5) — top up from the PG fallback deck when the room's deck runs dry.
 
-**⚠️ Issue 173 was selected and then WITHDRAWN the same day**, before any code was written — *"scrap AC3. Lets not make this change."* **`CONFIRM VOTE` keeps its current behaviour.** The rule it follows is now documented in full in that issue's Status, since the withdrawal followed a walk-through of it. The options are kept intact in case the user re-selects; **none is approved.**
+**⚠️ Issue 173 changed shape twice on September 12 and the order matters.** Option B (*the visible card is the selection*) was selected, then withdrawn before any code was written, then replaced by **Option A narrowed to instruction only** — a hint telling the player they must tap a card. **`CONFIRM VOTE` keeps its current tap-to-select behaviour**; AC3 adds the instruction and nothing else. The full greying rule is documented in that issue's Status, since the first withdrawal followed a walk-through of it.
 
 **No issue is currently awaiting a selection.**
 
@@ -134,7 +135,7 @@ It becomes non-null **only** through `onSelect` (`phase3_vote.dart:510`), which 
   - *Pros*: Puts the decision on the object being decided about, which removes the two-step model altogether and makes the dead-button state impossible. Reads naturally in a one-card-at-a-time layout.
   - *Cons*: Loses the deliberate two-step confirm that currently separates "I pick this" from "I am sure", which matters because a vote cannot be changed once cast. Consumes vertical space inside the card, competing with the answer text that Issue 160 was fought to keep legible. A larger change to a layout that shipped four days ago and is otherwise working.
 
-Your selection: Option B was selected on September 12, 2026 and **WITHDRAWN the same day, before any code was written** — *"scrap AC3. Lets not make this change."* **No option is approved. Do not implement any of them.** The withdrawal followed a walk-through of the current greying rule, which is now recorded in the Status above; the user may re-select later, so the options are kept intact.
+Your selection: **Option B was selected and withdrawn on September 12, 2026**, before any code was written — *"scrap AC3. Lets not make this change."* **Re-selected the same day as Option A, narrowed to its first half:** *"lets have a hint somewhere that says tap to select card or some instruction letting the player know that they have to tap the card to click confirm vote."* **Approved scope is instruction only — no behaviour change.** Specced as AC3 in `agent_execution_guide.md`. **Option B must not be implemented.**
 
 ---
 
