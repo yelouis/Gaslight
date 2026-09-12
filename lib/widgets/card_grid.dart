@@ -615,6 +615,17 @@ class _CardGridState extends State<CardGrid> {
                           ),
                         ),
                       ),
+                      if (!isSelected && !isUnvotable) ...[
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Tap to choose this one',
+                          style: TextStyle(
+                            color: AppColors.brass,
+                            fontSize: 11,
+                            fontFamily: 'Lora',
+                          ),
+                        ),
+                      ],
                       if (isSelfAnswer) ...[
                         const SizedBox(height: 4),
                         Text(

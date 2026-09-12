@@ -33,49 +33,7 @@ All issues from the September 8 playthrough have been resolved (Issues 153–170
 
 
 
-### Issue 173: `CONFIRM VOTE` is greyed out with nothing saying an option must be tapped
 
-**Status**: ⚠️ Confirmed Unresolved — reported from a device playthrough on September 12, 2026, with the screenshot showing the stacked deck on `CARD I OF III` and `CONFIRM VOTE` disabled. **The code is behaving as designed; the affordance is the defect.**
-
-**The current rule, traced in source September 12, 2026 — no change was made, this documents what ships.**
-
-`CONFIRM VOTE` exists only for a **voter**. The card's target sees `I'M READY` in its place, and once you have voted the whole voting UI is replaced by the waiting screen (`phase3_vote.dart:242`), so the button is *gone*, never greyed, after a vote.
-
-For a voter, the button is greyed **exactly when `_localSelectedAuthorId == null`** (`phase3_vote.dart:582`), and that field is null in exactly two situations:
-
-1. **On arrival at every card.** It is declared null and is **reset on every reader change** (`phase3_vote.dart:346`), so each new card starts greyed.
-2. **After tapping a card that cannot be voted for** — because that tap never registers a selection at all.
-
-It becomes non-null **only** through `onSelect` (`phase3_vote.dart:510`), which fires **only** from a tap on a card. **Navigating does not select**: swipe, `PREV`, `NEXT` and the jump dots all change which card is in front and nothing else. A player who pages through every option and never taps one keeps a greyed button throughout — which is what the September 12 screenshot shows.
-
-**Three tap sites, all gated the same way** — `card_grid.dart:507` (landscape grid), `:674` and `:740` (the stacked deck's cards). Each reads `onTap: isUnvotable ? null : …`, so on an unvotable card there is **no tap handler at all**: tapping does nothing, produces no ripple, and does not even bring that card to the front.
-
-`_isAnswerUnvotable` (`card_grid.dart:180`) is true when **any** of these hold:
-- the viewer is the card's **target** (who never sees this button anyway);
-- the answer is the viewer's **own** — their forgery on this card, matched by `myOptionIdForThisCard`;
-- the answer is a **placeholder** — `THE SOUL IS SILENT`, or empty, left by a player who did not answer in time.
-
-**So the two ways to meet a greyed button are:** you have not tapped any card yet, or the only card you tapped was your own answer or a placeholder. **The second is the confusing one** — the tap is silently ignored and nothing explains why.
-
-**Verified in source.** `phase3_vote.dart:582` disables the button while `_localSelectedAuthorId == null`, and `card_grid.dart:169` (`_onCardTap`) does call `onSelect` when the active card is tapped. **Selection works — the player simply has no way to know it is required.**
-
-**Why this arrived with Issue 160 and not before.** The old portrait layout listed every option as a row, where tapping a row to choose it is the only thing a list of choices affords. The stacked deck replaced that with one card at a time plus `PREV`/`NEXT` buttons and jump dots, so the screen now reads as a *viewer* — the controls present are for navigating, and nothing distinguishes "looking at card I" from "choosing card I". A player who navigates with the buttons, as the UI invites, never taps the card and finds the confirm button dead with no explanation. **This is a discoverability regression introduced by an otherwise successful change, and `test/stacked_deck_navigation_test.dart` cannot catch it** — it taps cards directly, which is precisely the step a real player does not know to take.
-
-**Option A (recommended)**: **Give the active card an explicit choose affordance and tell the player why the button is dead** — label the active card with a tap hint (and a clear selected state once tapped), and replace the disabled `CONFIRM VOTE` with the same button carrying a short instruction such as `TAP A CARD TO CHOOSE` until a selection exists.
-  - *Pros*: Fixes the immediate confusion at both places the player is looking — the card and the dead button — without changing the interaction model that was chosen from mockups and is otherwise working. A disabled control that explains itself is the smallest honest fix. Cheap to test: assert the hint is present before selection and gone after.
-  - *Cons*: Adds copy to a card whose whole purpose is to show an answer legibly at 320 pt, so the hint must be small and must be checked against the 100-character worst case. Two labels to keep in sync with the selected state.
-
-**Option B**: **Treat the visible card as the selection** — whatever card is in front is selected, so `CONFIRM VOTE` is enabled from the moment the deck renders.
-  - *Pros*: Removes the dead state entirely and matches how a pager is normally read: the thing in front of you is the thing you are choosing. No instruction needed because there is nothing extra to learn. Fewest taps to vote.
-  - *Cons*: Makes an accidental vote much easier — a player idly swiping to read all options has a live selection the whole time, and one mistimed tap on `CONFIRM VOTE` locks it in with no undo, on a screen that has no undo by design. It also silently defaults every player's vote to option I, which will skew results for anyone who confirms without navigating.
-
-**Option C**: **Move the action onto the card** — replace the separate `CONFIRM VOTE` button with a `CHOOSE THIS ONE` control inside the active card.
-  - *Pros*: Puts the decision on the object being decided about, which removes the two-step model altogether and makes the dead-button state impossible. Reads naturally in a one-card-at-a-time layout.
-  - *Cons*: Loses the deliberate two-step confirm that currently separates "I pick this" from "I am sure", which matters because a vote cannot be changed once cast. Consumes vertical space inside the card, competing with the answer text that Issue 160 was fought to keep legible. A larger change to a layout that shipped four days ago and is otherwise working.
-
-Your selection: **Option B was selected and withdrawn on September 12, 2026**, before any code was written — *"scrap AC3. Lets not make this change."* **Re-selected the same day as Option A, narrowed to its first half:** *"lets have a hint somewhere that says tap to select card or some instruction letting the player know that they have to tap the card to click confirm vote."* **Approved scope is instruction only — no behaviour change.** Specced as AC3 in `agent_execution_guide.md`. **Option B must not be implemented.**
-
----
 
 ### Issue 174: Three re-rolls per player can drain a deck inside one round
 
@@ -427,10 +385,11 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 
 ### Issues 65–171 — August 8 to September 12, 2026
 
-**96 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**97 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AC / AC3 — tap-to-choose instruction on vote deck** (rendered disabled button copy as `TAP A CARD TO CHOOSE` when `_localSelectedAuthorId == null` in `phase3_vote.dart`, reverting to `CONFIRM VOTE` upon selection; added `Tap to choose this one` cue in `AppColors.brass` 11pt on active card in `card_grid.dart` only when votable and unselected; strictly suppressed cue on unvotable cards [own forgery/truth and placeholders] and target view; zero behaviour changes; verified layout at 320pt across text scales 1.0 and 1.3 in `vote_option_truncation_test.dart` and 5 widget tests in `vote_tap_cue_test.dart`; falsified button copy and unvotable suppression) | 173 | `lib/screens/phase3_vote.dart`; `lib/widgets/card_grid.dart`; `test/vote_tap_cue_test.dart`; `design_ui_direction.md` |
 | **Wave AC / AC2 — inline sample answers replace sentence stems** (replaced 150 sentence stems with 150 complete sample answers in `functions/src/prompt_decks.ts` under `samples` field; enforced module load validation with `validateDeckSamples`; regenerated `lib/utils/prompt_decks.dart`; rendered `For example: "$sample"` with `sentence_sample_hint` key in `phase2_craft.dart` without prefilling `_answerController`; documented similarity check collision on derived answers in `craft_sentence_stem_test.dart` and `design_prompt_system.md` §6; falsified module load validation and sync gate) | 172 | `functions/src/prompt_decks.ts`; `lib/utils/prompt_decks.dart`; `lib/screens/phase2_craft.dart`; `test/craft_sentence_stem_test.dart`; `functions/test/prompt_decks.spec.ts`; `design_prompt_system.md` §6 |
 | **Wave AC / AC1 — collapse score breakdown behind tap & fix contrast** (collapsed per-player itemised score breakdown behind tap in `phase4_reveal.dart` with uniform collapsed chip height; expanded rule lines use `AppColors.brass` for rule names and `AppColors.ivory` for point deltas, completely eliminating `onSurface`/`ink` contrast defect; added verbatim hint `Tap a player to see their score breakdown` in `brass` 11pt; reset expansion state on card advance keyed on `currentReaderId`; added rendered contrast test asserting ratio >= 4.5:1 on rendered `Text` widgets in `contrast_tokens_test.dart` and 4 widget tests in `phase4_reveal_breakdown_test.dart`; falsified contrast with `onSurface` at 1.01:1 and card advance reset) | 171 | `lib/screens/phase4_reveal.dart`; `test/contrast_tokens_test.dart`; `test/phase4_reveal_breakdown_test.dart`; `design_ui_direction.md` |
 | **Wave AB / AB3 — Marionette playthrough evidence re-capture (E50–E63)** (captured 19 new PNG screenshots across Match A [5 players, room YPQR] and Match B [3 players, room BYVU]; verified E50–E63 under verbatim manifest R6 contract in `findings_waveAA.md`; annotated superseded blocks in `findings_marionette.md` and `findings_web.md`; falsified R5 and R6 gates; verified all 5 evidence gates exit 0 bare) | Wave AB | `docs/playthroughs/findings_waveAA.md`; `docs/playthroughs/manifest.md`; `docs/playthroughs/evidence/ARTEFACTS.tsv` |

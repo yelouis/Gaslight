@@ -276,6 +276,8 @@ All durations come from `AppMotion`: `fast` 180 ms (presses, stamps) · `standar
 
 **Navigation is bidirectional and offered three ways** — PREV/NEXT buttons, horizontal swipe (left peels forward, right unpeels back), and tappable jump dots for random access. **The backward path is a user requirement, not a convenience**: the selection explicitly asked to review and select previously peeled cards. `test/stacked_deck_navigation_test.dart` covers all three paths plus selection persistence across navigation.
 
+**Selection is tap-only and the instruction lives on the disabled button (Issue 173 / Wave AC3).** Navigating through the deck (swipe, PREV/NEXT, jump dots) changes the active card and does *not* select it. While no card is selected (`_localSelectedAuthorId == null`), the primary confirm button is disabled and reads `TAP A CARD TO CHOOSE` instead of `CONFIRM VOTE`. Additionally, the active front card displays `Tap to choose this one` in `AppColors.brass` at 11 pt only when that card is votable and not currently selected. The cue is strictly suppressed on unvotable cards (the player's own forgery/truth, and placeholders) where tapping is disabled, leaving the `SEALED` ribbon and role labels to explain the card. Covered by `test/vote_tap_cue_test.dart`.
+
 **⚠️ This replaced an assertion, not just an implementation.** `vote_option_truncation_test.dart` previously asserted the opposite — that six options *exceed* the viewport and index 3 sits below the fold. That test now asserts viewport containment and discoverability. The no-ellipsis truncation guarantees around it are untouched and must stay.
 
 ### Game Over — standings first (Issue 167 / AA13) and highlight card layout (Issue 168 / AA14)

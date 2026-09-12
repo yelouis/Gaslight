@@ -578,7 +578,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
               ),
           ] else ...[
             PrimaryButton(
-              text: 'CONFIRM VOTE',
+              text: _localSelectedAuthorId == null ? 'TAP A CARD TO CHOOSE' : 'CONFIRM VOTE',
               onPressed: _localSelectedAuthorId == null
                   ? null
                   : () => _castVote(context.read<GameService>(), _localSelectedAuthorId!),
