@@ -9,7 +9,7 @@ This document outlines the Firestore structure, the server-authoritative write a
 * `/rooms/{roomCode}`: the root `GameState` document (phase, cards, votes, readiness, rotation plan, `runningRivalries`). `runningRivalries` holds `{ fools: [...], reads: [...] }` with `count >= 1` sliced to the top 3 per direction. **Author leak prevention invariant**: during an active unmask window (`unmaskDeadline != null`), pairs from the resolving card are strictly withheld from `runningRivalries` until `closeUnmaskWindow` authoritatively flips the card, ensuring authorship is never leaked to unmask guessers.
 * `/rooms/{roomCode}/players/{playerId}`: individual `PlayerState` documents. `playerId` is a client-chosen stable ID; the document stores `authUid` (the Firebase anonymous UID currently bound to that seat) for server-side ownership checks.
 * `/rooms/{roomCode}/embeddings/{answerHash}`: server-managed cache of Gemini embedding vectors (md5 of the normalized answer text → vector) for the semantic-similarity filter. No client rule → default deny; server-only.
-* `/rooms/{roomCode}/sealed/{cardId}`: server-managed answer keys (`truthAnswer` and `sabotageAnswers` forgery map, `answerAuthors` option-to-author map), per-player prompt history (`seenPrompts` list), pending score deltas/breakdowns during unmask windows, and target forgery guesses (`targetForgeryGuesses` map) stored during `truth`, `forgery`, and `vote` phases to conceal answer origin, prompt history, and live reads until reveal. No client rule → default deny; server-only.
+* `/rooms/{roomCode}/sealed/{cardId}`: server-managed answer keys (`truthAnswer` and `sabotageAnswers` forgery map, `answerAuthors` option-to-author map), per-player prompt history (`seenPrompts` list), round re-roll count (`rerollsThisRound: number`), distinct candidate prompts (`rerollCandidates: string[]`), pending score deltas/breakdowns during unmask windows, and target forgery guesses (`targetForgeryGuesses` map) stored during `truth`, `forgery`, and `vote` phases to conceal answer origin, prompt history, and live reads until reveal. No client rule → default deny; server-only.
 
 ---
 
@@ -29,7 +29,8 @@ All game mutations are `onCall` Cloud Functions (`functions/src/index.ts`) that 
 | `submitTargetForgeryGuesses` | — | target seat owner only; writes target's `Record<optionId, guessedAuthorId>` to `sealed/{cardId}.targetForgeryGuesses` during vote phase; enforces non-ready target, rejects own truth, placeholders, target self-forgery, and non-room players; replace semantics |
 | `advancePhase` | `forceAdvance`/`evaluateReadyState` | host only; applies timeout placeholders, per-card scoring, honor stats |
 | `advanceToNextResolution` | `advanceToNextResolution` | host only; steps the vote→reveal card sequence / game over |
-| `rerollPrompt` | `rerollMyPrompt` | seat owner; unlimited re-rolls allowed during the `truth` phase |
+| `rerollPrompt` | `rerollMyPrompt` | seat owner; capped at `kMaxRerollsPerRound = 3` during truth phase; appends to `rerollCandidates` and tracks `rerollsThisRound` in `sealed/{cardId}` |
+| `selectRerolledPrompt` | — | seat owner; requires truth phase, owner of card, `rerollsThisRound >= 3`, `promptText` in `rerollCandidates`, `promptText` not in play on any card, and no submitted truth answer; updates card `promptText` |
 | `updateLobbySettings` | `updateLobbySettings` | host only |
 | `handleDisconnect` | `handlePlayerDisconnect` | host, self, or anyone for a heartbeat-dead player; idempotent; card pruning, assignment bridging, reader re-indexing, **host transfer** |
 

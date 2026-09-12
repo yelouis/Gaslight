@@ -567,7 +567,11 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
                 : <String>[];
             final newPrompt = PromptDecks.drawOneExcluding(deckId, cardSeenPrompts.toSet());
             final updatedSeen = [...cardSeenPrompts, newPrompt];
-            await sealedRef.set({'seenPrompts': updatedSeen}, SetOptions(merge: true));
+            await sealedRef.set({
+              'seenPrompts': updatedSeen,
+              'rerollsThisRound': 0,
+              'rerollCandidates': [],
+            }, SetOptions(merge: true));
 
             newCards.add(CardModel(
               targetPlayerId: p.id,
@@ -622,6 +626,10 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
       final playerId = params['playerId'];
 
       final roomRef = db.collection('rooms').doc(roomCode);
+      int finalCount = 0;
+      List<String> finalCandidates = [];
+      String finalNewPrompt = '';
+
       await db.runTransaction((transaction) async {
         final snapshot = await transaction.get(roomRef);
         final currentState = GameState.fromMap(snapshot.data()!, snapshot.id);
@@ -639,20 +647,35 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
 
         final sealedRef = roomRef.collection('sealed').doc(playerId);
         final sealedSnap = await transaction.get(sealedRef);
+        final sealedData = (sealedSnap.exists && sealedSnap.data() != null)
+            ? sealedSnap.data()!
+            : <String, dynamic>{};
         List<String> cardSeenPrompts = [oldCard.promptText];
-        if (sealedSnap.exists && sealedSnap.data()?['seenPrompts'] != null) {
-          cardSeenPrompts = List<String>.from(sealedSnap.data()!['seenPrompts']);
+        if (sealedData['seenPrompts'] != null) {
+          cardSeenPrompts = List<String>.from(sealedData['seenPrompts']);
+        }
+        int rerollsThisRound = (sealedData['rerollsThisRound'] as num?)?.toInt() ?? 0;
+        List<String> rerollCandidates = (sealedData['rerollCandidates'] is List)
+            ? List<String>.from(sealedData['rerollCandidates'])
+            : <String>[];
+
+        if (rerollsThisRound >= kMaxRerollsPerRound) {
+          throw FirebaseFunctionsException(
+            message: 'Maximum re-rolls ($kMaxRerollsPerRound) reached for this round.',
+            code: 'failed-precondition',
+          );
         }
 
         final deckId = currentState.selectedDeckId == 'custom' ? PromptDecks.fallbackDeckId : currentState.selectedDeckId;
+        final inPlay = cards.map((c) => c.promptText).toSet();
         final excludedPrompts = {
-          ...cards.map((c) => c.promptText),
+          ...inPlay,
           ...cardSeenPrompts,
         };
 
         String newPromptText;
         try {
-          newPromptText = PromptDecks.drawOneExcluding(deckId, excludedPrompts);
+          newPromptText = PromptDecks.drawOneExcluding(deckId, excludedPrompts, inPlay);
         } catch (e) {
           throw FirebaseFunctionsException(
             message: 'No more prompts left in this deck.',
@@ -661,14 +684,111 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         }
 
         final updatedSeen = [...cardSeenPrompts, newPromptText];
+        final newCount = rerollsThisRound + 1;
+        final updatedCandidates = rerollCandidates.contains(newPromptText)
+            ? rerollCandidates
+            : [...rerollCandidates, newPromptText];
 
         cards[cardIndex] = oldCard.copyWith(promptText: newPromptText);
 
         transaction.update(roomRef, {'cards': cards.map((c) => c.toMap()).toList()});
-        transaction.set(sealedRef, {'seenPrompts': updatedSeen}, SetOptions(merge: true));
+        transaction.set(sealedRef, {
+          'seenPrompts': updatedSeen,
+          'rerollsThisRound': newCount,
+          'rerollCandidates': updatedCandidates,
+        }, SetOptions(merge: true));
+
+        finalCount = newCount;
+        finalCandidates = updatedCandidates;
+        finalNewPrompt = newPromptText;
       });
 
-      return FakeHttpsCallableResult({'success': true} as T);
+      return FakeHttpsCallableResult({
+        'success': true,
+        'newPrompt': finalNewPrompt,
+        'rerollsThisRound': finalCount,
+        'rerollCandidates': finalCandidates,
+      } as T);
+    }
+
+    if (name == 'selectRerolledPrompt') {
+      final playerId = params['playerId'];
+      final promptText = params['promptText'] as String?;
+
+      if (promptText == null || promptText.isEmpty) {
+        throw FirebaseFunctionsException(
+          message: 'promptText is required.',
+          code: 'invalid-argument',
+        );
+      }
+
+      final roomRef = db.collection('rooms').doc(roomCode);
+      await db.runTransaction((transaction) async {
+        final snapshot = await transaction.get(roomRef);
+        final currentState = GameState.fromMap(snapshot.data()!, snapshot.id);
+
+        if (currentState.currentPhase != GamePhase.truth) {
+          throw FirebaseFunctionsException(
+            message: 'Prompt selection is only allowed during the truth phase.',
+            code: 'failed-precondition',
+          );
+        }
+
+        final cards = List<CardModel>.from(currentState.cards);
+        final cardIndex = cards.indexWhere((c) => c.targetPlayerId == playerId);
+        if (cardIndex == -1) {
+          throw FirebaseFunctionsException(
+            message: 'Target card not found for this player.',
+            code: 'not-found',
+          );
+        }
+        final card = cards[cardIndex];
+
+        final sealedRef = roomRef.collection('sealed').doc(playerId);
+        final sealedSnap = await transaction.get(sealedRef);
+        final sealedData = (sealedSnap.exists && sealedSnap.data() != null)
+            ? sealedSnap.data()!
+            : <String, dynamic>{};
+
+        final truthAnswer = (sealedData['truthAnswer'] as String?)?.trim() ?? '';
+        if (truthAnswer.isNotEmpty || card.truthAnswer.trim().isNotEmpty) {
+          throw FirebaseFunctionsException(
+            message: 'Cannot select prompt after submitting truth answer.',
+            code: 'failed-precondition',
+          );
+        }
+        final rerollsThisRound = (sealedData['rerollsThisRound'] as num?)?.toInt() ?? 0;
+        final rerollCandidates = (sealedData['rerollCandidates'] is List)
+            ? List<String>.from(sealedData['rerollCandidates'])
+            : <String>[];
+
+        if (rerollsThisRound < kMaxRerollsPerRound) {
+          throw FirebaseFunctionsException(
+            message: 'Must spend all $kMaxRerollsPerRound re-rolls before selecting.',
+            code: 'failed-precondition',
+          );
+        }
+
+        if (!rerollCandidates.contains(promptText)) {
+          throw FirebaseFunctionsException(
+            message: 'Selected prompt is not among your re-roll candidates.',
+            code: 'invalid-argument',
+          );
+        }
+
+        final collision = cards.any((c) => c.targetPlayerId != playerId && c.promptText == promptText);
+        if (collision) {
+          throw FirebaseFunctionsException(
+            message: 'This prompt was claimed by another player.',
+            code: 'failed-precondition',
+          );
+        }
+
+        cards[cardIndex] = card.copyWith(promptText: promptText);
+        transaction.update(roomRef, {'cards': cards.map((c) => c.toMap()).toList()});
+      });
+
+      return FakeHttpsCallableResult({'success': true, 'selectedPrompt': promptText} as T);
     }
 
     if (name == 'handleDisconnect') {

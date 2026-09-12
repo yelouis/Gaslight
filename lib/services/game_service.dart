@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'audio_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -167,6 +166,26 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
 
   // Disconnect in-flight guards
   final Set<String> _disconnectsInFlight = {};
+
+  int _rerollsThisRound = 0;
+  int get rerollsThisRound => _rerollsThisRound;
+
+  final List<String> _rerollCandidates = [];
+  List<String> get rerollCandidates => List.unmodifiable(_rerollCandidates);
+
+  void removeRerollCandidate(String candidate) {
+    if (_rerollCandidates.remove(candidate)) {
+      notifyListeners();
+    }
+  }
+
+  @visibleForTesting
+  void debugSetRerolls({int count = 0, List<String> candidates = const []}) {
+    _rerollsThisRound = count;
+    _rerollCandidates.clear();
+    _rerollCandidates.addAll(candidates);
+    notifyListeners();
+  }
 
   PlayerState? get currentPlayer {
     try {
@@ -432,6 +451,8 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     _myOptionIdByCard.clear();
     _optionIdFetchesInFlight.clear();
     _lastDisconnectAttemptAt.clear();
+    _rerollsThisRound = 0;
+    _rerollCandidates.clear();
 
     final prefs = await SharedPreferences.getInstance();
     final currentSavedRoom = prefs.getString('room_code');
@@ -494,10 +515,17 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     // Listen to Game State
     _roomSubscription = _db.collection('rooms').doc(roomCode).snapshots().listen((snapshot) async {
       if (snapshot.exists) {
-        _gameState = GameState.fromMap(snapshot.data()!, snapshot.id);
+        final newGameState = GameState.fromMap(snapshot.data()!, snapshot.id);
+        if (_gameState != null && newGameState.currentRound != _gameState!.currentRound) {
+          _rerollsThisRound = 0;
+          _rerollCandidates.clear();
+        }
+        _gameState = newGameState;
         notifyListeners();
       } else if (_gameState != null) {
         _roomClosed = true;
+        _rerollsThisRound = 0;
+        _rerollCandidates.clear();
         await _clearLocalRoomState();
         notifyListeners();
       }
@@ -646,9 +674,36 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     final rCode = _gameState?.roomCode;
     if (p == null || rCode == null || rCode.isEmpty || _gameState == null) return;
     
-    await _functions.httpsCallable('rerollPrompt').call({
+    final result = await _functions.httpsCallable('rerollPrompt').call({
       'roomCode': rCode,
       'playerId': p.id,
+    });
+    final data = result.data;
+    if (data is Map) {
+      if (data['rerollsThisRound'] is num) {
+        _rerollsThisRound = (data['rerollsThisRound'] as num).toInt();
+      }
+      if (data['rerollCandidates'] is List) {
+        _rerollCandidates.clear();
+        for (final item in data['rerollCandidates'] as List) {
+          if (item is String) {
+            _rerollCandidates.add(item);
+          }
+        }
+      }
+      notifyListeners();
+    }
+  }
+
+  Future<void> selectRerolledPrompt(String targetPlayerId, String promptText) async {
+    final p = currentPlayer;
+    final rCode = _gameState?.roomCode;
+    if (p == null || rCode == null || rCode.isEmpty || _gameState == null) return;
+
+    await _functions.httpsCallable('selectRerolledPrompt').call({
+      'roomCode': rCode,
+      'playerId': p.id,
+      'promptText': promptText,
     });
   }
 

@@ -16,6 +16,9 @@ import { HttpsError } from "firebase-functions/v2/https";
 /** Content rating. The seal COLOUR is a UI concern and lives in app_colors.dart. */
 export type DeckRating = "PG" | "R" | "X";
 
+/** Maximum re-rolls allowed per round per player. */
+export const kMaxRerollsPerRound = 3;
+
 export interface DeckDefinition {
   id: string;
   /** Shown to players. Not derived from the id - "rated_r_nsfw" would render as "Rated R Nsfw". */

@@ -14,6 +14,9 @@ import 'dart:math';
 /// `app_colors.dart` — this is only the token.
 enum DeckRating { pg, r, x }
 
+/// Maximum re-rolls allowed per round per player. Mirrors TypeScript source.
+const int kMaxRerollsPerRound = 3;
+
 /// Everything the app knows about one deck. Mirrors `DeckDefinition` in the
 /// TypeScript source.
 class DeckDefinition {

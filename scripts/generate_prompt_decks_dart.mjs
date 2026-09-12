@@ -20,7 +20,7 @@ import path from "node:path";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 execSync("npm --prefix functions run build", { cwd: root, stdio: "pipe" });
-const { PromptDecks } = await import(
+const { PromptDecks, kMaxRerollsPerRound } = await import(
   path.join(root, "functions/lib/prompt_decks.js")
 );
 
@@ -53,6 +53,9 @@ w("");
 w("/// Content rating for a deck. The seal COLOUR is a UI concern and lives in");
 w("/// `app_colors.dart` — this is only the token.");
 w("enum DeckRating { pg, r, x }");
+w("");
+w("/// Maximum re-rolls allowed per round per player. Mirrors TypeScript source.");
+w(`const int kMaxRerollsPerRound = ${kMaxRerollsPerRound};`);
 w("");
 w("/// Everything the app knows about one deck. Mirrors `DeckDefinition` in the");
 w("/// TypeScript source.");

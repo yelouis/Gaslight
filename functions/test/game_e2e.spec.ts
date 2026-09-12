@@ -1534,6 +1534,7 @@ describe('Gaslight E2E Game Emulator Tests', () => {
     for (let i = 0; i < altDeckSize - 1; i++) {
       const cardBefore = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host').promptText;
       const inPlayBefore = new Set((roomSnap.data()?.cards as any[]).map(c => c.promptText));
+      await db.collection('rooms').doc(roomCode).collection('sealed').doc('p_host').update({ rerollsThisRound: 0 });
       await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
       roomSnap = await roomRef.get();
       const updatedHostCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
@@ -1560,6 +1561,7 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       const before = await db.collection('rooms').doc(roomCode).get();
       const inPlayBefore = new Set((before.data()?.cards as any[]).map(c => c.promptText));
 
+      await db.collection('rooms').doc(roomCode).collection('sealed').doc('p_host').update({ rerollsThisRound: 0 });
       await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
 
       const after = await db.collection('rooms').doc(roomCode).get();
@@ -2841,6 +2843,7 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
           for (let i = 0; i < expectedHostRerolls; i++) {
             const cardBefore = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host').promptText;
             const inPlayBefore = new Set((roomSnap.data()?.cards as any[]).map(c => c.promptText));
+            await db.collection('rooms').doc(roomCode).collection('sealed').doc('p_host').update({ rerollsThisRound: 0 });
             await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
             roomSnap = await roomRef.get();
             const updatedCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
@@ -2855,6 +2858,7 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
           // and still refuses to hand back anything currently on the table.
           const beforeBoundary = await roomRef.get();
           const inPlayAtBoundary = new Set((beforeBoundary.data()?.cards as any[]).map(c => c.promptText));
+          await db.collection('rooms').doc(roomCode).collection('sealed').doc('p_host').update({ rerollsThisRound: 0 });
           await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
           const afterBoundary = await roomRef.get();
           const hostCardPastBoundary = (afterBoundary.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
@@ -3510,6 +3514,7 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
             cardsBefore.filter(c => c.targetPlayerId !== 'p_host').map(c => c.promptText)
           );
 
+          await db.collection('rooms').doc(roomCode).collection('sealed').doc('p_host').update({ rerollsThisRound: 0 });
           await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
 
           const after = await roomRef.get();
@@ -3612,7 +3617,7 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
 
           for (const voter of voters) {
             if (voter.id !== currentReader) {
-              const optToVote = options.find(o => answerAuthors[o.id] !== voter.id);
+              const optToVote = options.find(o => answerAuthors[o.id] !== voter.id && answerAuthors[o.id] !== currentReader) || options.find(o => answerAuthors[o.id] !== voter.id);
               if (optToVote) {
                 const votedAuthor = answerAuthors[optToVote.id];
                 allVotesCast.push({
@@ -3680,7 +3685,7 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
 
           for (const voter of voters) {
             if (voter.id !== currentReader) {
-              const optToVote = options.find(o => answerAuthors[o.id] !== voter.id);
+              const optToVote = options.find(o => answerAuthors[o.id] !== voter.id && answerAuthors[o.id] !== currentReader) || options.find(o => answerAuthors[o.id] !== voter.id);
               if (optToVote) {
                 const votedAuthor = answerAuthors[optToVote.id];
                 allVotesCast.push({
@@ -6525,6 +6530,393 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         const headToHead = snap.data()?.matchSummary?.headToHead || [];
         const h2hPair = headToHead.find((h: any) => h.deceiverId === foolPair.deceiverId && h.victimId === foolPair.victimId);
         expect(h2hPair).to.be.undefined;
+      });
+    });
+
+    describe('Wave AC: AC4 Re-roll Cap (3) & Chooser Specs', () => {
+      it('AC4.1: three re-rolls succeed; fourth is rejected with failed-precondition', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await roomRef.collection('players').doc('p_guest').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_guest2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+
+        // 3 re-rolls succeed
+        const res1 = await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        expect(res1.rerollsThisRound).to.equal(1);
+        expect(res1.rerollCandidates).to.have.lengthOf(1);
+
+        const res2 = await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        expect(res2.rerollsThisRound).to.equal(2);
+        expect(res2.rerollCandidates).to.have.lengthOf(2);
+
+        const res3 = await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        expect(res3.rerollsThisRound).to.equal(3);
+        expect(res3.rerollCandidates).to.have.lengthOf(3);
+
+        // 4th re-roll must fail with failed-precondition
+        let threwFourth = false;
+        try {
+          await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        } catch (err: any) {
+          threwFourth = true;
+          expect(err.status).to.equal('FAILED_PRECONDITION');
+        }
+        expect(threwFourth).to.be.true;
+      });
+
+      it('AC4.2 (Trap Test): pre-loaded seenPrompts avoids repeats across re-rolls', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await roomRef.collection('players').doc('p_guest').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_guest2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+
+        const roomSnap = await roomRef.get();
+        const cards = roomSnap.data()?.cards as any[];
+        const inPlay = new Set(cards.map(c => c.promptText));
+
+        const allDeckPrompts = PromptDecks.getDeck(ALT_DECK)!.prompts;
+        const availableNotInPlay = allDeckPrompts.filter(p => !inPlay.has(p));
+        expect(availableNotInPlay.length).to.be.at.least(5);
+
+        // Pre-load seenPrompts with all available prompts EXCEPT 3
+        const leaveUnseen = availableNotInPlay.slice(0, 3);
+        const preloadedSeen = allDeckPrompts.filter(p => !leaveUnseen.includes(p));
+
+        await roomRef.collection('sealed').doc('p_host').update({
+          seenPrompts: preloadedSeen,
+          rerollsThisRound: 0,
+          rerollCandidates: []
+        });
+
+        // 3 re-rolls must only pick from leaveUnseen, never from preloadedSeen
+        const drawnPrompts = new Set<string>();
+        for (let i = 0; i < 3; i++) {
+          const res = await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+          expect(preloadedSeen.includes(res.newPrompt), `Drawn prompt "${res.newPrompt}" should not be in seenPrompts`).to.be.false;
+          expect(leaveUnseen.includes(res.newPrompt), `Drawn prompt "${res.newPrompt}" must be one of the unseen prompts`).to.be.true;
+          drawnPrompts.add(res.newPrompt);
+        }
+        expect(drawnPrompts.size).to.equal(3);
+      });
+
+      it('AC4.3: concludeResolutionRound explicitly resets rerollsThisRound and rerollCandidates', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          totalRounds: 2,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await roomRef.collection('players').doc('p_guest').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_guest2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+
+        // Alice uses 3 re-rolls
+        await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+
+        let sealedSnap = await roomRef.collection('sealed').doc('p_host').get();
+        expect(sealedSnap.data()?.rerollsThisRound).to.equal(3);
+        expect(sealedSnap.data()?.rerollCandidates).to.have.lengthOf(3);
+
+        // Play through round 1 to trigger concludeResolutionRound into round 2
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'T1', isTruth: true });
+        await callFn('submitAnswer', guestUser.idToken, { roomCode, targetCardId: 'p_guest', authorId: 'p_guest', text: 'T2', isTruth: true });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: 'p_guest2', authorId: 'p_guest2', text: 'T3', isTruth: true });
+
+        let snap = await roomRef.get();
+        expect(snap.data()?.currentPhase).to.equal('forgery');
+
+        const assignments = snap.data()?.currentCardAssignments;
+        for (const [authorId, targetId] of Object.entries(assignments)) {
+          const uToken = authorId === 'p_host' ? hostUser.idToken : authorId === 'p_guest' ? guestUser.idToken : guest2User.idToken;
+          await callFn('submitAnswer', uToken, { roomCode, targetCardId: targetId, authorId, text: `F_${authorId}`, isTruth: false });
+        }
+
+        snap = await roomRef.get();
+        expect(snap.data()?.currentPhase).to.equal('vote');
+
+        const players = ['p_host', 'p_guest', 'p_guest2'];
+        const userTokens: Record<string, string> = { p_host: hostUser.idToken, p_guest: guestUser.idToken, p_guest2: guest2User.idToken };
+
+        for (let r = 0; r < 3; r++) {
+          snap = await roomRef.get();
+          const reader = snap.data()?.currentReaderId;
+          await callFn('setReady', userTokens[reader], { roomCode, playerId: reader, ready: true });
+          snap = await roomRef.get();
+          const card = snap.data()?.cards.find((c: any) => c.targetPlayerId === reader);
+          const sealedReader = await roomRef.collection('sealed').doc(reader).get();
+          const answerAuthors = sealedReader.data()?.answerAuthors as Record<string, string>;
+          for (const voter of players) {
+            if (voter !== reader) {
+              const optToVote = card.options.find((o: any) => answerAuthors[o.id] !== voter);
+              if (optToVote) {
+                await callFn('castVote', userTokens[voter], { roomCode, targetCardId: reader, voterId: voter, votedForId: optToVote.id });
+              }
+            }
+          }
+          await callFn('advanceToNextResolution', hostUser.idToken, { roomCode });
+        }
+
+        snap = await roomRef.get();
+        expect(snap.data()?.currentRound).to.equal(2);
+        expect(snap.data()?.currentPhase).to.equal('truth');
+
+        sealedSnap = await roomRef.collection('sealed').doc('p_host').get();
+        expect(sealedSnap.data()).to.have.property('rerollsThisRound', 0);
+        expect(sealedSnap.data()).to.have.property('rerollCandidates').that.is.an('array').with.lengthOf(0);
+      });
+
+      it('AC4.4: selectRerolledPrompt updates card promptText to chosen candidate', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await roomRef.collection('players').doc('p_guest').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_guest2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+
+        // Alice uses 3 re-rolls
+        const r1 = await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        const r3 = await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+
+        let roomSnap = await roomRef.get();
+        let hostCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+        expect(hostCard.promptText).to.equal(r3.newPrompt);
+
+        // Select candidate 1 (r1.newPrompt)
+        const selectRes = await callFn('selectRerolledPrompt', hostUser.idToken, {
+          roomCode,
+          playerId: 'p_host',
+          promptText: r1.newPrompt
+        });
+        expect(selectRes.success).to.be.true;
+
+        roomSnap = await roomRef.get();
+        hostCard = (roomSnap.data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host');
+        expect(hostCard.promptText).to.equal(r1.newPrompt);
+      });
+
+      it('AC4.5: selectRerolledPrompt five rejections', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await roomRef.collection('players').doc('p_guest').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_guest2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+
+        // Rejection 2: cap not yet spent (rerollsThisRound < 3)
+        let rejectedCapNotSpent = false;
+        try {
+          await callFn('selectRerolledPrompt', hostUser.idToken, {
+            roomCode,
+            playerId: 'p_host',
+            promptText: 'Some prompt'
+          });
+        } catch (e: any) {
+          rejectedCapNotSpent = true;
+          expect(e.status).to.equal('FAILED_PRECONDITION');
+        }
+        expect(rejectedCapNotSpent).to.be.true;
+
+        // Alice uses 3 re-rolls
+        const r1 = await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        const r2 = await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+
+        // Rejection 3: prompt not in rerollCandidates
+        let rejectedNotInCandidates = false;
+        try {
+          await callFn('selectRerolledPrompt', hostUser.idToken, {
+            roomCode,
+            playerId: 'p_host',
+            promptText: 'A Completely Made Up Prompt Not In Candidates'
+          });
+        } catch (e: any) {
+          rejectedNotInCandidates = true;
+          expect(e.status).to.equal('INVALID_ARGUMENT');
+        }
+        expect(rejectedNotInCandidates).to.be.true;
+
+        // Rejection 4: prompt now in play (collision with another player card)
+        const snapBeforeCollision = await roomRef.get();
+        const cardsMod = [...(snapBeforeCollision.data()?.cards as any[])];
+        const charlieIdx = cardsMod.findIndex(c => c.targetPlayerId === 'p_guest2');
+        cardsMod[charlieIdx] = { ...cardsMod[charlieIdx], promptText: r1.newPrompt };
+        await roomRef.update({ cards: cardsMod });
+
+        let rejectedCollision = false;
+        try {
+          await callFn('selectRerolledPrompt', hostUser.idToken, {
+            roomCode,
+            playerId: 'p_host',
+            promptText: r1.newPrompt
+          });
+        } catch (e: any) {
+          rejectedCollision = true;
+          expect(e.status).to.equal('FAILED_PRECONDITION');
+          expect(e.message).to.include('chosen by another player');
+        }
+        expect(rejectedCollision).to.be.true;
+
+        // Revert Charlie's card prompt
+        cardsMod[charlieIdx] = { ...cardsMod[charlieIdx], promptText: 'Distinct Charlie Prompt' };
+        await roomRef.update({ cards: cardsMod });
+
+        // Rejection 5: caller not the card owner
+        let rejectedNotOwner = false;
+        try {
+          await callFn('selectRerolledPrompt', guestUser.idToken, {
+            roomCode,
+            playerId: 'p_host',
+            promptText: r2.newPrompt
+          });
+        } catch (e: any) {
+          rejectedNotOwner = true;
+          expect(e.status).to.equal('PERMISSION_DENIED');
+        }
+        expect(rejectedNotOwner).to.be.true;
+
+        // Advance to forgery phase
+        await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'T1', isTruth: true });
+        await callFn('submitAnswer', guestUser.idToken, { roomCode, targetCardId: 'p_guest', authorId: 'p_guest', text: 'T2', isTruth: true });
+        await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: 'p_guest2', authorId: 'p_guest2', text: 'T3', isTruth: true });
+
+        const snapPhase = await roomRef.get();
+        expect(snapPhase.data()?.currentPhase).to.equal('forgery');
+
+        // Rejection 1: wrong phase (forgery phase)
+        let rejectedWrongPhase = false;
+        try {
+          await callFn('selectRerolledPrompt', hostUser.idToken, {
+            roomCode,
+            playerId: 'p_host',
+            promptText: r2.newPrompt
+          });
+        } catch (e: any) {
+          rejectedWrongPhase = true;
+          expect(e.status).to.equal('FAILED_PRECONDITION');
+        }
+        expect(rejectedWrongPhase).to.be.true;
+      });
+
+      it('AC4.6: duplicate draw does not produce a duplicate chooser entry', async () => {
+        const hostUser = await createAnonUser();
+        const guestUser = await createAnonUser();
+        const guest2User = await createAnonUser();
+
+        const createRes = await callFn('createRoom', hostUser.idToken, {
+          playerName: 'Alice',
+          playerId: 'p_host',
+          forgeriesPerCard: 1,
+          debugEnabled: true
+        });
+        const roomCode = createRes.roomCode;
+        const roomRef = db.collection('rooms').doc(roomCode);
+
+        await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+        await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+        await roomRef.collection('players').doc('p_guest').update({ lobbyReady: true });
+        await roomRef.collection('players').doc('p_guest2').update({ lobbyReady: true });
+
+        await callFn('updateLobbySettings', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+        await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: ALT_DECK });
+
+        // First re-roll
+        const r1 = await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        expect(r1.rerollCandidates).to.have.lengthOf(1);
+
+        const deckPrompts = PromptDecks.getDeck(ALT_DECK)!.prompts;
+        const targetCardPrompt = ((await roomRef.get()).data()?.cards as any[]).find(c => c.targetPlayerId === 'p_host').promptText;
+        const otherPrompt = deckPrompts.find(p => p !== targetCardPrompt && p !== r1.newPrompt)!;
+
+        // Pre-seed candidates to already contain otherPrompt
+        await roomRef.collection('sealed').doc('p_host').update({
+          rerollCandidates: [r1.newPrompt, otherPrompt]
+        });
+
+        const sealedSnap = await roomRef.collection('sealed').doc('p_host').get();
+        const seededCandidates = sealedSnap.data()?.rerollCandidates || [];
+        expect(seededCandidates).to.deep.equal([r1.newPrompt, otherPrompt]);
+
+        await callFn('rerollPrompt', hostUser.idToken, { roomCode, playerId: 'p_host' });
+        const finalSnap = await roomRef.collection('sealed').doc('p_host').get();
+        const finalCandidates: string[] = finalSnap.data()?.rerollCandidates || [];
+
+        const uniqueSet = new Set(finalCandidates);
+        expect(finalCandidates.length).to.equal(uniqueSet.size);
       });
     });
   });

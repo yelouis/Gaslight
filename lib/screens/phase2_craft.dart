@@ -735,59 +735,195 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
                       final bool isTimerLast5Sec = state.endTime != null && 
                           (state.endTime! - DateTime.now().millisecondsSinceEpoch) < 5000;
                       final bool isTruthPhase = state.currentPhase == GamePhase.truth;
-                      final bool canReroll = isTruthPhase && !isTimerLast5Sec && !_isSubmitting;
+                      final int remaining = (kMaxRerollsPerRound - gs.rerollsThisRound).clamp(0, kMaxRerollsPerRound);
+                      final bool canReroll = isTruthPhase && !isTimerLast5Sec && !_isSubmitting && remaining > 0;
 
-                      return SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton.icon(
-                          icon: const ThematicIcon(type: ThematicIconType.redraw, size: 18),
-                          label: const Text('RE-ROLL PROMPT'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.ground,
-                            foregroundColor: AppColors.brass,
-                            side: BorderSide(
-                              color: canReroll ? AppColors.brass : AppColors.brass.withOpacity(0.3),
-                              width: 1,
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              icon: const ThematicIcon(type: ThematicIconType.redraw, size: 18),
+                              label: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('RE-ROLL PROMPT'),
+                                    Text(' ($remaining LEFT)'),
+                                  ],
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.ground,
+                                foregroundColor: AppColors.brass,
+                                side: BorderSide(
+                                  color: canReroll ? AppColors.brass : AppColors.brass.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onPressed: canReroll
+                                  ? () async {
+                                      setState(() => _isSubmitting = true);
+                                      try {
+                                        await gs.rerollMyPrompt();
+                                        _answerController.clear();
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).clearSnackBars();
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Prompt re-rolled successfully!'),
+                                              duration: Duration(milliseconds: 1200),
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        debugPrint('rerollMyPrompt error: $e');
+                                        if (mounted) {
+                                          final String msg = (e is FirebaseFunctionsException && e.code == 'resource-exhausted')
+                                              ? 'No more prompts left in this deck.'
+                                              : 'Something went wrong. Try again.';
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(msg),
+                                              backgroundColor: Theme.of(context).colorScheme.error,
+                                            ),
+                                          );
+                                        }
+                                      } finally {
+                                        if (mounted) {
+                                          setState(() => _isSubmitting = false);
+                                        }
+                                      }
+                                    }
+                                  : null,
                             ),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
-                          onPressed: canReroll
-                              ? () async {
-                                  setState(() => _isSubmitting = true);
-                                  try {
-                                    await gs.rerollMyPrompt();
-                                    _answerController.clear();
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).clearSnackBars();
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Prompt re-rolled successfully!'),
-                                          duration: Duration(milliseconds: 1200),
+                          if (remaining == 0 && gs.rerollCandidates.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppColors.groundRaised,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppColors.brass.withValues(alpha: 0.5), width: 1),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      ThematicIcon(type: ThematicIconType.confirm, size: 16),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'SELECT A PROMPT',
+                                        style: TextStyle(
+                                          fontFamily: 'Cinzel',
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 1.2,
+                                          color: AppColors.brass,
                                         ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    debugPrint('rerollMyPrompt error: $e');
-                                    if (mounted) {
-                                       final String msg = (e is FirebaseFunctionsException && e.code == 'resource-exhausted')
-                                           ? 'No more prompts left in this deck.'
-                                           : 'Something went wrong. Try again.';
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(msg),
-                                          backgroundColor: Theme.of(context).colorScheme.error,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ...gs.rerollCandidates.map((candidate) {
+                                    final isSelected = targetCard.promptText == candidate;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 8.0),
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          onTap: (isSelected || _isSubmitting)
+                                              ? null
+                                              : () async {
+                                                  setState(() => _isSubmitting = true);
+                                                  try {
+                                                    await gs.selectRerolledPrompt(targetCard.targetPlayerId, candidate);
+                                                    _answerController.clear();
+                                                    if (mounted) {
+                                                      ScaffoldMessenger.of(context).clearSnackBars();
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        const SnackBar(
+                                                          content: Text('Prompt selected!'),
+                                                          duration: Duration(milliseconds: 1200),
+                                                        ),
+                                                      );
+                                                    }
+                                                  } catch (e) {
+                                                    debugPrint('selectRerolledPrompt error: $e');
+                                                    if (mounted) {
+                                                      final String msg = (e is FirebaseFunctionsException && e.code == 'failed-precondition')
+                                                          ? 'Prompt was chosen by another player.'
+                                                          : 'Something went wrong. Try again.';
+                                                      if (e is FirebaseFunctionsException && e.code == 'failed-precondition') {
+                                                        gs.removeRerollCandidate(candidate);
+                                                      }
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        SnackBar(
+                                                          content: Text(msg),
+                                                          backgroundColor: Theme.of(context).colorScheme.error,
+                                                        ),
+                                                      );
+                                                    }
+                                                  } finally {
+                                                    if (mounted) {
+                                                      setState(() => _isSubmitting = false);
+                                                    }
+                                                  }
+                                                },
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                            decoration: BoxDecoration(
+                                              color: isSelected
+                                                  ? AppColors.brass.withValues(alpha: 0.15)
+                                                  : AppColors.parchment.withValues(alpha: 0.05),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: isSelected
+                                                    ? AppColors.brass
+                                                    : AppColors.brass.withValues(alpha: 0.25),
+                                                width: isSelected ? 1.5 : 1.0,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                                                  color: isSelected ? AppColors.brass : AppColors.brass.withValues(alpha: 0.4),
+                                                  size: 18,
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Text(
+                                                    candidate,
+                                                    style: TextStyle(
+                                                      fontFamily: 'Lora',
+                                                      fontSize: 13,
+                                                      color: isSelected ? AppColors.ivory : AppColors.ivory.withValues(alpha: 0.85),
+                                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
                                         ),
-                                      );
-                                    }
-                                  } finally {
-                                    if (mounted) {
-                                      setState(() => _isSubmitting = false);
-                                    }
-                                  }
-                                }
-                              : null,
-                        ),
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       );
                     }(),
                   ],

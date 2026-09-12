@@ -4,8 +4,8 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomUUID, createHash } from "crypto";
 import { RotationEngine } from "./rotation_engine";
 import { ScoringLogic, GameState, CardModel, CardSummary, MatchSummary, ScoreBreakdownItem, kTargetForgeryGuessPoints } from "./scoring_logic";
-export { kTargetForgeryGuessPoints };
-import { PromptDecks } from "./prompt_decks";
+import { PromptDecks, kMaxRerollsPerRound } from "./prompt_decks";
+export { kTargetForgeryGuessPoints, kMaxRerollsPerRound };
 import { isTooSimilar } from "./text_similarity";
 
 if (!admin.apps.length) {
@@ -773,7 +773,14 @@ export const startGame = onCall(async (request) => {
 
     pIds.forEach((pid, idx) => {
       const sealedRef = roomRef.collection("sealed").doc(pid);
-      transaction.set(sealedRef, { seenPrompts: [prompts[idx]], truthAnswer: "", sabotageAnswers: {}, answerAuthors: {} });
+      transaction.set(sealedRef, {
+        seenPrompts: [prompts[idx]],
+        truthAnswer: "",
+        sabotageAnswers: {},
+        answerAuthors: {},
+        rerollsThisRound: 0,
+        rerollCandidates: []
+      });
     });
 
     transaction.set(roomRef.collection("sealed").doc("_summary"), { cards: [] });
@@ -1154,6 +1161,11 @@ export const rerollPrompt = onCall(async (request) => {
 
     const targetCard = room.cards[cardIdx];
     const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
+    const rerollsThisRound: number = typeof sealedData.rerollsThisRound === "number" ? sealedData.rerollsThisRound : 0;
+    if (rerollsThisRound >= kMaxRerollsPerRound) {
+      throw new HttpsError("failed-precondition", "Maximum re-rolls reached for this round.");
+    }
+
     const cardSeen: string[] = (sealedData && Array.isArray(sealedData.seenPrompts) && sealedData.seenPrompts.length > 0)
       ? sealedData.seenPrompts
       : [targetCard.promptText];
@@ -1165,23 +1177,24 @@ export const rerollPrompt = onCall(async (request) => {
     // Prompts sitting on a card right now - including this player's current
     // one. Never hand any of these back: a re-roll must visibly change something,
     // and two players must never end up on the same prompt.
-    // Under Option B (Issue 107), sampling is uniform minus what is currently live on cards.
+    // Exclude both in-play prompts and player's previously seen prompts (AC4).
     const inPlay = new Set(room.cards.map(c => c.promptText));
+    const excluded = new Set([...inPlay, ...cardSeen]);
     const promptSource = resolvePromptSource(room, activePlayers);
     let newPrompt: string;
 
     if ("pool" in promptSource) {
       const candidates = promptSource.pool.filter(
-        item => item.authorId !== playerId && !inPlay.has(item.text)
+        item => item.authorId !== playerId && !inPlay.has(item.text) && !cardSeen.includes(item.text)
       );
       if (candidates.length > 0) {
         const chosen = candidates[Math.floor(Math.random() * candidates.length)];
         newPrompt = chosen.text;
       } else {
-        newPrompt = PromptDecks.drawOneExcluding(promptSource.fallbackDeckId, inPlay, inPlay);
+        newPrompt = PromptDecks.drawOneExcluding(promptSource.fallbackDeckId, excluded, inPlay);
       }
     } else {
-      newPrompt = PromptDecks.drawOneExcluding(promptSource.deckId, inPlay, inPlay);
+      newPrompt = PromptDecks.drawOneExcluding(promptSource.deckId, excluded, inPlay);
     }
 
     const updatedCard = {
@@ -1191,11 +1204,103 @@ export const rerollPrompt = onCall(async (request) => {
     const newCards = [...room.cards];
     newCards[cardIdx] = updatedCard;
 
+    const rerollCandidates: string[] = Array.isArray(sealedData.rerollCandidates) ? sealedData.rerollCandidates : [];
+    const updatedCandidates = rerollCandidates.includes(newPrompt) ? rerollCandidates : [...rerollCandidates, newPrompt];
+    const nextRerolls = rerollsThisRound + 1;
     const updatedSeen = [...cardSeen, newPrompt];
 
     transaction.update(roomRef, { cards: newCards });
-    transaction.set(sealedRef, { seenPrompts: updatedSeen }, { merge: true });
+    transaction.set(sealedRef, {
+      seenPrompts: updatedSeen,
+      rerollsThisRound: nextRerolls,
+      rerollCandidates: updatedCandidates
+    }, { merge: true });
 
+    return {
+      success: true,
+      newPrompt,
+      rerollsThisRound: nextRerolls,
+      rerollCandidates: updatedCandidates
+    };
+  });
+});
+
+// 8.5. Select Rerolled Prompt
+export const selectRerolledPrompt = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+
+  const callerUid = request.auth.uid;
+  const { roomCode, playerId, promptText } = request.data;
+  if (!roomCode || !playerId || !promptText || typeof promptText !== "string") {
+    throw new HttpsError("invalid-argument", "roomCode, playerId, and promptText are required.");
+  }
+
+  const roomRef = db.collection("rooms").doc(roomCode);
+  const playerRef = roomRef.collection("players").doc(playerId);
+
+  const playerSnap = await playerRef.get();
+  if (!playerSnap.exists || (playerSnap.data() as PlayerState).authUid !== callerUid) {
+    throw new HttpsError("permission-denied", "User does not own this player document.");
+  }
+
+  return await db.runTransaction(async (transaction) => {
+    const roomSnap = await transaction.get(roomRef);
+    if (!roomSnap.exists) {
+      throw new HttpsError("not-found", "Game room not found.");
+    }
+
+    const room = roomSnap.data() as GameState;
+
+    // 1. Truth phase only
+    if (room.currentPhase !== "truth") {
+      throw new HttpsError("failed-precondition", "Prompt selection is only allowed during the truth phase.");
+    }
+
+    // 2. Caller owns the card
+    const cardIdx = room.cards.findIndex(c => c.targetPlayerId === playerId);
+    if (cardIdx === -1) {
+      throw new HttpsError("not-found", "Card not found for player.");
+    }
+
+    const sealedRef = roomRef.collection("sealed").doc(playerId);
+    const sealedSnap = await transaction.get(sealedRef);
+    const sealedData = sealedSnap.exists ? (sealedSnap.data() as any) : {};
+
+    // 3. Cap spent
+    const rerollsThisRound: number = typeof sealedData.rerollsThisRound === "number" ? sealedData.rerollsThisRound : 0;
+    if (rerollsThisRound < kMaxRerollsPerRound) {
+      throw new HttpsError("failed-precondition", "The prompt chooser is only available after all re-rolls for this round are used.");
+    }
+
+    // 4. promptText is a member of rerollCandidates
+    const rerollCandidates: string[] = Array.isArray(sealedData.rerollCandidates) ? sealedData.rerollCandidates : [];
+    if (!rerollCandidates.includes(promptText)) {
+      throw new HttpsError("invalid-argument", "Selected prompt is not among the re-rolled candidates.");
+    }
+
+    // 5. Re-validate inPlay at selection time (collision check with other players' cards)
+    const inPlayOther = new Set(
+      room.cards.filter(c => c.targetPlayerId !== playerId).map(c => c.promptText)
+    );
+    if (inPlayOther.has(promptText)) {
+      throw new HttpsError("failed-precondition", "Prompt was chosen by another player.");
+    }
+
+    // 6. Player has not already submitted truth answer
+    if ((sealedData.truthAnswer && sealedData.truthAnswer.trim().length > 0) || room.readyPlayers?.[playerId] === true) {
+      throw new HttpsError("failed-precondition", "Player has already submitted a truth answer this round.");
+    }
+
+    const updatedCard = {
+      ...room.cards[cardIdx],
+      promptText
+    };
+    const newCards = [...room.cards];
+    newCards[cardIdx] = updatedCard;
+
+    transaction.update(roomRef, { cards: newCards });
     return { success: true };
   });
 });
@@ -1486,7 +1591,15 @@ async function concludeResolutionRound(
       const seenPrompts = Array.from(finalPlayerSeenMap[p.id] || []);
       const updatedSeen = [...seenPrompts, newPrompt];
       const sealedRef = roomRef.collection("sealed").doc(p.id);
-      transaction.set(sealedRef, { seenPrompts: updatedSeen, truthAnswer: "", sabotageAnswers: {}, answerAuthors: {}, truthAnswerId: "" });
+      transaction.set(sealedRef, {
+        seenPrompts: updatedSeen,
+        truthAnswer: "",
+        sabotageAnswers: {},
+        answerAuthors: {},
+        truthAnswerId: "",
+        rerollsThisRound: 0,
+        rerollCandidates: []
+      });
 
       newCards.push({
         targetPlayerId: p.id,
