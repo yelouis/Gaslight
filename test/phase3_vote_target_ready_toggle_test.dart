@@ -167,8 +167,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // As a voter on Card 2, Alice sees CONFIRM VOTE (not target ready buttons)
-      expect(find.text('CONFIRM VOTE'), findsOneWidget);
+      // As a voter on Card 2, Alice sees TAP A CARD TO CHOOSE (not target ready buttons)
+      expect(find.text('TAP A CARD TO CHOOSE'), findsOneWidget);
       expect(find.text("I'M READY"), findsNothing);
       expect(find.text('NOT READY'), findsNothing);
 

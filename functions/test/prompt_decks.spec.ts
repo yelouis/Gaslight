@@ -67,6 +67,7 @@ describe("Prompt Decks & Samples Tests (TS)", () => {
       const fallbackDeck = PromptDecks.getDeck(fallbackId);
       expect(fallbackDeck).to.exist;
       expect(fallbackDeck!.rating).to.equal("PG");
+      expect(PromptDecks.getDeckRating(fallbackId)).to.equal("PG");
       expect(fallbackDeck!.isFallback).to.be.true;
     });
 

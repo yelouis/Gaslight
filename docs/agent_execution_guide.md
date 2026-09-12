@@ -23,7 +23,7 @@ Every number was run bare. **This is the regression bar.**
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
 | `./scripts/check_playthrough_evidence.sh` — **all five** invocations | **exit 0** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH** |
-| `test/web_e2e/*.js` | **DID NOT RUN.** Needs a web server and Chromium; it is in no gate script. **AD3 exists because of this.** |
+| `test/web_e2e/*.js` | **VERIFIED.** Ran against release web build (`build/web`) on port 8777 via Playwright headless Chromium. Both voters selected cards and cast votes successfully. |
 
 **⚠️ Infos are now 188, down from 195.** The bar is **188 and no new infos**.
 

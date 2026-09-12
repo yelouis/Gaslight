@@ -50,7 +50,7 @@ async function advanceMatchToGameOver(p1, p2, p3) {
       if (readyBtn) {
         await tryClickElement(page, n => n.role === 'button' && n.text === "I'M READY", `P${idx+1} Ready`);
       } else {
-        await tryClickElement(page, n => n.role === 'button' && !n.text.includes('Leave') && !n.text.includes('Mute') && !n.text.includes('CONFIRM') && !n.text.includes('CONTINUE'), `P${idx+1} Card Select`);
+        await tryClickElement(page, n => n.role === 'button' && (n.text.includes('OPTION') || n.ariaLabel.includes('OPTION')) && !n.text.includes('Leave') && !n.text.includes('Mute') && !n.text.includes('CONFIRM') && !n.text.includes('TAP A CARD TO CHOOSE') && !n.text.includes('CONTINUE'), `P${idx+1} Card Select`);
         await page.waitForTimeout(300);
         await tryClickElement(page, n => n.role === 'button' && n.text === 'CONFIRM VOTE', `P${idx+1} Confirm Vote`);
       }

@@ -577,8 +577,6 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                 child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
               ),
           ] else ...[
-            if (_localSelectedAuthorId == null)
-              const SizedBox(width: 0, height: 0, child: Opacity(opacity: 0, child: Text('CONFIRM VOTE'))),
             PrimaryButton(
               text: _localSelectedAuthorId == null ? 'TAP A CARD TO CHOOSE' : 'CONFIRM VOTE',
               onPressed: _localSelectedAuthorId == null

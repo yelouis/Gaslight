@@ -79,15 +79,17 @@ async function advanceMatchToGameOver(p1, p2, p3) {
       if (readyBtn) {
         await tryClickElement(page, n => n.role === 'button' && n.text === "I'M READY", `P${idx+1} Ready`);
       } else {
-        const confirmBtn = await findSemanticsElement(page, n => n.role === 'button' && n.text === 'CONFIRM VOTE');
+        const confirmBtn = await findSemanticsElement(page, n => n.role === 'button' && (n.text === 'CONFIRM VOTE' || n.text === 'TAP A CARD TO CHOOSE'));
         if (confirmBtn) {
           allVotersDone = false;
           const els = await getSemanticsElements(page);
           const optionCards = els.filter(n => 
             n.role === 'button' && 
+            (n.text.includes('OPTION') || n.ariaLabel.includes('OPTION')) &&
             !n.text.includes('Leave') && 
             !n.text.includes('Mute') && 
             !n.text.includes('CONFIRM') && 
+            !n.text.includes('TAP A CARD TO CHOOSE') &&
             !n.text.includes('CONTINUE') && 
             !n.text.includes('READY') && 
             !n.text.includes('PROCEED') && 

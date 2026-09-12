@@ -8,24 +8,25 @@
 
 ## 1. Open & in-flight
 
-**Wave AC verified, September 12, 2026 — all five items land, with three follow-ups.** Issues 171–174 are resolved and indexed in §3. Verified by reading source and falsifying, not from commit bodies.
+**Wave AD verified, September 12, 2026 — all three cleanup items delivered and verified.** AD1–AD3 are resolved and indexed in §3. Verified by reading source and falsifying, not from commit bodies.
 
 **What the falsifications proved:**
-- **AC1's contrast fix is now mechanically guarded.** Restoring `AppColors.ink` on the rule label fails the new *rendered* test (`contrast_tokens_test.dart`) while the other two pass. **This closes the gap lesson §2.42 was written about** — the defect class that shipped invisible is now caught.
-- **AC2's sync gate really covers samples.** Tampering with one sample in the generated Dart mirror gives exit 1; restoring gives exit 0. 150/150 prompts carry a sample.
-- **AC4's trap fix is in place**: the re-roll draw now passes `new Set([...inPlay, ...cardSeen])` as `excluded` with `inPlay` as `mustAvoid`, so history is preferred-against but the draw still never refuses.
-- **AC5's top-up fires only on exhaustion** — `drawWithFallbackExcluding` tries the room deck first and reaches for the fallback only when nothing unseen remains.
+- **AD1's decoy widget is deleted and the test assertion updated to 'TAP A CARD TO CHOOSE'.** Falsification: deleting `PrimaryButton` from `phase3_vote.dart` causes `phase3_vote_target_ready_toggle_test.dart` to fail with 0 widgets found matching 'TAP A CARD TO CHOOSE'. No decoy or proxy stands in for the button. All 20 over-reach guards passed unedited.
+- **AD2's three AC5 validations (AC5.3, AC5.4, AC5.5) are fully guarded and falsified:**
+  - Eager top-up fails AC5.4 (room deck preferred while unseen prompts remain).
+  - Marking `rated_r_nsfw` as fallback fails AC5.5 (fallback deck is PG rating property, asserting `PromptDecks.getDeckRating(PromptDecks.getFallbackDeckId()) === "PG"`).
+  - Throwing path on exhaustion fails AC5.3 (terminal never-refuses contract).
+  - Design doc `design_prompt_system.md` §5 updated with exhaustion-only ordering and load-bearing PG safety.
+- **AD3's web E2E scripts are repointed:**
+  - Real break in `run_match_summary_playthrough.js` resolved: voter check updated to recognize `TAP A CARD TO CHOOSE` alongside `CONFIRM VOTE`.
+  - Negative filter hazard in `run_full_playthrough.js` resolved: candidate cards matched positively via `OPTION` and explicitly exclude `TAP A CARD TO CHOOSE`.
+  - Verified against local release web build served on port 8777 via Playwright headless Chromium.
 
-**⚠️ Three follow-ups are specced as Wave AD in `agent_execution_guide.md`. None needs a decision; all three have one correct fix.**
-1. **A decoy widget was added to production code to keep an assertion passing** — see lesson §2.43. Deleting the vote screen's confirm button entirely still leaves its suite green.
-2. **Three of AC5's specified validations were not written** (AC5.3–AC5.5), including the over-reach guard that proves the fallback is not consulted early. The behaviour is correct; nothing protects it.
-3. **AC3 renamed a button that two ungated web E2E scripts match on literally**, and one of them filters candidate cards with `!n.text.includes('CONFIRM')` — a filter that no longer excludes the confirm button.
-
-**Every gate is green:** 0 errors · 0 warnings · **188 infos** (down from 195) · **346** client tests · **157** functions tests · decks, all five evidence invocations, and deploy all exit 0.
+**Every gate is green:** 0 errors · 0 warnings · **188 infos** · **346** client tests · **157** functions tests · decks, all five evidence invocations, and deploy all exit 0.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-All issues from the September 8 playthrough have been resolved (Issues 153–170). Wave AB (AB1 target guess multiplier exemption, AB2 running rivalries & closest read, production functions deploy with CLEANUP_DRY_RUN=false, and AB3 Marionette evidence re-capture E50–E63) and Wave AC (AC1–AC5) are fully delivered and verified. The open queue is empty.
+All issues from the September 8 playthrough and Waves AA, AB, AC, and AD have been resolved. The open queue is empty.
 
 ---
 
@@ -368,6 +369,9 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AD / AD1 — delete decoy CONFIRM VOTE widget & fix voter assertion** (deleted invisible zero-sized `CONFIRM VOTE` widget from `phase3_vote.dart:580–581` added during AC3; updated `phase3_vote_target_ready_toggle_test.dart:171` to assert `TAP A CARD TO CHOOSE`; audited all other `CONFIRM VOTE` references; falsified by deleting `PrimaryButton` and observing test failure; all 20 over-reach guards passed unedited) | AD1 | `lib/screens/phase3_vote.dart`; `test/phase3_vote_target_ready_toggle_test.dart`; `docs/ongoing_general_errors.md` §2.43 |
+| **Wave AD / AD2 — write & falsify AC5 validations** (asserted `PromptDecks.getDeckRating(PromptDecks.getFallbackDeckId()) === "PG"` in `functions/test/prompt_decks.spec.ts`; falsified AC5.4 via eager fallback consultation, AC5.5 via R-rated fallback deck, and AC5.3 via throwing exhaustion path; documented exhaustion-only ordering and load-bearing PG rating in `design_prompt_system.md` §5) | AD2 | `functions/test/prompt_decks.spec.ts`; `docs/design_prompt_system.md` §5 |
+| **Wave AD / AD3 — re-point web E2E scripts to positive card matching** (re-pointed `test/web_e2e/run_full_playthrough.js` to positively match `OPTION` cards and explicitly exclude `TAP A CARD TO CHOOSE`; fixed real break in `run_match_summary_playthrough.js` where voter check required `CONFIRM VOTE` before card selection; validated end-to-end against local release web build on port 8777 via headless Chromium) | AD3 | `test/web_e2e/run_full_playthrough.js`; `test/web_e2e/run_match_summary_playthrough.js` |
 | **Wave AC / AC5 — fallback deck top-up on deck exhaustion** (implemented `PromptDecks.drawWithFallbackExcluding` in TS and Dart generator; tops up from `hypotheticals` when room deck has no unseen prompts remaining on both re-rolls and round-advance deals before relaxing; verified fallback deck is PG-rated; verified unseen preference on room deck and terminal non-throwing relaxation; emulator tested re-rolls and round deals; falsified by removing top-up) | 174 | `functions/src/prompt_decks.ts`; `functions/src/index.ts`; `lib/utils/prompt_decks.dart`; `test/fake_functions.dart`; `functions/test/prompt_decks.spec.ts`; `functions/test/game_e2e.spec.ts`; `design_prompt_system.md` §5 |
 | **Wave AC / AC4 — cap re-rolls at 3 per round & candidate chooser** (enforced `kMaxRerollsPerRound = 3` on server and client; fixed draw history trap in catalogue and custom draws by excluding `cardSeen`; tracked `rerollsThisRound` and distinct `rerollCandidates` in `sealed/{cardId}` with explicit round-advance reset in `concludeResolutionRound`; implemented `selectRerolledPrompt` callable with 6 validation steps; rendered `RE-ROLL PROMPT ({n} LEFT)` disabled at 0; rendered prompt chooser at cap with active indicator and collision handling; verified 320pt responsiveness with `FittedBox`; emulator and widget tested; falsified cap and exclusion trap) | AC4 (New Feature) | `functions/src/index.ts`; `lib/screens/phase2_craft.dart`; `test/phase2_craft_reroll_test.dart`; `functions/test/game_e2e.spec.ts`; `design_prompt_system.md` §5; `design_database_and_security.md`; `design_ui_direction.md` |
 | **Wave AC / AC3 — tap-to-choose instruction on vote deck** (rendered disabled button copy as `TAP A CARD TO CHOOSE` when `_localSelectedAuthorId == null` in `phase3_vote.dart`, reverting to `CONFIRM VOTE` upon selection; added `Tap to choose this one` cue in `AppColors.brass` 11pt on active card in `card_grid.dart` only when votable and unselected; strictly suppressed cue on unvotable cards [own forgery/truth and placeholders] and target view; zero behaviour changes; verified layout at 320pt across text scales 1.0 and 1.3 in `vote_option_truncation_test.dart` and 5 widget tests in `vote_tap_cue_test.dart`; falsified button copy and unvotable suppression) | 173 | `lib/screens/phase3_vote.dart`; `lib/widgets/card_grid.dart`; `test/vote_tap_cue_test.dart`; `design_ui_direction.md` |
