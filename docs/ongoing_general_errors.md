@@ -47,39 +47,7 @@ The structural asset the game already has and does not exploit: **the answers ar
 
 Your selection: I think it is already different enough now but if needed lets proceed with Option A and B by showing and updating the rivaleries each reveal and making it clear who knows who best.
 
----
 
-### Issue 170: The target's own card is now worth up to 5.5× a voter's best card
-
-**Status**: ⚠️ Confirmed Unresolved — **newly filed September 11, 2026 during Wave AA verification.** Not a bug; a balance interaction that no single issue evaluated because it only exists once two of them shipped together.
-
-Issue 162 gave the target `target_forger_guess` (+1 per correctly attributed forgery) and Issue 163 multiplied every card's points by the round number. Both were specced and reviewed separately. **They accrue to the same player on the same card**, on top of the pre-existing `believable_target` (+1 per truth-finder) which was already the target's rule — so the target seat now double-dips and the multiplier scales the result.
-
-Measured from the shipped `ScoringLogic`, best case per card:
-
-| Players | Forgeries | Target's card (believable + guesses) | A voter's best card | Ratio |
-|---|---|---|---|---|
-| 3 | 2 | **4** (2 + 2) | 2 | 2.0× |
-| 5 | 4 | **8** (4 + 4) | 2 | 4.0× |
-| 7 | 5 | **11** (6 + 5) | 2 | 5.5× |
-
-At round 3 those become **12**, **24** and **33** against a voter's 6. **The ratio is symmetric** — every player is the target exactly once per round, so nobody is structurally favoured. The concern is **variance**: at 7 players a single late target card can swing 33 points, which can decide a match on one player's reading of five strangers' prose.
-
-**This is untested at a table.** No option below is supported by play data, which is itself the strongest argument for the first one.
-
-**Option A (recommended)**: **Ship as-is and playtest before touching the numbers** — keep `kTargetForgeryGuessPoints = 1` and the multiplier applying to it.
-  - *Pros*: The ratio is symmetric, so the likeliest outcome is a swingy, dramatic end-game, which a party game usually wants. Changing untested numbers is guessing with extra steps. Both knobs are one-line constants in two files, so reversing costs nothing once there is evidence. AA11's transcript already renders `target_forger_guess` as its own line, so over-earning will be **visible on screen during play** rather than needing to be inferred.
-  - *Cons*: The first real match is the experiment, and if it does swing badly that match is spoiled. At 7 players the ceiling is large enough that a comeback can look arbitrary rather than earned.
-
-**Option B**: **Exempt `target_forger_guess` from the round multiplier** — score it flat, the way the unmask revenge ±1 already is exempt.
-  - *Pros*: Keeps late rounds meaningful without letting the one double-dipping seat compound; there is already precedent for an unmultiplied rule, so it needs no new concept and no new explanation in the manual. Caps the 7-player round-3 swing from 33 to 23.
-  - *Cons*: Makes the scoring less uniform — two rules multiply, one does not — which cuts against Issue 169's whole purpose of making scoring explainable. Guessing four forgers correctly in a late round would feel undervalued.
-
-**Option C**: **Cap total guess points per card** — award `min(correct, ceil(forgeries / 2))`, so at most half the forgeries can pay.
-  - *Pros*: Bounds the ceiling directly at the source and scales with table size rather than fighting the multiplier; the target still gains a real reason to play the seat. Keeps every rule multiplied, so the manual stays uniform.
-  - *Cons*: A cap is the least explainable of the three on a scoring screen — "you got 5 right, we counted 3" is exactly the kind of rule Issue 169 was filed about. Adds a third scoring concept to a game already carrying six.
-
-Your selection: Proceed with Option B.
 
 ## 2. Lessons that still bite
 
@@ -379,12 +347,13 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–169 — August 8 to September 11, 2026
+### Issues 65–170 — August 8 to September 11, 2026
 
-**93 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**94 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AB / AB1 — target forgery guess multiplier exemption** (exempted `target_forger_guess` points from round multiplier by reordering `calculateScoresAndBreakdown` to execute guess points calculation after the multiplier block in both `functions/src/scoring_logic.ts` and `lib/utils/scoring_logic.dart`; verified sum invariant holds; verified 2x3+3=9 at round 3 in TS and Dart suites; inverted test 4 in both suites and falsified with 15 vs 9) | 170 | `functions/src/scoring_logic.ts`; `lib/utils/scoring_logic.dart`; `functions/test/scoring_logic.spec.ts`; `test/scoring_logic_test.dart`; `design_scoring_and_ui.md` |
 | **Wave AA / Issue 160 — stacked-deck vote options** (replaced the scrolling one-per-row portrait list in `card_grid.dart` with Treatment 3, chosen by the user from four rendered mockups in `docs/mockups/vote_options/`; six options fit a 320×640 pt viewport with no vertical scroll while `AutoSizedAnswerText` still renders a full 100-character answer; bidirectional navigation via PREV/NEXT, horizontal swipe and jump dots, as the selection explicitly required; **rewrote** `vote_option_truncation_test.dart`'s P9 discoverability case, which had asserted the below-the-fold behaviour this removes) | 160 | `lib/widgets/card_grid.dart`; `test/stacked_deck_navigation_test.dart`; `test/vote_option_truncation_test.dart`; `design_ui_direction.md` |
 | **Wave AA / AA16a+AA16b — target unmasks the forgers** (new `submitTargetForgeryGuesses` callable modelled on `submitUnmaskGuess`, storing `Record<optionId, guessedAuthorId>` in `sealed/{cardId}` with thirteen rejections and replace-not-merge semantics; `+1` per correct attribution via `kTargetForgeryGuessPoints`, forgers deliberately unpenalised; points inherit the unmask withholding contract; tap-to-assign chip row on the vote screen, rendered **beside** the option grid rather than making it interactive, so the O9 read-only assertion stayed true and unedited) | 162 | `functions/src/index.ts`; `functions/src/scoring_logic.ts`; `lib/widgets/card_grid.dart`; `lib/screens/phase3_vote.dart`; `design_scoring_and_ui.md`; `design_database_and_security.md` |
 | **Wave AA / AA12 — in-game rules access** (manual affordance added to all three in-game `AppBar`s plus a per-phase guidance line; **`inGameAppBarHeight`'s trailing reserve parameterised** as `56 + 56*trailingSlots` because a second action silently broke the old fixed 112 pt assumption; `guidance_strings_test.dart` updated to the new verbatim strings, not loosened) | 164 | `lib/widgets/in_game_app_bar.dart`; all three phase screens; `test/in_game_app_bar_test.dart`; `test/phase4_header_overflow_test.dart`; `design_ui_direction.md` |

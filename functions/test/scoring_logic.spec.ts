@@ -324,7 +324,7 @@ describe('ScoringLogic Target Forgery Guesses (AA16a / Issue 162)', () => {
     expect(guessItem).to.be.undefined;
   });
 
-  it('4. round multiplier scales target forgery guess points and satisfies sum invariant', () => {
+  it('4. round multiplier does not scale target forgery guess points and satisfies sum invariant', () => {
     const targetGuesses: Record<string, string> = {
       'opt_f1': 'p_f1',
       'opt_f2': 'p_f2'
@@ -339,8 +339,51 @@ describe('ScoringLogic Target Forgery Guesses (AA16a / Issue 162)', () => {
       answerAuthors
     );
 
-    // Base target points: 2 believable_target + 2 target_forger_guess = 4 base. x3 = 12 total.
-    expect(result.deltas['p_target']).to.equal(12);
+    // Base target points: 2 believable_target * 3 + 2 target_forger_guess (unmultiplied) = 8 total.
+    expect(result.deltas['p_target']).to.equal(8);
+    for (const [pId, delta] of Object.entries(result.deltas)) {
+      expect(sumBreakdown(result.breakdown[pId])).to.equal(delta);
+    }
+  });
+
+  it('5. target forgery guess points are exempt from round multiplier: 2 x 3 + 3 = 9', () => {
+    const cardWith3Forgeries: CardModel = {
+      ...card,
+      sabotageAnswers: {
+        'p_f1': 'Lie 1',
+        'p_f2': 'Lie 2',
+        'p_f3': 'Lie 3'
+      },
+      options: [
+        { id: 'opt_truth', text: 'True answer' },
+        { id: 'opt_f1', text: 'Lie 1' },
+        { id: 'opt_f2', text: 'Lie 2' },
+        { id: 'opt_f3', text: 'Lie 3' }
+      ]
+    };
+    const authors3: Record<string, string> = {
+      'opt_truth': 'p_target',
+      'opt_f1': 'p_f1',
+      'opt_f2': 'p_f2',
+      'opt_f3': 'p_f3'
+    };
+    const targetGuesses3: Record<string, string> = {
+      'opt_f1': 'p_f1',
+      'opt_f2': 'p_f2',
+      'opt_f3': 'p_f3'
+    };
+
+    const r3State = createBaseState(3); // multiplier x3
+    const result = ScoringLogic.calculateScoresAndBreakdown(
+      r3State,
+      cardWith3Forgeries,
+      votes, // 2 votes for truth: believable_target = 2 * 3 = 6
+      targetGuesses3, // 3 correct attributions: +3 unmultiplied
+      authors3
+    );
+
+    // 2 * 3 + 3 = 9 (Option B contract: unmultiplied guesses, not 15)
+    expect(result.deltas['p_target']).to.equal(9);
     for (const [pId, delta] of Object.entries(result.deltas)) {
       expect(sumBreakdown(result.breakdown[pId])).to.equal(delta);
     }

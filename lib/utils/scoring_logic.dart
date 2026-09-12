@@ -68,7 +68,19 @@ class ScoringLogic {
       }
     });
 
-    // Target forgery author guesses (Issue 162 / AA16a)
+    final multiplier = state.currentRound < 1 ? 1 : state.currentRound;
+    if (multiplier > 1) {
+      for (final playerId in deltas.keys.toList()) {
+        final basePoints = deltas[playerId]!;
+        final multBonus = basePoints * (multiplier - 1);
+        deltas[playerId] = basePoints * multiplier;
+        if (multBonus != 0) {
+          addBreakdown(playerId, 'round_multiplier', multBonus);
+        }
+      }
+    }
+
+    // Target forgery author guesses (Issue 162 / AA16a / Issue 170 exempt from multiplier)
     final guesses = targetForgeryGuesses ?? currentCard.targetForgeryGuesses;
     final authors = answerAuthors ?? currentCard.answerAuthors;
     if (guesses != null && authors != null) {
@@ -93,18 +105,6 @@ class ScoringLogic {
           addBreakdown(targetId, 'target_forger_guess', kTargetForgeryGuessPoints);
         }
       });
-    }
-
-    final multiplier = state.currentRound < 1 ? 1 : state.currentRound;
-    if (multiplier > 1) {
-      for (final playerId in deltas.keys.toList()) {
-        final basePoints = deltas[playerId]!;
-        final multBonus = basePoints * (multiplier - 1);
-        deltas[playerId] = basePoints * multiplier;
-        if (multBonus != 0) {
-          addBreakdown(playerId, 'round_multiplier', multBonus);
-        }
-      }
     }
 
     return ScoreCalculationResult(deltas: deltas, breakdown: breakdown);

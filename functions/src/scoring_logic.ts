@@ -150,7 +150,19 @@ export class ScoringLogic {
       }
     }
 
-    // Target forgery author guesses (Issue 162 / AA16a)
+    const multiplier = Math.max(1, state.currentRound ?? 1);
+    if (multiplier > 1) {
+      for (const playerId of Object.keys(deltas)) {
+        const basePoints = deltas[playerId];
+        const multBonus = basePoints * (multiplier - 1);
+        deltas[playerId] *= multiplier;
+        if (multBonus !== 0) {
+          addBreakdown(playerId, "round_multiplier", multBonus);
+        }
+      }
+    }
+
+    // Target forgery author guesses (Issue 162 / AA16a / Issue 170 exempt from multiplier)
     const guesses = targetForgeryGuesses || currentCard.targetForgeryGuesses;
     const authors = answerAuthors || currentCard.answerAuthors;
     if (guesses && authors) {
@@ -172,18 +184,6 @@ export class ScoringLogic {
         if (authors[optionId] === guessedAuthorId) {
           deltas[targetId] = (deltas[targetId] || 0) + kTargetForgeryGuessPoints;
           addBreakdown(targetId, "target_forger_guess", kTargetForgeryGuessPoints);
-        }
-      }
-    }
-
-    const multiplier = Math.max(1, state.currentRound ?? 1);
-    if (multiplier > 1) {
-      for (const playerId of Object.keys(deltas)) {
-        const basePoints = deltas[playerId];
-        const multBonus = basePoints * (multiplier - 1);
-        deltas[playerId] *= multiplier;
-        if (multBonus !== 0) {
-          addBreakdown(playerId, "round_multiplier", multBonus);
         }
       }
     }

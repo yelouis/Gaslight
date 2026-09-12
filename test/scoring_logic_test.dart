@@ -361,7 +361,7 @@ void main() {
       expect(hasGuessItem, isFalse);
     });
 
-    test('4. round multiplier scales target forgery guess points and satisfies sum invariant', () {
+    test('4. round multiplier does not scale target forgery guess points and satisfies sum invariant', () {
       final r3State = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 2, currentRound: 3); // multiplier x3
       const targetGuesses = {
         'opt_f1': 'p_f1',
@@ -376,8 +376,50 @@ void main() {
         answerAuthors: answerAuthors,
       );
 
-      // Base target points: 2 believable_target + 2 target_forger_guess = 4 base. x3 = 12 total.
-      expect(result.deltas['p_target'], equals(12));
+      // Base target points: 2 believable_target * 3 + 2 target_forger_guess (unmultiplied) = 8 total.
+      expect(result.deltas['p_target'], equals(8));
+      for (final entry in result.deltas.entries) {
+        expect(sumBreakdown(result.breakdown[entry.key]), equals(entry.value));
+      }
+    });
+
+    test('5. target forgery guess points are exempt from round multiplier: 2 x 3 + 3 = 9', () {
+      final cardWith3Forgeries = card.copyWith(
+        sabotageAnswers: {
+          'p_f1': 'Lie 1',
+          'p_f2': 'Lie 2',
+          'p_f3': 'Lie 3',
+        },
+        options: [
+          CardAnswerOption(id: 'opt_truth', text: 'True answer'),
+          CardAnswerOption(id: 'opt_f1', text: 'Lie 1'),
+          CardAnswerOption(id: 'opt_f2', text: 'Lie 2'),
+          CardAnswerOption(id: 'opt_f3', text: 'Lie 3'),
+        ],
+      );
+      const authors3 = {
+        'opt_truth': 'p_target',
+        'opt_f1': 'p_f1',
+        'opt_f2': 'p_f2',
+        'opt_f3': 'p_f3',
+      };
+      const targetGuesses3 = {
+        'opt_f1': 'p_f1',
+        'opt_f2': 'p_f2',
+        'opt_f3': 'p_f3',
+      };
+
+      final r3State = GameState(roomCode: 'TEST', totalPlayers: 4, forgeriesPerCard: 2, currentRound: 3); // multiplier x3
+      final result = ScoringLogic.calculateScoresAndBreakdown(
+        state: r3State,
+        currentCard: cardWith3Forgeries,
+        playerVotes: votes, // 2 votes for truth: believable_target = 2 * 3 = 6
+        targetForgeryGuesses: targetGuesses3, // 3 correct attributions: +3 unmultiplied
+        answerAuthors: authors3,
+      );
+
+      // 2 * 3 + 3 = 9 (Option B contract: unmultiplied guesses, not 15)
+      expect(result.deltas['p_target'], equals(9));
       for (final entry in result.deltas.entries) {
         expect(sumBreakdown(result.breakdown[entry.key]), equals(entry.value));
       }
