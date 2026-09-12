@@ -129,25 +129,25 @@ Contributions ride the player's own document to avoid a new write path (rules al
 
 ---
 
-## 6. Sentence Stems — writing aids per prompt (Issue 166 / Wave AA5 — September 2026)
+## 6. Sample Answers — writing aids per prompt (Issue 172 / Wave AC2 — September 2026)
 
-**The problem it solves.** A player facing a hard prompt had no help. `RE-ROLL PROMPT` exists only on truth rounds, so on forgery rounds — writing in another player's voice, under the same timer — there was no aid and no escape.
+**The problem it solves.** In Wave AA5, sentence stems were provided as openers, but players found completing someone else's sentence fragment harder than answering the prompt directly. Wave AC2 replaces sentence stems with complete sample answers rendered inline beneath the answer field (`For example: "{sample}"`).
 
-**Where stems live.** On `DeckDefinition`, as an optional sibling map keyed by the **exact prompt text**:
+**Where samples live.** On `DeckDefinition`, as an optional sibling map keyed by the **exact prompt text**:
 
 ```ts
-/** Optional writing aids, keyed by the EXACT prompt text they belong to. */
-stems?: Record<string, string[]>;
+/** Optional sample answers, keyed by the EXACT prompt text they belong to. */
+samples?: Record<string, string[]>;
 ```
 
-`prompts: string[]` is unchanged. Coverage is currently **150 of 150 prompts across all five decks** (`hypotheticals` 50, `real_life` 25, `unhinged_quirks` 25, `love_life` 25, `rated_r_nsfw` 25), and stems are written to match each deck's register.
+`prompts: string[]` is unchanged. Coverage is currently **150 of 150 prompts across all five decks** (`hypotheticals` 50, `real_life` 25, `unhinged_quirks` 25, `love_life` 25, `rated_r_nsfw` 25), and samples are written to match each deck's tone and character constraints (≤ 100 characters, respecting `kMaxAnswerLength`).
 
-**A text-keyed map detaches silently when a prompt is reworded, so it is guarded at module load.** `validateDeckStems(DECK_LIST)` runs on import and **throws** if any stem key does not match a prompt in its own deck — the same posture as `getFallbackDeckId()`, which throws on a malformed catalogue. **Never soften this to a warning:** the failure it prevents is invisible (a stem that simply stops appearing), which is precisely the class of bug that survives a green test suite.
+**A text-keyed map detaches silently when a prompt is reworded, so it is guarded at module load.** `validateDeckSamples(DECK_LIST)` runs on import and **throws** if any sample key does not match a prompt in its own deck — the same posture as `getFallbackDeckId()`, which throws on a malformed catalogue. **Never soften this to a warning:** the failure it prevents is invisible (a sample that simply stops appearing), which is precisely the class of bug that survives a green test suite.
 
-**Nothing about stems reaches the server's game state.** The card carries only `promptText`; the client resolves stems locally from the generated mirror via `PromptDecks.getStemsForPrompt(promptText)`. Custom-deck prompts are not in the catalogue, so the lookup returns `undefined` and no stem renders — the correct degradation, and the reason this needed no schema change on the room or card.
+**Nothing about samples reaches the server's game state.** The card carries only `promptText`; the client resolves samples locally from the generated mirror via `PromptDecks.getSamplesForPrompt(promptText)`. Custom-deck prompts are not in the catalogue, so the lookup returns `undefined` and no sample renders — the correct degradation, and the reason this needed no schema change on the room or card.
 
-**⚠️ Stems are displayed, never inserted into the answer field.** Pre-filling would make every player's answer open identically, which is both dull and a direct feed into the duplicate-answer heuristic in `design_semantic_integrity.md` — the game would begin rejecting answers for a similarity it had itself created. `phase2_craft.dart` reads the stem for display only; nothing writes to `_answerController.text`.
+**⚠️ Samples are displayed, never inserted into the answer field.** Pre-filling would make every player's answer open identically, which is both dull and a direct feed into the duplicate-answer heuristic in `design_semantic_integrity.md` — the game would begin rejecting answers for a similarity it had itself created. `phase2_craft.dart` reads the sample for display only; nothing writes to `_answerController.text`.
 
-**One stem list per prompt, framed by phase.** Truth rounds render the stem plainly; forgery rounds frame it as writing *as* the target. Issue 166's option text asked for stems that differ by phase; a single shared list with phase-dependent framing was shipped instead, because the stem is an opener for the same prompt and the deception lives in the content, not the opener. **If genuinely distinct stems per phase are ever wanted, the field becomes `Record<string, {truth: string[], forgery: string[]}>` and the content cost doubles to 300.**
+**Option B's known consequence: Duplicate check on derived answers.** Every player writing on a card sees the *same* prompt and therefore the *same* sample answer. `TextSimilarity.isTooSimilar` compares a new answer against the other answers already on that card. If two players both lean heavily on the sample, the second submission is rejected with *"Too similar to an existing answer! Be more creative."* This is the semantic integrity heuristic functioning as designed and must not be weakened to accommodate sample borrowing.
 
-**The sync gate covers stems.** `./scripts/check_decks_in_sync.sh` regenerates and diffs, so a stems-only divergence fails it. **Verified by falsification, September 11, 2026:** tampering with a single stem key in `lib/utils/prompt_decks.dart` produced exit 1; restoring produced exit 0. This matters because a generator that silently ignored `stems` would leave both sides equally empty and the gate would pass vacuously.
+**The sync gate covers samples.** `./scripts/check_decks_in_sync.sh` regenerates and diffs, so a samples-only divergence fails it. **Verified by falsification, September 12, 2026:** tampering with a single sample in `lib/utils/prompt_decks.dart` produced exit 1; restoring produced exit 0. This matters because a generator that silently ignored `samples` would leave both sides equally empty and the gate would pass vacuously.

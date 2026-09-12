@@ -8,6 +8,7 @@ import 'package:gaslight/models/card_model.dart';
 import 'package:gaslight/screens/phase2_craft.dart';
 import 'package:gaslight/services/game_service.dart';
 import 'package:gaslight/utils/prompt_decks.dart';
+import 'package:gaslight/utils/text_similarity.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart';
 
@@ -41,15 +42,15 @@ void main() {
         isHost: false,
       );
 
-  group('AA5 (Issue 166): Sentence Stems Per Prompt Tests', () {
+  group('AC2 (Issue 172): Sample Answers Per Prompt Tests', () {
     testWidgets(
-      'catalogue prompt renders stem in truth mode and forgery mode; answer controller remains empty',
+      'catalogue prompt renders sample in truth mode and forgery mode; answer controller remains empty',
       (WidgetTester tester) async {
         const promptText = "The first thing I'm stealing if looting becomes completely legal for one night.";
-        final expectedStems = PromptDecks.getStemsForPrompt(promptText);
-        expect(expectedStems, isNotNull);
-        expect(expectedStems!.isNotEmpty, isTrue);
-        final expectedStem = expectedStems.first;
+        final expectedSamples = PromptDecks.getSamplesForPrompt(promptText);
+        expect(expectedSamples, isNotNull);
+        expect(expectedSamples!.isNotEmpty, isTrue);
+        final expectedSample = expectedSamples.first;
 
         // 1. Truth round test
         final truthCard = CardModel(
@@ -79,9 +80,9 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
 
-        final stemFinder = find.byKey(const ValueKey('sentence_stem_hint'));
-        expect(stemFinder, findsOneWidget);
-        expect(find.text('Starter: "$expectedStem…"'), findsOneWidget);
+        final sampleFinder = find.byKey(const ValueKey('sentence_sample_hint'));
+        expect(sampleFinder, findsOneWidget);
+        expect(find.text('For example: "$expectedSample"'), findsOneWidget);
 
         // Assert answer field controller is never pre-filled
         final textField = tester.widget<TextField>(find.byKey(const ValueKey('answer_field')));
@@ -107,8 +108,8 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
 
-        expect(stemFinder, findsOneWidget);
-        expect(find.text('Writing as Bob: "$expectedStem…"'), findsOneWidget);
+        expect(sampleFinder, findsOneWidget);
+        expect(find.text('For example: "$expectedSample"'), findsOneWidget);
 
         final textFieldForgery = tester.widget<TextField>(find.byKey(const ValueKey('answer_field')));
         expect(textFieldForgery.controller?.text, isEmpty);
@@ -116,10 +117,10 @@ void main() {
     );
 
     testWidgets(
-      'prompt not in catalogue renders no stem hint and does not throw',
+      'prompt not in catalogue renders no sample hint and does not throw',
       (WidgetTester tester) async {
         const customPrompt = 'A completely non-catalogue custom prompt for testing';
-        expect(PromptDecks.getStemsForPrompt(customPrompt), isNull);
+        expect(PromptDecks.getSamplesForPrompt(customPrompt), isNull);
 
         final card = CardModel(
           targetPlayerId: 'p_host',
@@ -148,11 +149,33 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
 
-        final stemFinder = find.byKey(const ValueKey('sentence_stem_hint'));
-        expect(stemFinder, findsNothing);
+        final sampleFinder = find.byKey(const ValueKey('sentence_sample_hint'));
+        expect(sampleFinder, findsNothing);
 
         final textField = tester.widget<TextField>(find.byKey(const ValueKey('answer_field')));
         expect(textField.controller?.text, isEmpty);
+      },
+    );
+
+    test(
+      'Option B known consequence: two answers derived from sample on one card are rejected by similarity check',
+      () {
+        const promptText = "The first thing I'm stealing if looting becomes completely legal for one night.";
+        final sample = PromptDecks.getSamplesForPrompt(promptText)!.first;
+        expect(sample, equals("A commercial wheel of aged parmesan and two espresso machines"));
+
+        // Player 1 submits an answer derived from the sample
+        final answer1 = sample;
+        // Player 2 also leans on the sample and submits a closely derived variation
+        const answer2 = "A commercial wheel of aged parmesan and espresso machines";
+
+        // The text similarity heuristic flags this as too similar
+        final isTooSimilar = TextSimilarity.isTooSimilar(answer2, [answer1]);
+        expect(
+          isTooSimilar,
+          isTrue,
+          reason: 'Duplicate check must reject closely derived sample answers without weakening heuristic',
+        );
       },
     );
   });

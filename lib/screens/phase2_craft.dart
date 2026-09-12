@@ -548,8 +548,8 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
         ? 'Write something true about you. You score points for every player who identifies your answer.'
         : 'Write a convincing lie as $targetName. You score points for every player you fool.';
 
-    final stems = PromptDecks.getStemsForPrompt(targetCard.promptText);
-    final String? stem = (stems != null && stems.isNotEmpty) ? stems.first : null;
+    final samples = PromptDecks.getSamplesForPrompt(targetCard.promptText);
+    final String? sample = (samples != null && samples.isNotEmpty) ? samples.first : null;
 
     return Column(
       children: [
@@ -710,15 +710,13 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
                             );
                           },
                         ),
-                        if (stem != null) ...[
+                        if (sample != null) ...[
                           const SizedBox(height: 8),
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              isTruthRound
-                                  ? 'Starter: "$stem…"'
-                                  : 'Writing as $targetName: "$stem…"',
-                              key: const ValueKey('sentence_stem_hint'),
+                              'For example: "$sample"',
+                              key: const ValueKey('sentence_sample_hint'),
                               style: const TextStyle(
                                 fontFamily: 'Lora',
                                 fontStyle: FontStyle.italic,

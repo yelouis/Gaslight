@@ -31,37 +31,7 @@ All issues from the September 8 playthrough have been resolved (Issues 153–170
 
 
 
-### Issue 172: Sentence stems ask the wrong thing; sample answers were requested instead
 
-**Status**: ⚠️ Confirmed Unresolved — reported from a device playthrough on September 12, 2026. Delivered in Wave AA5 (Issue 166) as **150 stems across 150 prompts**, rendered beneath the answer field as `Starter: "…"`.
-
-**What was observed.** For the prompt *"The weird luxury I would insist on putting in my personal doomsday bunker."* the stem rendered as `Starter: "The bunker is non-negotiable without a custom..."`. The user's objection is conceptual rather than a complaint about that one string:
-
-> *"These sentence stems don't really make sense. Maybe instead of sentence stems, write some sample answers in case of the player can't think of anything"*
-
-**The diagnosis is that a stem and an answer are different cognitive tasks.** A stem asks the player to continue someone else's half-finished sentence, which is harder than answering the prompt outright, not easier — and the rendered form (quoted, trailing ellipsis) reads like a fragment of somebody else's answer rather than a scaffold for your own. Some stems are genuinely serviceable (`"I'd be banished for constantly"`), which is why this shipped; the ones that are not are the ones a stuck player meets at the worst moment.
-
-**⚠️ The reason stems were chosen over samples in the first place still applies and must be designed around.** `design_prompt_system.md` §6 records it: an aid that is *displayed* to every player for the same prompt invites copying, and copying feeds the duplicate-answer heuristic in `design_semantic_integrity.md` — **the game would start rejecting answers for a similarity it had itself created.** A complete sample answer is far more copyable than an opener. Any option below must say how it avoids that.
-
-**Option A (recommended)**: **Replace stems with full sample answers, shown on demand behind a `STUCK?` control** — the field stays clean by default and the sample appears only when asked for.
-  - *Pros*: Exactly what was requested, and *"in case the player can't think of anything"* describes an on-demand affordance rather than a permanent one. Because the default path shows nothing, the homogenisation risk is confined to the players who actually ask — which is the minority, and the ones for whom a nudge beats a blank page. Reclaims the vertical space the stem currently occupies on a screen that is already tight (Issues 157 and 160).
-  - *Cons*: 150 sample answers is the same content bill AA5 just paid, and the stems would be deleted. Adds a control to the craft screen. A player who taps it can still copy, so the duplicate heuristic may occasionally fire on someone who was trying to follow the example.
-
-**Option B**: **Replace stems with sample answers shown inline, always visible** — same content, no control.
-  - *Pros*: Maximum help with zero interaction; the player who needs it does not have to know a control exists, which is the same reasoning that put the rules on every phase screen in Issue 164. No new widget.
-  - *Cons*: Every player sees the same complete answer for the same prompt every time, which is the strongest possible version of the homogenisation and duplicate-rejection risk above. Keeps consuming the vertical space the stem already consumes.
-
-**Option C**: **Keep the per-prompt mechanism but change what it shows — a sample answer for a *different* prompt**, presented as an example of the *shape* of a good answer rather than content for this one.
-  - *Pros*: Teaches the register — specific, surprising, plausible — with nothing copyable, so the duplicate risk goes to zero. One example could serve an entire deck rather than needing 150, which is roughly a fifth of the content bill of A or B.
-  - *Cons*: Does not help with the prompt actually in front of the player, which is what they asked for; an unrelated example on screen during a timed round may read as a mistake. The weakest answer to the original Issue 166 problem.
-
-**Option D**: **Remove the writing aid entirely** and rely on `RE-ROLL PROMPT`.
-  - *Pros*: Deletes the complaint and 150 stems of content; simplifies the craft screen and recovers its vertical space.
-  - *Cons*: Re-roll exists only on truth rounds, so forgery rounds — the harder task, writing in another player's voice — would again have no aid at all. That is the exact gap Issue 166 was filed to close, so this reopens it.
-
-Your selection: Proceed with Option B.
-
----
 
 ### Issue 173: `CONFIRM VOTE` is greyed out with nothing saying an option must be tapped
 
@@ -457,10 +427,11 @@ Full narratives are in `git log`; **the durable consequences live in the design 
 
 ### Issues 65–171 — August 8 to September 12, 2026
 
-**95 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**96 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AC / AC2 — inline sample answers replace sentence stems** (replaced 150 sentence stems with 150 complete sample answers in `functions/src/prompt_decks.ts` under `samples` field; enforced module load validation with `validateDeckSamples`; regenerated `lib/utils/prompt_decks.dart`; rendered `For example: "$sample"` with `sentence_sample_hint` key in `phase2_craft.dart` without prefilling `_answerController`; documented similarity check collision on derived answers in `craft_sentence_stem_test.dart` and `design_prompt_system.md` §6; falsified module load validation and sync gate) | 172 | `functions/src/prompt_decks.ts`; `lib/utils/prompt_decks.dart`; `lib/screens/phase2_craft.dart`; `test/craft_sentence_stem_test.dart`; `functions/test/prompt_decks.spec.ts`; `design_prompt_system.md` §6 |
 | **Wave AC / AC1 — collapse score breakdown behind tap & fix contrast** (collapsed per-player itemised score breakdown behind tap in `phase4_reveal.dart` with uniform collapsed chip height; expanded rule lines use `AppColors.brass` for rule names and `AppColors.ivory` for point deltas, completely eliminating `onSurface`/`ink` contrast defect; added verbatim hint `Tap a player to see their score breakdown` in `brass` 11pt; reset expansion state on card advance keyed on `currentReaderId`; added rendered contrast test asserting ratio >= 4.5:1 on rendered `Text` widgets in `contrast_tokens_test.dart` and 4 widget tests in `phase4_reveal_breakdown_test.dart`; falsified contrast with `onSurface` at 1.01:1 and card advance reset) | 171 | `lib/screens/phase4_reveal.dart`; `test/contrast_tokens_test.dart`; `test/phase4_reveal_breakdown_test.dart`; `design_ui_direction.md` |
 | **Wave AB / AB3 — Marionette playthrough evidence re-capture (E50–E63)** (captured 19 new PNG screenshots across Match A [5 players, room YPQR] and Match B [3 players, room BYVU]; verified E50–E63 under verbatim manifest R6 contract in `findings_waveAA.md`; annotated superseded blocks in `findings_marionette.md` and `findings_web.md`; falsified R5 and R6 gates; verified all 5 evidence gates exit 0 bare) | Wave AB | `docs/playthroughs/findings_waveAA.md`; `docs/playthroughs/manifest.md`; `docs/playthroughs/evidence/ARTEFACTS.tsv` |
 | **Wave AB / AB2 — running rivalries & closest read superlative** (published `runningRivalries` `{ fools, reads }` with `count >= 1` sliced to top 3 per direction on room at reveal and game over; rendered `THE PARLOUR REMEMBERS` section on reveal after author flip with exact copy and `CLOSEST READ` superlative over reads; displayed reads in game-over `RIVALRIES` container; preserved strict author leak prevention during unmask window; verified leak guard, flush sites, attributions, thresholds, 320 pt responsiveness, and over-reach guards; falsified leak and threshold guards) | 165 | `functions/src/index.ts`; `functions/src/scoring_logic.ts`; `lib/models/game_state.dart`; `lib/screens/phase4_reveal.dart`; `lib/screens/game_over_screen.dart`; `test/running_rivalries_test.dart`; `functions/test/game_e2e.spec.ts`; `design_scoring_and_ui.md`; `design_database_and_security.md`; `design_ui_direction.md` |
