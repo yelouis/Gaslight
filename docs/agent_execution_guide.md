@@ -1,18 +1,20 @@
-# Agent Execution Guide — Wave AF: 1 approved item (a release) — September 12, 2026
+# Agent Execution Guide — Wave AG: 2 approved items — September 27, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Every number and literal string in this document is a decision, not a suggestion.**
 
-Issue 176 was selected on September 12, 2026 (**Option A**) and is specced as **AF1**. It is the only approved work.
+Two defects from a September 27 device playthrough on `1.1.0 (8)`, each with one correct fix, are specced as **AG1** and **AG2**. They need no selection.
 
-**⚠️ AF1 is a release, not a code change.** Exactly **one line** of the repository changes. Everything else is procedure and verification. **If you find yourself editing a test, a screen or a plist, stop — you have left the item.**
+**⚠️ Issue 177 (The Parlour Remembers redesign) is open and UNSELECTED** in `docs/ongoing_general_errors.md`, with rendered drafts at https://claude.ai/artifact/13Yt55TWsqge1YQBDLg1uz. **Do not start it.** An unselected issue is a question, not an instruction, and `(recommended)` is not approval. **AG2 touches the same reveal screen — keep AG2 to the point chips and do not restyle `THE PARLOUR REMEMBERS` block while you are there.**
+
+**Do not invent work beyond AG1, AG2 and §4.1.**
 
 ---
 
-## 1. Verified baseline — measured on `4a6aee7`
+## 1. Verified baseline — measured on `2db259c`
 
-**This is the regression bar.** Every number was run bare. **All eight gates must be green before AF1 ships.**
+**This is the regression bar.** All eight gates must stay green.
 
 | Gate | Result |
 |---|---|
@@ -22,107 +24,110 @@ Issue 176 was selected on September 12, 2026 (**Option A**) and is specced as **
 | `npm --prefix functions test` | **157 passing**, exit 0 |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
 | `./scripts/check_playthrough_evidence.sh` — **all five** invocations | **exit 0** |
-| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH** |
-| `./scripts/check_web_e2e_strings.sh` | **exit 0** — 32 UI strings, 3 scripts containment-clean |
+| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH** (re-run bare September 27) |
+| `./scripts/check_web_e2e_strings.sh` | **exit 0** |
 
-**⚠️ `flutter analyze lib test` exits 1 even when clean.** The bar is **0 errors / 0 warnings / 188 infos**, never `exit 0`. Use `lib test`, never bare `flutter analyze`.
+**⚠️ `flutter analyze lib test` exits 1 even when clean.** The bar is **0 errors / 0 warnings / 188 infos**, never `exit 0`.
 
-**⚠️ Read every exit code bare, never through a pipe.** `… | tail` reports `tail`'s status, always 0.
+**⚠️ Read every exit code bare, never through a pipe** — and **never through `timeout`, which does not exist on macOS.** A log query run as `timeout … | grep …` on September 27 failed with `command not found`, the grep filtered that out, and the empty result read as "no errors" (lesson §2.44).
+
+**⚠️ Neither AG item touches `functions/src/`.** Do not deploy functions and do not re-apply `CLEANUP_DRY_RUN`.
 
 ---
 
-## 2. AF1 — Issue 176 → Option A: ship as `1.1.0+8`
+## 2. AG1 — Replace the raw stack trace on CREATE ROOM with a sentence, through a mapping shared with JOIN ROOM
 
-**What this means for the user.** Five waves of work — the re-worked craft screen, stacked-deck voting, target forgery guessing, running rivalries, the score transcript, sample answers, the re-roll cap — are currently queued to ship under `1.0.0+7`, a build number allocated to Wave Z's single leave-button fix. After this they ship as **`1.1.0 (8)`**, and the title-screen label tells a tester they are holding a genuinely different app.
+**What this means for the user.** When creating a room fails today, the screen fills with a stack trace. The player can't tell what went wrong, and the line that would tell the developer — the error code — ends up hidden under the phone's status bar. After this, they see one plain sentence, and a connection failure says so.
 
-### 2.1 The only code change
+**The gap.** `lib/screens/lobby_screen.dart:203`:
 
-`pubspec.yaml`: `version: 1.0.0+7` → **`version: 1.1.0+8`**.
+```dart
+ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+```
 
-**That is the entire diff to the application.** Two things make it sufficient, and both were verified this session:
+`FirebaseException.toString()` appends the stack trace, so the SnackBar renders the frames the user screenshotted. **It is the only raw-exception display left in `lib/`.**
 
-- **iOS needs no plist edit.** `ios/Runner/Info.plist` sets `CFBundleShortVersionString` to `$(FLUTTER_BUILD_NAME)` and `CFBundleVersion` to `$(FLUTTER_BUILD_NUMBER)`, both fed from `pubspec.yaml` at build time.
-- **The title-screen label needs no code change.** It reads the *running bundle* via `PackageInfo.fromPlatform()` in `initAppVersion()`, which is the whole point of Issue 151 — it reports what is installed, not what the source claimed. It will read `v1.1.0 (8)` with no further work.
+**This defect was fixed once already — in the twin.** `_joinRoom`, directly below at `:212`, maps `e.code` to sentences, and `test/lobby_join_error_test.dart:44` is literally *"join non-existent room displays mapped readable sentence and no raw exception/stack trace"*. **`_createRoom` never got the same fix.** So the fix below is structural: one mapping both paths use, so they can't drift apart again.
 
-### 2.2 ⚠️ The one test you must not touch
+**Root cause, as far as it can be established — record it, don't re-investigate it.** The failing call **never reached Cloud Functions**. Cloud Run's request log has no request to any function between 02:30 and 04:30 UTC on September 28, the window around the 8:01 PM PDT screenshot, while the identical query over 20:30–21:00 UTC on September 27 returns a full game's traffic. Every `createroom` request in fourteen days returned HTTP 200. **So this was a client-side failure, most likely network-level.** The exact code was on the hidden line and can't be recovered. **Don't change server code for this item.**
 
-`test/lobby_version_test.dart` contains `version: '1.0.0'` and `expect(find.text('v1.0.0 (6)'), findsOneWidget)`. **Leave both exactly as they are.**
+### 2.1 Implementation
 
-Those values come from `PackageInfo.setMockInitialValues(...)` — the test **mocks** the bundle and asserts the *formatting* (`v{version} ({buildNumber})`), deliberately independent of whatever the app is actually versioned at. **Updating them to `1.1.0`/`8` would couple the test to the shipped version and guarantee churn on every future bump, for no gain.** A test that must be edited to stay green is a test that has stopped being a check.
+1. **Add one shared mapping**, `String lobbyCallableErrorMessage(Object error, {required LobbyAction action})`, with `enum LobbyAction { create, join }`, in `lib/screens/lobby_screen.dart` or a small file beside it. Both `_createRoom` and `_joinRoom` call it. **Delete `_joinRoom`'s inline `switch` once it delegates** — two copies are how the create path fell behind.
 
-**`flutter test` must still report 346 after the bump.** Any movement means something was edited that should not have been.
+2. **The mapping, exactly.** Every string in the join column **must stay byte-identical to today's**, because `test/lobby_join_error_test.dart` asserts them verbatim and must pass unedited.
 
-### 2.3 ⚠️ Delete two stale artefacts before building
-
-Both exist on disk right now and both will mislead verification:
-
-| Path | Contents | Why it is dangerous |
+| `e.code` | `create` | `join` |
 |---|---|---|
-| `build/ios/archive/Runner.xcarchive` | dated **2026-09-07 21:21**, `CFBundleShortVersionString` **1.0.0**, `CFBundleVersion` **6** | It is the *build 6* archive. If the new build fails, this is what an inattentive check finds — and it reports a plausible-looking version. |
-| `build/ios/ipa/gaslight.ipa` | dated **2026-08-25 19:16** | Eighteen days old, from the build-2 era. **`flutter build ipa` will not overwrite it**, because the export step fails on this machine. |
+| `not-found` | *(not thrown by create)* — use the generic sentence | `No room with that code. Check the four letters and try again.` |
+| `invalid-argument` | `Enter your name to open a room.` | `Enter your name and a four-letter room code.` |
+| `resource-exhausted` | `Could not find a free room code. Try again.` | generic |
+| `unauthenticated` | `Could not sign in. Check your connection and try again.` | `Could not sign in. Check your connection and try again.` |
+| `unavailable`, `deadline-exceeded` | **`Could not reach the parlour. Check your connection and try again.`** | **same** (new for join too) |
+| anything else, and any non-`FirebaseFunctionsException` | `Something went wrong. Try again.` | `Something went wrong. Try again.` |
 
-**Delete both first.** After that, anything present under `build/ios/` was produced by your run, and the timestamp check in §2.5 cannot be satisfied by an old file.
+   The create-side codes are the complete set its callable throws — `invalid-argument`, `resource-exhausted`, `unauthenticated` (from `export const createRoom` in `functions/src/index.ts`) — plus the two client-side network codes. **Match on `e.code`, never on `e.message`** (standing invariant).
 
-### 2.4 Build
+3. **`internal` stays generic.** `lobby_join_error_test.dart`'s over-reach guard 3 asserts *"unmapped code (internal) produces generic message"*. **Don't map `internal` to the connection sentence** even though iOS may raise a network failure as `internal` — the test is the contract.
 
-Run the **full eight-gate preflight** from §1 first — a release is the one moment the whole battery has to be green simultaneously.
+4. **Keep the diagnostic, move it out of sight.** `_createRoom` already has `debugPrint('Error creating room: $e')`; keep it, and give `_joinRoom` the equivalent. The raw exception belongs in the console, never on screen.
 
-```bash
-flutter build ipa
-```
+### 2.2 Validation
 
-**⚠️ This will end in an error and that is expected, not a failure.** The *export* step fails with `No Accounts` / `No signing certificate "iOS Distribution" found` because this machine has **no Apple Distribution certificate**. **The `.xcarchive` is still produced**, and Organizer distributes it. Do not "fix" the signing configuration.
+**Write the tests in a new file, `test/lobby_create_error_test.dart`.** Leave `lobby_join_error_test.dart` byte-identical so "unedited" is trivially checkable. Reuse the `ErrorFakeFirebaseFunctions` helper that `test/lobby_busy_state_test.dart:128` already uses to throw a chosen code.
 
-### 2.5 Verify the ARCHIVE, never the `.ipa`
+1. **The falsifying test, which mirrors the join one:** create throws `unavailable` → the SnackBar reads exactly `Could not reach the parlour. Check your connection and try again.`, and **`find.textContaining('#0')`, `find.textContaining('firebase_functions')` and `find.textContaining('Exception')` all find nothing.**
+2. One test per remaining create mapping: `invalid-argument`, `resource-exhausted`, `unauthenticated`, `internal` → generic, and a plain `Exception('boom')` → generic.
+3. **Join gains the network sentence:** join throws `unavailable` → the connection sentence. Put this in the new file too.
+4. **Over-reach guards, unedited:** all four tests in `test/lobby_join_error_test.dart`, and all four in `test/lobby_busy_state_test.dart`. **Guard 2 there throws `internal` on create and asserts the button re-enables**, which still has to hold.
+5. **Falsification:** restore `Text('Error: $e')` in `_createRoom`. Test 1 must fail on finding raw exception text. **If it passes, the test isn't looking at the SnackBar.**
+6. **Recommended device check — do it if you can, and record the result either way.** On a physical iPhone running a release build, turn off Wi-Fi and cellular and tap **CREATE ROOM**. Record **which sentence appears** and **which code `debugPrint` logs** in the Xcode console. **That tells us which code iOS actually uses for a network failure**, which nobody has confirmed yet. If it turns out to be `internal`, report it and don't change the mapping — changing it would contradict the join contract, and that's a decision, not a fix.
 
-```bash
-stat -f "%Sm" -t "%Y-%m-%d %H:%M" build/ios/archive/Runner.xcarchive
-/usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleShortVersionString" build/ios/archive/Runner.xcarchive/Info.plist
-/usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleVersion" build/ios/archive/Runner.xcarchive/Info.plist
-```
-
-**All three must hold: the timestamp is from your run, the short version is `1.1.0`, and the build version is `8`.** If any is wrong, the archive is not yours — go back to §2.3. **This is the check that has caught a stale archive before**, when one predated the fix it was supposed to contain by 27 minutes.
-
-### 2.6 Distribute and confirm
-
-1. `open build/ios/archive/Runner.xcarchive` → Organizer → **Distribute App** → **App Store Connect** → **Upload**.
-2. TestFlight: add build **8** to the **ME** and **FR** groups.
-3. **Expire builds 5 and 6.** Build 6 carries the Issue 152 leave bug and this has been pending since Wave Z. Build 7 never existed as an upload, so there is nothing to expire there.
-4. **Confirm on device: the title screen reads `v1.1.0 (8)` beneath `READ MANUAL`.** This is the acceptance test for the whole item — everything else is plumbing.
-
-### 2.7 Web, and what does NOT need doing
-
-**Deploy hosting.** The web app serves the same client code and is equally far behind:
-
-```bash
-flutter build web --release
-npx firebase-tools deploy --only hosting
-```
-
-Heed `README.md` §1's warnings — `.env` is a declared asset and must hold real keys with `USE_EMULATOR` not true, because it is baked in at build time.
-
-**⚠️ Do NOT deploy functions, and do NOT re-apply `CLEANUP_DRY_RUN`.** `check_deploy_fresh.sh` is **exit 0 — FRESH**, and AF1 changes no file under `functions/src/`. The flag is revision-scoped, so it only needs re-applying *after a functions deploy*; touching it without one is unnecessary risk on a live service. **The runbook's conditional is "if touched" — and nothing is touched.**
-
-### 2.8 Fix the runbook while you are in it
-
-`README.md` → Releasing has drifted and a release is exactly when someone follows it:
-
-- **§0 Preflight lists seven commands and there are now eight gates** — `./scripts/check_web_e2e_strings.sh` is missing.
-- **The note says infos are "~206"; the bar is 188.** It already says the guide's §1 is the source of truth, so make the number agree rather than adding a second one to maintain.
-
-### 2.9 Validation
-
-1. `git diff` after the bump touches **exactly one line in one file**.
-2. All **eight** gates green, read bare. **`flutter test` still reports 346** — see §2.2.
-3. The archive's timestamp, `1.1.0` and `8` all verified per §2.5, with the output recorded in the commit body.
-4. **On-device: `v1.1.0 (8)`.** Record it; a screenshot is ideal, and if you take one, **commit it** — a validation that leaves no artefact is a claim (lesson §2.36).
-5. **Over-reach guard:** `git status` shows no modification under `lib/`, `functions/`, `test/` or `ios/` beyond the README and `pubspec.yaml`.
-6. **Falsification is not available for a release**, and saying so is better than inventing one. **What replaces it is §2.5's three assertions** — they are the reason a wrong archive cannot be shipped silently. **If you cannot run a step (no Xcode, no Apple ID), say so plainly and leave the item open rather than reporting it done.**
-
-**Blast radius:** `pubspec.yaml`, `README.md` → Releasing, this guide's §1, and `docs/ongoing_general_errors.md` when the item resolves.
+**Blast radius:** `lib/screens/lobby_screen.dart`, `test/lobby_create_error_test.dart` (new), and `test/web_e2e/ui_strings.js` **only if** a web script matches an error sentence — run `./scripts/check_web_e2e_strings.sh` to find out.
 
 ---
-## 3. Already delivered — do NOT rework
+
+## 3. AG2 — Make the point chips readable
+
+**What this means for the user.** The row of player chips under `POINTS AWARDED THIS CARD` — "Louis: +2", "cool: +5" — is dark red on dark brown and very hard to read. That was half of the original Issue 171 complaint, and it's still there. After this the names and totals are cream-coloured and readable.
+
+**The gap.** `lib/screens/phase4_reveal.dart:624`:
+
+```dart
+final color = isPositive ? theme.colorScheme.primary : AppColors.oxblood;
+```
+
+**`colorScheme.primary` is `AppColors.oxblood`** (`lib/main.dart`), so **both branches are the same colour** and every chip header is oxblood on the chip fill. (Gains and losses are still told apart by the `+` or `-` in the text; what the collapsed ternary lost was only a colour difference.)
+
+| Chip header colour on the chip fill (brass @ 0.12 over ground, `0xFF2A2215`) | Contrast |
+|---|---|
+| **oxblood — ships today** | **1.57 : 1** |
+| brass | 6.54 : 1 |
+| ivory | 13.55 : 1 |
+| WCAG AA body text | 4.50 : 1 |
+
+**Why no test caught it, and why that's this log's fault rather than AC1's.** When Issue 171 was diagnosed, the screenshot showed these red headers *and* the invisible breakdown lines. The diagnosis measured the breakdown (1.12 : 1) and **missed the header**. AC1's spec then told its agent to *"walk the rendered Text widgets in that subtree"* — the expanded breakdown — so `test/contrast_tokens_test.dart`'s rendered test walks only `score_breakdown_items_*`. **The header was never inside any test's reach.** It's the same trap as `onSurface`: a `colorScheme` token read as a role ("primary" as "positive") when in this theme it names a colour.
+
+### 3.1 Implementation
+
+1. **Change the colour and nothing else.** The chip header stays **one `Text` in its exact current format**, `'${player.name}: $prefix${e.value}'` — `Bob: +3`, `Alice: -1` — rendered in **`AppColors.ivory`** for every player, gain or loss.
+2. **Delete the collapsed ternary** at `:624`. Don't use `colorScheme.primary` for any text on this screen.
+3. **⚠️ Don't split the header, and don't add `▲`/`▼` glyphs to the chip.** `test/phase4_reveal_test.dart`'s `O2` asserts `find.text('Bob: +3')` and `find.text('Alice: -1')` as **single widgets**, and asserts `find.text('▲+3')` and `find.text('▼-1')` **`findsOneWidget`** — those belong to the standings strip. Splitting the header breaks the first pair, and adding a glyph to the chip creates a second `▲+3` and breaks the second. **The `+` and `-` already mark the sign without relying on colour**, which is the accessible way to do it.
+4. **Change nothing else on this screen.** Tap-to-expand, the `Tap a player to see their score breakdown` hint, the breakdown lines, and **`THE PARLOUR REMEMBERS` block (Issue 177, unselected)** stay as they are.
+
+### 3.2 Validation — the durable half is widening the test
+
+1. **Widen the rendered contrast test to the whole `POINTS AWARDED THIS CARD` block.** Give the block a `ValueKey` if it lacks one, walk **every** `Text` beneath it — chip headers, deltas, the hint, and expanded breakdown lines — resolve each one's background as the nearest ancestor with a painted colour composited over the ground, and assert **≥ 4.5 : 1**. **Don't add another single-subtree test beside the old one.** Scoping a test to a subtree is exactly how the header escaped (lesson §2.42).
+2. Widget test: a positive and a negative chip both render in `AppColors.ivory`, and their texts are exactly `Bob: +3` and `Alice: -1`. **The sign is carried by the character, not the colour.**
+3. **Falsification:** restore `theme.colorScheme.primary` on the header. The widened test must fail with a ratio near **1.6**. **If it passes, it isn't walking the header.**
+4. **Over-reach guards, unedited:** all 7 tests in `test/phase4_reveal_test.dart` — including `O2: renders published scoreDeltas including negative deltas (▼-1) and positive deltas (▲+3)`, **which asserts the header text format this item must not change** — and the existing breakdown test in `test/contrast_tokens_test.dart`.
+
+**Measured and deliberately out of scope:** the standings strip's delta renders in `AppColors.verdigris` at **3.13 : 1** on the ground. That's below the body-text floor but legible in the September 27 screenshot, and changing the app's gain colour is a design decision, not a defect fix. **Leave it and don't widen the test to the standings strip in this item.** If it's worth raising, it gets its own issue.
+
+**Blast radius:** `lib/screens/phase4_reveal.dart`, `test/contrast_tokens_test.dart`, and `docs/design_ui_direction.md`, whose collapse-on-tap section from AC1 should record that chip text is ivory and that the sign is carried by `+`/`-`, never by colour.
+
+---
+## 4. Already delivered — do NOT rework
 
 ### Wave AA — sixteen items, verified September 11, 2026
 
@@ -142,7 +147,7 @@ Verified by reading source and re-falsifying, not by reading commit bodies. Full
 - Injecting `scoreDeltas` into the withheld branch fails **4** emulator tests including AA16a's leak test and the pre-existing P4 guard, with 135 still passing.
 - Tampering with one stem key in the generated Dart mirror makes `check_decks_in_sync.sh` exit **1**; restoring makes it exit **0**. The gate genuinely covers stems rather than passing vacuously on two empty sides.
 
-### 3.1 Standing maintenance — alongside AF1, not instead of it
+### 4.1 Standing maintenance — alongside Wave AG, not instead of it
 
 1. **Deploy the functions after any `functions/src` change, then restore the cleanup flag.** The gate is green today; it goes red the moment server code changes. `functions/src` changed under AA10, AA11 and AA16a, and **`submitTargetForgeryGuesses` is not deployed at all** — production runs 17 functions and the new callable is absent. **Target forgery guessing does not work in production today, and a client build shipped before this deploy would call a function that is not there.**
    ```
@@ -182,7 +187,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 4. Invariants & intentional decisions — do NOT change
+## 5. Invariants & intentional decisions — do NOT change
 
 - **The seven `DEBUG:` buttons stay in the source, gated.**
 - **`PrivacyInfo.xcprivacy` stays in the Runner target**; `NSPrivacyAccessedAPITypes` stays empty.
@@ -213,7 +218,12 @@ Each of these reaches the specified outcome by a different structure than the sp
 - **`lastReaction` / `lastReactionAt` are deliberately retained dead fields** from Issue 74.
 - **`lib/utils/prompt_decks.dart` is generated** — never hand-edit.
 
-**⚠️ Colour tokens name a SURFACE, not a role.** `colorScheme.onSurface` is `AppColors.ink` (`lib/main.dart:99`) — the near-black brown that `app_colors.dart:12` documents as **"Text on parchment"**. On the dark `ground` it measures **1.12 : 1** against a 4.5 : 1 floor and is effectively invisible; that is Issue 171. **Text on the dark ground is `AppColors.ivory`** (16.25 : 1), and `brass` (7.84 : 1) is for accents. **A passing `contrast_tokens_test.dart` does not cover you** — it checks five hand-curated pairs that are correct by construction, so it can never fail on a widget that reached for the wrong token (lesson §2.42).
+**⚠️ Colour tokens name a SURFACE, not a role — and `colorScheme.primary` is `AppColors.oxblood`, not "positive".** It is 1.57 : 1 on a chip fill. Never use it for text on the dark ground; the September 27 chip defect (AG2) is this trap, as `onSurface` was Issue 171's. `colorScheme.onSurface` is `AppColors.ink` (`lib/main.dart:99`) — the near-black brown that `app_colors.dart:12` documents as **"Text on parchment"**. On the dark `ground` it measures **1.12 : 1** against a 4.5 : 1 floor and is effectively invisible; that is Issue 171. **Text on the dark ground is `AppColors.ivory`** (16.25 : 1), and `brass` (7.84 : 1) is for accents. **A passing `contrast_tokens_test.dart` does not cover you** — it checks five hand-curated pairs that are correct by construction, so it can never fail on a widget that reached for the wrong token (lesson §2.42).
+
+**Wave AG invariant — user-facing errors (September 2026):**
+
+- **Never render an exception object to a player** — not `'$e'`, not `e.toString()`, not `e.message`. `FirebaseException.toString()` appends the full stack trace, which is how a player ended up screenshotting `#0 _extractReplyValueOrThrow` with the useful line hidden under the status bar. Map `e.code` to a sentence; send the raw exception to `debugPrint` only.
+- **Create and join share one mapping** (`lobbyCallableErrorMessage`, added in AG1). The raw-trace defect was fixed in `_joinRoom` in an earlier wave and survived in its twin `_createRoom` for months. **A fix applied to one of two twins is half a fix.**
 
 **Wave AE invariant — the web E2E string contract (September 2026):**
 
@@ -248,7 +258,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 5. Where the contracts live
+## 6. Where the contracts live
 
 | What | Where |
 |---|---|
@@ -265,7 +275,7 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ---
 
-## 6. Validation standard
+## 7. Validation standard
 
 **A guard flag lives as long as the object holding it.** `_isLeaving` guards "a leave is in flight", but it sits on a `State` that outlives every room. When a flag's lifetime is longer than the thing it guards, it needs an explicit reset — and the reset belongs in a `finally`, because the failure path is exactly when it matters.
 
@@ -297,47 +307,42 @@ Each of these reaches the specified outcome by a different structure than the sp
 
 ```
 (1) A selection exists? If NO -- stop. Never fill in a `Your selection:` line.
-    AF1 (section 2) is the only approved work. It is a RELEASE: exactly one
-    line of the app changes.
-(2) AF1 specifically: do NOT edit test/lobby_version_test.dart. Its 1.0.0 / 6
-    values are a MOCK asserting the label's FORMAT. flutter test must still
-    report 346 after the bump.
-(3) AF1 specifically: delete the stale archive (2026-09-07, build 6) and the
-    stale ipa (2026-08-25) BEFORE building, then verify the ARCHIVE's
-    timestamp, 1.1.0 and 8. Never verify the .ipa.
-(4) Deploy functions ONLY if functions/src changed. AF1 does not touch it, so
-    do not deploy and do not re-apply CLEANUP_DRY_RUN. The flag is
-    revision-scoped -- it needs re-applying after a deploy, not instead of one.
-(5) A gate must be able to FAIL. Ask what input would make yours go red; if
-    nothing would, it is not a gate. Record the failing run, not just the pass.
-(6) Using a search to prove ABSENCE? It must not encode an incidental
-    convention -- quoting, escaping, variable naming. And do not read a
-    truncated listing as a complete one: `ls | head -3` hid a stale archive
-    from this very verification pass (lesson 2.44).
-(7) A check over a hand-written list can only verify the list. Add the
-    containment half that makes drift impossible (lesson 2.42).
+    AG1 and AG2 need none. Issue 177 is UNSELECTED and is not work.
+(2) An EMPTY result is not evidence until the same query has been seen to
+    return something. Run a positive control. Never pipe through `timeout`
+    on macOS -- it does not exist and the failure reads as "no results".
+(3) Using a search to prove ABSENCE? It must not encode an incidental
+    convention -- quoting, escaping, variable naming -- and a truncated
+    listing is not a complete one (lesson 2.44).
+(4) A fix applied to one of two twins is half a fix. When you fix a defect,
+    search for its siblings -- create/join, host/guest, voter/target -- and
+    fix them through ONE shared path so they cannot drift again.
+(5) A test is only as wide as the thing it walks. Do not scope a regression
+    test to the subtree the last bug lived in; walk the whole block the
+    player sees (lesson 2.42).
+(6) COLOUR: colorScheme tokens name a SURFACE, not a role. onSurface is
+    AppColors.ink (text on PARCHMENT). primary is AppColors.oxblood, not
+    "positive". Text on the dark ground is ivory; accents are brass.
+(7) Never show an exception object to a player. Map e.code to a sentence;
+    the raw exception goes to debugPrint only.
 (8) A rename broke a test? UPDATE THE ASSERTION. Never move production code to
     satisfy a matcher (lesson 2.43).
 (9) Never silence a failing check by deleting what it flagged unless the
-    flagged thing is genuinely dead. A dead ALTERNATE in an OR with live
-    siblings is deleted; a SOLE matcher for a live affordance is repointed.
+    flagged thing is genuinely dead.
 (10) Read exit codes BARE. `... | tail` reports tail's status, always 0.
 (11) A gate that did not run is not a pass, and one you ran that left no
-     artefact is a claim. If a validation writes files, COMMIT THEM. If you
-     cannot run a step, say so and leave the item OPEN.
-(12) COLOUR: onSurface is AppColors.ink, text on PARCHMENT; on the dark ground
-     it is 1.12:1. Text on ground is ivory. Assert on the RENDERED tree.
-(13) Changing scoring? Change BOTH implementations and re-run the sum
+     artefact is a claim. If you cannot run a step, say so and leave the item
+     OPEN.
+(12) Changing scoring? Change BOTH implementations and re-run the sum
      invariant in both suites.
-(14) Publishing anything derived from authorship? Only cards whose author flip
-     has happened, at all THREE flush sites. Write the leak test first.
-(15) State bugs: the test must NOT re-pump the widget between steps.
-(16) Playthroughs: evidence records an observation, not current behaviour.
-     NEVER edit a verdict or a specified assertion.
-(17) RE-RUN THE FULL BATTERY -- all EIGHT gates, bare, except flutter analyze,
+(13) Publishing anything derived from authorship? Only cards whose author flip
+     has happened, at all THREE flush sites.
+(14) State bugs: the test must NOT re-pump the widget between steps.
+(15) Playthroughs: evidence records an observation. NEVER edit a verdict or a
+     specified assertion.
+(16) RE-RUN THE FULL BATTERY -- all EIGHT gates, bare, except flutter analyze,
      where the bar is 0 errors / 0 warnings / 188 infos and the code is 1.
-(18) COMMIT: ONE ITEM, ONE Conventional Commit, WHY in the body. Move the issue
-     to the SINGLE existing Resolved heading, leave ONE line there.
+(17) COMMIT: ONE ITEM, ONE Conventional Commit, WHY in the body.
 ```
 
-**When AF1 is done the queue is empty. Do not invent work.**
+**When AG1 and AG2 are done the queue is empty apart from Issue 177, which awaits a selection. Do not invent work.**

@@ -8,23 +8,66 @@
 
 ## 1. Open & in-flight
 
-**Wave AF verified, September 12, 2026 — AF1 is delivered.** Issue 176 is resolved and indexed in §3.
+**Two reports from a September 27, 2026 device playthrough on `1.1.0 (8)`.** One is specced directly as Wave AG in `agent_execution_guide.md`; one needs a decision and is Issue 177 below. Investigating them turned up a third defect, also specced as AG2.
 
-**The release shipped cleanly as `1.1.0+8`:**
-- `pubspec.yaml` was bumped from `1.0.0+7` to `1.1.0+8` (exactly one line of application code).
-- Stale build 6 archive and build 2 ipa were deleted before building.
-- Fresh `.xcarchive` was produced by `flutter build ipa` and verified with `PlistBuddy` (`1.1.0`, `8`) and current timestamp.
-- Web release was compiled and deployed to Firebase Hosting (`https://gaslight-46368.web.app`), with `version.json` confirming `1.1.0 (8)`.
-- On-device acceptance test verified on iOS simulator: runtime title screen displays `v1.1.0 (8)` beneath `READ MANUAL`.
-- Runbook in `README.md` was synchronized with the 8th preflight gate (`check_web_e2e_strings.sh`) and info count aligned to 188.
-- No files under `lib/`, `functions/`, `test/` or `ios/` were touched beyond `pubspec.yaml` and `README.md`.
-- All eight preflight baseline gates are green bare.
+**AG1 — "error when creating a room": the request never reached the server, and the error screen is a defect of its own.**
 
-**The queue is empty — 0 open items.**
+- **What the user saw** was a raw stack trace (`#0 _extractReplyValueOrThrow … #4 GameService.createRoom (game_service.dart:256) … #5 _LobbyScreenState._createRoom (lobby_screen.dart:193)`), because `lobby_screen.dart:203` renders `SnackBar(content: Text('Error: $e'))` and `FirebaseException.toString()` appends the stack. **The first line — which carries the error code — sat behind the status bar, so the screenshot could not be diagnosed.**
+- **The same defect was already fixed once, in the twin.** `_joinRoom` directly below maps `e.code` to sentences, and `test/lobby_join_error_test.dart:44` is literally *"join non-existent room displays mapped readable sentence and no raw exception/stack trace"*. **Create never received that fix.** It is the only raw-exception display left in `lib/`.
+- **Root cause: the failing call never reached Cloud Functions.** The screenshot reads 8:01 PM PDT (03:01 UTC, September 28). Cloud Run's request log shows **no request to any function between 02:30 and 04:30 UTC**, and only three `createroom` requests in fourteen days, **all HTTP 200** — the most recent at 20:36 UTC, the start of the working `ANYK` game that afternoon. **The empty window was checked against a positive control**: the identical query over 20:30–21:00 UTC returns that game's full traffic (`castvote`, `submittargetforgeryguesses`, `closeunmaskwindow` …). **The failure therefore happened on the device, most likely a network-level failure** (the screenshot shows Wi-Fi, where the working game ran on LTE). **The exact code cannot be recovered** — it was on the hidden line. AG1's readable message will say whether it was a connection failure next time.
+
+**AG2 — the point chips are still unreadable; Issue 171 was only half fixed, and the half left over was a diagnostic miss in this log.** Each chip's header (`Louis: +2`) renders in `isPositive ? theme.colorScheme.primary : AppColors.oxblood` (`phase4_reveal.dart:624`). **`colorScheme.primary` is `AppColors.oxblood`**, so both branches are the same colour — gains and losses are told apart only by the `+`/`-` in the text. Oxblood on the chip fill measures **1.57 : 1** against a 4.5 : 1 floor. Issue 171's screenshot showed these red headers *and* the invisible breakdown lines; the diagnosis measured the breakdown (1.12 : 1) and missed the header, and AC1's spec then scoped its rendered contrast test to the `score_breakdown_items_*` subtree — **so the header was never in any test's reach.** Same trap as `onSurface`: a `colorScheme` token assumed to mean a role ("primary" as "positive") that in this theme names a colour.
+
+**Issue 177 — The Parlour Remembers — needs a selection**, with rendered drafts of four options at **https://claude.ai/artifact/13Yt55TWsqge1YQBDLg1uz**.
+
+**Gate state:** unchanged from the Wave AF release — eight gates green at 0 errors / 0 warnings / 188 infos, 346 client tests, 157 functions tests. `check_deploy_fresh.sh` re-run bare this pass: **exit 0**. **AF1 (`1.1.0+8`) is recorded as shipped by its own commit and was not independently re-verified in this pass.**
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-None — the queue is empty. All issues through Issue 176 are resolved and indexed in §3.
+One open issue, filed September 27, 2026 from a device playthrough. Everything through Issue 176 is resolved and indexed in §3.
+
+---
+
+### Issue 177: The Parlour Remembers is hard to read and has nowhere good to live
+
+**Status**: ⚠️ Confirmed Unresolved — reported from a device playthrough on September 27, 2026 (room `ANYK`, build `1.1.0 (8)`):
+
+> *"The parlor remembers isn't extreme understandable. Maybe it should be in its own page after the reveal or maybe it should show up in the waiting stage so that people remember who was fooled before. It should also show more detail like some sort of dropdown to show which prompts were tricked."*
+
+**Rendered drafts of all four options, with tappable rivalry lines: https://claude.ai/artifact/13Yt55TWsqge1YQBDLg1uz** — built in HTML from the app's own palette and typefaces with example data from room `ANYK`. They show information layout; the chosen option still has to be checked in Flutter at 320 pt.
+
+**What is wrong today, from the screenshot and `lib/screens/phase4_reveal.dart:242–316`:**
+
+1. **"Has read" is never explained.** It means the player named another player as the author of a lie *on their own card* (AA16a's target forgery guess). Nobody at the table can infer that.
+2. **Two different stories share one list.** `fools` and `reads` render interleaved with identical styling.
+3. **One line is duplicated.** The `CLOSEST READ` superlative is also rendered again in the list beneath it — "Matt has read zzzzz ×1" appears twice.
+4. **No way to see what a line refers to.** Each entry is a bare count, so a player cannot recall the moment it describes.
+5. **It sits on the busiest screen in the game**, alongside the answers, the unmask window, points and standings.
+
+**Common to every option, and not itself a choice:**
+
+- **Copy:** "fooled" stays; **"has read" becomes "spotted"**, as in "Matt spotted zzzzz's lie". Each group carries a one-line explanation.
+- **Two labelled groups**, deceptions and spotted lies, never interleaved. The closest read is **marked in place**, not repeated.
+- **Every rivalry expands** to list each occurrence: round, whose card, the prompt, and the lie.
+- **Server data extension.** `runningRivalries` currently carries only `{…Id, …Name, count}`. Each pair gains an `occurrences` array of `{round, cardOwnerName, promptText, lieText}`, built from `sealed/_summary`'s `CardSummary` records — which already hold `promptText`, `forgeries[].text`, `forgeries[].fooledVoters` and `targetCorrectAttributions`. **It must reuse AB2's flipped-only filter** (`publicCardsForRivalries`, `index.ts:2055`), so a card enters the ledger only after its authorship has been published. **This does not reopen Issue 99**: single-card reveal scoping blanks past cards to hide *unresolved* cards, and every card in this data is already resolved and was shown to the whole table at its reveal.
+
+**Option A**: **Fold it into one line on the reveal** — start collapsed as a summary with counts ("3 deceptions · 3 lies spotted · 1 new"); tap to open the two groups; tap a pair to open its occurrences.
+  - *Pros*: Smallest move from today, so players already know where it lives. Reuses the tap-to-expand habit AC1 established for the score breakdown. Returns most of the reveal's vertical space.
+  - *Cons*: Still on the busiest screen, only quieter. A collapsed line is easy to ignore, so many players will never open it. Seen once per card and then gone.
+
+**Option B (recommended)**: **Move the ledger to the waiting screens** — the reveal keeps a single line naming what changed on this card ("Matt fooled zzzzz again, that makes 2"); the full grouped, expandable ledger renders on the vote and writing waiting screens (`phase3_vote.dart` and `phase2_craft.dart` `_buildWaitingUI`).
+  - *Pros*: Appears right before the next vote, which is exactly when *"remember who was fooled before"* changes how people play. Fills idle time, the gap Issue 158's answer recap already occupies. Takes the reveal down to one line. `runningRivalries` already persists across round boundaries, so the data is present on both screens with no new plumbing.
+  - *Cons*: Empty for most of round 1 — nothing is revealed during the first writing phase, so the ledger first has content at the second card's vote. Players who never wait, such as the last to vote, see only the teaser. Adds content to two screens instead of one.
+
+**Option C**: **Give it its own page between rounds** — after the last reveal of a round, everyone lands on a ledger page with a who-fooled-whom grid and the grouped list; the host starts the next round from there.
+  - *Pros*: A deliberate pause for the table to look back together — the most social version. Room for a grid, which makes patterns obvious in a way no list can. Removes the ledger from the reveal entirely.
+  - *Cons*: **Needs a new server phase** between the last reveal and the next round's truth phase, changing the phase order the game is built on (`truth → forgery → vote → reveal` is a §4 invariant) and the readiness gate that drives it. Appears only once per round and **never in a one-round match**. Adds a stop to every match.
+
+**Option D**: **Show each player their own story first** — four short groups about the viewer (who they fooled, who fooled them, whose lies they spotted, who spotted theirs), with a toggle to the whole table. Placement is a second choice: any of A, B or C.
+  - *Pros*: The most readable, because every line is about the person reading it. Makes grudges personal, which suits a game about people who know each other. Composes with any placement.
+  - *Cons*: Hides the table-wide picture behind a toggle, weakening the shared "did you see that" moment. Sparse for a quiet player, whose own view may be nearly empty. Four groups take more height than two when full. **Selecting it still requires choosing A, B or C for where it lives.**
+
+Your selection: _____
 
 ---
 
@@ -145,6 +188,8 @@ The search was `grep -ho "it('AC5[^']*'"`. That file writes `it("AC5.4: …")` w
 **The rule:** when a search is being used to establish that something is **absent**, it must not encode an incidental convention — quoting, indentation, spacing, file extension. Either normalise (`grep -rn "AC5\.[0-9]" functions/test/`) or **corroborate the absence a second way**: a count, a listing, or the artefact that would exist if the thing did. Here, the functions test count was **157 before and after AD2** — a number already on the baseline table, which would have contradicted "three tests added" immediately.
 
 **And the general form, which this log has now recorded four times** (§2.19, §2.30, §2.42, §2.43): **a check is only evidence if it could have produced the other answer.** This one is the verifier's version of the same mistake — the earlier three were about tests that could not fail, this is about a search that could not find.
+
+**A third shape, September 27.** A Cloud Functions log query was run as `timeout 120 npx firebase-tools functions:log … 2>&1 | grep -iE "error|exception|…"`. **macOS has no `timeout` command**, so the shell printed `command not found`, the `2>&1` sent that into `grep`, the filter matched nothing, and the result was empty — **reading exactly like "no errors in the logs."** It was caught only by re-running without the filter. The follow-up query that *did* show an empty window was then run a second time over a window known to contain traffic, and returned it. **That positive control is the habit to keep: an empty result means nothing until the same query has been seen to return something.**
 
 ---
 
