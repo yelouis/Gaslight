@@ -18,13 +18,13 @@
 
 **AG2 — the point chips are still unreadable; Issue 171 was only half fixed, and the half left over was a diagnostic miss in this log.** Each chip's header (`Louis: +2`) renders in `isPositive ? theme.colorScheme.primary : AppColors.oxblood` (`phase4_reveal.dart:624`). **`colorScheme.primary` is `AppColors.oxblood`**, so both branches are the same colour — gains and losses are told apart only by the `+`/`-` in the text. Oxblood on the chip fill measures **1.57 : 1** against a 4.5 : 1 floor. Issue 171's screenshot showed these red headers *and* the invisible breakdown lines; the diagnosis measured the breakdown (1.12 : 1) and missed the header, and AC1's spec then scoped its rendered contrast test to the `score_breakdown_items_*` subtree — **so the header was never in any test's reach.** Same trap as `onSurface`: a `colorScheme` token assumed to mean a role ("primary" as "positive") that in this theme names a colour.
 
-**Issue 177 — The Parlour Remembers — needs a selection**, with rendered drafts of four options at **https://claude.ai/artifact/13Yt55TWsqge1YQBDLg1uz**.
+**Issue 177 — The Parlour Remembers — was selected September 27 (Option B) and is specced as AG3.** Drafts: **https://claude.ai/artifact/13Yt55TWsqge1YQBDLg1uz**.
 
 **Gate state:** unchanged from the Wave AF release — eight gates green at 0 errors / 0 warnings / 188 infos, 346 client tests, 157 functions tests. `check_deploy_fresh.sh` re-run bare this pass: **exit 0**. **AF1 (`1.1.0+8`) is recorded as shipped by its own commit and was not independently re-verified in this pass.**
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-One open issue, filed September 27, 2026 from a device playthrough. Everything through Issue 176 is resolved and indexed in §3.
+**Issue 177 is selected (Option B) and specced as AG3**; it stays here until the code lands. Everything through Issue 176 is resolved and indexed in §3.
 
 ---
 
@@ -67,7 +67,7 @@ One open issue, filed September 27, 2026 from a device playthrough. Everything t
   - *Pros*: The most readable, because every line is about the person reading it. Makes grudges personal, which suits a game about people who know each other. Composes with any placement.
   - *Cons*: Hides the table-wide picture behind a toggle, weakening the shared "did you see that" moment. Sparse for a quiet player, whose own view may be nearly empty. Four groups take more height than two when full. **Selecting it still requires choosing A, B or C for where it lives.**
 
-Your selection: _____
+Your selection: **Proceed with Option B** (September 27, 2026). Specced as **AG3** in `agent_execution_guide.md`: Option B plus the five items common to every option. **The server change is strictly additive** — build `1.1.0 (8)` reads the existing keys — and it adds per-pair `occurrences` plus a `thisCard` field for the reveal's one-line teaser.
 
 ---
 
