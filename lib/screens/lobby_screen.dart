@@ -39,6 +39,35 @@ class UpperCaseTextFormatter extends TextInputFormatter {
   }
 }
 
+enum LobbyAction { create, join }
+
+String lobbyCallableErrorMessage(Object error, {required LobbyAction action}) {
+  if (error is FirebaseFunctionsException) {
+    switch (error.code) {
+      case 'not-found':
+        return action == LobbyAction.join
+            ? 'No room with that code. Check the four letters and try again.'
+            : 'Something went wrong. Try again.';
+      case 'invalid-argument':
+        return action == LobbyAction.create
+            ? 'Enter your name to open a room.'
+            : 'Enter your name and a four-letter room code.';
+      case 'resource-exhausted':
+        return action == LobbyAction.create
+            ? 'Could not find a free room code. Try again.'
+            : 'Something went wrong. Try again.';
+      case 'unauthenticated':
+        return 'Could not sign in. Check your connection and try again.';
+      case 'unavailable':
+      case 'deadline-exceeded':
+        return 'Could not reach the parlour. Check your connection and try again.';
+      default:
+        return 'Something went wrong. Try again.';
+    }
+  }
+  return 'Something went wrong. Try again.';
+}
+
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
 
@@ -200,7 +229,8 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     } catch (e) {
       debugPrint('Error creating room: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        final msg = lobbyCallableErrorMessage(e, action: LobbyAction.create);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
     } finally {
       if (mounted) {
@@ -221,25 +251,9 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
       final playerId = await gameService.getOrCreateStablePlayerId();
       await gameService.joinRoom(roomCode, name, playerId, avatarIndex: _selectedAvatarIndex);
     } catch (e) {
+      debugPrint('Error joining room: $e');
       if (mounted) {
-        final String msg;
-        if (e is FirebaseFunctionsException) {
-          switch (e.code) {
-            case 'not-found':
-              msg = 'No room with that code. Check the four letters and try again.';
-              break;
-            case 'invalid-argument':
-              msg = 'Enter your name and a four-letter room code.';
-              break;
-            case 'unauthenticated':
-              msg = 'Could not sign in. Check your connection and try again.';
-              break;
-            default:
-              msg = 'Something went wrong. Try again.';
-          }
-        } else {
-          msg = 'Something went wrong. Try again.';
-        }
+        final msg = lobbyCallableErrorMessage(e, action: LobbyAction.join);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
     } finally {
