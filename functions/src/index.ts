@@ -147,21 +147,81 @@ export function computeMatchSummary(
   };
 }
 
+export interface RivalryOccurrence {
+  round: number;
+  cardOwnerId: string;
+  cardOwnerName: string;
+  promptText: string;
+  lieText: string;
+}
+
+export interface FoolsPair {
+  deceiverId: string;
+  deceiverName: string;
+  victimId: string;
+  victimName: string;
+  count: number;
+  occurrences: RivalryOccurrence[];
+}
+
+export interface ReadsPair {
+  readerId: string;
+  readerName: string;
+  forgerId: string;
+  forgerName: string;
+  count: number;
+  occurrences: RivalryOccurrence[];
+}
+
+export interface ThisCardRivalries {
+  round: number;
+  cardOwnerId: string;
+  fools: Array<{
+    deceiverId: string;
+    deceiverName: string;
+    victimId: string;
+    victimName: string;
+    total: number;
+  }>;
+  reads: Array<{
+    readerId: string;
+    readerName: string;
+    forgerId: string;
+    forgerName: string;
+    total: number;
+  }>;
+}
+
+export interface RunningRivalries {
+  fools: FoolsPair[];
+  reads: ReadsPair[];
+  thisCard: ThisCardRivalries | null;
+}
+
 export function countFoolsPairs(
   cards: CardSummary[],
   playerNameMap: Record<string, string>,
   minCount: number = 2
-): Array<{ deceiverId: string; deceiverName: string; victimId: string; victimName: string; count: number }> {
-  const pairCounts: Record<string, { deceiverId: string; victimId: string; count: number }> = {};
+): FoolsPair[] {
+  const pairCounts: Record<string, { deceiverId: string; victimId: string; count: number; occurrences: RivalryOccurrence[] }> = {};
   for (const card of cards) {
+    const cardOwnerId = card.targetPlayerId;
+    const cardOwnerName = card.targetPlayerName || playerNameMap[cardOwnerId] || cardOwnerId;
     for (const f of card.forgeries) {
       for (const victimId of f.fooledVoters || []) {
         if (f.authorId !== victimId) {
           const key = `${f.authorId}:::${victimId}`;
           if (!pairCounts[key]) {
-            pairCounts[key] = { deceiverId: f.authorId, victimId, count: 0 };
+            pairCounts[key] = { deceiverId: f.authorId, victimId, count: 0, occurrences: [] };
           }
           pairCounts[key].count++;
+          pairCounts[key].occurrences.push({
+            round: card.round,
+            cardOwnerId,
+            cardOwnerName,
+            promptText: card.promptText,
+            lieText: f.text,
+          });
         }
       }
     }
@@ -174,7 +234,8 @@ export function countFoolsPairs(
       deceiverName: playerNameMap[p.deceiverId] || p.deceiverId,
       victimId: p.victimId,
       victimName: playerNameMap[p.victimId] || p.victimId,
-      count: p.count
+      count: p.count,
+      occurrences: p.occurrences
     }));
 
   pairs.sort((a, b) => {
@@ -190,17 +251,27 @@ export function countReadsPairs(
   cards: CardSummary[],
   playerNameMap: Record<string, string>,
   minCount: number = 1
-): Array<{ readerId: string; readerName: string; forgerId: string; forgerName: string; count: number }> {
-  const pairCounts: Record<string, { readerId: string; forgerId: string; count: number }> = {};
+): ReadsPair[] {
+  const pairCounts: Record<string, { readerId: string; forgerId: string; count: number; occurrences: RivalryOccurrence[] }> = {};
   for (const card of cards) {
     const readerId = card.targetPlayerId;
+    const cardOwnerName = card.targetPlayerName || playerNameMap[readerId] || readerId;
     for (const forgerId of card.targetCorrectAttributions || []) {
       if (readerId !== forgerId) {
         const key = `${readerId}:::${forgerId}`;
         if (!pairCounts[key]) {
-          pairCounts[key] = { readerId, forgerId, count: 0 };
+          pairCounts[key] = { readerId, forgerId, count: 0, occurrences: [] };
         }
         pairCounts[key].count++;
+        const forgerForgery = card.forgeries.find(f => f.authorId === forgerId);
+        const lieText = forgerForgery ? forgerForgery.text : "";
+        pairCounts[key].occurrences.push({
+          round: card.round,
+          cardOwnerId: readerId,
+          cardOwnerName,
+          promptText: card.promptText,
+          lieText,
+        });
       }
     }
   }
@@ -212,7 +283,8 @@ export function countReadsPairs(
       readerName: playerNameMap[p.readerId] || p.readerId,
       forgerId: p.forgerId,
       forgerName: playerNameMap[p.forgerId] || p.forgerId,
-      count: p.count
+      count: p.count,
+      occurrences: p.occurrences
     }));
 
   pairs.sort((a, b) => {
@@ -226,14 +298,69 @@ export function countReadsPairs(
 
 export function computeRunningRivalries(
   cards: CardSummary[],
-  playerNameMap: Record<string, string>
-): {
-  fools: Array<{ deceiverId: string; deceiverName: string; victimId: string; victimName: string; count: number }>;
-  reads: Array<{ readerId: string; readerName: string; forgerId: string; forgerName: string; count: number }>;
-} {
+  playerNameMap: Record<string, string>,
+  current: { round: number; targetPlayerId: string } | null = null
+): RunningRivalries {
+  const allFools = countFoolsPairs(cards, playerNameMap, 1);
+  const allReads = countReadsPairs(cards, playerNameMap, 1);
+
+  let thisCard: ThisCardRivalries | null = null;
+  if (current) {
+    const matchingCard = cards.find(
+      c => c.round === current.round && c.targetPlayerId === current.targetPlayerId
+    );
+    if (matchingCard) {
+      const foolsTotalMap = new Map<string, number>();
+      for (const p of allFools) {
+        foolsTotalMap.set(`${p.deceiverId}:::${p.victimId}`, p.count);
+      }
+      const readsTotalMap = new Map<string, number>();
+      for (const p of allReads) {
+        readsTotalMap.set(`${p.readerId}:::${p.forgerId}`, p.count);
+      }
+
+      const thisCardFools: ThisCardRivalries["fools"] = [];
+      for (const f of matchingCard.forgeries) {
+        for (const victimId of f.fooledVoters || []) {
+          if (f.authorId !== victimId) {
+            thisCardFools.push({
+              deceiverId: f.authorId,
+              deceiverName: playerNameMap[f.authorId] || f.authorId,
+              victimId: victimId,
+              victimName: playerNameMap[victimId] || victimId,
+              total: foolsTotalMap.get(`${f.authorId}:::${victimId}`) || 1,
+            });
+          }
+        }
+      }
+
+      const thisCardReads: ThisCardRivalries["reads"] = [];
+      const readerId = matchingCard.targetPlayerId;
+      for (const forgerId of matchingCard.targetCorrectAttributions || []) {
+        if (readerId !== forgerId) {
+          thisCardReads.push({
+            readerId: readerId,
+            readerName: playerNameMap[readerId] || readerId,
+            forgerId: forgerId,
+            forgerName: playerNameMap[forgerId] || forgerId,
+            total: readsTotalMap.get(`${readerId}:::${forgerId}`) || 1,
+          });
+        }
+      }
+
+      thisCard = {
+        round: matchingCard.round,
+        cardOwnerId: matchingCard.targetPlayerId,
+        fools: thisCardFools,
+        reads: thisCardReads,
+      };
+    }
+  }
+
   return {
-    fools: countFoolsPairs(cards, playerNameMap, 1).slice(0, 3),
-    reads: countReadsPairs(cards, playerNameMap, 1).slice(0, 3)
+    fools: allFools.slice(0, 3),
+    reads: allReads.slice(0, 3),
+    thisCard,
   };
 }
 
@@ -1616,7 +1743,7 @@ async function concludeResolutionRound(
     const { truthDuration } = getPhaseDurations(room.timerSeconds);
     const endTime = room.isTimerDisabled ? null : Date.now() + truthDuration;
 
-    const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames);
+    const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames, { round: nextRound, targetPlayerId: "" });
 
     transaction.update(roomRef, {
       currentPhase: "truth",
@@ -1634,7 +1761,7 @@ async function concludeResolutionRound(
     });
   } else {
     const matchSummary = computeMatchSummary(accumulatedCards, players, snapshottedPlayerNames);
-    const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames);
+    const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames, null);
     transaction.update(roomRef, {
       currentPhase: "gameOver",
       unmaskDeadline: null,
@@ -2055,7 +2182,7 @@ async function advancePhaseInternal(
     const publicCardsForRivalries = unmaskDeadline !== null
       ? accumulatedCards.filter(c => c.targetPlayerId !== room.currentReaderId || c.round !== (room.currentRound || 1))
       : accumulatedCards;
-    const runningRivalries = computeRunningRivalries(publicCardsForRivalries, accumulatedPlayerNames);
+    const runningRivalries = computeRunningRivalries(publicCardsForRivalries, accumulatedPlayerNames, { round: room.currentRound || 1, targetPlayerId: room.currentReaderId || "" });
 
     transaction.update(roomRef, {
       currentPhase: "reveal",
@@ -2116,7 +2243,7 @@ async function advancePhaseInternal(
         targetForgeryGuesses: sealedData.targetForgeryGuesses || currentCard.targetForgeryGuesses || {}
       };
 
-      const runningRivalries = computeRunningRivalries(accumulatedCards, accumulatedPlayerNames);
+      const runningRivalries = computeRunningRivalries(accumulatedCards, accumulatedPlayerNames, { round: room.currentRound || 1, targetPlayerId: room.currentReaderId || "" });
       transaction.update(roomRef, {
         cards: updatedCards,
         unmaskDeadline: 0,
@@ -2326,7 +2453,7 @@ export const advanceToNextResolution = onCall(async (request) => {
       const nextReaderId = order[nextIdx];
       const { voteDuration } = getPhaseDurations(room.timerSeconds);
       const endTime = room.isTimerDisabled ? null : Date.now() + voteDuration;
-      const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames);
+      const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames, { round: room.currentRound || 1, targetPlayerId: nextReaderId });
       transaction.update(roomRef, {
         currentPhase: "vote",
         currentReaderId: nextReaderId,
@@ -2531,7 +2658,7 @@ export const submitUnmaskGuess = onCall(async (request) => {
       unmaskDeadline: nextUnmaskDeadline
     };
     if (allFooledGuessed) {
-      updatePayload.runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames);
+      updatePayload.runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames, { round: room.currentRound || 1, targetPlayerId: room.currentReaderId || "" });
     }
     transaction.update(roomRef, updatePayload);
 
@@ -2640,7 +2767,7 @@ export const closeUnmaskWindow = onCall(async (request) => {
       targetForgeryGuesses: sealedData.targetForgeryGuesses || currentCard.targetForgeryGuesses || {}
     };
 
-    const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames);
+    const runningRivalries = computeRunningRivalries(accumulatedCards, snapshottedPlayerNames, { round: room.currentRound || 1, targetPlayerId: room.currentReaderId || "" });
 
     transaction.update(roomRef, {
       cards: updatedCards,

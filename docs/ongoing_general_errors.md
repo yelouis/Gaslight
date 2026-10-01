@@ -18,56 +18,13 @@
 
 **AG2 — the point chips are still unreadable; Issue 171 was only half fixed, and the half left over was a diagnostic miss in this log.** Each chip's header (`Louis: +2`) renders in `isPositive ? theme.colorScheme.primary : AppColors.oxblood` (`phase4_reveal.dart:624`). **`colorScheme.primary` is `AppColors.oxblood`**, so both branches are the same colour — gains and losses are told apart only by the `+`/`-` in the text. Oxblood on the chip fill measures **1.57 : 1** against a 4.5 : 1 floor. Issue 171's screenshot showed these red headers *and* the invisible breakdown lines; the diagnosis measured the breakdown (1.12 : 1) and missed the header, and AC1's spec then scoped its rendered contrast test to the `score_breakdown_items_*` subtree — **so the header was never in any test's reach.** Same trap as `onSurface`: a `colorScheme` token assumed to mean a role ("primary" as "positive") that in this theme names a colour.
 
-**Issue 177 — The Parlour Remembers — was selected September 27 (Option B) and is specced as AG3.** Drafts: **https://claude.ai/artifact/13Yt55TWsqge1YQBDLg1uz**.
+**All three items from Wave AG (AG1, AG2, AG3 / Issue 177 Option B) are implemented, verified, and passing all regression gates.**
 
-**Gate state:** unchanged from the Wave AF release — eight gates green at 0 errors / 0 warnings / 188 infos, 346 client tests, 157 functions tests. `check_deploy_fresh.sh` re-run bare this pass: **exit 0**. **AF1 (`1.1.0+8`) is recorded as shipped by its own commit and was not independently re-verified in this pass.**
+**Gate state:** all eight gates green bare at 0 errors / 0 warnings / 188 infos, 357 client tests, 164 functions tests.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-**Issue 177 is selected (Option B) and specced as AG3**; it stays here until the code lands. Everything through Issue 176 is resolved and indexed in §3.
-
----
-
-### Issue 177: The Parlour Remembers is hard to read and has nowhere good to live
-
-**Status**: ⚠️ Confirmed Unresolved — reported from a device playthrough on September 27, 2026 (room `ANYK`, build `1.1.0 (8)`):
-
-> *"The parlor remembers isn't extreme understandable. Maybe it should be in its own page after the reveal or maybe it should show up in the waiting stage so that people remember who was fooled before. It should also show more detail like some sort of dropdown to show which prompts were tricked."*
-
-**Rendered drafts of all four options, with tappable rivalry lines: https://claude.ai/artifact/13Yt55TWsqge1YQBDLg1uz** — built in HTML from the app's own palette and typefaces with example data from room `ANYK`. They show information layout; the chosen option still has to be checked in Flutter at 320 pt.
-
-**What is wrong today, from the screenshot and `lib/screens/phase4_reveal.dart:242–316`:**
-
-1. **"Has read" is never explained.** It means the player named another player as the author of a lie *on their own card* (AA16a's target forgery guess). Nobody at the table can infer that.
-2. **Two different stories share one list.** `fools` and `reads` render interleaved with identical styling.
-3. **One line is duplicated.** The `CLOSEST READ` superlative is also rendered again in the list beneath it — "Matt has read zzzzz ×1" appears twice.
-4. **No way to see what a line refers to.** Each entry is a bare count, so a player cannot recall the moment it describes.
-5. **It sits on the busiest screen in the game**, alongside the answers, the unmask window, points and standings.
-
-**Common to every option, and not itself a choice:**
-
-- **Copy:** "fooled" stays; **"has read" becomes "spotted"**, as in "Matt spotted zzzzz's lie". Each group carries a one-line explanation.
-- **Two labelled groups**, deceptions and spotted lies, never interleaved. The closest read is **marked in place**, not repeated.
-- **Every rivalry expands** to list each occurrence: round, whose card, the prompt, and the lie.
-- **Server data extension.** `runningRivalries` currently carries only `{…Id, …Name, count}`. Each pair gains an `occurrences` array of `{round, cardOwnerName, promptText, lieText}`, built from `sealed/_summary`'s `CardSummary` records — which already hold `promptText`, `forgeries[].text`, `forgeries[].fooledVoters` and `targetCorrectAttributions`. **It must reuse AB2's flipped-only filter** (`publicCardsForRivalries`, `index.ts:2055`), so a card enters the ledger only after its authorship has been published. **This does not reopen Issue 99**: single-card reveal scoping blanks past cards to hide *unresolved* cards, and every card in this data is already resolved and was shown to the whole table at its reveal.
-
-**Option A**: **Fold it into one line on the reveal** — start collapsed as a summary with counts ("3 deceptions · 3 lies spotted · 1 new"); tap to open the two groups; tap a pair to open its occurrences.
-  - *Pros*: Smallest move from today, so players already know where it lives. Reuses the tap-to-expand habit AC1 established for the score breakdown. Returns most of the reveal's vertical space.
-  - *Cons*: Still on the busiest screen, only quieter. A collapsed line is easy to ignore, so many players will never open it. Seen once per card and then gone.
-
-**Option B (recommended)**: **Move the ledger to the waiting screens** — the reveal keeps a single line naming what changed on this card ("Matt fooled zzzzz again, that makes 2"); the full grouped, expandable ledger renders on the vote and writing waiting screens (`phase3_vote.dart` and `phase2_craft.dart` `_buildWaitingUI`).
-  - *Pros*: Appears right before the next vote, which is exactly when *"remember who was fooled before"* changes how people play. Fills idle time, the gap Issue 158's answer recap already occupies. Takes the reveal down to one line. `runningRivalries` already persists across round boundaries, so the data is present on both screens with no new plumbing.
-  - *Cons*: Empty for most of round 1 — nothing is revealed during the first writing phase, so the ledger first has content at the second card's vote. Players who never wait, such as the last to vote, see only the teaser. Adds content to two screens instead of one.
-
-**Option C**: **Give it its own page between rounds** — after the last reveal of a round, everyone lands on a ledger page with a who-fooled-whom grid and the grouped list; the host starts the next round from there.
-  - *Pros*: A deliberate pause for the table to look back together — the most social version. Room for a grid, which makes patterns obvious in a way no list can. Removes the ledger from the reveal entirely.
-  - *Cons*: **Needs a new server phase** between the last reveal and the next round's truth phase, changing the phase order the game is built on (`truth → forgery → vote → reveal` is a §4 invariant) and the readiness gate that drives it. Appears only once per round and **never in a one-round match**. Adds a stop to every match.
-
-**Option D**: **Show each player their own story first** — four short groups about the viewer (who they fooled, who fooled them, whose lies they spotted, who spotted theirs), with a toggle to the whole table. Placement is a second choice: any of A, B or C.
-  - *Pros*: The most readable, because every line is about the person reading it. Makes grudges personal, which suits a game about people who know each other. Composes with any placement.
-  - *Cons*: Hides the table-wide picture behind a toggle, weakening the shared "did you see that" moment. Sparse for a quiet player, whose own view may be nearly empty. Four groups take more height than two when full. **Selecting it still requires choosing A, B or C for where it lives.**
-
-Your selection: **Proceed with Option B** (September 27, 2026). Specced as **AG3** in `agent_execution_guide.md`: Option B plus the five items common to every option. **The server change is strictly additive** — build `1.1.0 (8)` reads the existing keys — and it adds per-pair `occurrences` plus a `thisCard` field for the reveal's one-line teaser.
+None — all open items through Wave AG (Issues 1–177) are resolved.
 
 ---
 
@@ -420,12 +377,15 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–176 — August 8 to September 12, 2026
+### Issues 65–177 — August 8 to October 1, 2026
 
-**100 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
+**103 items.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
 | Area | Issues | Where the surviving contract lives |
 |---|---|---|
+| **Wave AG / AG3 — move The Parlour Remembers to waiting screens & reveal teaser** (Option B: replaced reveal `THE PARLOUR REMEMBERS` block with 1–3 line `thisCard` teaser bordered in verdigris; moved full rivalry ledger to `ParlourLedger` on vote and craft waiting screens; vote waiting screen wrapped in `LayoutBuilder`/`SingleChildScrollView` to prevent overflow at 320pt while preserving vertical centering when empty; grouped pairs into `FOOLED` and `SPOTTED` with inline `CLOSEST` badge and zero line duplication; added expandable `occurrences` with prompt and lie text; server `runningRivalries` extended strictly additively with `occurrences` and `thisCard`; preserved flipped-only leak filter and top-3 slice; backward compatibility with 1.1.0 (8) verified; worst-case payload measured at 17.59 KB; 7 widget/emulator validations and 4 falsifications passed) | 177 | `functions/src/index.ts`; `functions/src/scoring_logic.ts`; `lib/screens/phase4_reveal.dart`; `lib/screens/phase3_vote.dart`; `lib/screens/phase2_craft.dart`; `lib/screens/game_over_screen.dart`; `lib/widgets/parlour_ledger.dart`; `test/running_rivalries_test.dart`; `functions/test/running_rivalries.spec.ts`; `functions/test/game_e2e.spec.ts`; `docs/design_scoring_and_ui.md`; `docs/design_database_and_security.md`; `docs/design_ui_direction.md` |
+| **Wave AG / AG2 — render point chip headers in ivory for accessible contrast** (deleted collapsed ternary `isPositive ? theme.colorScheme.primary : AppColors.oxblood` on chip headers under `POINTS AWARDED THIS CARD`; rendered all chip headers in `AppColors.ivory` [13.55:1 against chip fill], carrying sign via `+`/`-` characters without relying on color or glyphs; preserved O2 format; wrapped block in `points_awarded_this_card_block` ValueKey; widened rendered contrast test in `test/contrast_tokens_test.dart` to walk all Text widgets in points block; updated `docs/design_ui_direction.md`) | AG2 | `lib/screens/phase4_reveal.dart`; `test/contrast_tokens_test.dart`; `docs/design_ui_direction.md` |
+| **Wave AG / AG1 — map create room callable errors to human readable sentences** (unified create and join error mapping via `lobbyCallableErrorMessage` to prevent twin drift; mapped `invalid-argument`, `resource-exhausted`, `unauthenticated`, `unavailable`, and `deadline-exceeded` to user-facing sentences; kept join sentences verbatim; sent raw exception to `debugPrint` instead of UI; added `test/lobby_create_error_test.dart` with falsification and mappings) | AG1 | `lib/screens/lobby_screen.dart`; `test/lobby_create_error_test.dart`; `docs/agent_execution_guide.md` §2 |
 | **Wave AF / AF1 — ship as 1.1.0+8** (bumped `pubspec.yaml` from `1.0.0+7` to `1.1.0+8`, ending 47-commit accumulation across 5 waves under Wave Z's build number; verified `CFBundleShortVersionString` and `CFBundleVersion` derived from build metadata; verified runtime title-screen version label displays `v1.1.0 (8)` on device/simulator; deleted stale build 6 archive and build 2 ipa; built fresh `.xcarchive` verified with timestamp, `1.1.0` and `8`; deployed web hosting to production; added `check_web_e2e_strings.sh` to `README.md` preflight and aligned info count to 188; all 8 gates green bare; 0 open items) | 176 | `pubspec.yaml`; `README.md`; `docs/agent_execution_guide.md` §1 |
 | **Wave AE / AE1 — gate web E2E UI strings against production code** (declared all UI labels matched by web E2E scripts in frozen `UI` map in `test/web_e2e/ui_strings.js`; replaced bare literals in `playthrough_helpers.js`, `run_full_playthrough.js`, and `run_match_summary_playthrough.js` with `UI`/`FIXTURE` references; pruned 6 dead steps/alternates including stale `INSPECT`, `DISMISS`, `ACCUSE`, `SHARE`, `VIEW STANDINGS`, and `START ROUND`; added `scripts/check_web_e2e_strings.sh` gate verifying non-vacuity, presence in `lib/**/*.dart`, and variable-agnostic containment in E2E scripts; battery gate exits 0 bare) | 175 | `test/web_e2e/ui_strings.js`; `scripts/check_web_e2e_strings.sh`; `test/web_e2e/playthrough_helpers.js`; `test/web_e2e/run_full_playthrough.js`; `test/web_e2e/run_match_summary_playthrough.js`; `docs/agent_execution_guide.md` §1 |
 | **Wave AD / AD1 — delete decoy CONFIRM VOTE widget & fix voter assertion** (deleted invisible zero-sized `CONFIRM VOTE` widget from `phase3_vote.dart:580–581` added during AC3; updated `phase3_vote_target_ready_toggle_test.dart:171` to assert `TAP A CARD TO CHOOSE`; audited all other `CONFIRM VOTE` references; falsified by deleting `PrimaryButton` and observing test failure; all 20 over-reach guards passed unedited) | AD1 | `lib/screens/phase3_vote.dart`; `test/phase3_vote_target_ready_toggle_test.dart`; `docs/ongoing_general_errors.md` §2.43 |

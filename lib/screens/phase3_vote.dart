@@ -23,6 +23,7 @@ import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
 import '../widgets/in_game_app_bar.dart';
 import '../widgets/instructions_dialog.dart';
+import '../widgets/parlour_ledger.dart';
 import '../theme/app_icons.dart';
 
 class Phase3VoteScreen extends StatefulWidget {
@@ -279,46 +280,56 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
     final activeNonSpectators = gs.players.where((p) => p.role != PlayerRole.spectator).toList();
     final activeCount = activeNonSpectators.length;
     int unready = (activeCount - readyCount).clamp(0, activeCount);
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        RavenMascot(
-          state: ravenPose,
-          size: 72,
-        ),
-        const SizedBox(height: 12),
-        const CandleFlameIndicator(),
-        const SizedBox(height: 24),
-        Text(
-          'YOUR BALLOT IS SEALED',
-          style: theme.textTheme.headlineSmall?.copyWith(
-            color: theme.colorScheme.secondary,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2,
-            shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 8)],
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text('Waiting for $unready players...', style: const TextStyle(color: Colors.white)),
-        const SizedBox(height: 16),
-        WaitingOnRow(players: activeNonSpectators, readyMap: state.readyPlayers),
-        if (gs.currentPlayer!.isHost) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: 40),
-            child: SecondaryButton(
-              text: 'PROCEED TO REVEAL (HOST)',
-              onPressed: () => _confirmAndProceed(context, gs),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                RavenMascot(
+                  state: ravenPose,
+                  size: 72,
+                ),
+                const SizedBox(height: 12),
+                const CandleFlameIndicator(),
+                const SizedBox(height: 24),
+                Text(
+                  'YOUR BALLOT IS SEALED',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: theme.colorScheme.secondary,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2,
+                    shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 8)],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text('Waiting for $unready players...', style: const TextStyle(color: Colors.white)),
+                const SizedBox(height: 16),
+                WaitingOnRow(players: activeNonSpectators, readyMap: state.readyPlayers),
+                ParlourLedger(runningRivalries: state.runningRivalries),
+                if (gs.currentPlayer!.isHost) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 40),
+                    child: SecondaryButton(
+                      text: 'PROCEED TO REVEAL (HOST)',
+                      onPressed: () => _confirmAndProceed(context, gs),
+                    ),
+                  ),
+                  if (kDebugMode) ...[
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: () => gs.debugSimulateBotResponses(),
+                      child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                    ),
+                  ],
+                ],
+              ],
             ),
           ),
-          if (kDebugMode) ...[
-            const SizedBox(height: 10),
-            TextButton(
-              onPressed: () => gs.debugSimulateBotResponses(),
-              child: const Text('DEBUG: BOTS SUBMIT', style: TextStyle(color: Colors.white24, fontSize: 10)),
-            ),
-          ],
-        ],
-      ],
+        );
+      },
     );
   }
 

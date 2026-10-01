@@ -6389,6 +6389,65 @@ await callFn('castVote', innocentForgeryVoter.token, { roomCode, targetCardId, v
         expect(readEntry.count).to.equal(1);
       });
 
+      it('1b. leak test extended (AG3): while unmask window is open, no occurrence references current card and thisCard is null; after close, thisCard.cardOwnerId is current reader', async () => {
+        const { roomCode, roomRef, userMap, currentReaderId, targetUser, otherPlayers, answerAuthors, currentCard } = await setupVoteGame(3);
+        const forgeryOptions = currentCard.options.filter((opt: any) => answerAuthors[opt.id] !== currentReaderId);
+
+        await callFn('submitTargetForgeryGuesses', targetUser.idToken, {
+          roomCode,
+          cardId: currentReaderId,
+          guesses: { [forgeryOptions[0].id]: answerAuthors[forgeryOptions[0].id] }
+        });
+        await callFn('setReady', targetUser.idToken, { roomCode, playerId: currentReaderId, ready: true });
+
+        const opt1 = currentCard.options.find((opt: any) => answerAuthors[opt.id] === otherPlayers[1]);
+        const opt0 = currentCard.options.find((opt: any) => answerAuthors[opt.id] === otherPlayers[0]);
+
+        await callFn('castVote', userMap[otherPlayers[0]].idToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: otherPlayers[0],
+          votedForId: opt1.id
+        });
+        await callFn('castVote', userMap[otherPlayers[1]].idToken, {
+          roomCode,
+          targetCardId: currentReaderId,
+          voterId: otherPlayers[1],
+          votedForId: opt0.id
+        });
+
+        let roomSnap = await roomRef.get();
+        expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+        expect(roomSnap.data()?.unmaskDeadline).to.be.greaterThan(0);
+
+        // LEAK GUARD (extended): during window, no occurrence references current card and thisCard is null
+        const runningDuring = roomSnap.data()?.runningRivalries;
+        expect(runningDuring).to.not.be.undefined;
+        expect(runningDuring.thisCard).to.be.null;
+        for (const f of runningDuring.fools || []) {
+          for (const occ of f.occurrences || []) {
+            expect(occ.cardOwnerId).to.not.equal(currentReaderId);
+          }
+        }
+        for (const r of runningDuring.reads || []) {
+          for (const occ of r.occurrences || []) {
+            expect(occ.cardOwnerId).to.not.equal(currentReaderId);
+          }
+        }
+
+        // Close unmask window
+        await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
+        await callFn('closeUnmaskWindow', targetUser.idToken, { roomCode });
+
+        // After window closes, thisCard.cardOwnerId is the current reader!
+        roomSnap = await roomRef.get();
+        const runningAfter = roomSnap.data()?.runningRivalries;
+        expect(runningAfter).to.not.be.undefined;
+        expect(runningAfter.thisCard).to.not.be.null;
+        expect(runningAfter.thisCard.cardOwnerId).to.equal(currentReaderId);
+        expect(runningAfter.thisCard.round).to.equal(1);
+      });
+
       it('2. all three flush sites publish runningRivalries', async () => {
         // Site A: advancePhaseInternal (transition to reveal with no unmask window)
         const g1 = await setupVoteGame(3);

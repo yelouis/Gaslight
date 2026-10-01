@@ -45,8 +45,14 @@ export interface GameState {
   unmaskDeadline?: number | null;
   matchSummary?: MatchSummary;
   runningRivalries?: {
-    fools: Array<{ deceiverId: string; deceiverName: string; victimId: string; victimName: string; count: number }>;
-    reads: Array<{ readerId: string; readerName: string; forgerId: string; forgerName: string; count: number }>;
+    fools: Array<{ deceiverId: string; deceiverName: string; victimId: string; victimName: string; count: number; occurrences?: Array<{ round: number; cardOwnerId: string; cardOwnerName: string; promptText: string; lieText: string }> }>;
+    reads: Array<{ readerId: string; readerName: string; forgerId: string; forgerName: string; count: number; occurrences?: Array<{ round: number; cardOwnerId: string; cardOwnerName: string; promptText: string; lieText: string }> }>;
+    thisCard?: {
+      round: number;
+      cardOwnerId: string;
+      fools: Array<{ deceiverId: string; deceiverName: string; victimId: string; victimName: string; total: number }>;
+      reads: Array<{ readerId: string; readerName: string; forgerId: string; forgerName: string; total: number }>;
+    } | null;
   };
 }
 

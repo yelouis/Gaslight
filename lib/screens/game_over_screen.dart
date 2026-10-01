@@ -799,7 +799,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2),
                     child: Text(
-                      '${pair['readerName']} has read ${pair['forgerName']} ×${pair['count']}',
+                      '${pair['readerName']} spotted ${pair['forgerName']}\'s lie ×${pair['count']}',
                       style: const TextStyle(
                         fontFamily: 'Lora',
                         fontSize: 12,

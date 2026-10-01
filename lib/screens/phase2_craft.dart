@@ -22,6 +22,7 @@ import '../widgets/lamp_loading.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/in_game_app_bar.dart';
 import '../widgets/instructions_dialog.dart';
+import '../widgets/parlour_ledger.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_motion.dart';
 
@@ -511,6 +512,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
               ),
             ),
           ],
+          ParlourLedger(runningRivalries: state.runningRivalries),
           if (kDebugMode && gs.currentPlayer!.isHost) ...[
             const SizedBox(height: 20),
             TextButton(
