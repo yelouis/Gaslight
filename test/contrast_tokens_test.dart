@@ -139,7 +139,7 @@ void main() {
         reason: 'Rendered reveal answer text body on groundRaised background must have contrast ratio >= 4.5:1. Got $measuredRatio');
   });
 
-  testWidgets('rendered score breakdown text widgets in reveal subtree satisfy WCAG AA contrast floor >= 4.5:1', (WidgetTester tester) async {
+  testWidgets('rendered score breakdown and point chip text widgets in POINTS AWARDED THIS CARD block satisfy WCAG AA contrast floor >= 4.5:1', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     final mockDb = FakeFirestore();
     final gameService = GameService(db: mockDb, functions: FakeFirebaseFunctions(mockDb));
@@ -153,9 +153,13 @@ void main() {
         promptText: 'A prompt for testing contrast',
         truthAnswer: 'The truth',
         scoreDeltas: {
+          'local_player_id': -1,
           'guest_1': 3,
         },
         scoreBreakdown: {
+          'local_player_id': [
+            const ScoreBreakdownItem(rule: 'fooled_by_forgery', points: -1),
+          ],
           'guest_1': [
             const ScoreBreakdownItem(rule: 'successful_forgery', points: 3),
           ],
@@ -197,8 +201,19 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<GameService>.value(
           value: gameService,
-          child: const MaterialApp(
-            home: MediaQuery(
+          child: MaterialApp(
+            theme: ThemeData(
+              brightness: Brightness.dark,
+              scaffoldBackgroundColor: AppColors.ground,
+              colorScheme: const ColorScheme.dark(
+                primary: AppColors.oxblood,
+                secondary: AppColors.brass,
+                tertiary: AppColors.verdigris,
+                surface: AppColors.parchment,
+                onSurface: AppColors.ink,
+              ),
+            ),
+            home: const MediaQuery(
               data: MediaQueryData(accessibleNavigation: true),
               child: Phase4RevealScreen(),
             ),
@@ -211,32 +226,70 @@ void main() {
         await tester.pump(const Duration(milliseconds: 200));
       }
 
+      // Assert chips are rendered with exact text format (validation 2)
+      expect(find.text('Bob: +3'), findsOneWidget);
+      expect(find.text('Alice: -1'), findsOneWidget);
+
+      final bobHeaderText = tester.widget<Text>(find.text('Bob: +3'));
+      expect(bobHeaderText.style?.color, AppColors.ivory,
+          reason: 'Positive chip header must render in ivory (AG2)');
+      final aliceHeaderText = tester.widget<Text>(find.text('Alice: -1'));
+      expect(aliceHeaderText.style?.color, AppColors.ivory,
+          reason: 'Negative chip header must render in ivory (AG2)');
+
       // Tap Bob's chip to expand the breakdown
-      final chipFinder = find.byKey(const ValueKey('score_breakdown_chip_guest_1'));
-      expect(chipFinder, findsOneWidget);
-      await tester.tap(chipFinder);
+      final bobChipFinder = find.byKey(const ValueKey('score_breakdown_chip_guest_1'));
+      expect(bobChipFinder, findsOneWidget);
+      await tester.tap(bobChipFinder);
       await tester.pump();
 
-      // Find container inside the chip to get its background decoration
-      final containerFinder = find.descendant(of: chipFinder, matching: find.byType(Container)).first;
-      final containerWidget = tester.widget<Container>(containerFinder);
-      final boxDec = containerWidget.decoration as BoxDecoration;
-      final chipTint = boxDec.color ?? Colors.transparent;
-      final effectiveBg = Color.alphaBlend(chipTint, AppColors.ground);
+      // Tap Alice's chip to expand its breakdown as well
+      final aliceChipFinder = find.byKey(const ValueKey('score_breakdown_chip_local_player_id'));
+      expect(aliceChipFinder, findsOneWidget);
+      await tester.tap(aliceChipFinder);
+      await tester.pump();
 
-      // Walk all Text widgets inside the expanded breakdown subtree
-      final breakdownItemsFinder = find.byKey(const ValueKey('score_breakdown_items_guest_1'));
-      expect(breakdownItemsFinder, findsOneWidget);
+      // Locate the POINTS AWARDED THIS CARD container block
+      final blockFinder = find.byKey(const ValueKey('points_awarded_this_card_block'));
+      expect(blockFinder, findsOneWidget, reason: 'Must find POINTS AWARDED THIS CARD block');
 
-      final textWidgets = tester.widgetList<Text>(
-        find.descendant(of: breakdownItemsFinder, matching: find.byType(Text)),
-      ).toList();
+      // Helper to resolve background color by walking up ancestor elements
+      Color resolveBackgroundForElement(Element textElement) {
+        Color? bg;
+        textElement.visitAncestorElements((ancestor) {
+          final widget = ancestor.widget;
+          if (widget is Container && widget.decoration is BoxDecoration) {
+            final dec = widget.decoration as BoxDecoration;
+            if (dec.color != null && dec.color!.a > 0) {
+              bg = dec.color;
+              return false; // stop ascending
+            }
+          }
+          if (widget is DecoratedBox && widget.decoration is BoxDecoration) {
+            final dec = widget.decoration as BoxDecoration;
+            if (dec.color != null && dec.color!.a > 0) {
+              bg = dec.color;
+              return false;
+            }
+          }
+          return true; // continue ascending
+        });
+        if (bg != null) {
+          return Color.alphaBlend(bg!, AppColors.ground);
+        }
+        return AppColors.ground;
+      }
 
-      expect(textWidgets.isNotEmpty, isTrue, reason: 'Must find text widgets in expanded breakdown');
+      // Walk all Text widgets under POINTS AWARDED THIS CARD block
+      final textElements = find.descendant(of: blockFinder, matching: find.byType(Text)).evaluate().toList();
+      expect(textElements.isNotEmpty, isTrue, reason: 'Must find text widgets in POINTS AWARDED THIS CARD block');
 
-      final List<({String desc, Color color, double ratio})> inspected = [];
+      final List<({String desc, Color color, Color bg, double ratio})> inspected = [];
 
-      for (final text in textWidgets) {
+      for (final element in textElements) {
+        final text = element.widget as Text;
+        final effectiveBg = resolveBackgroundForElement(element);
+
         final List<(String, Color)> colors = [];
         if (text.style?.color != null) {
           colors.add((text.data ?? 'plain', text.style!.color!));
@@ -255,7 +308,7 @@ void main() {
           final color = entry.$2;
           final effectiveFg = Color.alphaBlend(color, effectiveBg);
           final ratio = getContrastRatio(effectiveFg, effectiveBg);
-          inspected.add((desc: label, color: color, ratio: ratio));
+          inspected.add((desc: label, color: color, bg: effectiveBg, ratio: ratio));
           expect(
             ratio,
             greaterThanOrEqualTo(4.5),
@@ -264,9 +317,17 @@ void main() {
         }
       }
 
-      // Ensure we actually inspected the breakdown line tokens
+      // Verify we inspected chip headers, section heading, hint, and breakdown lines
+      expect(inspected.any((i) => i.desc == 'Bob: +3'), isTrue,
+          reason: 'Must have inspected positive chip header Bob: +3');
+      expect(inspected.any((i) => i.desc == 'Alice: -1'), isTrue,
+          reason: 'Must have inspected negative chip header Alice: -1');
+      expect(inspected.any((i) => i.desc.contains('POINTS AWARDED THIS CARD')), isTrue,
+          reason: 'Must have inspected section heading');
+      expect(inspected.any((i) => i.desc.contains('Tap a player')), isTrue,
+          reason: 'Must have inspected hint text');
       expect(inspected.any((i) => i.desc.contains('Successful Forgery') || i.desc.contains(': +3')), isTrue,
-          reason: 'Must have inspected the expanded rule lines');
+          reason: 'Must have inspected expanded rule lines');
     } finally {
       gameService.dispose();
     }

@@ -598,113 +598,117 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
 
                           if (revealStage >= 4) ...[
                             if (_latestDeltas.isNotEmpty) ...[
-                              const SizedBox(height: 24),
-                              Text(
-                                'POINTS AWARDED THIS CARD', 
-                                style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1.5),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Tap a player to see their score breakdown',
-                                style: TextStyle(
-                                  color: AppColors.brass,
-                                  fontSize: 11,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 12,
-                                runSpacing: 8,
-                                alignment: WrapAlignment.center,
-                                children: _latestDeltas.entries.where((e) => e.value != 0).map((e) {
-                                  final player = gs.players.firstWhere((p) => p.id == e.key, orElse: () => PlayerState(id: e.key, name: 'Unknown'));
-                                  final isPositive = e.value > 0;
-                                  final prefix = isPositive ? '+' : '';
-                                  final color = isPositive ? theme.colorScheme.primary : AppColors.oxblood;
-                                  final breakdownItems = currentCard?.scoreBreakdown[e.key] ?? const [];
-                                  final isExpanded = _expandedBreakdownPlayerIds.contains(e.key);
-                                  return GestureDetector(
-                                    key: ValueKey('score_breakdown_chip_${e.key}'),
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () {
-                                      setState(() {
-                                        if (_expandedBreakdownPlayerIds.contains(e.key)) {
-                                          _expandedBreakdownPlayerIds.remove(e.key);
-                                        } else {
-                                          _expandedBreakdownPlayerIds.add(e.key);
-                                        }
-                                      });
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: (isPositive ? theme.colorScheme.secondary : AppColors.oxblood).withValues(alpha: 0.12),
-                                        border: Border.all(
-                                          color: isPositive ? theme.colorScheme.secondary : AppColors.oxblood,
-                                          width: 1,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Row(
+                              Column(
+                                key: const ValueKey('points_awarded_this_card_block'),
+                                children: [
+                                  const SizedBox(height: 24),
+                                  Text(
+                                    'POINTS AWARDED THIS CARD', 
+                                    style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1.5),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Tap a player to see their score breakdown',
+                                    style: TextStyle(
+                                      color: AppColors.brass,
+                                      fontSize: 11,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 12,
+                                    runSpacing: 8,
+                                    alignment: WrapAlignment.center,
+                                    children: _latestDeltas.entries.where((e) => e.value != 0).map((e) {
+                                      final player = gs.players.firstWhere((p) => p.id == e.key, orElse: () => PlayerState(id: e.key, name: 'Unknown'));
+                                      final isPositive = e.value > 0;
+                                      final prefix = isPositive ? '+' : '';
+                                      final breakdownItems = currentCard?.scoreBreakdown[e.key] ?? const [];
+                                      final isExpanded = _expandedBreakdownPlayerIds.contains(e.key);
+                                      return GestureDetector(
+                                        key: ValueKey('score_breakdown_chip_${e.key}'),
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () {
+                                          setState(() {
+                                            if (_expandedBreakdownPlayerIds.contains(e.key)) {
+                                              _expandedBreakdownPlayerIds.remove(e.key);
+                                            } else {
+                                              _expandedBreakdownPlayerIds.add(e.key);
+                                            }
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: (isPositive ? theme.colorScheme.secondary : AppColors.oxblood).withValues(alpha: 0.12),
+                                            border: Border.all(
+                                              color: isPositive ? theme.colorScheme.secondary : AppColors.oxblood,
+                                              width: 1,
+                                            ),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              PlayerAvatar(player: player, size: 20, showName: false),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                '${player.name}: $prefix${e.value}',
-                                                style: TextStyle(
-                                                  color: color,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 14,
-                                                ),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  PlayerAvatar(player: player, size: 20, showName: false),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    '${player.name}: $prefix${e.value}',
+                                                    style: const TextStyle(
+                                                      color: AppColors.ivory,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
+                                              if (isExpanded && breakdownItems.isNotEmpty) ...[
+                                                const SizedBox(height: 6),
+                                                Container(
+                                                  key: ValueKey('score_breakdown_items_${e.key}'),
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: breakdownItems.map((item) {
+                                                      final itemPrefix = item.points > 0 ? '+' : '';
+                                                      return Padding(
+                                                        padding: const EdgeInsets.only(left: 28, top: 2),
+                                                        child: Text.rich(
+                                                          TextSpan(
+                                                            children: [
+                                                              TextSpan(
+                                                                text: _ruleDisplayName(item.rule),
+                                                                style: const TextStyle(
+                                                                  color: AppColors.brass,
+                                                                  fontSize: 12,
+                                                                ),
+                                                              ),
+                                                              TextSpan(
+                                                                text: ': $itemPrefix${item.points}',
+                                                                style: const TextStyle(
+                                                                  color: AppColors.ivory,
+                                                                  fontSize: 12,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }).toList(),
+                                                  ),
+                                                ),
+                                              ],
                                             ],
                                           ),
-                                          if (isExpanded && breakdownItems.isNotEmpty) ...[
-                                            const SizedBox(height: 6),
-                                            Container(
-                                              key: ValueKey('score_breakdown_items_${e.key}'),
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: breakdownItems.map((item) {
-                                                  final itemPrefix = item.points > 0 ? '+' : '';
-                                                  return Padding(
-                                                    padding: const EdgeInsets.only(left: 28, top: 2),
-                                                    child: Text.rich(
-                                                      TextSpan(
-                                                        children: [
-                                                          TextSpan(
-                                                            text: _ruleDisplayName(item.rule),
-                                                            style: const TextStyle(
-                                                              color: AppColors.brass,
-                                                              fontSize: 12,
-                                                            ),
-                                                          ),
-                                                          TextSpan(
-                                                            text: ': $itemPrefix${item.points}',
-                                                            style: const TextStyle(
-                                                              color: AppColors.ivory,
-                                                              fontSize: 12,
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  );
-                                                }).toList(),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
                               ),
                             ],
 
