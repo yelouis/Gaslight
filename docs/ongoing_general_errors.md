@@ -8,23 +8,36 @@
 
 ## 1. Open & in-flight
 
-**Two reports from a September 27, 2026 device playthrough on `1.1.0 (8)`.** One is specced directly as Wave AG in `agent_execution_guide.md`; one needs a decision and is Issue 177 below. Investigating them turned up a third defect, also specced as AG2.
+**Wave AG verified, October 3, 2026.** All three items are implemented as specified and their guards are real. **One gap remains, and it is in the AG1 spec, not the AG1 code.** It is specced as AH1 in `agent_execution_guide.md`.
 
-**AG1 — "error when creating a room": the request never reached the server, and the error screen is a defect of its own.**
+**Falsified this pass, not taken from commit bodies:**
 
-- **What the user saw** was a raw stack trace (`#0 _extractReplyValueOrThrow … #4 GameService.createRoom (game_service.dart:256) … #5 _LobbyScreenState._createRoom (lobby_screen.dart:193)`), because `lobby_screen.dart:203` renders `SnackBar(content: Text('Error: $e'))` and `FirebaseException.toString()` appends the stack. **The first line — which carries the error code — sat behind the status bar, so the screenshot could not be diagnosed.**
-- **The same defect was already fixed once, in the twin.** `_joinRoom` directly below maps `e.code` to sentences, and `test/lobby_join_error_test.dart:44` is literally *"join non-existent room displays mapped readable sentence and no raw exception/stack trace"*. **Create never received that fix.** It is the only raw-exception display left in `lib/`.
-- **Root cause: the failing call never reached Cloud Functions.** The screenshot reads 8:01 PM PDT (03:01 UTC, September 28). Cloud Run's request log shows **no request to any function between 02:30 and 04:30 UTC**, and only three `createroom` requests in fourteen days, **all HTTP 200** — the most recent at 20:36 UTC, the start of the working `ANYK` game that afternoon. **The empty window was checked against a positive control**: the identical query over 20:30–21:00 UTC returns that game's full traffic (`castvote`, `submittargetforgeryguesses`, `closeunmaskwindow` …). **The failure therefore happened on the device, most likely a network-level failure** (the screenshot shows Wi-Fi, where the working game ran on LTE). **The exact code cannot be recovered** — it was on the hidden line. AG1's readable message will say whether it was a connection failure next time.
+| Item | Injected fault | Result |
+|---|---|---|
+| AG1 | `_createRoom` shows `'Error: $e'` again | 5 tests in `lobby_create_error_test.dart` fail |
+| AG2 | Chip header back to oxblood | Fails on the pinned colour check, **and** — with those pins removed — fails on the rendered ratio walk alone at **1.84 : 1**. The guard holds two independent ways. |
+| AG3 | Flipped-only filter disabled | **Exactly 2** server tests fail (AB2's leak test and AG3's extended `1b`), 162 pass |
+| AG3 | Teaser identity gate removed | 1 client test fails |
+| AG3 | Vote waiting scroll wrap reverted | Overflows by **850 px** |
+| AG3 | Spotted line rendered twice | *"Found 2 widgets"* — the no-duplicate check fails |
 
-**AG2 — the point chips are still unreadable; Issue 171 was only half fixed, and the half left over was a diagnostic miss in this log.** Each chip's header (`Louis: +2`) renders in `isPositive ? theme.colorScheme.primary : AppColors.oxblood` (`phase4_reveal.dart:624`). **`colorScheme.primary` is `AppColors.oxblood`**, so both branches are the same colour — gains and losses are told apart only by the `+`/`-` in the text. Oxblood on the chip fill measures **1.57 : 1** against a 4.5 : 1 floor. Issue 171's screenshot showed these red headers *and* the invisible breakdown lines; the diagnosis measured the breakdown (1.12 : 1) and missed the header, and AC1's spec then scoped its rendered contrast test to the `score_breakdown_items_*` subtree — **so the header was never in any test's reach.** Same trap as `onSurface`: a `colorScheme` token assumed to mean a role ("primary" as "positive") that in this theme names a colour.
+**Also confirmed:** all seven `runningRivalries` publish sites pass the round and reader each transaction *writes* (`:2246` closes the unmask window without changing the reader, so passing the current one is correct). The worst-case payload is **18,013 bytes**, recorded in the AG3 commit. The functions are deployed and the deploy gate is fresh. **`CLEANUP_DRY_RUN=false` survived the deploy** on revision `cleanupdaily-00018-2wm`. All three design docs were updated, and the shipped `1.1.0 (8)` keys were left untouched.
 
-**All three items from Wave AG (AG1, AG2, AG3 / Issue 177 Option B) are implemented, verified, and passing all regression gates.**
+**⚠️ The AG1 gap: on iOS, a dropped connection still reads "Something went wrong."** AG1 sends `unavailable` and `deadline-exceeded` to the connection sentence. **On iOS, almost no connection failure arrives as either.** Traced through the vendored sources on disk:
 
-**Gate state:** all eight gates green bare at 0 errors / 0 warnings / 188 infos, 357 client tests, 164 functions tests.
+1. **firebase-ios-sdk 12.15.0**, `Functions.swift` `processedError`: maps HTTP statuses, and **only `NSURLErrorTimedOut`** to `.deadlineExceeded`. No internet (`-1009`), DNS failure (`-1003`), cannot connect (`-1004`) and connection lost (`-1005`) are all returned as a **raw `NSError` in `NSURLErrorDomain`**.
+2. **cloud_functions 6.3.5**, `FirebaseFunctionsPlugin.swift` `createFlutterError`: an error outside `com.firebase.functions` gets **`errorCode = "unknown"`**.
+3. **cloud_functions_platform_interface 6.0.5**, `exception.dart`: `code = details['code']`, so Dart receives **`FirebaseFunctionsException(code: 'unknown')`**.
+
+`lobbyCallableErrorMessage` sends `unknown` to the default branch. **The likeliest cause of the September 27 failure — a device that couldn't reach the network — would therefore still say "Something went wrong. Try again."** The code does exactly what its spec said. **The spec assumed the wrong code.** It flagged that assumption as unverified and *recommended* a device check, which wasn't done and wasn't mentioned in the commit. The SDK source that answers it was on disk the whole time. Recorded as lesson §2.45.
+
+**Process note:** the AG1 commit body records neither its falsification output nor whether the device check ran. The falsification was re-run in this pass and holds.
+
+**Gate state:** all eight gates green bare — 0 errors / 0 warnings / **188** infos, **357** client tests, **164** functions tests, decks, all five evidence invocations, web E2E strings, and deploy fresh.
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-None — all open items through Wave AG (Issues 1–177) are resolved.
+No open issues. Issues 1–177 are resolved and indexed in §3. **The one follow-up from the Wave AG verification, AH1, has one correct fix and is specced directly** in `agent_execution_guide.md`; it needs no selection.
 
 ---
 
@@ -132,6 +145,21 @@ The X1 spec said: throw for a card, then fetch **that same card** and assert it 
 
 
 SEC1 and SEC2 shipped correctly, with tests and a verified deploy — and `design_database_and_security.md` §3 still read *"Room documents: `allow read: if true`"*, the exact rule that had just been retired for granting collection enumeration, while the seat-token mechanism that fixed the HIGH-severity takeover appeared **nowhere**. Four of the six items updated a design doc; the two most important did not. A future agent reading §3 would have found a documented invitation to "simplify" the split verbs back into the vulnerability. **Closing a security issue means updating the document that described the old behaviour as intended, not only the one describing the new behaviour as delivered** — and the doc most likely to be stale is the one that made the vulnerable design sound deliberate. Grep the design docs for the code you just deleted.
+---
+
+#### 2.45 A recommended check is an optional check, and optional checks don't happen
+
+AG1 was specced to make a dropped connection say *"Could not reach the parlour."* It mapped `unavailable` and `deadline-exceeded` to that sentence on an **assumption** about which code iOS raises, and **the spec said so**: *"which code a network failure produces on iOS is not verified."* It then listed a device check under *"Recommended — do it if you can, and record the result either way."*
+
+The check wasn't run, and the commit didn't mention it. The assumption was wrong. On iOS a dropped connection reaches Dart as **`unknown`**, so the fix shipped without doing the one thing it was for. **It was implemented exactly to spec and still missed its purpose** — the worst kind of miss, because every gate is green.
+
+**The evidence was on disk from the start.** The Firebase iOS SDK, the FlutterFire plugin and its platform interface are all vendored (`~/Library/Developer/Xcode/DerivedData/…/SourcePackages`, `~/.pub-cache`). Reading three short functions answered the question in minutes, with no device needed.
+
+**The rules:**
+- **If a fix's value depends on how a platform or library behaves, verify that behaviour while writing the spec**, from vendored source if it is available. Don't hand it to the implementer as an open question.
+- **Don't put a load-bearing check under "recommended."** Make it required, or require the commit to state its outcome either way (`Device check: DONE — … / NOT RUN — reason`). A check that can be silently skipped will be.
+- **"Implemented to spec" and "fixed the problem" are separate claims.** Verify the second against the original report, not against the spec.
+
 ---
 
 #### 2.44 A grep that assumes a quoting style is a search with a silent filter on it
