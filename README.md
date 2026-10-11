@@ -59,7 +59,7 @@ There are three layers of testing: **automated suites** (run these first, always
 ### Automated test suites (run before any playtest)
 
 ```bash
-flutter analyze                 # static analysis — must report 0 errors
+flutter analyze lib test        # 0 errors · 0 warnings · infos per docs/agent_execution_guide.md §1 (exits 1 even when clean)
 flutter test                    # client widget/unit tests (incl. 360×640 phone-layout tests)
 npm --prefix functions test     # backend E2E on the Firebase emulator: full game loops,
                                 # security rules, bots, custom decks, unmasking/revenge scoring
@@ -148,7 +148,7 @@ npm --prefix functions test
 ./scripts/check_web_e2e_strings.sh
 ```
 
-> **`flutter analyze` exits 1 even when clean.** It returns non-zero on *infos*, of which there are 188 (`withOpacity` deprecations, `avoid_print` in tests). **Read the error and warning counts, not the exit code.** Every *other* gate is judged on its exit code — and read those **bare**, never through a pipe: `... | tail` reports the pipe's status, which is always 0.
+> **`flutter analyze` exits 1 even when clean.** It returns non-zero on *infos*, whose current count is in docs/agent_execution_guide.md §1 (`withOpacity` deprecations, `avoid_print` in tests). **Read the error and warning counts, not the exit code.** Every *other* gate is judged on its exit code — and read those **bare**, never through a pipe: `... | tail` reports the pipe's status, which is always 0.
 
 > **Use `flutter analyze lib test`, never bare `flutter analyze`** — the bare form walks `build/{ios,macos}/SourcePackages` and reports ~678 phantom errors from vendored plugin source.
 
