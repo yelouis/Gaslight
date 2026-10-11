@@ -229,6 +229,63 @@ void main() {
       );
     });
 
+    // Wave AH / AH1: on iOS a dropped connection reaches Dart as `unknown`, not
+    // `unavailable` (see the comment on the mapper). The platform message is a
+    // raw NSError description and must never reach the player.
+    const iosOfflineMessage = 'The Internet connection appears to be offline.';
+    const connectionSentence = 'Could not reach the parlour. Check your connection and try again.';
+
+    testWidgets('create throws unknown (iOS dropped connection) maps to the connection sentence, never the platform message', (WidgetTester tester) async {
+      await pumpLobbyWithFunctions(
+        tester,
+        createException: FirebaseFunctionsException(
+          code: 'unknown',
+          message: iosOfflineMessage,
+        ),
+      );
+
+      await tester.enterText(find.byKey(const ValueKey('player_name_field')), 'Alice');
+      await tester.pump();
+
+      await tester.tap(find.text('CREATE ROOM'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.descendant(of: find.byType(SnackBar), matching: find.text(connectionSentence)),
+        findsOneWidget,
+        reason: 'unknown must read as the connection sentence on create',
+      );
+      expect(find.textContaining(iosOfflineMessage), findsNothing);
+      expect(find.text('Something went wrong. Try again.'), findsNothing);
+    });
+
+    testWidgets('join throws unknown (iOS dropped connection) maps to the connection sentence, never the platform message', (WidgetTester tester) async {
+      await pumpLobbyWithFunctions(
+        tester,
+        joinException: FirebaseFunctionsException(
+          code: 'unknown',
+          message: iosOfflineMessage,
+        ),
+      );
+
+      await tester.enterText(find.byKey(const ValueKey('player_name_field')), 'Alice');
+      await tester.enterText(find.byKey(const ValueKey('room_code_field')), 'TEST');
+      await tester.pump();
+
+      await tester.tap(find.text('JOIN ROOM'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.descendant(of: find.byType(SnackBar), matching: find.text(connectionSentence)),
+        findsOneWidget,
+        reason: 'unknown must read as the connection sentence on join',
+      );
+      expect(find.textContaining(iosOfflineMessage), findsNothing);
+      expect(find.text('Something went wrong. Try again.'), findsNothing);
+    });
+
     test('lobbyCallableErrorMessage unit mapping completeness and symmetry', () {
       // create mapping checks
       expect(

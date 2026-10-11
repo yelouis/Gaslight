@@ -58,6 +58,15 @@ String lobbyCallableErrorMessage(Object error, {required LobbyAction action}) {
             : 'Something went wrong. Try again.';
       case 'unauthenticated':
         return 'Could not sign in. Check your connection and try again.';
+      // iOS: almost no dropped connection arrives as `unavailable` or
+      // `deadline-exceeded`. (1) firebase-ios-sdk 12.15.0 Functions.swift
+      // processedError maps only HTTP statuses and NSURLErrorTimedOut, so
+      // -1009/-1003/-1004/-1005 return as a raw NSError; (2) cloud_functions
+      // 6.3.5 createFlutterError starts from "unknown" and remaps only
+      // com.firebase.functions errors; (3) cloud_functions_platform_interface
+      // 6.0.5 sets code = details['code']. Dart gets `unknown`. Keep it here,
+      // not in the default branch (Wave AH / AH1). iOS only, nothing about web.
+      case 'unknown':
       case 'unavailable':
       case 'deadline-exceeded':
         return 'Could not reach the parlour. Check your connection and try again.';
