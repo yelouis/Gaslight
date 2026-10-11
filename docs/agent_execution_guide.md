@@ -50,7 +50,7 @@
 | `./scripts/check_playthrough_evidence.sh` — **all five**: no-arg, `docs/playthroughs/findings_marionette.md`, `…/findings_web.md`, `…/findings_5player.md`, `…/findings_waveAA.md` | **exit 0** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH, 19 functions** |
 | `./scripts/check_web_e2e_strings.sh` | **exit 0** |
-| `flutter build ios --release --no-codesign` | **FAILS, exit 1** — `Target Integrity … 'IPHONEOS_DEPLOYMENT_TARGET' is set to 13.0` (Issue 178 → AI1). **Becomes a required ninth gate, exit 0, once AI1 lands.** |
+| `flutter build ios --release --no-codesign` | **exit 0 — `✓ Built build/ios/iphoneos/Runner.app (50.1MB)`** — the required **ninth gate** since AI1 (Issue 178). Before AI1 it failed with exit 1: `Target Integrity … 'IPHONEOS_DEPLOYMENT_TARGET' is set to 13.0`. |
 | `flutter test --coverage` | **Not a gate** — segfaults the runner (Issue 189 → AI14) |
 
 **Production (read October 10 via Firebase MCP):** 19 functions deployed — the 18 callables in `functions/src/index.ts` plus `cleanupDaily`, **including `submitTargetForgeryGuesses`**. Firestore rules identical to `firestore.rules`. 0 ERROR log entries Sep 26 – Oct 10. `CLEANUP_DRY_RUN=false` was last read back on revision `cleanupdaily-00018-2wm` after the AG3 deploy; it was **not** re-read on October 10.
