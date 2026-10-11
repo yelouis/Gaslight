@@ -568,8 +568,8 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                         label: Text('$f'),
                                         selected: isSelected,
                                         selectedColor: AppColors.brass,
-                                        labelStyle: TextStyle(
-                                          color: isSelected ? AppColors.ink : AppColors.ivory,
+                                        labelStyle: const TextStyle(
+                                          color: AppColors.ink,
                                           fontWeight: FontWeight.bold,
                                         ),
                                         onSelected: (selected) {
@@ -600,8 +600,8 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                         label: Text('$r'),
                                         selected: isSelected,
                                         selectedColor: AppColors.brass,
-                                        labelStyle: TextStyle(
-                                          color: isSelected ? AppColors.ink : AppColors.ivory,
+                                        labelStyle: const TextStyle(
+                                          color: AppColors.ink,
                                           fontWeight: FontWeight.bold,
                                         ),
                                         onSelected: (selected) {
