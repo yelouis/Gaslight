@@ -8,6 +8,13 @@
 
 ## 1. Open & in-flight
 
+**Read-only plugin audit, October 10, 2026 — Issues 178–191 filed below; nothing was fixed.** Run on `04363d6` with two Claude Code plugins installed that day: **`dart-and-flutter`** (Dart MCP server: `analyze_files`, `lsp` hover, `pub outdated`, `dtd` + `get_runtime_errors` + `widget_inspector` against the running app; skills `dart-run-static-analysis`, `dart-fix-runtime-errors`, `flutter-fix-layout-issues`, `flutter-build-responsive-layout`, `dart-resolve-package-conflicts`, `dart-collect-coverage`, `flutter-apply-architecture-best-practices` as a lens only) and **`firebase`** (Firebase MCP, read-only: `firebase_get_security_rules`, `functions_list_functions`, `functions_get_logs`, `firestore_list_indexes`, `firebase_get_environment`). App driven with **marionette** (p1–p3) on iOS 26.5 simulators against local emulators.
+
+- **Ran:** all eight §1 gates bare — **identical to baseline** (0 / 0 / 188, exit 1 · 357 · build clean · 164 · decks · all five evidence invocations · deploy FRESH, 19 functions · web strings). Static analysis (188 infos grouped; `unawaited_futures`/`discarded_futures` measured on a scratch copy). Full solo match on an **iPhone SE (3rd gen) simulator** — lobby → truth → forgery → vote → reveal → game over — plus force-quit/relaunch seat recovery (worked), leave → create a second room (Issue 152 journey, worked), host kick, the 101-character error path, text scale 1.3 and Reduce Motion (particle layer correctly absent). iPad Pro 13" **portrait**. Production rules (no drift vs `firestore.rules`; client room writes denied), deployed functions (19 = 18 callables + `cleanupDaily`, no drift), 14 days of function logs, indexes, Auth providers.
+- **Could not run as specified:** (1) **No iOS build works on this Mac's Xcode 27 as checked in** — Issue 178. Runtime passes ran from a scratch `git archive HEAD` with the one-line Podfile fix applied there; the repo was never edited. (2) **iPad landscape and window resizing** — this Xcode ships no Simulator.app and `simctl` cannot rotate; access to Device Hub was declined, so only portrait was observed (Issue 188). (3) **`flutter test --coverage` segfaults the test runner** on the full suite and then never exits; coverage was collected file-by-file instead (Issue 189). (4) Function logs carry no `HttpsError` reasons, so the 4xx below are counts only. (5) Auth provider config is not exposed by the Firebase MCP; read with one REST `GET` (Anonymous only, matching `main.dart`).
+- **Production logs, Sep 26 – Oct 10:** **0 ERROR**, **6 WARNING**, all 4xx on **Sep 27**: `joinroom` 401 × 3 (`auth: MISSING`, 20:36–20:37), `handledisconnect` 403 × 2, `submitunmaskguess` 400 × 1. No timeouts, no 5xx. App Check reports `MISSING` on every call (not filed — no defect follows from it today).
+- **Simulator env:** a throwaway "Audit SE" simulator was created for the small-phone pass and deleted afterwards; text size and Reduce Motion were restored.
+
 **Wave AG verified, October 3, 2026.** All three items are implemented as specified and their guards are real. **One gap remains, and it is in the AG1 spec, not the AG1 code.** It is specced as AH1 in `agent_execution_guide.md`.
 
 **Falsified this pass, not taken from commit bodies:**
@@ -37,7 +44,223 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-No open issues. Issues 1–177 are resolved and indexed in §3. **The one follow-up from the Wave AG verification, AH1, has one correct fix and is specced directly** in `agent_execution_guide.md`; it needs no selection.
+Issues 1–177 are resolved and indexed in §3. Issues 178–191 come from the October 10 audit in §1, ordered by severity. **All fourteen now have selections and are specced as Wave AI in `agent_execution_guide.md` §2** (AI1 … AI14, in execution order), alongside the still-pending AH1. Issues 178 and 189: the selection lines below hold the user's questions; after the plain-language context was given in chat on October 10, the user chose **Option B for both**. Those lines are left exactly as the user wrote them.
+
+### Issue 178: No iOS build succeeds on the installed Xcode 27 — the generated `Flutter` pod still targets iOS 13.0
+**Status**: ⚠️ Confirmed Unresolved — Reproduced October 10, 2026 on **Xcode 27.0 (27A266a)** (`/Applications/Xcode.app` was replaced October 1; no older Xcode remains). Both `flutter run` (simulator, Debug) and `flutter build ios --release --no-codesign` (device, Release) fail before any Dart compiles: `Target Integrity (Xcode): The iOS deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 13.0, but the range of supported deployment target versions is 15.0 to 27.0.x.` in `ios/Pods/Pods.xcodeproj`. The 13.0 belongs to the `Flutter` aggregate pod only (`Pods/Local Podspecs/Flutter.podspec.json` → `"ios": "13.0"`; its Debug and Release configs, generated `project.pbxproj` lines 353 and 623) — every other target is 15.0. `ios/Podfile:2` already declares `platform :ios, '15.0'`, but Flutter's `podhelper.rb:49` only clears a pod's target when it is **below** 13 (`< 13`), so 13.0 survives. **The fix was verified, not reasoned:** in a scratch `git archive HEAD` (repo untouched), forcing `IPHONEOS_DEPLOYMENT_TARGET = '15.0'` on every pod target in `post_install` turned the same release build into `✓ Built build/ios/iphoneos/Runner.app (50.1MB)`, exit 0, and the debug build then ran on simulators for this whole audit. **It blocks every TestFlight build and AH1's required release-build device check** (`agent_execution_guide.md` §2.2 step 5). The shipped 1.1.0 (8) is unaffected — archived September 12 on the previous Xcode.
+
+**Option A (recommended)**: **Pin pod deployment targets in `ios/Podfile`'s `post_install`** — inside the existing `installer.pods_project.targets.each` loop, after `flutter_additional_ios_build_settings(target)`, set `config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'` for each of the target's build configurations. Validate with `flutter build ios --release --no-codesign` (exit 0, read bare) and an archive per `README.md` → Releasing.
+  - *Pros*: Exactly the change verified above, on both Debug/simulator and Release/device; about four lines in one tracked file; no Dart or server change, so nothing reaches 1.1.0 (8) testers; matches the app's existing 15.0 floor (`Podfile:2`, Runner target).
+  - *Cons*: Would also lower any future pod that needs a *higher* target (none today — `Flutter` is the only pod); it works around a Flutter-tool behaviour that a later Flutter may fix, leaving dead config; `pod install` still rewrites `project.pbxproj` as usual (§2.29).
+
+**Option B**: **Finish the move to Swift Package Manager and remove CocoaPods** — `flutter run` already reports *"All plugins found for ios are Swift Packages, but your project still has CocoaPods integration"*: `pod deintegrate`, drop the `Pods-Runner.*.xcconfig` includes from `ios/Flutter/{Debug,Release}.xcconfig`, delete `Podfile`/`Podfile.lock`.
+  - *Pros*: Deletes the `Pods.xcodeproj` that carries the 13.0 target outright; Flutter says it shortens builds; removes the two CocoaPods manifest-check script phases §2.29 lists.
+  - *Cons*: A larger change to the Xcode project, which §2.29 already shows is easy to break; Flutter flags this Podfile as "non-standard", so the migration is manual; needs a full archive and TestFlight upload to prove, and AH1 waits for all of it.
+
+**Option C**: **Build Gaslight with the previous Xcode** — install Xcode 26.x alongside and `xcode-select` it for this project.
+  - *Pros*: No project change at all.
+  - *Cons*: Xcode 26 is not installed (multi-GB download); every machine and agent must remember to switch; App Store Connect will eventually require the iOS 27 SDK, so this only postpones A or B.
+
+Your selection: Can you explain this issue and the solution you provided in more simplier terms? What is more scalable and maintainable? What is the right decision?
+
+---
+
+### Issue 179: House Rules chip numbers are invisible — ivory labels on parchment chips at 1.02 : 1
+**Status**: ⚠️ Confirmed Unresolved — Observed in the host's parlour on the iPhone SE and iPad Pro 13" simulators: every **unselected** `Forgeries Per Card` and `Rounds` chip is a blank cream tile; only the already-selected chip shows its number. Measured on the rendered screenshot: label vs chip fill **1.02 : 1** (`#F5EEDB` on `#F4EBD8`); the selected chip measures 6.71 : 1. Cause: `lib/screens/lobby_screen.dart:557–571` and `:589–603` set `labelStyle: color: isSelected ? AppColors.ink : AppColors.ivory`, but an unselected Material 3 `ChoiceChip` is filled from `colorScheme.surface`, which this app defines as `AppColors.parchment` (`main.dart` `ColorScheme.dark(surface: parchment)`). Ivory is *text on ground*; the chip is not ground — the surface-vs-role trap in §4. `test/house_rules_panel_test.dart` checks `selected` flags and taps; nothing measures the rendered chip, and `contrast_tokens_test.dart` never visits the lobby. Every host choosing 2–5 rounds or a forgery count is picking between blank buttons.
+
+**Option A (recommended)**: **Use ink for unselected labels** — change the unselected branch at both sites from `AppColors.ivory` to `AppColors.ink` (ink on parchment is **13.59 : 1**, a pair the palette already intends), and add a rendered-contrast case to `contrast_tokens_test.dart` that walks every `Text` inside the House Rules panel (selected and unselected chips, host view, 375 × 667 at text scale 1.0 and 1.3) against the colour actually painted behind it, asserting ≥ 4.5 : 1.
+  - *Pros*: Two-token change; keeps today's cream-tile look; the new walk measures what renders, so it would have caught this and catches the next wrong token (§2.42).
+  - *Cons*: Leaves the theme able to reproduce the trap on the next `ChoiceChip` someone adds; bright cream tiles on the dark card stay visually loud, which is a design question this option does not answer.
+
+**Option B**: **App-wide `chipTheme`** — in `main.dart`, `ChipThemeData(backgroundColor: groundRaised, selectedColor: brass, labelStyle: ivory, secondaryLabelStyle: ink, side: brass outline)`, and delete the per-chip `labelStyle`/`selectedColor`; same rendered-contrast walk as A.
+  - *Pros*: Fixes every present and future chip in one place; dark chips match the parlour palette.
+  - *Cons*: Changes the House Rules look (needs a design eye per `design_ui_direction.md`); the outline is needed or dark chips vanish into the dark card; slightly larger blast radius than A (these are today's only `ChoiceChip`s, so it stays small).
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 180: A reveal answer collapses to one letter per line once many players vote for it
+**Status**: ⚠️ Confirmed Unresolved — Reproduced on the iPhone SE simulator in a 10-player room (host + 9 bots), reveal of a card whose truth drew **9 votes**: `get_runtime_errors` reported `A RenderFlex overflowed by 7.0 pixels on the right` at `lib/screens/phase4_reveal.dart:1226`, and the screenshot shows the answer stacked one or two letters per line (`Si / m / ul / at / ed …`) with the `THE TRUTH` badge shrunk to a sliver. Cause: the option card is a `Row` of `Expanded(answer column)` and a `Column(VOTES, Wrap(voters))` (`:1343–1368`). A `Row` gives that non-flex `Column` unbounded width, so the `Wrap` never wraps: the voter column is **32n − 4 pt** wide (28 pt avatar + 4 pt spacing) plus a 12 pt gap, and the answer gets what is left of the card's **289 pt** (measured constraint at 375 pt): 7 voters → 57 pt, 8 → 25 pt, 9 → 0 pt and the overflow. Rooms hold up to 10 players (`functions/src/index.ts:726`), so a well-found truth at a full table hits this; at 402 pt (iPhone 17) the answer still falls to ~20 pt at 9 voters. No test seeds more than a few voters on one option.
+
+**Option A (recommended)**: **Cap the voter column's width so the `Wrap` wraps** — wrap the voters `Column` in `ConstrainedBox(maxWidth: 3 × 28 + 2 × 4 = 92)` (intrinsic width below the cap is unchanged, so 1–3 voters look exactly as today), letting extra tokens flow into rows. Widget test at 320 and 375 pt, text scale 1.0 and 1.3: seed 9 voters on one option, assert no `FlutterError`, and assert the answer's `RenderParagraph` is at least 60 % of the card's inner width.
+  - *Pros*: No visual change for the common 1–3-voter case; one constraint at one site; the test pins the layout at the sizes that break.
+  - *Cons*: A popular truth grows taller (three rows of tokens at 9 voters); the 92 pt cap is a judgment call the test has to encode.
+
+**Option B**: **Move the voters below the answer** — turn the card body into a `Column`: badge, answer at full width, then a right-aligned full-width `Wrap` of voters; same test as A.
+  - *Pros*: The answer always gets the full card width, at any voter count and any screen; simplest layout to reason about.
+  - *Cons*: Changes every reveal card's look, including the 1-voter case `design_ui_direction.md` describes; taller cards on every reveal, adding scroll on small phones.
+
+**Option C**: **Show at most N tokens plus a `+k` chip** — render the first 4 voters and a `+5` pill.
+  - *Pros*: Fixed, small footprint; the card never grows.
+  - *Cons*: Hides *who* voted — information the reveal exists to show, and which the unmask and rivalry beats lean on; still needs the width cap for the pill itself.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 181: Oxblood text on the dark ground at 1.78 : 1 — the actions of five confirmation dialogs and two lobby headings
+**Status**: ⚠️ Confirmed Unresolved — Measured on SE screenshots: the in-game **"Leave this game?"** dialog's `STAY` / `LEAVE GAME` and the host's **"Remove player?"** dialog's `CANCEL` / `REMOVE` render **1.78 : 1** (`#8B0000` on the dialog fill `#1C1712`), while the body text in the same dialog measures 15.36 : 1 (positive control). On the title screen, **`THE GUEST LEDGER`** and **`Select Character Token`** also measure 1.78 : 1. Cause: the dialogs at `phase2_craft.dart:87`, `phase3_vote.dart:98`, `phase4_reveal.dart:369` (three copies of the in-game leave dialog), `phase3_vote.dart:257` ("End Voting?") and `lobby_screen.dart:173` (kick) use unstyled `TextButton`s, whose foreground is `colorScheme.primary` = `AppColors.oxblood`; `main.dart`'s `dialogTheme` fixes the dialog's background, title and content but not its actions. **Twin:** the lobby's own leave dialog (`lobby_screen.dart:117`, actions `:134–160`) styles its actions `AppTextStyles.bodyIvory` — the fix exists on one leave dialog and not its three in-game copies. The headings use `crimsonColor = theme.colorScheme.primary` (`lobby_screen.dart:1019`, used at `:1056`, `:1094`). §4: *"colorScheme.primary is AppColors.oxblood … Never use it for text on the dark ground."* `test/dialog_theme_contrast_test.dart` measures an action-less `AlertDialog`'s title and content only. These are the buttons on irreversible actions — leaving a game you cannot rejoin, removing a player, ending the vote.
+
+**Option A (recommended)**: **One shared confirmation dialog** — extract a `GaslightConfirmDialog(title, body, cancelLabel, confirmLabel, onConfirm)` with actions styled like the lobby leave dialog (ivory, 15.36 : 1; `minimumSize: Size(64, 48)`), and route all six dialogs through it, including `lobby_screen.dart:117`. Recolour the two headings to `AppColors.brass` (7.41 : 1 on `groundRaised`). Extend `dialog_theme_contrast_test.dart` to pump the shared dialog **with** actions and assert ≥ 4.5 : 1 on every rendered `Text`, and add the two headings to a rendered walk of the entry screen.
+  - *Pros*: One path for six twins (THE LOOP rule 8) — the in-game leave dialog stops being three copies of itself; the test now covers the part that was wrong.
+  - *Cons*: Touches four screen files plus a new widget; the existing leave/kick/end-voting tests must keep passing unedited, which constrains the extraction; heading colour is a small design change.
+
+**Option B**: **App-wide `textButtonTheme`** — set `TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: AppColors.ivory))` in `main.dart`; recolour the headings; same test extension.
+  - *Pros*: Fixes all dialogs and any future `TextButton` with one line; smallest diff.
+  - *Cons*: There are 20 `TextButton`s in `lib/`; any that sit on parchment would become ivory on parchment (1.02 : 1) — each must be audited; leaves the three duplicated leave dialogs in place.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 182: Vote screen text below the contrast floor — two subtitles in ink on the dark ground, and the card's brass cue on parchment
+**Status**: ⚠️ Confirmed Unresolved — Measured on SE screenshots of `Phase3VoteScreen`: the target's subtitle *"Keep a straight face while the parlor deliberates."* (`lib/screens/phase3_vote.dart:420–428`) renders **1.18 : 1**, and the voter's instruction *"One of these is {name}'s truth."* (`:442–449`) **1.81 : 1** — both `theme.colorScheme.onSurface.withOpacity(0.75)`, i.e. **ink on the dark ground**, which is Issue 171's trap verbatim (ink@0.75 on `ground` computes to 1.12 : 1). On the parchment option card, the *"Tap to choose this one"* cue (`lib/widgets/card_grid.dart:618–625`, `AppColors.brass` 11 pt) measures **2.02 : 1** and the `OPTION I` label (`:569`) **1.77 : 1** — brass is specified for these in `design_ui_direction.md:280`, but brass is an accent *for the dark ground* (7.41–7.84 : 1); on parchment it fails. The voter subtitle is the line that names whose card is being voted on. `contrast_tokens_test.dart`'s rendered walks cover the reveal only.
+
+**Option A (recommended)**: **Recolour all four and walk the vote screen** — subtitles to `AppColors.ivory.withOpacity(0.75)` (9.41 : 1 on `ground`); cue and option label to `AppColors.ink.withOpacity(0.7)` (5.48 : 1 on parchment) or a new darker brass token measured ≥ 4.5 : 1; update `design_ui_direction.md:280` to match. Add a rendered-contrast walk of `Phase3VoteScreen` in both target and voter views, including the active card, at 375 × 667.
+  - *Pros*: Every measured failure on the screen is fixed and the walk keeps it fixed; the doc and code stop disagreeing about what "brass" means on parchment.
+  - *Cons*: Changes a design-doc-specified colour (the cue), so it is a design decision as well as a fix; loses the brass "gold hint" on the card unless a new token is introduced.
+
+**Option B**: **Fix only the two ink subtitles** — they are unambiguous regressions of a documented invariant; record the brass cue and label as an accepted deviation in the guide's "Accepted equivalents".
+  - *Pros*: Smallest change; no design decision needed.
+  - *Cons*: Leaves two texts at ~2 : 1 that every voter must read on every card; an "accepted" contrast failure is exactly what §2.42 warns becomes invisible.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 183: Auto-rejoin deletes the saved seat on any failure, including a dropped connection
+**Status**: ⚠️ Confirmed Unresolved — Verified by reading `lib/services/game_service.dart:319–364`; **not reproduced on a device**. On launch `LobbyScreen` calls `tryRejoinSession()` (`lobby_screen.dart:196–210`). When the room and player documents exist (Firestore can serve them from its local cache), it calls `joinRoom`; **any** exception from that call lands in the catch at `:353–358`, which removes `seat_token_<room>`, `room_code` and `player_id` from `SharedPreferences`, and the lobby then shows *"Your session expired — please rejoin."* On iOS a dropped connection reaches Dart as `unknown` (AH1, guide §2) and a failed anonymous sign-in as `unauthenticated` — both transient, both wipe. Production signal: on Sep 27, three `joinroom` calls arrived with `auth: MISSING` (401) within 33 s — the same call this path makes; consistent with it, not proof. Effect: a player who reopens the app on a flaky connection loses the automatic seat recovery the README promises (*"force-quit mid-game and reopen — you should recover your seat"*) and is told their session expired when it did not; re-entering the code can still re-bind by ownership if their anonymous `authUid` survived, but the seat token is gone. The happy path was verified this audit (force-quit → relaunch returned to the same vote card). **No test exercises the failure branch:** neither SnackBar sentence appears anywhere in `test/`.
+
+**Option A (recommended)**: **Wipe only on a definitive rejection** — keep the saved session on `unavailable`, `deadline-exceeded`, `unknown`, `unauthenticated` and non-`FirebaseFunctionsException` errors, and show the connection sentence (reuse `lobbyCallableErrorMessage`) with a *Retry* SnackBar action; clear it only on `not-found`, `permission-denied` or a missing room/player document. Widget tests with `overrideCallable('joinRoom')`: throws `unknown` → prefs kept and connection sentence shown; throws `not-found` → prefs cleared and expired sentence shown; succeeds → existing behaviour.
+  - *Pros*: A transient failure stops being permanent; the message tells the truth; the tests pin both branches; client-only, nothing for 1.1.0 (8).
+  - *Cons*: Must decide which codes are "definitive" — get it wrong and a dead session is retried every launch until the room's 8-hour TTL removes it; one more SnackBar path on the title screen.
+
+**Option B**: **Never wipe from the client** — keep the saved session until the server proves it gone (room or player document missing), and treat every callable error as retryable.
+  - *Pros*: Simplest rule; no code classification.
+  - *Cons*: A genuinely rejected re-bind (`permission-denied` after the seat was taken) retries on every launch and shows a misleading sentence each time until TTL.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 184: Instructions truncate on a 375-pt phone — the vote button and the unmask heading at default size, game-over stats at 1.3
+**Status**: ⚠️ Confirmed Unresolved — Observed on the iPhone SE simulator (375 × 667): the vote screen's disabled button reads **"TAP A CARD TO CHOO…"** at text scale 1.0 (`lib/screens/phase3_vote.dart:592`; `PrimaryButton` hard-codes `maxLines: 1, overflow: ellipsis` at `lib/widgets/shared_ui.dart:307–346`); the reveal's unmask panel heading reads **"REVENGE UNMASKIN…"** at 1.0 (`lib/screens/phase4_reveal.dart:987`, `Expanded` + ellipsis); at 1.3, every game-over standings row reads **"Fooled 1 · Fooled…"** (`lib/screens/game_over_screen.dart:664`), hiding *Fooled by N*. `design_ui_direction.md:234` (M3): *"Layouts must still survive 1.3."* AC3 moved the "tap a card" instruction onto this button, and its §3 index row says it verified layout "at 320pt across text scales 1.0 and 1.3 in `vote_option_truncation_test.dart`" — that file checks the option cards; `TAP A CARD` appears nowhere in it.
+
+**Option A (recommended)**: **Scale down instead of ellipsizing, at all three sites** — `PrimaryButton`: wrap the label in `FittedBox(fit: BoxFit.scaleDown)` and drop the ellipsis; unmask heading: allow two lines; game-over stat line: allow wrap to two lines. Truncation test in the style of `highlight_card_truncation_test.dart`: for each of the three strings at 320 and 375 pt, text scale 1.0 and 1.3, assert `RenderParagraph.didExceedMaxLines == false` and the full string is rendered.
+  - *Pros*: No copy changes, so `guidance_strings_test.dart` and the web-E2E `UI` map are untouched; the `PrimaryButton` change protects every primary button; the mechanical assertion is the one that already works for highlights.
+  - *Cons*: `PrimaryButton` is shared, so every primary label can now shrink, which may hide future over-long copy instead of failing; two-line headings make the reveal panel taller.
+
+**Option B**: **Shorten the copy** — e.g. "TAP A CARD", "UNMASK THEM!", "Fooled 1 · by 2", updating `ui_strings.js`, the design doc and the verbatim-string tests in the same change.
+  - *Pros*: Layout code unchanged; labels stay full size.
+  - *Cons*: Copy decisions per string; touches the web-E2E string contract (Wave AE) and the verbatim tests; does not protect the next long label.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 185: Craft and reveal error SnackBars match on message text; a closed unmask window reads "That guess is already locked in."
+**Status**: ⚠️ Confirmed Unresolved — `lib/screens/phase4_reveal.dart:1104–1114` chooses its sentence with `e.toString().contains('already submitted') || e.toString().contains('failed-precondition')` → *"That guess is already locked in."* But `submitUnmaskGuess` throws `failed-precondition` for six different reasons, including *"Unmask guess deadline has passed or is inactive."* (`functions/src/index.ts:2514`; others at `:2510`, `:2557`) — so a tap that lands as the countdown expires is told it is already locked in. `lib/screens/phase2_craft.dart:186–189` maps `'similar'` / `'Similarity'` substrings; the server's similarity rejection is `invalid-argument` (`index.ts:975`), the same code as its length and type rejections, so the code alone cannot tell them apart. §4: *"Error surfaces match on `e.code`, never on the message."* Production: 1 `submitunmaskguess` 400 in the 14-day window (Sep 27); its reason is not logged. Neither branch has a test. (Not reproduced on device: the deadline tap could not be timed through marionette.)
+
+**Option A (recommended)**: **Additive server reason, one client mapper** — add `details: { reason: 'deadline_passed' | 'already_submitted' | 'too_similar' }` to those `HttpsError`s (old clients ignore `details`), and route craft and reveal through one shared helper mapping `e.code` + `e.details['reason']` to sentences (*"The guessing window has closed."*, *"That guess is already locked in."*, *"Too similar to an existing answer! Be more creative."*), falling back to the generic sentence. Emulator test asserts each `details.reason`; widget tests throw each code/reason pair and assert the exact sentence, plus a plain `Exception` → generic.
+  - *Pros*: Restores the §4 invariant with no string matching; additive, so 1.1.0 (8) is unaffected; one helper for both screens (THE LOOP rule 8).
+  - *Cons*: Needs a functions deploy — then `CLEANUP_DRY_RUN=false` must be re-applied and `check_deploy_fresh.sh` re-run (guide §3.1); touches the client and the server.
+
+**Option B**: **Client-only, code-based and honest** — `failed-precondition` → *"Your guess can't be taken now — the window may have closed."*; `invalid-argument` on submit → *"That answer can't be submitted. Check its length and wording."*, relying on the existing local similarity pre-check for the specific message.
+  - *Pros*: No deploy; restores the invariant immediately.
+  - *Cons*: Vaguer sentences; a player who really did already guess gets a hedged message; the server-side similarity rejection (for answers the local pre-check misses) loses its specific wording.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 186: Host settings changes fail silently — `updateLobbySettings` is fired and forgotten with no error handling
+**Status**: ⚠️ Confirmed Unresolved — Six call sites fire `gs.updateLobbySettings(...)` without `await` or `catch`: `lib/screens/lobby_screen.dart:510` (deck), `:568` (forgeries), `:600` (rounds), `:621` (timers), `:670` (seconds), `:709` (family-friendly write-through). `GameService.updateLobbySettings` (`lib/services/game_service.dart:624–637`) awaits the callable with no `try`, and `main.dart` installs no `PlatformDispatcher.instance.onError` or `runZonedGuarded`. The controls render server state, so a failed call (offline, iOS `unknown`, a server `invalid-argument`) leaves the control unchanged with no message, and the exception surfaces only as an uncaught async error. Measured on a scratch copy with `discarded_futures` enabled: 92 discarded futures in `lib/`, these six among them (the rest are animation, navigation and sound calls). **`:709` matters most:** it is the write-through that keeps the Family-Friendly filter and the room's deck in agreement (Issue 106) — if it fails silently, the lobby shows a family-friendly selection while the room still holds the hidden deck, and `startGame` starts what the room holds. Not reproduced at runtime (the emulator setup could not be taken offline mid-session without killing it); evidence is the code path above.
+
+**Option A (recommended)**: **One awaited, caught path for every setting** — a `_applySetting(Future<void> Function() call)` in `_LobbyScreenState` that awaits, catches, `debugPrint`s the raw error and shows a mapped sentence via SnackBar (extend `lobbyCallableErrorMessage` with a `LobbyAction.settings` variant); all six sites call it. Widget tests: `overrideCallable('updateLobbySettings')` throws `unknown` for each control → exact sentence shown, no raw text; the `:709` case asserts the SnackBar appears when the write-through fails.
+  - *Pros*: The host learns a change did not take; the Issue 106 desync cannot recur silently; one shared path; client-only.
+  - *Cons*: Six call sites change shape; a flapping connection produces a SnackBar per tap (needs `clearSnackBars()` as the other surfaces do).
+
+**Option B**: **Global safety net only** — install `PlatformDispatcher.instance.onError` in `main.dart` to log uncaught async errors.
+  - *Pros*: One-line change; catches every fire-and-forget future, not just these.
+  - *Cons*: The host still sees nothing; the family-friendly desync still happens silently; `main.dart`'s bootstrap is load-bearing (§4), so even this must be shown not to throw.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 187: Undersized and unlabeled controls — kick 22 × 22 pt, deck dots 13 × 19 pt, PREV/NEXT 30 pt tall; four icon-only controls have no accessible name
+**Status**: ⚠️ Confirmed Unresolved — Element bounds measured through marionette on the SE simulator: host kick `kick_<id>` **22 × 22 pt** (`lib/screens/lobby_screen.dart:894–910`, a destructive action); stacked-deck jump dots `stacked_deck_dot_i` **13 × 19 pt** (active 20 × 19; `lib/widgets/card_grid.dart:404–430`); `stacked_deck_prev_button` / `stacked_deck_next_button` **71 × 30** / **72 × 30 pt** (`:355`, `:439`). Apple's HIG minimum is 44 × 44 pt (Material: 48 × 48). There is **no `Semantics` widget anywhere in `lib/`**, and `ThematicIcon` renders a bare `Icon`/`CustomPaint` with no `semanticLabel` (`lib/theme/app_icons.dart`), so VoiceOver gets no name for the kick control, the room-code share button (`lib/widgets/room_code_plaque.dart:141–158`, 48 × 48 so size is fine), the six avatar-token pickers (`lobby_screen.dart:1103–1106`) or the deck dots. AppBar `IconButton`s carry tooltips and are fine.
+
+**Option A (recommended)**: **Enlarge hit areas and label them** — give each control a ≥ 44 × 44 pt hit box without changing its drawing (`SizedBox` + `HitTestBehavior.opaque`, or `padding` inside the `InkWell`), and wrap each in `Semantics(button: true, label: …)` — e.g. *"Remove Bot 1"*, *"Share room code"*, *"Token 3 of 6, selected"*, *"Show option 2 of 3"*. Add `meetsGuideline(iOSTapTargetGuideline)` and `meetsGuideline(labeledTapTargetGuideline)` checks for the host parlour and the vote screen at 375 × 667.
+  - *Pros*: Fixes size and naming together on the same five controls; the `flutter_test` guidelines are mechanical and will catch the next one.
+  - *Cons*: Larger hit boxes on the dots and kick badges must not overlap neighbours (the kick badge sits on an avatar); the guideline checks will likely flag other small targets that need triage in the same change.
+
+**Option B**: **Labels only** — add the `Semantics` labels; leave sizes.
+  - *Pros*: Zero visual or hit-test risk; VoiceOver becomes usable.
+  - *Cons*: A 22 pt destructive control and 13 pt dots remain hard to hit for everyone.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 188: Decide whether Gaslight ships as an iPad app
+**Status**: ⚠️ Confirmed Unresolved — `ios/Runner.xcodeproj/project.pbxproj:458, 586, 637` set `TARGETED_DEVICE_FAMILY = "1,2"`; `ios/Runner/Info.plist`'s `UISupportedInterfaceOrientations~ipad` lists all four orientations and there is no `UIRequiresFullScreen`; the only lock is `SystemChrome.setPreferredOrientations([portraitUp])` (`lib/main.dart:45`). Observed on the iPad Pro 13" simulator (iOS 26.5, **portrait only** — see §1): no runtime errors, and the title screen is a centred card, but the parlour is the phone layout stretched to 1032 pt — the House Rules card spans the full width with its switches at the far edge, and the player sheet is mostly empty parchment. Some screens cap their content width (title card 420 pt at `lobby_screen.dart:1049`, craft 380–400 pt at `phase2_craft.dart:471/601/947`, vote 500 pt at `phase3_vote.dart:399/611`), but the parlour does not, and nothing adapts to width — the five `LayoutBuilder`s in `lib/` measure height or card size, and the only branch is the title screen's `maxHeight < 700`. Landscape and resizable windows were not observable this session. Apple's TN3192: from iPadOS 26, `UIRequiresFullScreen` is deprecated, will be ignored in a future release, and apps are expected to support resizing and all orientations. Shipping an iPad-capable binary also means iPad screenshots and iPad review. 1.1.0 (8) is on TestFlight only, so this can still be decided either way before the first App Store release; once an iPad-capable version is live, later versions cannot drop iPad.
+
+**Option A (recommended)**: **iPhone-only for the first App Store release** — set `TARGETED_DEVICE_FAMILY = 1` in all three Runner configurations (iPad users then run the iPhone app in compatibility mode); revisit native iPad later.
+  - *Pros*: Removes the unverified landscape/resizing surface and the iPad screenshot and review burden; the portrait-only phone design is what every screen was built and tested for; adding iPad later is allowed, removing it later is not.
+  - *Cons*: iPad users get a letterboxed, scaled iPhone UI; any TestFlight testers on iPad lose the native-resolution layout; a project setting change, so the Xcode "update settings" dialog trap (§2.29) applies.
+
+**Option B**: **Ship iPad deliberately** — a max-width (e.g. 600 pt) centred column on every screen, verified in landscape, Split View and resized windows on iPadOS 26, plus iPad screenshots.
+  - *Pros*: A real iPad app; robust to the iPadOS 26 windowing direction.
+  - *Cons*: The largest option — every screen re-verified at new sizes and orientations, which this audit could not even exercise with the current tooling.
+
+**Option C**: **Keep iPad but force full screen and portrait** — add `UIRequiresFullScreen = YES` and restrict `~ipad` to portrait.
+  - *Pros*: One `Info.plist` change; keeps the app on iPad and avoids landscape now.
+  - *Cons*: TN3192 says the key is deprecated and will be ignored in a future release, so it only buys time; the stretched phone layout remains.
+
+Your selection: Proceed with Option A
+
+---
+
+### Issue 189: Coverage cannot be measured reliably on this toolchain, so "what is untested" has no mechanical answer
+**Status**: ⚠️ Confirmed Unresolved — Measured on Flutter 3.44.6 with nothing else running: (1) `flutter test --coverage` over the full suite crashes the runner — `Shell subprocess crashed with segmentation fault` (`flutter_tester_device.dart 255:73`), **24 times** in one run, still with `--concurrency=1` — and the tool then **never exits** (idle at 0 % CPU until killed). Bare `flutter test` passes 357/357 on the same tree. (2) Run **file by file**, 60 of 73 files produce LCOV, **13 segfault even alone** (`ember_backdrop_reduce_motion`, `gaslight_route`, `phase4_header_overflow`, `phase4_reveal`, `raven_mascot`, `reduce_motion`, `room_code_plaque`, `scoring_logic`, `stacked_deck_navigation`, `text_similarity`, `vote_option_truncation`, `waiting_indicator`, `wax_seal_badge`). (3) Even in the 60 that complete, **`lib/services/game_service.dart` (450 coverable lines) appears in one LCOV file with 0 hits**, and `models/game_state.dart` and `models/player_state.dart` in one each — although nearly every widget test drives `GameService`. One hypothesis was falsified: switching `test/simulation_test.dart`'s relative `../lib/` imports to `package:` (scratch copy) did not bring `game_service.dart` back. Union of the 60 files, for what it is worth: `screens/game_over_screen.dart` 90.7 %, `lobby_screen.dart` 90.5 %, `phase2_craft.dart` 90.6 %, `phase4_reveal.dart` 86.6 %, `phase3_vote.dart` 73.7 %; `services/audio_service.dart` 78.0 %, `services/game_service.dart` **unmeasurable**; all `lib/` 73.5 % — **a lower bound with 13 files missing.** **Untested critical paths, named from the test inventory instead:** the rejoin failure branch (Issue 183), the craft and reveal error mappings (Issue 185), settings-write failure (Issue 186), a many-voter reveal card (Issue 180), and rendered contrast of the lobby, the vote screen and dialog actions (Issues 179, 181, 182) — each issue specifies the test that would close it. Phase transitions are covered where it counts, by the emulator suite (`functions/test/game_e2e.spec.ts`).
+
+**Option A (recommended)**: **Record coverage as unavailable and keep the falsification standard** — add one line to the guide's §1 that coverage is not collectable on Flutter 3.44.6 (segfault + missing `game_service.dart`), never make it a gate, and keep naming untested paths by inventory as above.
+  - *Pros*: No tooling work; the project's real standard — remove the guard, watch the test fail (§6, §2.16) — is unaffected and is what found every defect worth having; avoids a number that is demonstrably wrong.
+  - *Cons*: No percentage to spot drift; a future agent may re-try `--coverage` and lose an hour unless the line is there.
+
+**Option B**: **Time-boxed investigation of the collector** — reproduce the segfault on one of the 13 small files and the missing-library effect on `lobby_create_error_test.dart`; retest on the next Flutter stable; file upstream if it reproduces outside Gaslight.
+  - *Pros*: Could restore a working coverage signal, including for `game_service.dart`.
+  - *Cons*: Toolchain debugging with an uncertain end; whatever it finds may be "wait for Flutter".
+
+Your selection: I don't understand what this issue is. Explain it more simply
+
+---
+
+### Issue 190: Eight deprecated API calls in `lib/` outside the rejected `withOpacity` migration
+**Status**: ⚠️ Confirmed Unresolved — `flutter analyze lib test`'s 188 infos include 155 `deprecated_member_use`; `withOpacity` accounts for 139 (that migration was rejected as 139 C and is not re-proposed). The rest in `lib/`: `Share.shareXFiles` (`lib/screens/game_over_screen.dart:125`) and `Share.share` (`lib/widgets/room_code_plaque.dart:144`) — share_plus 13.2.1 says *"Use SharePlus.instance.share()"*; `Switch.activeColor` (`lib/screens/lobby_screen.dart:617`, `:691`) — *"deprecated after v3.31.0-2.0.pre"*; `Matrix4.scale` (`game_over_screen.dart:1174`, `lobby_screen.dart:1108`) — vector_math 2.2.0 (latest 2.4.3); `Color.value` (`lobby_screen.dart:1122` × 2); plus `Color.red/green/blue` × 6 in `test/raven_mascot_test.dart:47, 195`. Each compiles today and becomes a compile error the release its owner removes it — and Issue 178 shows toolchain upgrades are not optional here. `pub outdated` shows no discontinued packages; 39 dependencies are only behind within their constraints.
+
+**Option A (recommended)**: **Migrate these 14 call sites in one change** — `SharePlus.instance.share(ShareParams(...))`, `activeThumbColor`, `scaleByDouble`/`scaleByVector3`, `toARGB32()` / `.r .g .b`; infos fall from 188 to **172** (16 infos: the 14 calls plus the two `Share` class references — corrected from "174" on October 10 while speccing AI12) and the §1 bar is updated in the same commit.
+  - *Pros*: Mechanical; removes every non-`withOpacity` deprecation before an upgrade forces it at a bad moment.
+  - *Cons*: The two share paths (case file PNG, room code) change API and need a device check of the share sheet; the analyze bar changes, which every gate table must follow.
+
+**Option B**: **Migrate only when a dependency or SDK upgrade breaks the build.**
+  - *Pros*: No work now.
+  - *Cons*: The break arrives mid-upgrade, stacked on whatever else that upgrade changes.
+
+Your selection: Proceed with Option A.
+
+---
+
+### Issue 191: Handoff docs contradict measured state
+**Status**: ⚠️ Confirmed Unresolved — (1) `agent_execution_guide.md` §3.1 item 1 says *"`submitTargetForgeryGuesses` is not deployed at all — production runs 17 functions"* and *"Target forgery guessing does not work in production today"*. Firebase MCP `functions_list_functions` on October 10 lists **19** deployed functions **including `submitTargetForgeryGuesses`**, matching `functions/src/index.ts` (18 callables + `cleanupDaily`), and `check_deploy_fresh.sh` reports *"All 19 Cloud Functions"*. An agent following the stale text would run an unneeded deploy, which drops `CLEANUP_DRY_RUN` (§4). (2) `README.md:62` tells readers to run bare `flutter analyze` and expect *"0 errors"* — the §2.2 trap (~678 phantom errors); the same README's Releasing section (`:141`, `:153`) says the opposite. (3) This file's §3 repeats the *"three highest-value things to know"* blockquote twice in a row.
+
+**Option A (recommended)**: **Correct all three passages in one docs commit** — replace the §3.1 deployment claim with the measured 19-function state (keeping the deploy-then-restore procedure itself), change `README.md:62` to `flutter analyze lib test` with the 0 / 0 / 188 bar, and delete the duplicate blockquote.
+  - *Pros*: Docs only; removes a false production claim and a known trap from the first file new contributors read.
+  - *Cons*: None material; the guide's §1 date and baseline commit should be refreshed at the same time.
+
+Your selection: Proceed with Option A
 
 ---
 
