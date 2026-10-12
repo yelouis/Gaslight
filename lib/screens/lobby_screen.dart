@@ -40,7 +40,7 @@ class UpperCaseTextFormatter extends TextInputFormatter {
   }
 }
 
-enum LobbyAction { create, join }
+enum LobbyAction { create, join, settings }
 
 String lobbyCallableErrorMessage(Object error, {required LobbyAction action}) {
   if (error is FirebaseFunctionsException) {
@@ -50,9 +50,15 @@ String lobbyCallableErrorMessage(Object error, {required LobbyAction action}) {
             ? 'No room with that code. Check the four letters and try again.'
             : 'Something went wrong. Try again.';
       case 'invalid-argument':
-        return action == LobbyAction.create
-            ? 'Enter your name to open a room.'
-            : 'Enter your name and a four-letter room code.';
+        return switch (action) {
+          LobbyAction.create => 'Enter your name to open a room.',
+          LobbyAction.join => 'Enter your name and a four-letter room code.',
+          LobbyAction.settings => "That house rule can't be set for this table.",
+        };
+      case 'permission-denied':
+        return action == LobbyAction.settings
+            ? 'Only the host can change the house rules.'
+            : 'Something went wrong. Try again.';
       case 'resource-exhausted':
         return action == LobbyAction.create
             ? 'Could not find a free room code. Try again.'
@@ -100,6 +106,21 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
   bool _isStartingGame = false;
   bool _isCreatingRoom = false;
   bool _isJoiningRoom = false;
+
+  /// Every host setting goes through here (Issue 186): a failed write was fired and
+  /// forgotten, so the control stayed unchanged with no message and the error escaped
+  /// as an uncaught async one. [gs.updateLobbySettings] itself still throws.
+  Future<void> _applySetting(Future<void> Function() call) async {
+    try {
+      await call();
+    } catch (e) {
+      debugPrint('updateLobbySettings error: $e');
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.clearSnackBars();
+      messenger.showSnackBar(SnackBar(content: Text(lobbyCallableErrorMessage(e, action: LobbyAction.settings))));
+    }
+  }
 
   void _confirmLeave(BuildContext context, GameService gs, bool isHost) {
     if (_isLeaving) return;
@@ -477,7 +498,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                 DeckCarousel(
                   selectedDeckId: selectedDeckId,
                   availableDecks: availableDecks,
-                  onDeckSelected: (val) => gs.updateLobbySettings(selectedDeckId: val),
+                  onDeckSelected: (val) => _applySetting(() => gs.updateLobbySettings(selectedDeckId: val)),
                   isHost: isHost,
                   gameService: gs,
                 ),
@@ -535,7 +556,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                         ),
                                         onSelected: (selected) {
                                           if (selected) {
-                                            gs.updateLobbySettings(forgeriesPerCard: f);
+                                            _applySetting(() => gs.updateLobbySettings(forgeriesPerCard: f));
                                           }
                                         },
                                       );
@@ -567,7 +588,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                         ),
                                         onSelected: (selected) {
                                           if (selected) {
-                                            gs.updateLobbySettings(totalRounds: r);
+                                            _applySetting(() => gs.updateLobbySettings(totalRounds: r));
                                           }
                                         },
                                       );
@@ -588,7 +609,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                   contentPadding: EdgeInsets.zero,
                                   onChanged: isHost
                                       ? (val) {
-                                          gs.updateLobbySettings(isTimerDisabled: val);
+                                          _applySetting(() => gs.updateLobbySettings(isTimerDisabled: val));
                                         }
                                       : null,
                                 ),
@@ -637,7 +658,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                         onChanged: (val) {
                                           final parsed = int.tryParse(val);
                                           if (parsed != null && parsed >= 15 && parsed <= 300) {
-                                            gs.updateLobbySettings(timerSeconds: parsed);
+                                            _applySetting(() => gs.updateLobbySettings(timerSeconds: parsed));
                                           }
                                         },
                                       ),
@@ -676,8 +697,10 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                 if (current != null &&
                                     current != 'custom' &&
                                     !_isFamilyFriendly(current)) {
-                                  gs.updateLobbySettings(
-                                    selectedDeckId: PromptDecks.fallbackDeckId,
+                                  _applySetting(
+                                    () => gs.updateLobbySettings(
+                                      selectedDeckId: PromptDecks.fallbackDeckId,
+                                    ),
                                   );
                                 }
                               }
