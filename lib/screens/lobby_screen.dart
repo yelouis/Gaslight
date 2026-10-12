@@ -21,6 +21,7 @@ import '../widgets/room_code_plaque.dart';
 import '../widgets/deck_carousel.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/instructions_dialog.dart';
 import '../main.dart';
 
@@ -111,7 +112,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
       barrierColor: Colors.black54,
       transitionDuration: reduce ? Duration.zero : const Duration(milliseconds: 150),
       pageBuilder: (ctx, animation, secondaryAnimation) =>
-          _buildLeaveDialog(ctx, gs, isHost),
+          _buildLeaveDialog(gs, isHost),
       transitionBuilder: (ctx, animation, secondaryAnimation, child) {
         if (reduce) return child;
         return FadeTransition(
@@ -122,79 +123,39 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     );
   }
 
-  Widget _buildLeaveDialog(BuildContext ctx, GameService gs, bool isHost) {
-    return AlertDialog(
-      backgroundColor: AppColors.groundRaised,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.brass, width: 1),
-      ),
-      title: Text(
-        isHost ? 'Close this room?' : 'Leave this room?',
-        style: AppTextStyles.cardHeader.copyWith(color: AppColors.brass),
-      ),
-      content: Text(
-        isHost
-            ? 'You are the host. Leaving will close the room for everyone.'
-            : "You can rejoin with the room code as long as the game hasn't started.",
-        style: AppTextStyles.bodyIvory,
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          style: TextButton.styleFrom(
-            minimumSize: const Size(64, 48),
-          ),
-          child: Text(
-            'STAY',
-            style: AppTextStyles.bodyIvory.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-        TextButton(
-          onPressed: () async {
-            if (_isLeaving) return;
-            _isLeaving = true;
-            Navigator.of(ctx).pop();
-            try {
-              await gs.leaveRoom();
-            } finally {
-              if (mounted) _isLeaving = false;
-            }
-          },
-          style: TextButton.styleFrom(
-            minimumSize: const Size(64, 48),
-          ),
-          child: Text(
-            isHost ? 'CLOSE ROOM' : 'LEAVE',
-            style: AppTextStyles.bodyIvory.copyWith(
-              fontWeight: FontWeight.bold,
-              color: isHost ? AppColors.oxblood : AppColors.brass,
-            ),
-          ),
-        ),
-      ],
+  Widget _buildLeaveDialog(GameService gs, bool isHost) {
+    return GaslightConfirmDialog(
+      title: isHost ? 'Close this room?' : 'Leave this room?',
+      body: isHost
+          ? 'You are the host. Leaving will close the room for everyone.'
+          : "You can rejoin with the room code as long as the game hasn't started.",
+      cancelLabel: 'STAY',
+      confirmLabel: isHost ? 'CLOSE ROOM' : 'LEAVE',
+      onConfirm: (dialogContext) async {
+        if (_isLeaving) return;
+        _isLeaving = true;
+        Navigator.of(dialogContext).pop();
+        try {
+          await gs.leaveRoom();
+        } finally {
+          if (mounted) _isLeaving = false;
+        }
+      },
     );
   }
 
   void _confirmKick(BuildContext context, GameService gs, PlayerState player) {
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove player?'),
-        content: Text('Remove ${player.name} from this room? They can rejoin with the room code.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await gs.kickPlayer(player.id);
-            },
-            child: const Text('REMOVE'),
-          ),
-        ],
+      builder: (ctx) => GaslightConfirmDialog(
+        title: 'Remove player?',
+        body: 'Remove ${player.name} from this room? They can rejoin with the room code.',
+        cancelLabel: 'CANCEL',
+        confirmLabel: 'REMOVE',
+        onConfirm: (dialogContext) async {
+          Navigator.of(dialogContext).pop();
+          await gs.kickPlayer(player.id);
+        },
       ),
     );
   }
@@ -1064,7 +1025,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                               Text(
                                 'THE GUEST LEDGER',
                                 style: theme.textTheme.titleMedium?.copyWith(
-                                  color: crimsonColor,
+                                  color: AppColors.brass,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 4,
                                   fontFamily: 'Lora',
@@ -1101,7 +1062,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                               SizedBox(height: isSmallHeight ? 6 : 12),
                               Text(
                                 'Select Character Token',
-                                style: TextStyle(color: crimsonColor, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1),
+                                style: TextStyle(color: AppColors.brass, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1),
                               ),
                               const SizedBox(height: 6),
                               Wrap(

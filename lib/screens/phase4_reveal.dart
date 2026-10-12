@@ -9,6 +9,7 @@ import '../models/card_model.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/flipping_card.dart';
 import '../widgets/gaslight_route.dart';
 import '../theme/app_text_styles.dart';
@@ -366,22 +367,15 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
   void _confirmLeaveGame(BuildContext context, GameService gs) {
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Leave this game?'),
-        content: const Text('Your card and answers will be removed from this round. You cannot rejoin a game in progress.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('STAY'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await gs.leaveRoom();
-            },
-            child: const Text('LEAVE GAME'),
-          ),
-        ],
+      builder: (ctx) => GaslightConfirmDialog(
+        title: 'Leave this game?',
+        body: 'Your card and answers will be removed from this round. You cannot rejoin a game in progress.',
+        cancelLabel: 'STAY',
+        confirmLabel: 'LEAVE GAME',
+        onConfirm: (dialogContext) async {
+          Navigator.of(dialogContext).pop();
+          await gs.leaveRoom();
+        },
       ),
     );
   }

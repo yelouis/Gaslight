@@ -10,6 +10,7 @@ import '../models/card_model.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/auto_advance_timer.dart';
 import '../widgets/card_grid.dart';
 import '../theme/app_colors.dart';
@@ -95,22 +96,15 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
   void _confirmLeaveGame(BuildContext context, GameService gs) {
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Leave this game?'),
-        content: const Text('Your card and answers will be removed from this round. You cannot rejoin a game in progress.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('STAY'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await gs.leaveRoom();
-            },
-            child: const Text('LEAVE GAME'),
-          ),
-        ],
+      builder: (ctx) => GaslightConfirmDialog(
+        title: 'Leave this game?',
+        body: 'Your card and answers will be removed from this round. You cannot rejoin a game in progress.',
+        cancelLabel: 'STAY',
+        confirmLabel: 'LEAVE GAME',
+        onConfirm: (dialogContext) async {
+          Navigator.of(dialogContext).pop();
+          await gs.leaveRoom();
+        },
       ),
     );
   }
@@ -254,22 +248,15 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('End Voting?'),
-          content: const Text('End voting now? Players who have not voted will score nothing on this card, and their vote cannot be cast later.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('CANCEL'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                gs.forceAdvance();
-              },
-              child: const Text('PROCEED'),
-            ),
-          ],
+        return GaslightConfirmDialog(
+          title: 'End Voting?',
+          body: 'End voting now? Players who have not voted will score nothing on this card, and their vote cannot be cast later.',
+          cancelLabel: 'CANCEL',
+          confirmLabel: 'PROCEED',
+          onConfirm: (dialogContext) {
+            Navigator.of(dialogContext).pop();
+            gs.forceAdvance();
+          },
         );
       },
     );
