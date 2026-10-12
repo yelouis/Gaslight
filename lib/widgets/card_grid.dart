@@ -351,131 +351,160 @@ class _CardGridState extends State<CardGrid> {
             // Compact PREV button
             Material(
               color: Colors.transparent,
-              child: InkWell(
-                key: const Key('stacked_deck_prev_button'),
+              child: Semantics(
+                button: true,
+                enabled: _currentIndex > 0,
+                label: 'Previous option',
                 onTap: _currentIndex > 0 ? _unpeelPrev : null,
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _currentIndex > 0
-                        ? AppColors.brass.withValues(alpha: 0.15)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
+                excludeSemantics: true,
+                child: InkWell(
+                  key: const Key('stacked_deck_prev_button'),
+                  onTap: _currentIndex > 0 ? _unpeelPrev : null,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+                    decoration: BoxDecoration(
                       color: _currentIndex > 0
-                          ? AppColors.brass.withValues(alpha: 0.5)
-                          : AppColors.brass.withValues(alpha: 0.15),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.chevron_left,
-                        size: 16,
+                          ? AppColors.brass.withValues(alpha: 0.15)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
                         color: _currentIndex > 0
-                            ? AppColors.brass
-                            : AppColors.brass.withValues(alpha: 0.25),
+                            ? AppColors.brass.withValues(alpha: 0.5)
+                            : AppColors.brass.withValues(alpha: 0.15),
                       ),
-                      const SizedBox(width: 2),
-                      Text(
-                        'PREV',
-                        style: TextStyle(
-                          fontFamily: 'CormorantGaramond',
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                          letterSpacing: 1.0,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.chevron_left,
+                          size: 16,
                           color: _currentIndex > 0
                               ? AppColors.brass
                               : AppColors.brass.withValues(alpha: 0.25),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 2),
+                        Text(
+                          'PREV',
+                          style: TextStyle(
+                            fontFamily: 'CormorantGaramond',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1.0,
+                            color: _currentIndex > 0
+                                ? AppColors.brass
+                                : AppColors.brass.withValues(alpha: 0.25),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
 
-            // Dot indicators
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (int i = 0; i < widget.answers.length; i++)
-                  GestureDetector(
-                    key: Key('stacked_deck_dot_$i'),
-                    onTap: () => _goToIndex(i),
-                    behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3.0, vertical: 6.0),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: i == _currentIndex ? 14 : 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: i == _currentIndex
-                              ? AppColors.brass
-                              : (widget.selectedAuthorId == widget.answers[i].authorId)
-                                  ? AppColors.oxblood
-                                  : AppColors.brass.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: (widget.selectedAuthorId == widget.answers[i].authorId)
-                                ? AppColors.oxblood
-                                : Colors.transparent,
-                            width: 1,
+            // Dot indicators. Each slot is a 44-pt hit box while the dots fit; with many
+            // options the slots shrink below 44 pt wide and PREV / NEXT stay the accessible
+            // path (Issue 187).
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (int i = 0; i < widget.answers.length; i++)
+                    Flexible(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 44, maxWidth: 44),
+                        child: Semantics(
+                          button: true,
+                          selected: i == _currentIndex,
+                          label: 'Show option ${i + 1} of ${widget.answers.length}',
+                          onTap: () => _goToIndex(i),
+                          excludeSemantics: true,
+                          child: GestureDetector(
+                            key: Key('stacked_deck_dot_$i'),
+                            onTap: () => _goToIndex(i),
+                            behavior: HitTestBehavior.opaque,
+                            child: Center(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: i == _currentIndex ? 14 : 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  color: i == _currentIndex
+                                      ? AppColors.brass
+                                      : (widget.selectedAuthorId == widget.answers[i].authorId)
+                                          ? AppColors.oxblood
+                                          : AppColors.brass.withValues(alpha: 0.3),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: (widget.selectedAuthorId == widget.answers[i].authorId)
+                                        ? AppColors.oxblood
+                                        : Colors.transparent,
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
 
             // Compact NEXT button
             Material(
               color: Colors.transparent,
-              child: InkWell(
-                key: const Key('stacked_deck_next_button'),
+              child: Semantics(
+                button: true,
+                enabled: _currentIndex < widget.answers.length - 1,
+                label: 'Next option',
                 onTap: _currentIndex < widget.answers.length - 1 ? _peelNext : null,
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _currentIndex < widget.answers.length - 1
-                        ? AppColors.brass.withValues(alpha: 0.15)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
+                excludeSemantics: true,
+                child: InkWell(
+                  key: const Key('stacked_deck_next_button'),
+                  onTap: _currentIndex < widget.answers.length - 1 ? _peelNext : null,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+                    decoration: BoxDecoration(
                       color: _currentIndex < widget.answers.length - 1
-                          ? AppColors.brass.withValues(alpha: 0.5)
-                          : AppColors.brass.withValues(alpha: 0.15),
+                          ? AppColors.brass.withValues(alpha: 0.15)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _currentIndex < widget.answers.length - 1
+                            ? AppColors.brass.withValues(alpha: 0.5)
+                            : AppColors.brass.withValues(alpha: 0.15),
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'NEXT',
-                        style: TextStyle(
-                          fontFamily: 'CormorantGaramond',
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                          letterSpacing: 1.0,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'NEXT',
+                          style: TextStyle(
+                            fontFamily: 'CormorantGaramond',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1.0,
+                            color: _currentIndex < widget.answers.length - 1
+                                ? AppColors.brass
+                                : AppColors.brass.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 16,
                           color: _currentIndex < widget.answers.length - 1
                               ? AppColors.brass
                               : AppColors.brass.withValues(alpha: 0.25),
                         ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(
-                        Icons.chevron_right,
-                        size: 16,
-                        color: _currentIndex < widget.answers.length - 1
-                            ? AppColors.brass
-                            : AppColors.brass.withValues(alpha: 0.25),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

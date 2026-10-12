@@ -571,6 +571,8 @@ Full index in `ongoing_general_errors.md` §3; durable contracts in the design d
 - **`EmberBackdrop` and `AnimatedThinkingBackground` both keep `..repeat()` in `initState`.**
 - **E48 merged two artefacts** · **`r0_u2_p3_reduce_motion.png` is logged under E49** · **P4's Option B deferral**.
 - **`use_build_context_synchronously` × 4** (`lobby_screen.dart:982–986`, `phase4_reveal.dart:1111`) guard `State.context` with `context.mounted` — equivalent to `mounted`; a lint quirk, not a defect.
+- **The stacked deck's jump-dot slots are 44 pt wide only while they fit** (AI8, `card_grid.dart`). With 5 or more options on a 375-pt phone, or 3 or more on a 320-pt one (from the measured PREV / NEXT widths of 71 and 72 pt), the `Flexible` slots shrink below 44 pt wide and PREV / NEXT (44 pt tall) are the accessible path. A bounded deviation from the 44 × 44 rule, recorded on purpose — do not "fix" it by letting the row overflow (without the `Flexible`, nine 44-pt slots overflow a 320-pt row by 300 px).
+- **The vote screen's deck row cannot be judged by `meetsGuideline(iOSTapTargetGuideline)`**: it is flush with its scroll view's edges, which the guideline skips by design, so it passed on the unfixed 30-pt buttons. `test/tap_target_guidelines_test.dart` asserts those sizes directly — do not "simplify" that back to the guideline.
 - **`marionette_flutter` is in `dependencies`, not `dev_dependencies`** — it is tree-shaken from release (0 strings in the 1.1.0 (8) binary) and has no native code.
 
 ---

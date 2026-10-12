@@ -353,6 +353,7 @@ class _FolderCard extends StatelessWidget {
     // there is deliberately no deck id named anywhere in this file.
     final rating = deck?.rating;
     final bool hasSeal = rating != null;
+    final bool canPeek = isCentred && deck != null && deck.prompts.isNotEmpty;
     final String? sealLabel = rating == null ? null : AppColors.sealLabelFor(rating);
     final Color sealColor =
         rating == null ? AppColors.oxblood : AppColors.sealColorFor(rating);
@@ -439,12 +440,12 @@ class _FolderCard extends StatelessWidget {
                                 color: AppColors.ink.withOpacity(0.7),
                               ),
                             ),
-                            if (isCentred && deck != null && deck.prompts.isNotEmpty) ...[
+                            if (canPeek) ...[
                               const SizedBox(height: 1),
-                              GestureDetector(
-                                key: ValueKey('peek_inside_$deckId'),
-                                onTap: onPeek,
-                                child: const Text(
+                              // Only the drawing: the tap target and its name are the 44-pt
+                              // box below, so this must not be read a second time.
+                              const ExcludeSemantics(
+                                child: Text(
                                   'PEEK INSIDE',
                                   style: TextStyle(
                                     fontFamily: 'Lora',
@@ -461,6 +462,28 @@ class _FolderCard extends StatelessWidget {
                           ],
                         ),
                       ),
+                      // PEEK INSIDE is 12 pt tall; an invisible 44-pt-tall box over it (and
+                      // the prompt count above it) is the tap target (Issue 187). It stays
+                      // inside the card: Flutter does not hit-test outside a parent's bounds.
+                      if (canPeek)
+                        Positioned(
+                          left: 2,
+                          bottom: 2,
+                          right: 32,
+                          height: 44,
+                          child: Semantics(
+                            container: true,
+                            button: true,
+                            label: 'PEEK INSIDE',
+                            onTap: onPeek,
+                            excludeSemantics: true,
+                            child: GestureDetector(
+                              key: ValueKey('peek_inside_$deckId'),
+                              behavior: HitTestBehavior.opaque,
+                              onTap: onPeek,
+                            ),
+                          ),
+                        ),
                       // Wax Seal
                       if (hasSeal)
                         Positioned(

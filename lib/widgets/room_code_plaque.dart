@@ -18,6 +18,10 @@ class RoomCodePlaque extends StatefulWidget {
 class _RoomCodePlaqueState extends State<RoomCodePlaque> {
   double _scale = 1.0;
 
+  void _shareCode() {
+    Share.share('Join my Gaslight game! Room code: ${widget.code}');
+  }
+
   void _copyToClipboard() async {
     await Clipboard.setData(ClipboardData(text: widget.code));
     
@@ -138,19 +142,23 @@ class _RoomCodePlaqueState extends State<RoomCodePlaque> {
                   right: 0,
                   child: Material(
                     color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () {
-                        Share.share('Join my Gaslight game! Room code: ${widget.code}');
-                      },
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: ThematicIcon(
-                            type: ThematicIconType.envelope,
-                            size: 22,
-                            color: AppColors.ink.withOpacity(0.7),
+                    child: Semantics(
+                      button: true,
+                      label: 'Share room code',
+                      onTap: _shareCode,
+                      excludeSemantics: true,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: _shareCode,
+                        child: SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Center(
+                            child: ThematicIcon(
+                              type: ThematicIconType.envelope,
+                              size: 22,
+                              color: AppColors.ink.withOpacity(0.7),
+                            ),
                           ),
                         ),
                       ),

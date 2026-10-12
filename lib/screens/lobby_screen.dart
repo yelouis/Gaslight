@@ -857,26 +857,47 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                     clipBehavior: Clip.none,
                                     children: [
                                       PlayerAvatar(player: player, size: 48, showName: false),
+                                      // Flutter does not hit-test outside a parent's bounds, so the
+                                      // 44-pt hit box sits INSIDE the 48-pt avatar; the badge is
+                                      // translated back to where it always painted (Issue 187).
                                       if (isHost && !player.isHost)
                                         Positioned(
-                                          top: -4,
-                                          right: -4,
-                                          child: GestureDetector(
-                                            key: ValueKey('kick_${player.id}'),
+                                          top: 0,
+                                          right: 0,
+                                          child: Semantics(
+                                            container: true,
+                                            button: true,
+                                            label: 'Remove ${player.name}',
                                             onTap: () => _confirmKick(context, gs, player),
-                                            child: Container(
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: const BoxDecoration(
-                                                color: AppColors.groundRaised,
-                                                shape: BoxShape.circle,
-                                                border: Border.fromBorderSide(
-                                                  BorderSide(color: AppColors.brass, width: 1),
+                                            excludeSemantics: true,
+                                            child: GestureDetector(
+                                              key: ValueKey('kick_${player.id}'),
+                                              behavior: HitTestBehavior.opaque,
+                                              onTap: () => _confirmKick(context, gs, player),
+                                              child: SizedBox(
+                                                width: 44,
+                                                height: 44,
+                                                child: Align(
+                                                  alignment: Alignment.topRight,
+                                                  child: Transform.translate(
+                                                    offset: const Offset(4, -4),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(4),
+                                                      decoration: const BoxDecoration(
+                                                        color: AppColors.groundRaised,
+                                                        shape: BoxShape.circle,
+                                                        border: Border.fromBorderSide(
+                                                          BorderSide(color: AppColors.brass, width: 1),
+                                                        ),
+                                                      ),
+                                                      child: const ThematicIcon(
+                                                        type: ThematicIconType.depart,
+                                                        size: 12,
+                                                        color: AppColors.oxblood,
+                                                      ),
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
-                                              child: const ThematicIcon(
-                                                type: ThematicIconType.depart,
-                                                size: 12,
-                                                color: AppColors.oxblood,
                                               ),
                                             ),
                                           ),
@@ -1071,27 +1092,34 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                 alignment: WrapAlignment.center,
                                 children: List.generate(6, (index) {
                                   final isSelected = _selectedAvatarIndex == index;
-                                  return GestureDetector(
+                                  return Semantics(
+                                    button: true,
+                                    selected: isSelected,
+                                    label: 'Token ${index + 1} of 6',
                                     onTap: () => setState(() => _selectedAvatarIndex = index),
-                                    child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 200),
-                                      transform: Matrix4.identity()..scale(isSelected ? 1.15 : 1.0),
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: isSelected ? crimsonColor : Colors.transparent,
-                                          width: 2.5,
+                                    excludeSemantics: true,
+                                    child: GestureDetector(
+                                      onTap: () => setState(() => _selectedAvatarIndex = index),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 200),
+                                        transform: Matrix4.identity()..scale(isSelected ? 1.15 : 1.0),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: isSelected ? crimsonColor : Colors.transparent,
+                                            width: 2.5,
+                                          ),
+                                          boxShadow: isSelected ? [
+                                            BoxShadow(color: crimsonColor.withOpacity(0.5), blurRadius: 10, spreadRadius: 1.5)
+                                          ] : null,
                                         ),
-                                        boxShadow: isSelected ? [
-                                          BoxShadow(color: crimsonColor.withOpacity(0.5), blurRadius: 10, spreadRadius: 1.5)
-                                        ] : null,
-                                      ),
-                                      child: Opacity(
-                                        opacity: isSelected ? 1.0 : 0.4,
-                                        child: PlayerAvatar.buildChip(
-                                          colorValue: isSelected ? crimsonColor.value : Colors.grey.shade700.value,
-                                          avatarIndex: index,
-                                          size: isSmallHeight ? 44 : 48,
+                                        child: Opacity(
+                                          opacity: isSelected ? 1.0 : 0.4,
+                                          child: PlayerAvatar.buildChip(
+                                            colorValue: isSelected ? crimsonColor.value : Colors.grey.shade700.value,
+                                            avatarIndex: index,
+                                            size: isSmallHeight ? 44 : 48,
+                                          ),
                                         ),
                                       ),
                                     ),
