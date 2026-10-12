@@ -662,7 +662,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                             const SizedBox(height: 2),
                             Text(
                               'Fooled ${player.playersDeceived} · Fooled by ${player.timesFooled}',
-                              maxLines: 1,
+                              maxLines: 3,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontFamily: 'Lora',

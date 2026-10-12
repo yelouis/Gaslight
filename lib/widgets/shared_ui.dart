@@ -304,30 +304,36 @@ class _PrimaryButtonState extends State<PrimaryButton> with TickerProviderStateM
                                   _buildLoadingDots(context),
                                   const SizedBox(width: 12),
                                   Flexible(
-                                    child: Text(
-                                      widget.text,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: widget.fontSize,
-                                        letterSpacing: 2,
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        widget.text,
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: widget.fontSize,
+                                          letterSpacing: 2,
+                                        ),
                                       ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
                                     ),
                                   ),
                                 ],
                               )
                             : _buildLoadingDots(context))
                         : (widget.icon == null
-                            ? Text(
-                                widget.text,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: widget.fontSize,
-                                  letterSpacing: 2,
+                            ? FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  widget.text,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: widget.fontSize,
+                                    letterSpacing: 2,
+                                  ),
                                 ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
                               )
                             : Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -335,15 +341,18 @@ class _PrimaryButtonState extends State<PrimaryButton> with TickerProviderStateM
                                   widget.icon!,
                                   const SizedBox(width: 8),
                                   Flexible(
-                                    child: Text(
-                                      widget.text,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: widget.fontSize,
-                                        letterSpacing: 2,
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        widget.text,
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: widget.fontSize,
+                                          letterSpacing: 2,
+                                        ),
                                       ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
                                     ),
                                   ),
                                 ],

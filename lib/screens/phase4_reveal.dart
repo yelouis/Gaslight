@@ -979,7 +979,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                       Expanded(
                         child: Text(
                           isFooled ? 'REVENGE UNMASKING!' : 'UNMASKING IN PROGRESS...',
-                          maxLines: 1,
+                          maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontFamily: 'CormorantGaramond',
