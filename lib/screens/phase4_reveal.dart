@@ -1338,29 +1338,33 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
             ),
             if (voters.isNotEmpty) ...[
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'VOTES',
-                    style: TextStyle(
-                      color: theme.colorScheme.secondary.withOpacity(0.6),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
+              // 3 avatars (28) + 2 gaps (4): the Wrap wraps instead of starving the answer (Issue 180).
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 92),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'VOTES',
+                      style: TextStyle(
+                        color: theme.colorScheme.secondary.withOpacity(0.6),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    alignment: WrapAlignment.end,
-                    children: voters.map((v) => Tooltip(
-                      message: v.name,
-                      child: PlayerAvatar(player: v, size: 28, showName: false),
-                    )).toList(),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      alignment: WrapAlignment.end,
+                      children: voters.map((v) => Tooltip(
+                        message: v.name,
+                        child: PlayerAvatar(player: v, size: 28, showName: false),
+                      )).toList(),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
