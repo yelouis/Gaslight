@@ -567,11 +567,11 @@ class _CardGridState extends State<CardGrid> {
                       ),
                       child: Text(
                         'OPTION ${_toRoman(_currentIndex + 1)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'CormorantGaramond',
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.brass,
+                          color: AppColors.ink.withValues(alpha: 0.7),
                           letterSpacing: 1.2,
                         ),
                       ),
@@ -617,10 +617,10 @@ class _CardGridState extends State<CardGrid> {
                       ),
                       if (!isSelected && !isUnvotable) ...[
                         const SizedBox(height: 4),
-                        const Text(
+                        Text(
                           'Tap to choose this one',
                           style: TextStyle(
-                            color: AppColors.brass,
+                            color: AppColors.ink.withValues(alpha: 0.7),
                             fontSize: 11,
                             fontFamily: 'Lora',
                           ),

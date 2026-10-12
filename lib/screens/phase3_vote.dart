@@ -407,7 +407,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                     Text(
                       'Keep a straight face while the parlor deliberates.',
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.75),
+                        color: AppColors.ivory.withValues(alpha: 0.75),
                         fontSize: 13,
                         fontStyle: FontStyle.italic,
                       ),
@@ -429,7 +429,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                     Text(
                       "One of these is ${targetPlayer.name}'s truth.",
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.75),
+                        color: AppColors.ivory.withValues(alpha: 0.75),
                         fontSize: 13,
                         fontStyle: FontStyle.italic,
                       ),
