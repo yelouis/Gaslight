@@ -15,7 +15,7 @@
 1. **One item = one local Conventional Commit**, WHY in the body, plus the tracker update (§0.9) in the same commit. Do not push.
 2. **Falsify every new test.** Inject the fault, run the test, watch it fail, restore. The fault must **compile** — a test that fails to load proves nothing (THE LOOP rule 7). When reverting a whole commit would delete a symbol the test imports, inject a targeted fault instead. Paste the failing output under `Falsification:`.
 3. **Read exit codes bare** — never through `| tail`, never through `timeout` (macOS has none). An empty result means nothing until the same query has returned something (lesson §2.44).
-4. **New code adds zero analyzer infos.** Use `.withValues(alpha: x)`, never `.withOpacity(x)`; no `print`. After every item `flutter analyze lib test` must show **0 errors · 0 warnings · 186 infos** — until AI12, which lowers it to **170**.
+4. **New code adds zero analyzer infos.** Use `.withValues(alpha: x)`, never `.withOpacity(x)`; no `print`. After every item `flutter analyze lib test` must show **0 errors · 0 warnings · 170 infos** (AI12 lowered it from 186 by migrating the 16 `deprecated_member_use` that are not `withOpacity`).
 5. **Strings are verbatim** — copy, keys, labels, punctuation, the em dash.
 6. **The only server change left is AI11.** Deploy functions **once**, after AI11's commit (§0.8). Server changes are **additive only** — build **1.1.0 (8)** is on testers' phones.
 7. **Rendered contrast is measured from pixels** with `test/helpers/rendered_contrast.dart` (`measureRenderedContrast`), never with the widget-tree walk in `test/contrast_tokens_test.dart`.
@@ -47,7 +47,7 @@
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors · 0 warnings · 186 infos · exit 1** (153 `deprecated_member_use`, of which 137 `withOpacity`) |
+| `flutter analyze lib test` | **0 errors · 0 warnings · 170 infos · exit 1** (137 `deprecated_member_use`, all of them `withOpacity` — the rejected 139 C migration; was 186 until AI12) |
 | `flutter test` | **423 passing**, exit 0 |
 | `npm --prefix functions run build` | clean, exit 0 |
 | `npm --prefix functions test` | **164 passing**, exit 0 |
@@ -329,7 +329,7 @@ Each row's falsification was **re-run independently** in a scratch copy of `HEAD
 - **AI8 also fixed `PEEK INSIDE`** (an 8.5-pt link, 99 × 12) with an invisible 44-pt-tall box — the guideline run found it.
 - **The stacked deck's jump-dot slots are 44 pt wide only while they fit** (AI8, `card_grid.dart`). With 5 or more options on a 375-pt phone, or 3 or more on a 320-pt one, the `Flexible` slots shrink below 44 pt wide and PREV / NEXT (44 pt tall) are the accessible path. Do not "fix" it by letting the row overflow (without the `Flexible`, nine 44-pt slots overflow a 320-pt row by 300 px).
 - **The vote screen's deck row cannot be judged by `meetsGuideline(iOSTapTargetGuideline)`**: it is flush with its scroll view's edges, which the guideline skips by design. `test/tap_target_guidelines_test.dart` asserts those sizes directly — do not "simplify" that back to the guideline.
-- **AI5 lowered the analyzer count to 186** by replacing two `withOpacity` calls with `withValues` — not a regression of the 188 bar.
+- **AI5 lowered the analyzer count to 186** by replacing two `withOpacity` calls with `withValues` — not a regression of the 188 bar. **AI12 lowered it to 170** by migrating the 16 other `deprecated_member_use`.
 - **The target's attribution UI is a separate chip row, not an interactive option grid** (AA16b) · **AA16b enforces one-player-per-option on the client** · **AA5 ships one stem list per prompt** · **AA8's phase guard on `setReady`** · **`GameService.kMissingAnswerPlaceholder` stays** · **Waves Y1, Z1, AA bumped `pubspec.yaml` in their own commits** · **`EmberBackdrop` and `AnimatedThinkingBackground` keep `..repeat()`** · **E48 / E49 / P4 records**.
 - **`use_build_context_synchronously` × 4** guard `State.context` with `context.mounted` — equivalent to `mounted`.
 - **`marionette_flutter` is in `dependencies`** — tree-shaken from release (0 strings in the 1.1.0 (8) binary), no native code.
@@ -417,8 +417,8 @@ Each row's falsification was **re-run independently** in a scratch copy of `HEAD
 (12) A rename broke a test? UPDATE THE ASSERTION, never the production code.
 (13) Server changes the shipped client reads must be ADDITIVE (1.1.0 (8)).
 (14) Read exit codes BARE.
-(15) RE-RUN THE FULL BATTERY — all nine gates bare; analyze bar 0/0/186
-     (170 after AI12); functions tests 164 (167 after AI11).
+(15) RE-RUN THE FULL BATTERY — all nine gates bare; analyze bar 0/0/170;
+     functions tests 167.
 (16) COMMIT: ONE ITEM, ONE Conventional Commit, WHY + Falsification + Device
      check in the body; tracker updated in the same commit. Ask before any
      deploy; never upload to TestFlight.

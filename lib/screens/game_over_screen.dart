@@ -122,9 +122,11 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
       final file = await File('${tempDir.path}/gaslight_case_file.png').create();
       await file.writeAsBytes(pngBytes);
 
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'image/png')],
-        text: 'Just finished a match of Gaslight! Check out the night\'s honors.',
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path, mimeType: 'image/png')],
+          text: 'Just finished a match of Gaslight! Check out the night\'s honors.',
+        ),
       );
     } catch (e) {
       debugPrint('Error sharing case file: $e');
@@ -1167,11 +1169,12 @@ class _StaggeredPlaqueState extends State<StaggeredPlaque> with SingleTickerProv
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
+        final scale = _scaleAnimation.value;
         return Opacity(
           opacity: _fadeAnimation.value,
           child: Transform(
             transform: Matrix4.identity()
-              ..scale(_scaleAnimation.value)
+              ..scaleByDouble(scale, scale, scale, 1.0)
               ..rotateZ(_rotationAnimation.value),
             alignment: Alignment.center,
             child: child,

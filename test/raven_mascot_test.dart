@@ -44,7 +44,7 @@ void main() {
 
     test('T3.3: Rim contrast regression guard >= 4.5:1 against ground (#14110E)', () {
       final img = decodePngFile(File('assets/images/raven/body.png'));
-      final bgLum = relativeLuminance(AppColors.ground.red, AppColors.ground.green, AppColors.ground.blue);
+      final bgLum = relativeLuminance((AppColors.ground.r * 255.0).round().clamp(0, 255), (AppColors.ground.g * 255.0).round().clamp(0, 255), (AppColors.ground.b * 255.0).round().clamp(0, 255));
 
       final significantPixels = img.pixels.where((p) => p.a > 100).toList();
       expect(significantPixels, isNotEmpty);
@@ -192,7 +192,7 @@ void main() {
       expect(entries.length, equals(10),
           reason: '_poseSheets must register all 10 transient poses (found ${entries.length})');
 
-      final bgLum = relativeLuminance(AppColors.ground.red, AppColors.ground.green, AppColors.ground.blue);
+      final bgLum = relativeLuminance((AppColors.ground.r * 255.0).round().clamp(0, 255), (AppColors.ground.g * 255.0).round().clamp(0, 255), (AppColors.ground.b * 255.0).round().clamp(0, 255));
 
       for (final m in entries) {
         final poseName = m.group(1)!;

@@ -619,7 +619,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                     style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
                                   ),
                                   value: gs.gameState?.isTimerDisabled ?? true,
-                                  activeColor: AppColors.brass,
+                                  activeThumbColor: AppColors.brass,
                                   contentPadding: EdgeInsets.zero,
                                   onChanged: isHost
                                       ? (val) {
@@ -693,7 +693,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                               style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ivory, fontSize: 14),
                             ),
                             value: _familyFriendlyOnly,
-                            activeColor: AppColors.brass,
+                            activeThumbColor: AppColors.brass,
                             contentPadding: EdgeInsets.zero,
                             onChanged: (val) {
                               setState(() {
@@ -1129,6 +1129,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                 alignment: WrapAlignment.center,
                                 children: List.generate(6, (index) {
                                   final isSelected = _selectedAvatarIndex == index;
+                                  final tokenScale = isSelected ? 1.15 : 1.0;
                                   return Semantics(
                                     button: true,
                                     selected: isSelected,
@@ -1139,7 +1140,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                       onTap: () => setState(() => _selectedAvatarIndex = index),
                                       child: AnimatedContainer(
                                         duration: const Duration(milliseconds: 200),
-                                        transform: Matrix4.identity()..scale(isSelected ? 1.15 : 1.0),
+                                        transform: Matrix4.identity()..scaleByDouble(tokenScale, tokenScale, tokenScale, 1.0),
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
                                           border: Border.all(
@@ -1153,7 +1154,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                         child: Opacity(
                                           opacity: isSelected ? 1.0 : 0.4,
                                           child: PlayerAvatar.buildChip(
-                                            colorValue: isSelected ? crimsonColor.value : Colors.grey.shade700.value,
+                                            colorValue: isSelected ? crimsonColor.toARGB32() : Colors.grey.shade700.toARGB32(),
                                             avatarIndex: index,
                                             size: isSmallHeight ? 44 : 48,
                                           ),

@@ -140,7 +140,7 @@ To allow seamless recovery from app restarts, device sleep, or connection losses
 * **Responsive Badge Pills (`_highlightCard`)**: Highlight card titles are wrapped in `Expanded` with text ellipsis alongside `Flexible` badge containers to preserve badge visibility without clipping or RenderFlex overflow on narrow devices (Issue 114).
 * **Case File Delivery (`_shareCaseFile`)**:
   * **Web (`kIsWeb`)**: Converts the `RepaintBoundary` PNG bytes into a `Blob` via `package:web`, triggers a synthetic anchor download (`gaslight_case_file_<roomCode>.png`), and presents a confirmation snackbar.
-  * **Mobile / Native**: Writes PNG bytes to a temporary file and opens the native OS share sheet via `Share.shareXFiles`.
+  * **Mobile / Native**: Writes PNG bytes to a temporary file and opens the native OS share sheet via `SharePlus.instance.share(ShareParams(files: [XFile(path, mimeType: 'image/png')], text: …))` (share_plus 13; the static `Share.shareXFiles` is deprecated and was migrated in Wave AI / AI12).
 
 ---
 

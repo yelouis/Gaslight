@@ -19,7 +19,7 @@ class _RoomCodePlaqueState extends State<RoomCodePlaque> {
   double _scale = 1.0;
 
   void _shareCode() {
-    Share.share('Join my Gaslight game! Room code: ${widget.code}');
+    SharePlus.instance.share(ShareParams(text: 'Join my Gaslight game! Room code: ${widget.code}'));
   }
 
   void _copyToClipboard() async {
