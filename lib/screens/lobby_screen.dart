@@ -181,24 +181,38 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     );
   }
 
+  /// Re-bind the saved seat on launch, and again from RETRY. A dropped connection is not an
+  /// expired session (Issue 183): `tryRejoinSession` keeps the seat on anything but a
+  /// definitive rejection, and this says so and offers RETRY.
+  Future<void> _attemptRejoin() async {
+    final gs = context.read<GameService>();
+    final prefs = await SharedPreferences.getInstance();
+    final hasSavedSession = prefs.getString('room_code') != null;
+    final rejoined = await gs.tryRejoinSession();
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (rejoined) {
+      messenger.showSnackBar(const SnackBar(content: Text('Rejoined active game session!')));
+    } else if (gs.lastRejoinFailure == RejoinFailure.connection) {
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Could not reach the parlour. Check your connection and try again.'),
+          duration: const Duration(seconds: 10),
+          // brass, not the theme default: an unstyled SnackBarAction took black on the dark
+          // SnackBar, measured 1.30 : 1 (Issue 183).
+          action: SnackBarAction(label: 'RETRY', textColor: AppColors.brass, onPressed: _attemptRejoin),
+        ),
+      );
+    } else if (hasSavedSession) {
+      messenger.showSnackBar(const SnackBar(content: Text('Your session expired — please rejoin.')));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final gs = context.read<GameService>();
-      final prefs = await SharedPreferences.getInstance();
-      final hasSavedSession = prefs.getString('room_code') != null;
-      final rejoining = await gs.tryRejoinSession();
-      if (rejoining && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Rejoined active game session!')),
-        );
-      } else if (!rejoining && hasSavedSession && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Your session expired — please rejoin.')),
-        );
-      }
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _attemptRejoin());
   }
 
   void _createRoom() async {

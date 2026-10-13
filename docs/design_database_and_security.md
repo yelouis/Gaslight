@@ -108,6 +108,20 @@ A re-bind is now permitted only when **one of three** conditions holds:
 
 **Do not simplify this to a single condition.** Staleness alone is too weak — an attacker just waits. Token alone strands any player who reinstalls. All three tested in `functions/test/game_e2e.spec.ts` ("SEC2"), with the stranger-takeover case as the falsifying assertion and four over-reach guards.
 
+
+### Auto-rejoin on launch — what clears the saved seat (Issue 183, Wave AI / AI10, October 2026)
+
+`GameService.tryRejoinSession()` runs on every launch (`LobbyScreen._attemptRejoin`) and re-binds the saved seat through `joinRoom`. **Until October 2026 any exception from that call removed `seat_token_<room>`, `room_code` and `player_id`**, so a player who reopened the app on a flaky connection was told *"Your session expired — please rejoin."* and lost the automatic recovery above — a dropped connection reaches Dart on iOS as `unknown` (Wave AH), a failed anonymous sign-in as `unauthenticated`, and neither says anything about the seat.
+
+**The rule now:** the saved session is cleared only on a **definitive** verdict —
+
+* the room **or** the player document does not exist, or
+* `joinRoom` throws a `FirebaseFunctionsException` whose `code` is `not-found`, `permission-denied` or `invalid-argument`.
+
+**Everything else keeps the keys**: `unknown`, `unavailable`, `deadline-exceeded`, `unauthenticated`, `internal`, any other code, a non-`FirebaseFunctionsException`, and a failure of the room / player read itself (Firestore unreachable on a cold start). `tryRejoinSession()` still returns a `bool`; **why** it returned `false` is `GameService.lastRejoinFailure` (`RejoinFailure.none` / `expired` / `connection`, reset at the start of every attempt). The lobby shows *"Could not reach the parlour. Check your connection and try again."* for `connection` — a 10-second SnackBar with a **RETRY** action that runs the same attempt again — and *"Your session expired — please rejoin."* only for `expired` when a saved session existed.
+
+**Bounded, deliberately:** a genuinely dead seat that fails with a non-definitive code is retried on every launch until the room's 8-hour TTL (`ROOM_TTL_MS`) deletes the document, after which the "document missing" branch clears it. That is the price of never mistaking a dropped connection for a verdict. `test/rejoin_failure_test.dart` pins every code on both sides of the line, **each of the three keys by name**, plus the outer catch (the one a `joinRoom`-only test list does not reach) and the screen.
+
 ---
 
 ## 6. Firestore TTL Policy (Issue 53 — shipped August 2026)

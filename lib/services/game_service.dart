@@ -11,6 +11,13 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:uuid/uuid.dart';
 
+/// Why the last [GameService.tryRejoinSession] returned false (Issue 183).
+///
+/// [expired]: the seat is gone for good (room or player document missing, or the server
+/// rejected the re-bind outright) and the saved session has been cleared. [connection]:
+/// anything else went wrong, which says nothing about the seat, so it is kept for a retry.
+enum RejoinFailure { none, expired, connection }
+
 class GameService extends ChangeNotifier with WidgetsBindingObserver {
   final FirebaseFirestore _db;
   final FirebaseFunctions _functions;
@@ -316,53 +323,78 @@ class GameService extends ChangeNotifier with WidgetsBindingObserver {
     listenToRoom(roomCode);
   }
 
+  RejoinFailure _lastRejoinFailure = RejoinFailure.none;
+  RejoinFailure get lastRejoinFailure => _lastRejoinFailure;
+
+  /// The server's verdict that a saved seat can never be re-bound. Everything else a
+  /// re-bind can throw -- a dropped connection (on iOS `unknown`), `unavailable`,
+  /// `deadline-exceeded`, a failed sign-in (`unauthenticated`), `internal` -- says nothing
+  /// about the seat, and clearing it on one of those strands the player (Issue 183).
+  static const _definitiveRebindRejections = {'not-found', 'permission-denied', 'invalid-argument'};
+
   Future<bool> tryRejoinSession() async {
+    _lastRejoinFailure = RejoinFailure.none;
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedRoom = prefs.getString('room_code');
       final savedPlayerId = prefs.getString('player_id');
-      if (savedRoom != null && savedPlayerId != null) {
-        final roomDoc = await _db.collection('rooms').doc(savedRoom).get();
-        final playerDoc = await _db.collection('rooms').doc(savedRoom).collection('players').doc(savedPlayerId).get();
-        if (roomDoc.exists && playerDoc.exists) {
-          final pData = playerDoc.data()!;
-          final name = pData['name'] as String? ?? 'Player';
-          final avatarIndex = pData['avatarIndex'] as int? ?? 0;
-          final colorValue = pData['colorValue'] as int? ?? 0xFF58A6FF;
+      if (savedRoom == null || savedPlayerId == null) return false;
 
-          try {
-            await ensureAuthenticated();
-            final savedSeatToken = prefs.getString('seat_token_$savedRoom');
-            final result = await _functions.httpsCallable('joinRoom').call({
-              'roomCode': savedRoom,
-              'playerName': name,
-              'playerId': savedPlayerId,
-              'avatarIndex': avatarIndex,
-              'colorValue': colorValue,
-              if (savedSeatToken != null) 'seatToken': savedSeatToken,
-            });
-            
-            final seatToken = result.data != null ? result.data['seatToken'] as String? : null;
-            if (seatToken != null) {
-              await prefs.setString('seat_token_$savedRoom', seatToken);
-            }
+      Future<void> forgetSeat() async {
+        await prefs.remove('seat_token_$savedRoom');
+        await prefs.remove('room_code');
+        await prefs.remove('player_id');
+      }
 
-            _currentPlayerId = savedPlayerId;
-            _gameState = GameState.fromMap(roomDoc.data()!, roomDoc.id);
-            listenToRoom(savedRoom);
-            return true;
-          } catch (e) {
-            debugPrint('Error re-binding session during rejoin: $e');
-            await prefs.remove('seat_token_$savedRoom');
-            await prefs.remove('room_code');
-            await prefs.remove('player_id');
-          }
+      final roomDoc = await _db.collection('rooms').doc(savedRoom).get();
+      final playerDoc = await _db.collection('rooms').doc(savedRoom).collection('players').doc(savedPlayerId).get();
+      if (!roomDoc.exists || !playerDoc.exists) {
+        await forgetSeat();
+        _lastRejoinFailure = RejoinFailure.expired;
+        return false;
+      }
+
+      final pData = playerDoc.data()!;
+      final name = pData['name'] as String? ?? 'Player';
+      final avatarIndex = pData['avatarIndex'] as int? ?? 0;
+      final colorValue = pData['colorValue'] as int? ?? 0xFF58A6FF;
+
+      try {
+        await ensureAuthenticated();
+        final savedSeatToken = prefs.getString('seat_token_$savedRoom');
+        final result = await _functions.httpsCallable('joinRoom').call({
+          'roomCode': savedRoom,
+          'playerName': name,
+          'playerId': savedPlayerId,
+          'avatarIndex': avatarIndex,
+          'colorValue': colorValue,
+          if (savedSeatToken != null) 'seatToken': savedSeatToken,
+        });
+
+        final seatToken = result.data != null ? result.data['seatToken'] as String? : null;
+        if (seatToken != null) {
+          await prefs.setString('seat_token_$savedRoom', seatToken);
         }
+
+        _currentPlayerId = savedPlayerId;
+        _gameState = GameState.fromMap(roomDoc.data()!, roomDoc.id);
+        listenToRoom(savedRoom);
+        return true;
+      } catch (e) {
+        debugPrint('Error re-binding session during rejoin: $e');
+        if (e is FirebaseFunctionsException && _definitiveRebindRejections.contains(e.code)) {
+          await forgetSeat();
+          _lastRejoinFailure = RejoinFailure.expired;
+        } else {
+          _lastRejoinFailure = RejoinFailure.connection;
+        }
+        return false;
       }
     } catch (e) {
       debugPrint('Error rejoining session: $e');
+      _lastRejoinFailure = RejoinFailure.connection;
+      return false;
     }
-    return false;
   }
 
   bool _heartbeatDisabledForTest = false;
