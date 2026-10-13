@@ -22,19 +22,30 @@ All game mutations are `onCall` Cloud Functions (`functions/src/index.ts`) that 
 | `createRoom` | `GameService.createRoom` | authenticated |
 | `joinRoom` | `GameService.joinRoom` | authenticated; re-binds `authUid` for seat recovery **only on ownership, a valid `seatToken`, or a seat stale >30 s** — `playerId` alone is not a credential (§5) |
 | `startGame` | `GameService.startGame` | host only; validates player count, rounds, deck size with descriptive errors |
-| `submitAnswer` | `submitCardAnswer` | seat owner; server-side semantic-similarity check; marks author ready; auto-advances when all active players are ready |
+| `submitAnswer` | `submitCardAnswer` | seat owner; server-side semantic-similarity check [rejection: `invalid-argument` with `details.reason: "too_similar"`]; marks author ready; auto-advances when all active players are ready |
 | `getMyOptionId` | `GameService.fetchMyOptionId` | seat owner; reads default-deny `sealed/{cardId}.answerAuthors` server-side, returning **only the caller's own optionId** (`{ optionId }`) or `{ optionId: null }` if none authored; throws `permission-denied` on ownership mismatch |
 | `castVote` | `castVote` | seat owner; enforces the self-vote guard; marks voter ready; auto-advances |
 | `setReady` | `setPlayerReady` | seat owner; auto-advances when all ready |
 | `submitTargetForgeryGuesses` | — | target seat owner only; writes target's `Record<optionId, guessedAuthorId>` to `sealed/{cardId}.targetForgeryGuesses` during vote phase; enforces non-ready target, rejects own truth, placeholders, target self-forgery, and non-room players; replace semantics |
 | `advancePhase` | `forceAdvance`/`evaluateReadyState` | host only; applies timeout placeholders, per-card scoring, honor stats |
 | `advanceToNextResolution` | `advanceToNextResolution` | host only; steps the vote→reveal card sequence / game over |
+| `submitUnmaskGuess` | `GameService.submitUnmaskGuess` | seat owner; reveal phase only and before `unmaskDeadline`; only a voter who fell for a forgery, and once; closes the window when the last fooled voter has guessed. Throws `failed-precondition` for **six** reasons — the two the client acts on carry `details.reason`: `"deadline_passed"` and `"already_submitted"` |
 | `rerollPrompt` | `rerollMyPrompt` | seat owner; capped at `kMaxRerollsPerRound = 3` during truth phase; appends to `rerollCandidates` and tracks `rerollsThisRound` in `sealed/{cardId}` |
 | `selectRerolledPrompt` | — | seat owner; requires truth phase, owner of card, `rerollsThisRound >= 3`, `promptText` in `rerollCandidates`, `promptText` not in play on any card, and no submitted truth answer; updates card `promptText` |
 | `updateLobbySettings` | `updateLobbySettings` | host only |
 | `handleDisconnect` | `handlePlayerDisconnect` | host, self, or anyone for a heartbeat-dead player; idempotent; card pruning, assignment bridging, reader re-indexing, **host transfer** |
 
 > **Authorship invariant & `getMyOptionId`:** The invariant is *never send other players' authorship to the client*. `getMyOptionId` responds over a private callable channel to a single authenticated seat owner, returning only the opaque option ID corresponding to the caller's *own* submission on that card. It reveals nothing the player does not already know (they wrote the text), keeps all other options' authors concealed in the default-deny sealed document, and rejects queries for third-party player IDs with `permission-denied`.
+
+> **Machine-readable error reasons (Issue 185, Wave AI / AI11, October 2026).** When one code covers several causes, the callable names the cause the client acts on in `HttpsError.details` as `{ reason: "<snake_case>" }`. Three exist:
+>
+> | Callable | Code | `details.reason` | The player is told |
+> |---|---|---|---|
+> | `submitUnmaskGuess` | `failed-precondition` | `deadline_passed` | *The guessing window has closed.* |
+> | `submitUnmaskGuess` | `failed-precondition` | `already_submitted` | *That guess is already locked in.* |
+> | `submitAnswer` | `invalid-argument` | `too_similar` | *Too similar to an existing answer! Be more creative.* |
+>
+> **They are additive, and the message strings are byte-identical to before**: build 1.1.0 (8), on testers' phones, still matches on those strings, and an old client ignores `details`. Never reword or recode an existing error — an installed build may key on either. The client reads the reason in exactly one place, `gameCallableErrorMessage` (`lib/utils/callable_error_message.dart`), which maps `(action, code, reason)` and answers everything else — no `details`, an unknown reason, any other code, an error that is not a `FirebaseFunctionsException` — with *Something went wrong. Try again.* A new reason is a new `details` value **and** a new branch in that mapper, in the same change. **A client with this mapper needs a server that sends the reasons**: against one that predates them, all three read the generic sentence. In `functions/test/game_e2e.spec.ts`, `callFn` copies `json.error.details` onto the thrown error (`err.details`) — without that no emulator test can see a reason — and three cases assert each `status`, `details.reason` **and** the unchanged `message` (the 1.1.0 (8) compatibility guard).
 
 ### Client call discipline for `getMyOptionId` (Issues 91–92, August 2026)
 

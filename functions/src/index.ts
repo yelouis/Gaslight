@@ -972,7 +972,7 @@ export const submitAnswer = onCall(async (request) => {
   }
 
   if (isTooSimilar(text, existing)) {
-    throw new HttpsError("invalid-argument", "Answer is too similar to another player's answer!");
+    throw new HttpsError("invalid-argument", "Answer is too similar to another player's answer!", { reason: "too_similar" });
   }
 
   // 2. Perform write in a transaction to prevent race conditions
@@ -2511,7 +2511,7 @@ export const submitUnmaskGuess = onCall(async (request) => {
     }
 
     if (!room.unmaskDeadline || Date.now() > room.unmaskDeadline) {
-      throw new HttpsError("failed-precondition", "Unmask guess deadline has passed or is inactive.");
+      throw new HttpsError("failed-precondition", "Unmask guess deadline has passed or is inactive.", { reason: "deadline_passed" });
     }
 
     const currentCardIdx = room.cards.findIndex(c => c.targetPlayerId === room.currentReaderId);
@@ -2554,7 +2554,7 @@ export const submitUnmaskGuess = onCall(async (request) => {
     }
 
     if (currentCard.unmaskGuesses?.[voterId]) {
-      throw new HttpsError("failed-precondition", "Player has already submitted an unmask guess.");
+      throw new HttpsError("failed-precondition", "Player has already submitted an unmask guess.", { reason: "already_submitted" });
     }
 
     if (guessedAuthorId === voterId) {

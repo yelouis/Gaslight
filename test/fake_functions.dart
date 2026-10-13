@@ -346,9 +346,11 @@ class FakeHttpsCallable extends Fake implements HttpsCallable {
         });
 
         if (TextSimilarity.isTooSimilar(text, existing) || text.toString().contains('trigger_error')) {
+          // Mirrors functions/src/index.ts: the client reads `details.reason`, not the message.
           throw FirebaseFunctionsException(
             message: 'Answer is too similar to another player\'s answer!',
             code: 'invalid-argument',
+            details: {'reason': 'too_similar'},
           );
         }
       }

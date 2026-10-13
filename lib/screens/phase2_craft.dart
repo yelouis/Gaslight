@@ -13,6 +13,7 @@ import '../widgets/thinking_background.dart';
 import '../widgets/shared_ui.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/auto_advance_timer.dart';
+import '../utils/callable_error_message.dart';
 import '../utils/text_similarity.dart';
 import '../utils/prompt_decks.dart';
 import '../theme/app_colors.dart';
@@ -177,11 +178,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
     } catch (e) {
       debugPrint('EXCEPTION CAUGHT ON SUBMIT: $e, mounted=$mounted');
       if (mounted) {
-        final String errStr = e.toString();
-        String msg = 'Something went wrong. Try again.';
-        if (errStr.contains('similar') || errStr.contains('Similarity')) {
-          msg = 'Too similar to an existing answer! Be more creative.';
-        }
+        final String msg = gameCallableErrorMessage(e, action: GameAction.submitAnswer);
         debugPrint('SHOWING SNACKBAR WITH MSG: $msg');
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(

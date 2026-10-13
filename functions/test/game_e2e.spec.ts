@@ -66,6 +66,7 @@ async function callFn(name: string, idToken: string, data: any): Promise<any> {
   if (json && json.error) {
     const err = new Error(json.error.message || 'Callable error');
     (err as any).status = json.error.status;
+    (err as any).details = json.error.details;
     throw err;
   }
 
@@ -74,6 +75,70 @@ async function callFn(name: string, idToken: string, data: any): Promise<any> {
     throw new Error(`HTTP Error ${res.status} calling function ${name}`);
   }
   return json.result;
+}
+
+/**
+ * A 4-player room in the REVEAL phase on a card where TWO players (`voterId`, `otherVoterId`) fell
+ * for `forgerId`'s forgery, with the unmask window open. Two, not one: the server closes the
+ * window the moment the last fooled voter has guessed, so with a single fooled voter a second
+ * guess meets "deadline passed" first and `already_submitted` can never be reached.
+ */
+async function reachRevealWithTwoFooledVoters() {
+  const users = [await createAnonUser(), await createAnonUser(), await createAnonUser(), await createAnonUser()];
+  const ids = ['p_host', 'p_guest1', 'p_guest2', 'p_guest3'];
+  const names: Record<string, string> = { p_host: 'Alice', p_guest1: 'Bob', p_guest2: 'Charlie', p_guest3: 'Dana' };
+  const tokens: Record<string, string> = {};
+  ids.forEach((id, i) => { tokens[id] = users[i].idToken; });
+
+  const createRes = await callFn('createRoom', tokens.p_host, {
+    playerName: 'Alice',
+    playerId: 'p_host',
+    sabotageAnswersCount: 1,
+    debugEnabled: true
+  });
+  const roomCode = createRes.roomCode;
+  for (const id of ids.slice(1)) {
+    await callFn('joinRoom', tokens[id], { roomCode, playerName: names[id], playerId: id });
+    await db.collection('rooms').doc(roomCode).collection('players').doc(id).update({ lobbyReady: true });
+  }
+  await callFn('startGame', tokens.p_host, { roomCode, selectedDeckId: FALLBACK_DECK });
+
+  for (const id of ids) {
+    await callFn('submitAnswer', tokens[id], {
+      roomCode, targetCardId: id, authorId: id, text: `${names[id]} truth`, isTruth: true
+    });
+  }
+  const roomRef = db.collection('rooms').doc(roomCode);
+  let roomSnap = await roomRef.get();
+  expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+  const assignments = roomSnap.data()?.currentCardAssignments;
+  for (const id of ids) {
+    await callFn('submitAnswer', tokens[id], {
+      roomCode, targetCardId: assignments[id], authorId: id, text: `${names[id]} forgery`, isTruth: false
+    });
+  }
+  roomSnap = await roomRef.get();
+  expect(roomSnap.data()?.currentPhase).to.equal('vote');
+  const readerId: string = roomSnap.data()?.currentReaderId;
+  // The forger is whoever wrote the forgery on the reader's card; the other two fall for it.
+  const forgerId = ids.find((id) => assignments[id] === readerId)!;
+  const [voterId, otherVoterId] = ids.filter((id) => id !== readerId && id !== forgerId);
+
+  await new Promise((r) => setTimeout(r, 100));
+  const sealedSnap = await roomRef.collection('sealed').doc(readerId).get();
+  const answerAuthors = sealedSnap.data()?.answerAuthors || {};
+  const forgerOptId = Object.keys(answerAuthors).find((k) => answerAuthors[k] === forgerId) || forgerId;
+  const truthOptId = sealedSnap.data()?.truthAnswerId || 'TRUTH';
+  for (const id of [voterId, otherVoterId]) {
+    await callFn('castVote', tokens[id], { roomCode, targetCardId: readerId, voterId: id, votedForId: forgerOptId });
+  }
+  await callFn('castVote', tokens[forgerId], { roomCode, targetCardId: readerId, voterId: forgerId, votedForId: truthOptId });
+  await callFn('setReady', tokens[readerId], { roomCode, playerId: readerId, ready: true });
+
+  roomSnap = await roomRef.get();
+  expect(roomSnap.data()?.currentPhase).to.equal('reveal');
+  expect(roomSnap.data()?.unmaskDeadline).to.be.a('number');
+  return { roomCode, roomRef, voterId, otherVoterId, forgerId, tokens };
 }
 
 describe('Gaslight E2E Game Emulator Tests', () => {
@@ -1328,6 +1393,73 @@ describe('Gaslight E2E Game Emulator Tests', () => {
       rejected = true;
     }
     expect(rejected).to.be.true;
+  });
+
+  // Issue 185 / AI11: the server says WHY it refused, additively, so the client maps on a code
+  // it can rely on instead of the message text. The message strings are asserted unchanged:
+  // build 1.1.0 (8), already on testers' phones, still matches on them.
+  it('submitUnmaskGuess after the deadline fails FAILED_PRECONDITION with details.reason deadline_passed', async () => {
+    const { roomCode, roomRef, voterId, forgerId, tokens } = await reachRevealWithTwoFooledVoters();
+    await roomRef.update({ unmaskDeadline: Date.now() - 1000 });
+
+    try {
+      await callFn('submitUnmaskGuess', tokens[voterId], { roomCode, guesserId: voterId, guessedAuthorId: forgerId });
+      expect.fail('Should have rejected a guess after the deadline');
+    } catch (err: any) {
+      expect(err.status).to.equal('FAILED_PRECONDITION');
+      expect(err.details).to.deep.equal({ reason: 'deadline_passed' });
+      expect(err.message).to.equal('Unmask guess deadline has passed or is inactive.');
+    }
+  });
+
+  it('a second submitUnmaskGuess fails FAILED_PRECONDITION with details.reason already_submitted', async () => {
+    const { roomCode, voterId, forgerId, tokens } = await reachRevealWithTwoFooledVoters();
+    // The first guess is taken; the other fooled voter has not guessed, so the window stays open.
+    await callFn('submitUnmaskGuess', tokens[voterId], { roomCode, guesserId: voterId, guessedAuthorId: forgerId });
+
+    try {
+      await callFn('submitUnmaskGuess', tokens[voterId], { roomCode, guesserId: voterId, guessedAuthorId: forgerId });
+      expect.fail('Should have rejected a second guess');
+    } catch (err: any) {
+      expect(err.status).to.equal('FAILED_PRECONDITION');
+      expect(err.details).to.deep.equal({ reason: 'already_submitted' });
+      expect(err.message).to.equal('Player has already submitted an unmask guess.');
+    }
+  });
+
+  it('a too-similar submitAnswer fails INVALID_ARGUMENT with details.reason too_similar', async () => {
+    const hostUser = await createAnonUser();
+    const guestUser = await createAnonUser();
+    const guest2User = await createAnonUser();
+    const createRes = await callFn('createRoom', hostUser.idToken, {
+      playerName: 'Alice', playerId: 'p_host', forgeriesPerCard: 1, sabotageAnswersCount: 1, debugEnabled: true
+    });
+    const roomCode = createRes.roomCode;
+    await callFn('joinRoom', guestUser.idToken, { roomCode, playerName: 'Bob', playerId: 'p_guest' });
+    await callFn('joinRoom', guest2User.idToken, { roomCode, playerName: 'Charlie', playerId: 'p_guest2' });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest').update({ lobbyReady: true });
+    await db.collection('rooms').doc(roomCode).collection('players').doc('p_guest2').update({ lobbyReady: true });
+    await callFn('startGame', hostUser.idToken, { roomCode, selectedDeckId: FALLBACK_DECK });
+    await callFn('submitAnswer', hostUser.idToken, { roomCode, targetCardId: 'p_host', authorId: 'p_host', text: 'Alice truth', isTruth: true });
+    await callFn('submitAnswer', guestUser.idToken, { roomCode, targetCardId: 'p_guest', authorId: 'p_guest', text: 'Bob truth', isTruth: true });
+    await callFn('submitAnswer', guest2User.idToken, { roomCode, targetCardId: 'p_guest2', authorId: 'p_guest2', text: 'Charlie truth', isTruth: true });
+
+    const roomSnap = await db.collection('rooms').doc(roomCode).get();
+    expect(roomSnap.data()?.currentPhase).to.equal('forgery');
+    const guestTargetCardId = roomSnap.data()?.currentCardAssignments['p_guest'];
+    const guestSealed = await db.collection('rooms').doc(roomCode).collection('sealed').doc(guestTargetCardId).get();
+    const guestTruth = guestSealed.data()?.truthAnswer || 'Bob truth';
+
+    try {
+      await callFn('submitAnswer', guestUser.idToken, {
+        roomCode, targetCardId: guestTargetCardId, authorId: 'p_guest', text: `${guestTruth}!`, isTruth: false
+      });
+      expect.fail('Should have rejected the near-duplicate answer');
+    } catch (err: any) {
+      expect(err.status).to.equal('INVALID_ARGUMENT');
+      expect(err.details).to.deep.equal({ reason: 'too_similar' });
+      expect(err.message).to.equal("Answer is too similar to another player's answer!");
+    }
   });
 
   it('should handle custom deck prompt selection, top-ups, and reroll fallback', async () => {
