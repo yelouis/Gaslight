@@ -200,6 +200,8 @@ Hosting already has SPA rewrites (`** → /index.html`), so deep links resolve.
 
 > **⚠️ Never accept Xcode's "Update to recommended settings" prompt.** It enables `ENABLE_USER_SCRIPT_SANDBOXING` and breaks the iOS build. This has bitten before.
 
+> **iPhone-only (Wave AI / AI13).** The Runner target sets `TARGETED_DEVICE_FAMILY = 1` in all three build configurations, so the binary is iPhone-only: iPad users get the iPhone app in compatibility mode, and **App Store Connect needs no iPad screenshots**. Adding iPad later is allowed; **removing it after an iPad-capable version is live is not** — do not set it back to `"1,2"` without a decision (`docs/design_ui_direction.md` §10). Edit the setting as text in `ios/Runner.xcodeproj/project.pbxproj`, never through Xcode's settings UI (the warning above). Check the built artefact with `/usr/libexec/PlistBuddy -c "Print :UIDeviceFamily" build/ios/iphoneos/Runner.app/Info.plist` → only `1`.
+
 ### 3. Cloud Functions — and the flag that vanishes
 
 Only when your change touches `functions/src`.

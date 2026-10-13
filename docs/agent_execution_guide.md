@@ -55,7 +55,7 @@
 | `./scripts/check_playthrough_evidence.sh` — **all five**: no-arg, `docs/playthroughs/findings_marionette.md`, `…/findings_web.md`, `…/findings_5player.md`, `…/findings_waveAA.md` | **exit 0** |
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH, 19 functions** |
 | `./scripts/check_web_e2e_strings.sh` | **exit 0** |
-| `flutter build ios --release --no-codesign` | **exit 0 — `✓ Built build/ios/iphoneos/Runner.app (50.1MB)`**; `UIDeviceFamily` = `1, 2` (AI13 changes it) |
+| `flutter build ios --release --no-codesign` | **exit 0 — `✓ Built build/ios/iphoneos/Runner.app (50.1MB)`**; `UIDeviceFamily` = `1` (iPhone-only since AI13; it was `1, 2`) |
 | `flutter test --coverage` | **Not a gate** — segfaults the runner (AI14) |
 
 **Production:** 19 functions deployed; Firestore rules identical to `firestore.rules`. `CLEANUP_DRY_RUN=false` was last read back on `cleanupdaily-00020-7tq` (October 12, after AI11's deploy; it also survived the deploy itself, on `cleanupdaily-00019-pud`).

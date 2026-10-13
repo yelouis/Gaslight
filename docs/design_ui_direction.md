@@ -245,11 +245,19 @@ Absorbed from `ongoing_general_errors.md` during the August 7 doc consolidation.
 ### Mobile-first pass (M1–M5, shipped July 16)
 | # | Decision | Why it constrains future work |
 |---|---|---|
-| **M1** | **Portrait-locked on phones**; iPad rotation retained | Every screen is a portrait column design. Landscape was never laid out. |
+| **M1** | **Portrait-locked** (`main.dart`); iPad rotation was retained until the app became iPhone-only (Wave AI / AI13, below) | Every screen is a portrait column design. Landscape was never laid out. |
 | **M2** | Waiting room is a scrollable sheet, not a fixed column | The Parlor roster must survive any player count on a 360×640 viewport. |
 | **M3** | **Text scale clamped 1.0–1.3** app-wide (`main.dart`) | A recorded accessibility trade-off: fixed-height widgets break above 1.3. Layouts must still survive 1.3. |
 | **M4** | Touch targets **≥ 48 dp** | Do not shrink an interactive element below this to win vertical space. |
 | **M5** | Safe-area and thumb-zone pass; bottom-anchored commit actions | Craft's SUBMIT is a deliberate in-flow exception for keyboard interplay. |
+
+### iPhone-only for the first App Store release (Issue 188 / AI13 — Wave AI, October 2026)
+
+**The decision.** `TARGETED_DEVICE_FAMILY = 1` in all three Runner build configurations (`ios/Runner.xcodeproj/project.pbxproj`): the binary is **iPhone-only**, and iPad users run it in iPhone compatibility mode — an iPhone-sized, scaled window on the iPad desktop. **Why.** Every screen was built and tested as a portrait phone column. The iPad-capable binary stretched that to 1032 pt (the parlour's House Rules card spans the full width, the player sheet is mostly empty parchment), nothing adapts to width, landscape and resizable windows were never observed, and from iPadOS 26 Apple expects iPad apps to support resizing and all orientations (TN3192; `UIRequiresFullScreen` is deprecated and will be ignored). Shipping iPad also means iPad screenshots and iPad review. **Adding iPad later is allowed; removing it after an iPad-capable App Store release is not** — which is why this was decided while 1.1.0 (8) was still TestFlight-only.
+
+**What was left alone, deliberately.** `UISupportedInterfaceOrientations~ipad` stays in `Info.plist` (an iPhone-only binary ignores it) and `lib/main.dart`'s portrait lock is unchanged. **What was observed** on the iPad Pro 13" simulator (iOS 26.5): the compatibility window opens with the title screen intact — the card is taller than the window, so at launch its last line (the version label) sits just below the fold and the card scrolls — and the iPad-capable build's launch-time log line `Failed to change device orientation … The current windowing mode does not allow for programmatic changes to interface orientation` (the portrait lock cannot be applied under iPadOS windowing) is gone.
+
+**Revisiting iPad is a design project, not a setting:** a max-width (about 600 pt) centred column on every screen, verified in landscape, Split View and resized windows on iPadOS 26, plus iPad screenshots (Issue 188 Option B). Until then, do not change the device family back to `"1,2"`.
 
 ### Character & custom widgets (V1–V5, shipped July 16)
 - **V1 — the Lamplighter's Raven**, now the app's single mascot (see the mascot block above, and §5's lamplight motif).
