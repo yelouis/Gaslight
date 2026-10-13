@@ -308,7 +308,7 @@ Each row's falsification was **re-run independently** in a scratch copy of `HEAD
 | **AI5** (182 → A) | Vote subtitles ivory @ 0.75; card cue and `OPTION` label ink @ 0.7. | Revert → subtitles at **1.23 : 1** fail. |
 | **AI6** (180 → A) | Voters column `ConstrainedBox(maxWidth: 92)`. | Revert → overflow plus starved answer; 5 fail. |
 | **AI7** (184 → A) | `PrimaryButton` labels `FittedBox(scaleDown)`; unmask heading and game-over stat wrap. | Revert → 11 truncation cells fail. |
-| **AI8** (187 → A) | 44-pt hit boxes and spoken names for kick, share, tokens, PREV/NEXT, dots, `PEEK INSIDE`. | Revert → 10 guideline/semantics tests fail. Inspector reading → **AI15** (Issue 193 → B). |
+| **AI8** (187 → A) | 44-pt hit boxes and spoken names for kick, share, tokens, PREV/NEXT, dots, `PEEK INSIDE`. | Revert → 10 guideline/semantics tests fail. **Read in Accessibility Inspector on October 12 (AI15, Issue 193 → B):** every named control reports its label with the Button trait — Selected on the chosen token and the current option's dot, Not Enabled on PREV at the first option and NEXT at the last, each kick badge its own element beside the tile's `<name>`. What VoiceOver speaks on a device is still unheard. |
 | **AI9** (186 → A) | All six settings writes go through `_applySetting`; `LobbyAction.settings` sentences. | One site made fire-and-forget again → its tests fail. |
 
 ### Earlier waves
