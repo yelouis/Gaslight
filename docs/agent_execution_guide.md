@@ -58,7 +58,7 @@
 | `flutter build ios --release --no-codesign` | **exit 0 — `✓ Built build/ios/iphoneos/Runner.app (50.1MB)`**; `UIDeviceFamily` = `1, 2` (AI13 changes it) |
 | `flutter test --coverage` | **Not a gate** — segfaults the runner (AI14) |
 
-**Production:** 19 functions deployed; Firestore rules identical to `firestore.rules`. `CLEANUP_DRY_RUN=false` was last read back on `cleanupdaily-00018-2wm` (before Wave AI; no deploy since).
+**Production:** 19 functions deployed; Firestore rules identical to `firestore.rules`. `CLEANUP_DRY_RUN=false` was last read back on `cleanupdaily-00020-7tq` (October 12, after AI11's deploy; it also survived the deploy itself, on `cleanupdaily-00019-pud`).
 
 **⚠️ `flutter analyze lib test` exits 1 even when clean** — judge it by the counts. Never run bare `flutter analyze`.
 
