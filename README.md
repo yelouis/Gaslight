@@ -155,9 +155,15 @@ npm --prefix functions test
 ### 1. Web app
 
 ```bash
+./scripts/run_web_smoke.sh        # must exit 0 — about 5 minutes
 flutter build web --release
 npx firebase-tools deploy --only hosting
 ```
+
+> **Run the web smoke first, and do not build or deploy unless it exits 0.** `./scripts/run_web_smoke.sh` builds an emulator-only copy of the app into a scratch directory (never `build/web`: that build talks to the emulators and must never be deployed), starts the Auth, Functions and Firestore emulators with `firebase emulators:exec`, and plays two full games with three browsers (`test/web_e2e/`): a one-round game through the whole journey and a two-round game with its match summary. It exits 0 only if both reach game over.
+> - **It needs** Java for the emulators (`brew install openjdk`) and Playwright's Chromium in `test/web_e2e/node_modules` (`cd test/web_e2e && npm install && npx playwright install chromium`).
+> - **It takes about 5 minutes.** It starts its own emulators, so it refuses to run while port 8777, 8080, 9099, 5001, 4000, 4400, 4500 or 9150 is busy; it prints the owner and kills nothing.
+> - **Screenshots and logs** go to the scratch directory it prints, never to `docs/playthroughs/evidence/`. Re-capturing that recorded evidence is a separate, deliberate step.
 
 > **⚠️ `.env` is a declared Flutter asset** (`pubspec.yaml`), so it builds to `build/web/assets/.env`, and `main.dart` calls `dotenv.load()` **before** `runApp()`. If it is missing, the app dies before it paints anything.
 > - The `ignore` list in `firebase.json` **must never gain a dot-file glob** (the `**/.*` pattern) — it would exclude the deployed `.env`. There is a comment in `firebase.json` saying exactly this; heed it.

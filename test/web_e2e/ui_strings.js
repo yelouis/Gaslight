@@ -37,7 +37,25 @@ const UI = Object.freeze({
   SILENT: 'SILENT',
   RESOLVING: 'RESOLVING',
   THE_REVEAL: 'THE REVEAL',
-  UNMASK: 'UNMASK'
+  UNMASK: 'UNMASK',
+  // Wave AK / AK1. Every value below was checked against lib/ (see check_web_e2e_strings.sh).
+  GUEST_LEDGER: 'THE GUEST LEDGER',
+  ROUNDS_LABEL: 'Rounds:',
+  THE_INK_DRIES: 'THE INK DRIES',
+  THE_VOTE: 'THE VOTE',
+  YOUR_BALLOT_IS_SEALED: 'YOUR BALLOT IS SEALED',
+  NOT_READY: 'NOT READY',
+  // Invariant prefix of 'Write a convincing lie as $targetName. You score points ...' (phase2_craft.dart).
+  WRITE_LIE_AS: 'Write a convincing lie as',
+  TOO_SIMILAR: 'Too similar to an existing answer! Be more creative.',
+  // Invariant prefix of 'Show option ${i + 1} of ${n}' (card_grid.dart): n is the deck size.
+  SHOW_OPTION: 'Show option',
+  NEXT_OPTION: 'Next option',
+  PREVIOUS_OPTION: 'Previous option',
+  TAP_TO_CHOOSE: 'Tap to choose this one',
+  PROCEED_TO_REVEAL: 'PROCEED TO REVEAL (HOST)',
+  ACCUSE_PROMPT: 'Accuse the player who wrote the forgery you voted for:',
+  MATCH_HIGHLIGHTS: 'MATCH HIGHLIGHTS'
 });
 
 const FIXTURE = Object.freeze({

@@ -1,20 +1,33 @@
 const { chromium } = require('playwright');
-const fs = require('fs');
-const path = require('path');
 const {
-  enableSemantics,
+  assertThat,
+  labelPage,
   getSemanticsElements,
-  findSemanticsElement,
-  dismissAnyDialog,
+  hasText,
   clickElement,
-  tryClickElement,
-  typeIntoInput,
-  tryTypeIntoInput,
-  saveScreenshot
+  saveScreenshot,
+  readRoom,
+  readPlayers,
+  waitFor,
+  waitForRoom,
+  waitForScreen,
+  markerOf,
+  openApp,
+  createRoom,
+  joinRoom,
+  ensureTimersDisabled,
+  ensureRounds,
+  driveToGameOver,
+  runMain
 } = require('./playthrough_helpers');
 const { UI, FIXTURE } = require('./ui_strings');
 
 const APP_URL = 'http://127.0.0.1:8777';
+const VIEWPORT = { width: 1280, height: 800 };
+
+// A 2-round game needs, per round, one truth tick, two forgery ticks and about three ticks for
+// each of the three cards (vote, reveal and a retry); this is generous headroom, not a target.
+const MAX_TICKS = 90;
 
 // 100% disjoint single-word vocabulary pools (no overlap, Jaccard = 0.0)
 const WORD_POOLS = [
@@ -23,217 +36,85 @@ const WORD_POOLS = [
   ['Archimedes', 'Galileo', 'Copernicus', 'Newton', 'Kepler', 'Pascal', 'Descartes', 'Tesla', 'Aristotle', 'Edison']
 ];
 
-async function advanceMatchToGameOver(p1, p2, p3) {
-  let submitCount = [0, 0, 0];
-
-  for (let tick = 0; tick < 120; tick++) {
-    for (const page of [p1, p2, p3]) {
-      await enableSemantics(page);
-      await dismissAnyDialog(page);
-    }
-    
-    // Check if GameOver reached on P1
-    const p1Els = await getSemanticsElements(p1);
-    const isGameOver = p1Els.some(e => 
-      e.text.includes(UI.NIGHTS_HONORS) || 
-      e.text.includes(UI.GAME_OVER) || 
-      e.text.includes(UI.FINAL_STANDINGS) || 
-      e.text.includes(UI.SHARE_CASE_FILE)
-    );
-    if (isGameOver) {
-      console.log('GameOver reached!');
-      return;
-    }
-
-    // 1. Phase: Truth / Forgery Crafting
-    for (const [idx, page] of [p1, p2, p3].entries()) {
-      const submitBtn = await findSemanticsElement(page, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER));
-      if (submitBtn) {
-        const pool = WORD_POOLS[idx];
-        const uniqueWord = pool[submitCount[idx] % pool.length];
-        submitCount[idx]++;
-
-        console.log(`[CRAFT] P${idx+1} typing: "${uniqueWord}"`);
-        const typed = await tryTypeIntoInput(page, 'quill', uniqueWord);
-        if (typed) {
-          await page.waitForTimeout(300);
-          await tryClickElement(page, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER), `P${idx+1} Submit Dossier`);
-          for (let w = 0; w < 10; w++) {
-            await page.waitForTimeout(300);
-            await enableSemantics(page);
-            const stillSubmit = await findSemanticsElement(page, n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER));
-            if (!stillSubmit) break;
-          }
-        }
-      }
-    }
-
-    // 2. Phase: Vote
-    let allVotersDone = true;
-    for (const [idx, page] of [p1, p2, p3].entries()) {
-      const readyBtn = await findSemanticsElement(page, n => n.role === 'button' && n.text === UI.IM_READY);
-      if (readyBtn) {
-        await tryClickElement(page, n => n.role === 'button' && n.text === UI.IM_READY, `P${idx+1} Ready`);
-      } else {
-        const confirmBtn = await findSemanticsElement(page, n => n.role === 'button' && (n.text === UI.CONFIRM_VOTE || n.text === UI.TAP_A_CARD_TO_CHOOSE));
-        if (confirmBtn) {
-          allVotersDone = false;
-          const els = await getSemanticsElements(page);
-          const optionCards = els.filter(n => 
-            n.role === 'button' && 
-            (n.text.includes(UI.OPTION) || n.ariaLabel.includes(UI.OPTION)) &&
-            !n.text.includes(UI.LEAVE) && 
-            !n.text.includes(UI.MUTE) && 
-            !n.text.includes(UI.CONFIRM) && 
-            !n.text.includes(UI.TAP_A_CARD_TO_CHOOSE) && 
-            !n.text.includes(UI.CONTINUE) && 
-            !n.text.includes(UI.READY) && 
-            !n.text.includes(UI.PROCEED) && 
-            !n.text.includes(UI.SEALED) && 
-            !n.text.includes(UI.YOUR_FORGERY) && 
-            !n.text.includes(UI.SILENT) &&
-            n.rect.height > 25
-          );
-
-          if (optionCards.length > 0) {
-            // Target Alice's gems for P2 and P3 so Alice's forgeries get voted on
-            const aliceOption = optionCards.find(o => 
-              WORD_POOLS[0].some(w => o.text.trim() === w || o.text.includes(w))
-            );
-            const chosen = (idx > 0 && aliceOption) ? aliceOption : optionCards[0];
-            const targetText = chosen.text;
-            console.log(`[VOTE] P${idx+1} selecting: "${targetText}"`);
-            await tryClickElement(page, n => n.role === 'button' && (n.text === targetText || n.text.includes(targetText)), `P${idx+1} Option "${targetText}"`);
-            await page.waitForTimeout(400);
-            await tryClickElement(page, n => n.role === 'button' && n.text === UI.CONFIRM_VOTE, `P${idx+1} Confirm Vote`);
-            for (let w = 0; w < 10; w++) {
-              await page.waitForTimeout(300);
-              await enableSemantics(page);
-              const stillConfirm = await findSemanticsElement(page, n => n.role === 'button' && n.text === UI.CONFIRM_VOTE);
-              if (!stillConfirm) break;
-            }
-          }
-        }
-      }
-    }
-
-    // 3. Phase: Reveal / Unmask
-    const isReveal = p1Els.some(e => e.text.includes(UI.RESOLVING) || e.text.includes(UI.THE_REVEAL) || e.text.includes(UI.UNMASK));
-    if (isReveal) {
-      for (const [idx, page] of [p1, p2, p3].entries()) {
-        await tryClickElement(page, n => n.role === 'button' && (n.text === FIXTURE.ALICE || n.text === FIXTURE.BOB || n.text === FIXTURE.CHARLIE || n.text === FIXTURE.ALICE_UPPER || n.text === FIXTURE.BOB_UPPER || n.text === FIXTURE.CHARLIE_UPPER), `P${idx+1} Accuse`);
-      }
-    }
-
-    // 4. Host Advance / Continue / Proceed
-    if (allVotersDone || isReveal) {
-      await tryClickElement(p1, n => n.role === 'button' && (
-        n.text === UI.CONTINUE || 
-        n.text.includes(UI.CONTINUE) || 
-        n.text.includes(UI.NEXT)
-      ), 'P1 Continue');
-    }
-    
-    await p1.waitForTimeout(1500);
-  }
-}
-
-async function main() {
+async function run(browser) {
   console.log('===========================================================');
   console.log('=== RUNNING MATCH SUMMARY MULTI-ROUND PLAYTHROUGH (§2) ===');
   console.log('===========================================================\n');
 
-  const browser = await chromium.launch({ headless: true });
+  const ctx1 = await browser.newContext({ viewport: VIEWPORT });
+  const ctx2 = await browser.newContext({ viewport: VIEWPORT });
+  const ctx3 = await browser.newContext({ viewport: VIEWPORT });
 
-  const ctx1 = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const ctx3 = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-
-  const p1 = await ctx1.newPage();
-  const p2 = await ctx2.newPage();
-  const p3 = await ctx3.newPage();
+  const p1 = labelPage(await ctx1.newPage(), 'P1');
+  const p2 = labelPage(await ctx2.newPage(), 'P2');
+  const p3 = labelPage(await ctx3.newPage(), 'P3');
 
   // 1. P1 Host Room
   console.log('[1/7] P1 loading app & hosting room...');
-  await p1.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-  await p1.waitForTimeout(2500);
-  await enableSemantics(p1);
-
-  await typeIntoInput(p1, 'Your Name', 'Alice');
-  await clickElement(p1, n => n.text === UI.CREATE_ROOM || n.ariaLabel === UI.CREATE_ROOM, 'CREATE ROOM');
-  await p1.waitForTimeout(4000);
-  await enableSemantics(p1);
-
-  // Extract Room Code
-  const p1Elements = await getSemanticsElements(p1);
-  const roomCodeElement = p1Elements.find(e => e.text.includes(UI.ROOM_CODE) || e.ariaLabel.includes(UI.ROOM_CODE));
-  if (!roomCodeElement) {
-    throw new Error('Failed to find ROOM CODE on P1 lobby');
-  }
-  const roomCodeMatch = (roomCodeElement.text + ' ' + roomCodeElement.ariaLabel).match(/ROOM CODE\s+([A-Z]{4})/);
-  if (!roomCodeMatch) {
-    throw new Error(`Could not parse 4-letter room code from text: "${roomCodeElement.text}"`);
-  }
-  const roomCode = roomCodeMatch[1];
+  await openApp(p1, APP_URL);
+  const roomCode = await createRoom(p1, FIXTURE.ALICE);
   console.log(`[1/7] Room Created! Code: "${roomCode}"`);
 
-  // Adjust Lobby Settings: Total Rounds = 2, Disable Timers = ON
+  // Adjust Lobby Settings: Total Rounds = 2, Disable Timers = ON. Each is read before it is
+  // clicked and asserted afterwards (timers start disabled, so the switch is usually left alone).
   console.log('[2/7] Setting 2 rounds & disabling timers on P1...');
-  await tryClickElement(p1, n => n.role === 'checkbox' && n.ariaLabel === FIXTURE.ROUNDS_2, '2 Rounds Checkbox', { x: 20, y: 17 });
-  await p1.waitForTimeout(500);
-
-  // P1 disables game timers
-  await clickElement(p1, n => n.role === 'switch' && n.ariaLabel === UI.DISABLE_GAME_TIMERS, 'Disable Game Timers switch', { x: 25, y: 24 });
-  await p1.waitForTimeout(1000);
+  await ensureRounds(p1, roomCode, 2);
+  const settings = await ensureTimersDisabled(p1, roomCode);
+  assertThat(settings.totalRounds === 2, '[2/7] totalRounds === 2');
+  assertThat(settings.isTimerDisabled === true, '[2/7] isTimerDisabled === true');
 
   // 2. P2 Join Room (Bob)
   console.log('[3/7] P2 (Bob) joining room from Context 2...');
-  await p2.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-  await p2.waitForTimeout(2000);
-  await enableSemantics(p2);
-  await typeIntoInput(p2, 'Your Name', 'Bob');
-  await typeIntoInput(p2, 'Room Code', roomCode);
-  await clickElement(p2, n => n.text === UI.JOIN_ROOM, 'JOIN ROOM P2');
-  await p2.waitForTimeout(4000);
-  await enableSemantics(p2);
+  await openApp(p2, APP_URL);
+  await joinRoom(p2, FIXTURE.BOB, roomCode);
 
   // 3. P3 Join Room (Charlie)
   console.log('[4/7] P3 (Charlie) joining room from Context 3...');
-  await p3.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-  await p3.waitForTimeout(2000);
-  await enableSemantics(p3);
-  await typeIntoInput(p3, 'Your Name', 'Charlie');
-  await typeIntoInput(p3, 'Room Code', roomCode);
-  await clickElement(p3, n => n.text === UI.JOIN_ROOM, 'JOIN ROOM P3');
-  await p3.waitForTimeout(4000);
-  await enableSemantics(p3);
+  await openApp(p3, APP_URL);
+  await joinRoom(p3, FIXTURE.CHARLIE, roomCode);
 
   // Ready up P2 & P3
   console.log('[5/7] Readying up P2 & P3...');
   await clickElement(p2, n => n.text === UI.IM_READY, "P2 I'M READY");
-  await p2.waitForTimeout(1000);
-
   await clickElement(p3, n => n.text === UI.IM_READY, "P3 I'M READY");
-  await p3.waitForTimeout(1500);
+  await waitFor(async () => (await readPlayers(roomCode)).filter(p => !p.isHost).every(p => p.lobbyReady === true), {
+    timeoutMs: 10000,
+    description: 'Bob and Charlie to be lobbyReady'
+  });
 
   // Start Game
   console.log('[6/7] Starting Game on P1...');
-  await dismissAnyDialog(p1);
   await clickElement(p1, n => n.role === 'button' && n.text === UI.START_GAME, 'START GAME');
-  await p1.waitForTimeout(6000);
+  await waitForRoom(roomCode, r => r.currentPhase === 'truth', { timeoutMs: 20000, description: 'the room to enter the truth phase' });
 
   // Run match to game over
   console.log('[7/7] Advancing multi-round match to GameOver...');
-  await advanceMatchToGameOver(p1, p2, p3);
+  const seats = [
+    { name: FIXTURE.ALICE, page: p1 },
+    { name: FIXTURE.BOB, page: p2 },
+    { name: FIXTURE.CHARLIE, page: p3 }
+  ];
+  await driveToGameOver({
+    code: roomCode,
+    players: seats,
+    maxTicks: MAX_TICKS,
+    // Each seat's n-th answer is the n-th word of its own pool, so no answer is ever too similar to
+    // another seat's.
+    craftTextFor: (seat, name, phase, n) => WORD_POOLS[seat][n % WORD_POOLS[seat].length],
+    // Bob and Charlie vote for Alice's words (so Alice's forgeries get voted on); Alice takes the first card she can.
+    votePreferFor: name => (name === FIXTURE.ALICE ? null : WORD_POOLS[0])
+  });
+
+  const finalRoom = await readRoom(roomCode);
+  assertThat(finalRoom.currentPhase === 'gameOver', 'the room is in the gameOver phase');
+  assertThat(finalRoom.currentRound === 2, `the match reached round 2 (currentRound === ${finalRoom.currentRound})`);
 
   // Wait 10 seconds for engraving ceremony to finish
   console.log('Reached GameOver! Waiting for engraving ceremony and match summary...');
   await p1.waitForTimeout(10000);
-  await enableSemantics(p1);
 
   // Capture top of GameOver (Standings & Podium)
   await saveScreenshot(p1, 'w20_gameover_standings.png');
-  console.log('Saved docs/playthroughs/evidence/w20_gameover_standings.png');
 
   // Scroll down to reveal Match Highlights
   console.log('Scrolling down to Match Highlights...');
@@ -244,16 +125,17 @@ async function main() {
   await p1.mouse.move(640, 150, { steps: 15 });
   await p1.mouse.up();
   await p1.waitForTimeout(1500);
-  await enableSemantics(p1);
 
-  const scrolledEls = await getSemanticsElements(p1);
+  const scrolledEls = await waitForScreen(p1, els => hasText(els, UI.MATCH_HIGHLIGHTS), {
+    timeoutMs: 10000,
+    description: `to show "${UI.MATCH_HIGHLIGHTS}" on the game over screen`
+  });
   const scrolledTexts = scrolledEls.map(e => `[${e.role || e.tag}] ${e.text}`).filter(t => t.length > 3);
   console.log('\n=== P1 SCROLLED SEMANTICS ON GAME OVER ===');
   console.log(scrolledTexts.join('\n'));
 
   // Save screenshot of Match Highlights section
   await saveScreenshot(p1, 'w20_match_summary.png');
-  console.log('Saved docs/playthroughs/evidence/w20_match_summary.png');
 
   // Drag a bit more to capture detail
   await p1.mouse.move(640, 500);
@@ -261,15 +143,17 @@ async function main() {
   await p1.mouse.move(640, 250, { steps: 15 });
   await p1.mouse.up();
   await p1.waitForTimeout(1000);
-  await enableSemantics(p1);
   await saveScreenshot(p1, 'w20_best_lie_detail.png');
-  console.log('Saved docs/playthroughs/evidence/w20_best_lie_detail.png');
 
+  assertThat(markerOf(await getSemanticsElements(p1)) === 'gameover', 'P1 is still on the game over screen after scrolling');
   console.log('\n=== MATCH SUMMARY OBSERVATION RUN FINISHED SUCCESSFULLY ===');
-  await browser.close();
 }
 
-main().catch(err => {
-  console.error('MATCH SUMMARY PLAYTHROUGH ERROR:', err);
-  process.exit(1);
+runMain('run_match_summary_playthrough.js', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    await run(browser);
+  } finally {
+    await browser.close().catch(() => {});
+  }
 });
