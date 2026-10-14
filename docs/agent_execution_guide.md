@@ -1,10 +1,10 @@
-# Agent Execution Guide — Active Build: Wave AI, 6 remaining items (AI15, AI10–AI14) — October 12, 2026
+# Agent Execution Guide — Wave AI complete (AI15, AI10–AI14 built) — October 13, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Every number and literal string in this document is a decision, not a suggestion.** Implement as written. If a value turns out to be impossible, keep the intent, deviate minimally, measure the deviation, and say so in the commit body. If the design itself cannot work, **STOP** and file it in `docs/ongoing_general_errors.md` with options and a `Your selection: _____` line — do not improvise.
 
-**Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191); the user selected an option for every issue. **Steps 1–10 (AI1, AH1, AI2–AI9) are built and were verified on October 12** by re-running the battery and re-falsifying every item in a scratch copy (§9). **Six items remain: AI15, then AI10–AI14** (§2). Their specs below were refreshed against the current code — line numbers moved when earlier items edited the same files.
+**Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191); the user selected an option for every issue. **Steps 1–10 (AI1, AH1, AI2–AI9) are built and were verified on October 12** by re-running the battery and re-falsifying every item in a scratch copy (§9). **The six remaining items were built on October 12–13: AI15 `5bef8d7`, AI10 `d06fe1d`, AI11 `4d2d686` (deploy record `d445ade`), AI12 `bfa9b18`, AI13 `6011202`, AI14 `3bccfb3`** — all local, none pushed. Sections 3–9 are kept as the specs they were built from; their line numbers describe the code *before* each item landed.
 
 **Two follow-ups were selected in chat on October 12.** Issue 192 → **B**: AH1's physical-iPhone check is closed by acceptance (simulator observation plus source trace) — nothing to do; see §9's accepted equivalents. Issue 193 → **B**: the user grants **one-time Accessibility Inspector access** so the AI8 readings can be taken as specced — that is **AI15** (§8), and it runs **first**, while the user is at the keyboard to approve the access dialog.
 
@@ -35,25 +35,25 @@
 - **A native iOS sheet (the share sheet) cannot be dismissed from marionette** and `simctl` has no tap. End it with `xcrun simctl terminate <udid> com.whylabs.gaslight`; relaunching auto-rejoins the saved room. Plan native-sheet checks last in a session.
 - **Marionette:** text taps and `scroll_to` fail on off-screen widgets — swipe first. In the parlour the House Rules and `DEBUG:` buttons sit on the page behind the `DraggableScrollableSheet`: drag the sheet handle down (y≈230→640), then swipe the page (y≈300→70, ×3). Failed marionette calls show up in `get_runtime_errors` as `ext.flutter.marionette.*` — not app errors.
 - **No Simulator.app on this Xcode; `simctl` cannot rotate.** Text size: `xcrun simctl ui <udid> content_size accessibility-extra-extra-extra-large` (the app clamps to 1.3; restore with `large`).
-- **`flutter test --coverage` is broken on Flutter 3.44.6** (AI14 investigates). Never use it for validation.
+- **`flutter test --coverage` is broken on Flutter 3.44.6 and on 3.47.7** (AI14: a crash in the Dart VM's `getSourceReport`; findings in the tracker §1). Never use it for validation.
 - **`~/.local/bin/git` cannot clone over https** — prefix `PATH="/usr/bin:$PATH"`.
 - **zsh:** a word starting with `=` is expanded (`echo =====x` fails) and an unmatched glob aborts the command. Use bash for scripts.
 
 ---
 
-## 1. Verified baseline — measured October 12, 2026 on `da73408`
+## 1. Verified baseline — measured October 13, 2026 on `3bccfb3` (code identical to `6011202`; only docs changed after it)
 
 **This is the regression bar.** Every gate was run bare in that session.
 
 | Gate | Result |
 |---|---|
 | `flutter analyze lib test` | **0 errors · 0 warnings · 170 infos · exit 1** (137 `deprecated_member_use`, all of them `withOpacity` — the rejected 139 C migration; was 186 until AI12) |
-| `flutter test` | **423 passing**, exit 0 |
+| `flutter test` | **466 passing**, exit 0 (423 before AI10; AI10 added 24, AI11 19) |
 | `npm --prefix functions run build` | clean, exit 0 |
-| `npm --prefix functions test` | **164 passing**, exit 0 |
+| `npm --prefix functions test` | **167 passing**, exit 0 (164 before AI11, which added three `details.reason` cases) |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
 | `./scripts/check_playthrough_evidence.sh` — **all five**: no-arg, `docs/playthroughs/findings_marionette.md`, `…/findings_web.md`, `…/findings_5player.md`, `…/findings_waveAA.md` | **exit 0** |
-| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH, 19 functions** |
+| `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH, 19 functions** (deployed October 12 after AI11; it reads STALE after any later commit that touches `functions/src` until the next deploy) |
 | `./scripts/check_web_e2e_strings.sh` | **exit 0** |
 | `flutter build ios --release --no-codesign` | **exit 0 — `✓ Built build/ios/iphoneos/Runner.app (50.1MB)`**; `UIDeviceFamily` = `1` (iPhone-only since AI13; it was `1, 2`) |
 | `flutter test --coverage` | **Not a gate, and not collectable** — see the line below |
@@ -428,11 +428,11 @@ Each row's falsification was **re-run independently** in a scratch copy of `HEAD
 
 ## Definition of Done for this wave
 
-- [ ] AI15's readings committed (or `Device check: NOT RUN` with the reason, plus the step 3(b) issue if that path was blocked).
-- [ ] AI10–AI13 each committed separately in §2 order; AI14's findings recorded (it may run in parallel).
-- [ ] Each code commit body has `Falsification:` (compiling faults); every commit body has a `Device check:` line (DONE or NOT RUN with reason).
-- [ ] All nine §1 gates green bare; analyze **0 / 0 / 170**; flutter tests at least **423** passing; functions tests **167**; after AI11's deploy `check_deploy_fresh.sh` FRESH and `CLEANUP_DRY_RUN=false` read back (or `Deploy: NOT RUN` recorded if the user declined).
-- [ ] Issues 183, 185, 188, 189, 190 and 193 moved to the tracker's §3 index; design docs updated per each blast radius.
-- [ ] §1 of this guide re-measured and rewritten as the new baseline.
+- [x] AI15's readings committed (or `Device check: NOT RUN` with the reason, plus the step 3(b) issue if that path was blocked).
+- [x] AI10–AI13 each committed separately in §2 order; AI14's findings recorded (it may run in parallel).
+- [x] Each code commit body has `Falsification:` (compiling faults); every commit body has a `Device check:` line (DONE or NOT RUN with reason). *(`3a36e91`, which committed the user's own spec docs unmodified, is not a Wave item and has neither; AI15 is docs-only and has no `Falsification:`.)*
+- [x] All nine §1 gates green bare; analyze **0 / 0 / 170**; flutter tests at least **423** passing; functions tests **167**; after AI11's deploy `check_deploy_fresh.sh` FRESH and `CLEANUP_DRY_RUN=false` read back (or `Deploy: NOT RUN` recorded if the user declined).
+- [x] Issues 183, 185, 188, 189, 190 and 193 moved to the tracker's §3 index; design docs updated per each blast radius.
+- [x] §1 of this guide re-measured and rewritten as the new baseline.
 
 **When AI14 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are: a new user selection (including on any issue AI15 files), a §1 gate going red (investigate and file), or a user report.
