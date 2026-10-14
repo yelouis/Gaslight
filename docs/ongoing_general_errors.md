@@ -8,6 +8,51 @@
 
 ## 1. Open & in-flight
 
+**Wave AI verified complete, October 13, 2026 — all sixteen items hold (AI1–AI15 and AH1); the queue is empty.** Verified on `27a6314` by re-running the battery and re-falsifying AI10–AI14 in scratch clones of `HEAD`, not by reading commit bodies. Steps 1–10 were re-falsified on October 12 on `da73408`: AH1 revert → its 2 tests fail · AI3 → chips at 1.02 : 1 · AI4 oxblood confirm and a stray `AlertDialog` each fail · AI5 → 1.23 : 1 · AI6 → 5 fail · AI7 → 11 fail · AI8 → 10 fail · AI9 → its tests fail · control 69/69. That October 12 snapshot is replaced by this entry.
+
+- **Battery, all bare:**
+  - `flutter analyze lib test` 0 / 0 / **170**, exit 1 (137 `withOpacity`, 0 other `deprecated_member_use`).
+  - `flutter test` **466**, exit 0.
+  - Functions build exit 0; functions test **167**, exit 0.
+  - Decks, all five evidence invocations and web strings: exit 0.
+  - Deploy FRESH (last `functions/src` commit October 12, 20:29 PDT).
+  - iOS release build exit 0, `✓ Built … Runner.app (50.1MB)`, `UIDeviceFamily` `{ 1 }` (it was `{ 1, 2 }` on October 12).
+- **Production, read-only:**
+  - `cleanupdaily` serves `cleanupdaily-00020-7tq` at 100 % with `CLEANUP_DRY_RUN=false`.
+  - Cloud Functions logs since the deploy (October 13, 03:30 UTC) hold **0 entries at WARNING or above**.
+  - Positive control: the same window at any severity returns entries, including the first nightly cleanup after the deploy (`dryRun=false`, `errors=0`).
+- **Falsified in scratch clones of `HEAD`, each run from `git reset --hard`, every fault compiling:**
+  - **AI10:**
+    - wiping the seat on any re-bind error → **14** of 24 fail;
+    - the outer catch reporting `expired` → **1** fails (the unreachable-Firestore case, lesson §2.48);
+    - the lobby's connection branch disabled → **4** fail.
+  - **AI11:**
+    - the reveal site's old `toString()` expression → **2** fail;
+    - the mapper without its `deadline_passed` line → **3** fail;
+    - the craft site matching on message text → **2** fail;
+    - `{ reason: "deadline_passed" }` dropped from `functions/src/index.ts:2514` → exactly its emulator case fails (166 pass, 1 fail);
+    - `callFn` without its `details` line → exactly the three new cases fail (164 pass, 3 fail).
+  - **Control:** the four new client test files pass **43 / 43** on unmodified `HEAD`.
+  - **AI12:** reverting its `lib/` and `test/` changes → **186** infos, **16** of them non-`withOpacity` deprecations; `HEAD` has 170 and 0.
+  - **AI13:** `TARGETED_DEVICE_FAMILY = 1;` three times and `"1,2"` nowhere; the built artefact reads `{ 1 }`.
+- **AI14 spot check:** Flutter 3.44.6, `flutter test --coverage test/lobby_create_error_test.dart`, one run (10 pass, no segfault).
+  - `game_service.dart` **0**; positive control `lobby_screen.dart` **1**. The finding holds.
+  - **One detail did not reproduce:** this LCOV listed **36** source files (all 5 in `lib/theme`, all 22 widgets), where AI14 recorded 20 with theme and 10 widgets absent.
+  - `lib/services` and `lib/models` were absent both times; which other files drop out varies between runs. Outcome (c) is unchanged.
+- **Read in source against the original reports:**
+  - **AI10:** `tryRejoinSession` clears the three keys only on `not-found`, `permission-denied` or `invalid-argument`, or a missing room or player document; every other failure, including the outer catch, keeps them and reports `connection`. It still returns `Future<bool>`.
+  - **AI11:** only `gameCallableErrorMessage` chooses the craft and reveal sentences. `toString().contains` survives only at `lib/theme/app_icons.dart:627`, and the three server messages are byte-identical, so 1.1.0 (8) still matches them.
+  - **AI12:** no deprecated call remains, and both share texts are unchanged.
+  - **AI13:** three `project.pbxproj` lines changed, and nothing else in `ios/`.
+  - **AI15:** design §9 carries the Inspector sentence.
+  - **Docs:** every blast-radius doc is updated — `design_database_and_security.md` §2 and §5, `design_ui_direction.md` error surfaces, §9 and §10, `design_scoring_and_ui.md` share and README Releasing.
+- **Accepted deviations, now listed in the guide's accepted equivalents:**
+  - AI10's RETRY is brass: an unstyled `SnackBarAction` rendered black on the ink SnackBar at 1.30 : 1; brass measures 6.71 : 1. It is the only `SnackBarAction` in `lib/`, and there is no `snackBarTheme`.
+  - AI11 edited `test/fake_functions.dart`, the in-memory twin of the server, and needed a 4-player room for `already_submitted`.
+  - AI12 hoisted the scale into a local.
+  - AI15 found the tokens on the entry screen, not the parlour, and read kick badges for Bots 1–3 of 9.
+- **One open question for the user:** AI14 left "whether to report the VM crash upstream" to the user. It is filed as **Issue 194**.
+
 **Issue 189 investigated — Wave AI / AI14, October 13, 2026. Outcome (c): nothing works. The crash is inside the Dart VM, not in Gaslight, and Flutter 3.47.7 has it too.** Time-boxed (about 75 minutes of active work of the 2 hours allowed); worked in scratch exports of `6011202` (`git archive HEAD | tar -x`, `.env` copied, `flutter pub get`), never in the repo — `git status --porcelain` shows only docs. Every run below used a kill timer (macOS has no `timeout`; the harness killed the process group), and every "absent" claim has its positive control.
 
 - **Where it crashes.** The 25 macOS crash reports for `flutter_tester` now on disk (`~/Library/Logs/DiagnosticReports`, which keeps the newest 25 — 10 captured on October 10, 15 today; an earlier count today was higher because older reports have since rotated out): **24 are `EXC_BAD_ACCESS / SIGSEGV` with one stack on the VM's main thread** — `dart::String::StartsWith ← SourceReport::ShouldFiltersIncludeScript ← SourceReport::GetScriptIndex ← VisitFunction ← VisitLibrary ← PrintJSON ← GetSourceReport ← Service::InvokeMethod`; the 25th is `LongJumpScope::Jump`. That is the **`getSourceReport` service call that `flutter test --coverage` makes with a library filter** (`flutter_tools` passes `--coverage-package`, default `gaslight`, as the filter; no option of `flutter test` reaches the tester's VM flags — `flutter_tester_device.dart` builds a fixed argument list). The fault address is **`0x00000d140003f1b7` in 19 of the 24**, `0x213b` (near null) in 4 and `0x10005e1bb` in 1: an invalid string pointer reaching `String::StartsWith`, not one random corruption — my reading of the reports, not checked in the VM source.
@@ -18,15 +63,7 @@
 - **Minimal repro.** A fresh `flutter create --empty` app with one widget test, `flutter test --coverage`, the test edited before each run: **10 of 10 pass.** So the crash is not reproduced outside this project, and I cannot call it a clean Flutter bug. What an upstream report would carry is the first bullet — the stack, the identical fault address, and that 3.47.7 has it. **Not posted. Whether to report it upstream is the user's decision.**
 - **Outcome (c).** The guide's §1 carries the one line. A retry-per-file loop (kill a crashed run, rerun the file) would produce LCOV for most screens, but `lib/services/game_service.dart` stays unmeasurable, so it does not meet outcome (a) and is not recorded as a working command. Untested critical paths keep being named from the test inventory, and the falsification standard (remove the guard, watch the test fail) stays the project's real measure.
 
-**Wave AI steps 1–10 verified, October 12, 2026 — AI1, AH1 and AI2–AI9 hold; AI10–AI14 are not built.** *(A snapshot: AI10–AI15 were built on October 12–13 — each has its row in §3.)* Verified on `da73408` by re-running the battery and re-falsifying every item, not by reading commit bodies.
-
-- **Battery, all bare:** `flutter analyze lib test` 0 / 0 / **186** infos, exit 1 (AI5 replaced two `withOpacity` calls; the guide's §1 still said 188 — corrected in the rewrite) · `flutter test` **423**, exit 0 · functions build exit 0 · functions test **164**, exit 0 · decks, all five evidence invocations, web strings exit 0 · deploy FRESH, 19 functions · **iOS release build exit 0**, `✓ Built … Runner.app (50.1MB)`; no `Podfile`, `grep -c Pods` = 0 in the project and workspace.
-- **Falsified in a scratch copy of `HEAD`, each run from `git reset --hard`, every fault compiling (0 compile errors):** AH1 revert → exactly its 2 tests fail · AI3 revert → chips fail at **1.02 : 1** · AI4 confirm label → oxblood → the dialog contrast test fails; a stray `AlertDialog` added to `phase4_reveal.dart` → the routing/source-scan test fails · AI5 revert → subtitles fail at **1.23 : 1** · AI6 revert → overflow and starved answer, 5 fail · AI7 revert → 11 truncation cells fail · AI8 revert → 10 guideline/semantics tests fail · AI9 one site made fire-and-forget again → its tests fail. **Control:** the same nine files on unmodified `HEAD` pass **69/69**. (Whole-commit reverts of AI4 and AI9 do not compile — their tests import the new symbols — so targeted faults were used; lesson THE LOOP rule 7.)
-- **Read in source against the original reports:** six dialogs route through `GaslightConfirmDialog` and `AlertDialog(` appears only in `confirm_dialog.dart`; the lobby leave keeps `_isLeaving` with the reset in a `finally`; all six settings sites go through `_applySetting`; `case 'unknown':` sits in the connection branch with the three-hop comment; chips ink, headings brass, vote subtitles ivory @ 0.75, card cue and `OPTION` label ink @ 0.7; voters column `maxWidth: 92`; `PrimaryButton` has no ellipsis left; all five named controls carry `Semantics` with `onTap`. Design docs carry each contract.
-- **Accepted deviations, measured by the implementer:** AI7 `maxLines: 3` (not 2) at the unmask heading and game-over stat — two lines cannot fit at 320 pt × 1.3 with the real fonts; AI8's `Semantics` recipe adds `onTap` and `container: true` (lesson §2.46), fixes the unlisted 99 × 12 `PEEK INSIDE` link, and its spec'd falsification (c) does not hold because the guideline skips the deck row by design. Recorded as accepted equivalents in the guide.
-- **Two required manual checks were NOT RUN for reasons only the user can remove** — filed as Issues 192 (AH1's physical-iPhone check) and 193 (AI8's VoiceOver/Inspector reading). **The user chose Option B for both in chat on October 12:** 192 is closed by acceptance (§3); 193's Inspector readings are guide step **AI15**, run first.
-
-**Read-only plugin audit, October 10, 2026 — Issues 178–191 filed below; nothing was fixed.** Run on `04363d6` with two Claude Code plugins installed that day: **`dart-and-flutter`** (Dart MCP server: `analyze_files`, `lsp` hover, `pub outdated`, `dtd` + `get_runtime_errors` + `widget_inspector` against the running app; skills `dart-run-static-analysis`, `dart-fix-runtime-errors`, `flutter-fix-layout-issues`, `flutter-build-responsive-layout`, `dart-resolve-package-conflicts`, `dart-collect-coverage`, `flutter-apply-architecture-best-practices` as a lens only) and **`firebase`** (Firebase MCP, read-only: `firebase_get_security_rules`, `functions_list_functions`, `functions_get_logs`, `firestore_list_indexes`, `firebase_get_environment`). App driven with **marionette** (p1–p3) on iOS 26.5 simulators against local emulators.
+**Read-only plugin audit, October 10, 2026 — Issues 178–191 filed; nothing was fixed then (all resolved since, §3).** Run on `04363d6` with two Claude Code plugins installed that day: **`dart-and-flutter`** (Dart MCP server: `analyze_files`, `lsp` hover, `pub outdated`, `dtd` + `get_runtime_errors` + `widget_inspector` against the running app; skills `dart-run-static-analysis`, `dart-fix-runtime-errors`, `flutter-fix-layout-issues`, `flutter-build-responsive-layout`, `dart-resolve-package-conflicts`, `dart-collect-coverage`, `flutter-apply-architecture-best-practices` as a lens only) and **`firebase`** (Firebase MCP, read-only: `firebase_get_security_rules`, `functions_list_functions`, `functions_get_logs`, `firestore_list_indexes`, `firebase_get_environment`). App driven with **marionette** (p1–p3) on iOS 26.5 simulators against local emulators.
 
 - **Ran:** all eight §1 gates bare — **identical to baseline** (0 / 0 / 188, exit 1 · 357 · build clean · 164 · decks · all five evidence invocations · deploy FRESH, 19 functions · web strings). Static analysis (188 infos grouped; `unawaited_futures`/`discarded_futures` measured on a scratch copy). Full solo match on an **iPhone SE (3rd gen) simulator** — lobby → truth → forgery → vote → reveal → game over — plus force-quit/relaunch seat recovery (worked), leave → create a second room (Issue 152 journey, worked), host kick, the 101-character error path, text scale 1.3 and Reduce Motion (particle layer correctly absent). iPad Pro 13" **portrait**. Production rules (no drift vs `firestore.rules`; client room writes denied), deployed functions (19 = 18 callables + `cleanupDaily`, no drift), 14 days of function logs, indexes, Auth providers.
 - **Could not run as specified:** (1) **No iOS build works on this Mac's Xcode 27 as checked in** — Issue 178. Runtime passes ran from a scratch `git archive HEAD` with the one-line Podfile fix applied there; the repo was never edited. (2) **iPad landscape and window resizing** — this Xcode ships no Simulator.app and `simctl` cannot rotate; access to Device Hub was declined, so only portrait was observed (Issue 188). (3) **`flutter test --coverage` segfaults the test runner** on the full suite and then never exits; coverage was collected file-by-file instead (Issue 189). (4) Function logs carry no `HttpsError` reasons, so the 4xx below are counts only. (5) Auth provider config is not exposed by the Firebase MCP; read with one REST `GET` (Anonymous only, matching `main.dart`).
@@ -56,7 +93,34 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-Issues 1–177 are resolved and indexed in §3. Issues 178–191 come from the October 10 audit in §1, ordered by severity. **All fourteen have selections and are specced as Wave AI in `agent_execution_guide.md` §2.** As each item lands, its issue block is deleted from this section and indexed in §3. **Wave AI is built: 178–191 and AH1 are resolved (§1, §3).** **Issues 192 and 193 were filed on October 12; the user chose Option B for both in chat that day.** 192 is resolved by acceptance (§3); 193 was resolved by guide step **AI15** (§3), and its block is deleted — its selection line had been left blank, the choice being recorded here, as it was for 178 and 189. Issue 189: the selection line below holds the user's question; after the plain-language context was given in chat on October 10, the user chose **Option B** (as they did for 178). That line is left exactly as the user wrote it.
+Issues 1–193 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Four of its selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12. **One issue is open: 194**, a decision AI14 left to the user. **The user chose Option A in chat on October 13.** It is specced as guide step **AI16**, which deletes the block below; its selection line is left blank, because the choice is recorded here.
+
+### Issue 194: Decide whether the Dart VM crash behind the coverage failure is reported upstream
+**Status**: ⚠️ Confirmed Unresolved — AI14 (`3bccfb3`, Issue 189 → B) ended in outcome (c): coverage cannot be collected.
+- **The crash:** 24 of the 25 `flutter_tester` crash reports on disk share one Dart VM stack, `dart::String::StartsWith ← SourceReport::ShouldFiltersIncludeScript ← … ← GetSourceReport`. That is the `getSourceReport` call `flutter test --coverage` makes. 19 of them fault at the same address.
+- **The missing libraries:** in the LCOV that does get written, `lib/services` and `lib/models` are absent.
+- **Flutter 3.47.7** (the latest stable) crashes the same way.
+- **Not reproduced outside Gaslight:** a fresh `flutter create --empty` app passed 10 of 10 runs.
+- **Re-checked October 13** (§1): `game_service.dart` is still absent and the `lobby_screen.dart` control is present; which other files drop out varies between runs.
+
+By its own terms, the 189 B option you chose ("file upstream if it reproduces outside Gaslight") does not call for a report. But AI14's findings say *"Whether to report it upstream is the user's decision"*, so this records that decision. Nothing in the app waits on it: coverage is not a gate, and the falsification standard (remove the guard, watch the test fail) remains the project's measure. **No agent posts anything anywhere; a report goes out only from your own GitHub account.**
+
+**Option A (recommended)**: **Don't report; leave coverage recorded as unavailable.** The guide's §1 line stays. An agent re-tries `--coverage` only when the project's Flutter SDK is upgraded for another reason: one run of `test/lobby_create_error_test.dart`, and the full suite only if that run's LCOV contains `game_service.dart`.
+  - *Pros*: No effort; matches the terms of 189 B; nothing depends on coverage, and every defect worth having was found by falsification, not by a percentage.
+  - *Cons*: The VM bug stays unknown upstream unless someone else reports it, and coverage may stay broken indefinitely. The upgrade-time retry only notices a fix if the project upgrades.
+
+**Option B**: **An agent drafts a `dart-lang/sdk` issue; you post it.** The draft names Flutter 3.44.6 / Dart 3.12.2 and 3.47.7, the symbolicated stack, the repeated fault address, the trigger (`flutter test --coverage` over the 85-file widget and unit suite, which issues `getSourceReport` with a library filter) and the missing-library symptom. It says plainly that a fresh sample app does not reproduce it, and contains no Gaslight source and no player data. It is saved as a Markdown file in the agent's scratch area and handed to you.
+  - *Pros*: A VM segfault is a VM bug whatever triggers it, and a stable stack with a repeated fault address is a real lead for the Dart team. About 30 minutes of agent time and a few of yours.
+  - *Cons*: Without a standalone repro the Dart team will probably ask for one, which leads back to Option C. The report is public and comes from your account.
+
+**Option C**: **One more time-boxed attempt at a standalone repro (2 hours), then Option B if it reproduces.** Grow the fresh sample app towards Gaslight's shape one step at a time until it crashes:
+  1. test helpers imported by relative path, which make the VM load nine libraries twice (`package:` and `file:`);
+  2. `provider` with fakes for `cloud_functions` and `cloud_firestore`;
+  3. 85 test files in one run.
+  - *Pros*: A repro makes the report actionable, and it might expose a trigger in Gaslight's own test code (such as the doubly-loaded libraries) whose fix restores coverage without waiting for a Dart release.
+  - *Cons*: More toolchain debugging with an uncertain end. AI14 already spent 75 minutes, and the one hypothesis it tested (relative imports) did not explain the missing libraries.
+
+Your selection: _____
 
 ## 2. Lessons that still bite
 
@@ -456,7 +520,7 @@ The pre-demo playthrough answered *"what I observed, verbatim"* with `grep -Fn "
 
 Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This is an index, not a record. **One heading, and only one — never add a second** (that is how this file reached 559 lines: each verification pass appended its own summary without removing the last, so Issues 93–95 appeared three times).
 
-### Issues 65–177 and Wave AI (178–193, AH1) — August 8 to October 12, 2026
+### Issues 65–177 and Wave AI (178–193, AH1) — August 8 to October 13, 2026
 
 **103 items through Issue 177; Wave AI rows (one per issue, plus AH1) are added at the top as each item lands.** Full narratives are in `git log`; **the durable consequences live in the design docs**, and each row says which. This section is an index, not a record — if you need the reasoning behind a decision, the design doc has it and the commit body has the rest.
 
