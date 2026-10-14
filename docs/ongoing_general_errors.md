@@ -8,6 +8,17 @@
 
 ## 1. Open & in-flight
 
+**AJ1 verified and Issue 195 validated, October 13, 2026 — the iOS half of 1.2.0 (9) holds; the web half is blocked by Issue 195, which is real and now fully explained.**
+
+- **AJ1 (`adb05fc`), checked on the artefact, not the commit body:**
+  - The only change outside `docs/` since `75abb36` is `pubspec.yaml` `1.1.0+8` → `1.2.0+9`.
+  - `build/ios/archive/Runner.xcarchive` (October 13, 20:11) reads 1.2.0 / 9, `UIDeviceFamily` `{ 1 }`, `MinimumOSVersion` 15.0, `Gaslight`, `ITSAppUsesNonExemptEncryption` false and `com.whylabs.gaslight`, and carries `PrivacyInfo.xcprivacy`.
+  - Its `App` binary holds 0 `marionette` strings, with the control `Could not reach the parlour` at 1.
+  - The live web `version.json` (read-only GET) still reads 1.1.0 / 8, as AJ1 recorded.
+  - AJ1's deviations are accepted: `flutter build ipa` exited 0 while still printing the expected export error, and its other four are cosmetic.
+  - **Still to do:** the TestFlight upload (the user's step) and the web deploy (blocked; guide Wave AK).
+- **Issue 195 re-validated independently.** One run of each script ran against an emulator web build of `adb05fc`, from a scratch clone so the tracked evidence was untouched, inside `firebase emulators:exec`; the details are in the Issue 195 block. The W7 failure was reproduced, and the match-summary "hang" was isolated as a silent loop with a vacuous-pass ending. **The user chose Option A in chat on October 13**, extended as recommended; it is specced as guide Wave AK.
+
 **Wave AI verified complete, October 13, 2026 — all sixteen items hold (AI1–AI15 and AH1); the queue is empty.** Verified on `27a6314` by re-running the battery and re-falsifying AI10–AI14 in scratch clones of `HEAD`, not by reading commit bodies. Steps 1–10 were re-falsified on October 12 on `da73408`: AH1 revert → its 2 tests fail · AI3 → chips at 1.02 : 1 · AI4 oxblood confirm and a stray `AlertDialog` each fail · AI5 → 1.23 : 1 · AI6 → 5 fail · AI7 → 11 fail · AI8 → 10 fail · AI9 → its tests fail · control 69/69. That October 12 snapshot is replaced by this entry.
 
 - **Battery, all bare:**
@@ -93,7 +104,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-Issues 1–194 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Five selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, and 194 A on October 13. The user approved the release of **1.2.0 (9)** in chat on October 13; AJ1 built and verified its iOS archive for the user to upload, and its web deploy did not run (§3). **One issue is open: 195**, found by AJ1's web smoke; it waits for the user's selection.
+Issues 1–194 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Five selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, and 194 A on October 13. The user approved the release of **1.2.0 (9)** in chat on October 13; AJ1 built and verified its iOS archive for the user to upload, and its web deploy did not run (§3). **One issue is open: 195**, found by AJ1's web smoke. **The user chose Option A in chat on October 13**, extended as the October 13 validation recommends (a one-command runner and no vacuous pass). It is specced as guide **Wave AK**: AK1 repairs the smoke, then AK2 makes the web deploy of 1.2.0 (9). The selection line below is left blank, because the choice is recorded here.
 
 ### Issue 195: The two web playthrough scripts no longer pass on any client, so the web smoke has no signal
 **Status**: ⚠️ Confirmed Unresolved — found by AJ1's web smoke (guide §2.2 step 7, October 13). Both scripts in `test/web_e2e/` were run against emulator-flavoured web builds served on `127.0.0.1:8777`. **Both also fail on the 1.1.0 (8) code** (`b0ef1cc`, the commit before Wave AI), so neither failure comes from Wave AI or from the 1.2.0 bump.
@@ -106,6 +117,26 @@ Issues 1–194 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH
 - **A hazard:** both scripts write into the tracked folder `docs/playthroughs/evidence/`. The first run overwrote 11 tracked PNGs, one per screenshot it saved before failing, so running a script dirties the tree. AJ1 restored them with `git checkout -- docs/playthroughs/evidence`.
 - **What still gives a signal:** the 466 widget tests, the 167 emulator tests and device checks. The scripts also feed two gates: `check_web_e2e_strings.sh` scans `test/web_e2e/*.js` for UI strings, and `check_playthrough_evidence.sh` checks that the PNGs cited by `docs/playthroughs/findings_web.md` exist.
 - **AJ1's outcome:** the web release build and deploy did not run (guide §2.2 step 7), and the user chose in chat on October 13 not to deploy anyway. The live `version.json`, read that day, shows `1.1.0` / `8`.
+
+**Validated independently, October 13** (second pass). One run of each script ran against an emulator web build of `adb05fc`, from a scratch clone, inside `firebase emulators:exec`.
+- **W7 reproduced, mechanism confirmed.**
+  - The server reads players with no sort order: `transaction.get(roomRef.collection("players"))`, `functions/src/index.ts` (truth → forgery, around `:1830`).
+  - Player IDs are random v4 UUIDs (`lib/services/game_service.dart:251`), so the room's `rotationPlan` follows document-ID order. In room RWUZ that order was Alice, Charlie, Bob, so rotation 1 had Bob forge Alice's card.
+  - P2's duplicate drew one `400`. The field kept the rejected text with `aria-label` `''` and `text` `''`, so "Input not found: quill".
+  - The craft screen names the target (*"Write a convincing lie as Bob."*, `phase2_craft.dart:542`).
+  - During forgery the truth is sealed from the client, so the duplicate can only be caught by the server. The player then sees the same sentence as the local pre-check: *"Too similar to an existing answer! Be more creative."*
+- **W5 confirmed:** `isTimerDisabled` defaults to `true` in the model and on the server, so the click turns a timer on.
+- **The match-summary "hang" isolated: it is not a hang.** A copy of the script, instrumented to log every page's buttons each tick (room OQLN, 56 ticks before a 600 s kill, about 10 s per tick), showed the game stuck in `vote` from tick 3 to tick 55, the last before the kill:
+  - P1 had voted for the deck's front card (`OPTION I Panther …`);
+  - P3, the target, was ready (`NOT READY` showing);
+  - P2 never voted.
+  - **Why P2 never voted:** since the stacked deck (Issue 160, `75377e9`, September 11) only the front card is labelled `OPTION …` (`card_grid.dart:598`); the cards behind it are `CARD II` / `CARD III` buttons (`:732`, `:798`). The script votes only for a button containing `OPTION`, and P2's front card has no tap target — by AC3's rules, P2's own forgery. The script never presses `Next option`.
+  - **Two more drifts:** the script never presses the host's `PROCEED TO REVEAL (HOST)` (`phase3_vote.dart:303`, `:668`) — it looks for CONTINUE or NEXT; and it treats the target's ready toggle only as `I'M READY`.
+  - **The loop logs only when it acts,** so a stall looks like an idle process.
+- **New finding: the match-summary script can pass vacuously.** When its 120 ticks run out without reaching game over, `advanceMatchToGameOver` returns normally and `main()` prints *"MATCH SUMMARY OBSERVATION RUN FINISHED SUCCESSFULLY"* and exits 0. At about 10 s per tick that would have happened after roughly 20 minutes; AJ1 killed it at 14.
+- **The hazard is wider than a dirty tree:** all 20 screenshot names the two scripts save are cited in `docs/playthroughs/findings_web.md`, so a default run overwrites recorded evidence.
+- **A runner pitfall:** `firebase emulators:exec` passes on the exit code of its command's **last** line. A wrapper that runs the scripts and then does any cleanup exits 0 even when both scripts fail; this pass's own wrapper did exactly that.
+- **Not re-run:** the 1.1.0 (8) comparison (AJ1 ran it 3 + 1 times). Rotation randomness and the stacked-deck drift (September 11) explain why the scripts fail on both clients.
 
 **Option A (recommended)**: **Repair the two scripts in their own item, then re-run the web smoke and decide the web deploy.** Change `test/web_e2e/` only, with no app code:
   1. W7 reads whose card P2 is forging from the craft screen (it says *Write a convincing lie as …*, `phase2_craft.dart:542`), types that player's truth, and finds the field again after a rejection by tag, not by "quill";
