@@ -51,7 +51,7 @@
   - AI11 edited `test/fake_functions.dart`, the in-memory twin of the server, and needed a 4-player room for `already_submitted`.
   - AI12 hoisted the scale into a local.
   - AI15 found the tokens on the entry screen, not the parlour, and read kick badges for Bots 1–3 of 9.
-- **One open question for the user:** AI14 left "whether to report the VM crash upstream" to the user. It is filed as **Issue 194**.
+- **One open question for the user:** AI14 left "whether to report the VM crash upstream" to the user. It was filed as **Issue 194**; the user chose Option A in chat the same day, and AI16 (`75abb36`) recorded it — verified October 13: §2.2's checks re-run with positive controls, the doc gates and `check_deploy_fresh.sh` exit 0, and no file outside `docs/` changed since `27a6314`, so the battery above still stands.
 
 **Issue 189 investigated — Wave AI / AI14, October 13, 2026. Outcome (c): nothing works. The crash is inside the Dart VM, not in Gaslight, and Flutter 3.47.7 has it too.** Time-boxed (about 75 minutes of active work of the 2 hours allowed); worked in scratch exports of `6011202` (`git archive HEAD | tar -x`, `.env` copied, `flutter pub get`), never in the repo — `git status --porcelain` shows only docs. Every run below used a kill timer (macOS has no `timeout`; the harness killed the process group), and every "absent" claim has its positive control.
 
@@ -93,7 +93,7 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-Issues 1–194 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Five selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, and 194 A on October 13. **No issue is open.**
+Issues 1–194 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Five selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, and 194 A on October 13. **No issue is open.** The user approved the release of **1.2.0 (9)** in chat on October 13. It is specced as guide step **AJ1**: one line of `pubspec.yaml`, an iOS archive for the user to upload, and a web deploy with the user's go-ahead.
 
 ## 2. Lessons that still bite
 
