@@ -1,10 +1,10 @@
-# Agent Execution Guide — Active Build: release 1.2.0 (9) (AJ1) — October 13, 2026
+# Agent Execution Guide — Queue Complete (Wave AI verified; release 1.2.0 (9) archived) — October 13, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191) plus two October 12 follow-ups (192, 193). All sixteen of its items, AI1–AI15 and AH1, are built, and AI11's server change is deployed. **The whole wave was verified on October 13** by re-running every gate and re-falsifying every item in scratch clones (§3).
 
-**One item is approved: AJ1 (§2), the release of 1.2.0 (9).** The user confirmed the version in chat on October 13. Wave AI's last item, AI16 (`75abb36`), recorded Issue 194 → A. AJ1 changes one line of the app plus docs; when it is done the queue is empty. **Do not invent work.**
+**No work is approved; the queue is empty (§2).** The last item, AJ1, prepared the release of **1.2.0 (9)**: the iOS archive is built and verified, and uploading it is the user's step; the web deploy did not run, because the web playthroughs fail on every client (Issue 195). It changed one line of the app (`pubspec.yaml`) and docs. **Issue 195 is open and waits for the user's selection.** **Do not invent work.**
 
 **If work arrives** (a selection, a red gate, a user report), these rules apply:
 - **Every number and literal string in a spec is a decision, not a suggestion.** Implement it as written.
@@ -102,109 +102,9 @@
 
 ---
 
-## 2. AJ1 — Ship 1.2.0 (9) (approved by the user in chat, October 13)
+## 2. Queue
 
-**What this means for the user.** Testers are still playing 1.1.0 (8), which predates every Wave AI fix. Until a new build ships, none of the sixteen fixes reach a phone, and the web app still runs the old client code too. This item builds and verifies 1.2.0 (9) on both surfaces. It deploys the web app with your go-ahead, and leaves an iOS archive ready for **you** to upload from Xcode's Organizer.
-
-**⚠️ AJ1 is a release, not a code change.** Exactly **one line** of the application changes: the version in `pubspec.yaml`. Everything else is procedure and verification. **If you find yourself editing a test, a screen, a script or a plist, stop — you have left the item.**
-
-**The gap, measured October 13:**
-- `pubspec.yaml:19` reads `version: 1.1.0+8`.
-- **Stale artefacts that would mislead verification:**
-  - `build/ios/archive/Runner.xcarchive` is dated October 11, 00:07 and reads 1.1.0 (8) with `UIDeviceFamily` `{ 1, 2 }`. It predates AI13.
-  - `build/ios/ipa/` holds August 25 leftovers (`DistributionSummary.plist`, `ExportOptions.plist`, `Packaging.log`).
-  - `build/web/` holds the 1.1.0 (8) web build.
-- **Signing:** this Mac has **only an Apple Development identity**, so the `.ipa` export step will fail — expected, see step 4.
-- **Server:** the functions are unchanged since AI11's deploy (`check_deploy_fresh.sh` exit 0). **Do not deploy functions.**
-
-### 2.1 The only application change
-`pubspec.yaml`: `version: 1.1.0+8` → **`version: 1.2.0+9`**. That is sufficient:
-- `ios/Runner/Info.plist` takes `CFBundleShortVersionString` from `$(FLUTTER_BUILD_NAME)` and `CFBundleVersion` from `$(FLUTTER_BUILD_NUMBER)`.
-- The title-screen label reads the running bundle through `PackageInfo.fromPlatform()`.
-- The web build writes `build/web/version.json` from the same line.
-
-**⚠️ Do not touch `test/lobby_version_test.dart`.** It mocks `9.9.9` and `1.0.0` on purpose, to test the label's *format* independently of the shipped version. `flutter test` must still report **466** after the bump.
-
-### 2.2 Procedure
-0. **If `git status --porcelain` shows the two docs modified,** commit them **unmodified** first, on their own: `docs: commit the October 13 AJ1 spec and verification notes, unmodified`. If anything outside `docs/` is modified, STOP and ask the user.
-1. **Bump** `pubspec.yaml` as in §2.1.
-2. **Preflight:** run all nine §1 gates bare. The numbers must equal §1 exactly: 0 / 0 / 170, 466, 167, and the rest exit 0. A release is the one moment the whole battery must be green at once.
-3. **Delete the stale artefacts:**
-   - `ls -la build/ios/archive build/ios/ipa build/web` first, to confirm they are the ones named above.
-   - Then `rm -rf build/ios/archive build/ios/ipa build/web` (`/build/` is git-ignored).
-   - From here on, anything under `build/` was produced by your run.
-4. **`flutter build ipa`** — read its output, not just the exit code.
-   - **Expected:** `✓ Built build/ios/archive/Runner.xcarchive`, followed by an export error (`No Accounts` / `No signing certificate "iOS Distribution" found`) and a non-zero exit. That outcome is a **pass**.
-   - **If the ARCHIVE step itself fails, STOP.** This is the first signed archive since AI1 removed CocoaPods. Record the error verbatim and file it in the tracker with options. Never "fix" it by accepting Xcode's settings dialog or by reintroducing a `Podfile`.
-5. **Verify the archive, never an `.ipa`.**
-   - The paths: `X=build/ios/archive/Runner.xcarchive`, `A=$X/Products/Applications/Runner.app`.
-   - **Required values:**
-
-     | Check | Required |
-     |---|---|
-     | `stat -f "%Sm" $X` | a timestamp from this run |
-     | `PlistBuddy :ApplicationProperties:CFBundleShortVersionString` on `$X/Info.plist` | `1.2.0` |
-     | `PlistBuddy :ApplicationProperties:CFBundleVersion` on `$X/Info.plist` | `9` |
-     | `PlistBuddy :UIDeviceFamily` on `$A/Info.plist` | only `1` (the stale archive read `{ 1, 2 }` — your before/after) |
-     | `:MinimumOSVersion` | `15.0` |
-     | `:CFBundleDisplayName` | `Gaslight` |
-     | `:ITSAppUsesNonExemptEncryption` | `false` |
-     | `test -f $A/PrivacyInfo.xcprivacy` | exit 0 |
-     | `strings $A/Frameworks/App.framework/App \| grep -c marionette` | `0` |
-
-   - **Positive control for the `0`:** on the same binary, `strings $A/Frameworks/App.framework/App | grep -c 'Could not reach the parlour'` must be `1`. A release AOT binary carries the app's UI strings, so the search can see Dart text; without this, the `0` proves nothing (lesson §2.44). (Do not use a debug build as the control: its Dart code lives in `kernel_blob.bin`, not `App.framework`. Checked October 13 on the release `build/ios/iphoneos` app: marionette `0`, control `1`.)
-6. **Title-screen version (Device check, REQUIRED):**
-   - Use the iPhone SE simulator with a reset Keychain (§0.1).
-   - Run `flutter run -d <udid> --dart-define=USE_EMULATOR=true` with the emulators up.
-   - The title screen must show **`v1.2.0 (9)`** beneath READ MANUAL. Swipe up if it sits below the fold.
-   - Take a screenshot via `xcrun simctl io <udid> screenshot`.
-7. **Web smoke on emulators — the first web run since Wave AI:**
-   - Run `flutter build web --release --dart-define=USE_EMULATOR=true -o <scratch>/web_smoke`. It goes to **scratch, never `build/web`**: this build talks to the emulators and must never be deployed.
-   - With **your** emulators running (§0.1), serve it: `python3 -m http.server 8777 --bind 127.0.0.1 --directory <scratch>/web_smoke` in the background.
-   - From `test/web_e2e/`, run `node run_full_playthrough.js` and `node run_match_summary_playthrough.js`. Read each exit code bare; Playwright's Chromium is already installed.
-   - Stop the server and **your** emulator process afterwards.
-   - **If a script fails,** read its screenshots.
-     - An app defect, or a script that no longer matches a correct screen, is filed in the tracker with options. **Do not edit the scripts or the app in this item.**
-     - **The web deploy (steps 8–9) does not happen.** The iOS part continues; the two surfaces are independent.
-8. **Web release build:**
-   - Run `flutter build web --release` with **no** `--dart-define`, into the default `build/web`.
-   - `build/web/version.json` must read `"version":"1.2.0"` and `"build_number":"9"`, with a timestamp from this run.
-   - `grep -c '^USE_EMULATOR=true' .env` must be `0`. **Never print `.env` values.**
-   - `test -f build/web/assets/.env` must exit 0: the app dies before painting without it (README → Releasing).
-9. **Web deploy — ask the user for the go-ahead first; it changes production.**
-   - Run `npx firebase-tools deploy --only hosting` bare; it must exit 0.
-   - Then check the live site:
-     - `curl -s "https://gaslight-46368.web.app/version.json?t=$(date +%s)"` must show 1.2.0 and 9;
-     - `curl -s -o /dev/null -w '%{http_code}' https://gaslight-46368.web.app/assets/.env` must return `200`. Status only — never print the body.
-   - If the user declines, record `Web deploy: NOT RUN — <reason>`.
-10. **Do not upload to TestFlight, do not open Organizer's Distribute flow, and do not deploy functions.** The upload needs the user's Apple account. Hand over instead (step 12).
-11. **One commit:** `chore(release): ship 1.2.0+9 (Wave AJ / AJ1)`.
-    - **Files:** `pubspec.yaml`, plus the docs:
-      - a tracker §3 row: what shipped, the archive values, the smoke and deploy results;
-      - this guide: §1's "Release plumbing" names 1.2.0 (9) as archived, upload pending; the guide returns to queue-complete mode (title, framing, §2 "Queue — empty", THE LOOP step (1), close-out).
-    - Don't try to write the commit's own hash into it; a commit cannot contain its own hash.
-    - **Body:** the WHY, the step-5 table as measured, `Falsification:` (the stale archive's 1.1.0 / 8 / `{ 1, 2 }` against the new 1.2.0 / 9 / `{ 1 }`, and the `marionette` count with its `Could not reach the parlour` control), `Device check: DONE — v1.2.0 (9) …`, the web smoke exit codes, and `Web deploy: DONE …` or `NOT RUN …`. Do not push.
-12. **Hand-off to the user, in your final message:**
-    - **Upload:** `open build/ios/archive/Runner.xcarchive` → Organizer → **Distribute App** → **App Store Connect** → **Upload**, letting Xcode manage signing.
-    - **In App Store Connect → TestFlight:** add the build to internal testers, **expire build 8**, and paste the *What to Test* text below.
-    - **iPad testers,** if any, now get the iPhone app in compatibility mode (AI13).
-
-**What to Test (paste verbatim into App Store Connect):**
-
-> 1.2.0 (9) — fixes from the October audit:
-> • Reopen the app on a bad connection and you keep your seat, with a RETRY button, instead of being told your session expired.
-> • An accusation that lands just as the unmask countdown ends now says the guessing window has closed.
-> • Easier-to-read House Rules chips, vote screen text and confirmation buttons; no cut-off labels on small phones.
-> • Bigger tap targets and spoken names for icon buttons (VoiceOver).
-> • iPhone-only build.
-> Please try: (1) turn on Airplane Mode, then tap CREATE ROOM — it should say "Could not reach the parlour. Check your connection and try again." (2) If you use VoiceOver, swipe through the lobby and the vote screen and tell us anything that isn't read clearly.
-
-### 2.3 Validation summary
-- **Falsifying:** the archive's values differ from the deleted stale archive in exactly the intended ways — version 1.2.0, build 9, `UIDeviceFamily` `{ 1 }`.
-- **Over-reach guard:** `git diff --stat` for the release commit shows `pubspec.yaml` and docs only; `flutter test` still 466 with `test/lobby_version_test.dart` untouched.
-- **Load-bearing checks (REQUIRED):** the title screen's `v1.2.0 (9)`, both web playthroughs, and the live `version.json` (if deployed). Each outcome goes in the commit body either way.
-
-**Blast radius:** `pubspec.yaml`, `docs/ongoing_general_errors.md`, `docs/agent_execution_guide.md`. No design doc: a version number is not a design contract.
+**Queue — empty.** AJ1 (release 1.2.0 (9), approved by the user in chat October 13) was the last item. Its commit is the one titled `chore(release): ship 1.2.0+9 (Wave AJ / AJ1)`; find it with `git log --grep 'Wave AJ / AJ1'`. Issue 195 is open and waits for the user's selection; no agent acts on it before that.
 
 ---
 
@@ -240,7 +140,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **Wave AA** (sixteen items, Issues 153–169, 160, 162) — verified September 11.
 - **Wave Z (152)** leave latch in a `finally` · **Y1 (151)** · **Y2 (149)** · **X1 (147)** · **X2 (148)** · **W1 (146)** · **W2 (145)** · **V1 (143, 144)** · **U1–U5**, **S1**, **R0–R2**, soak blocks **E22–E49**, Waves **Q/P/O**, Issues **96–105, 50–95, 31, 28/29**.
 
-**Release plumbing:** bundle ID `com.whylabs.gaslight` · `CFBundleDisplayName` **`Gaslight`** · `ITSAppUsesNonExemptEncryption` **`false`** · iOS target **15.0** · **iPhone-only** (`UIDeviceFamily` 1) · Node **22** · build **1.1.0 (8)** on TestFlight. That build predates Wave AI; a new build is the user's call.
+**Release plumbing:** bundle ID `com.whylabs.gaslight` · `CFBundleDisplayName` **`Gaslight`** · `ITSAppUsesNonExemptEncryption` **`false`** · iOS target **15.0** · **iPhone-only** (`UIDeviceFamily` 1) · Node **22**. **TestFlight has build 1.1.0 (8)**, which predates Wave AI. **1.2.0 (9) is archived and verified** (`build/ios/archive/Runner.xcarchive`, October 13; the preflight on the 1.2.0+9 tree read the same numbers as §1), and **its upload is pending — the user's step in Xcode's Organizer**, because this Mac has no Apple Distribution certificate and `flutter build ipa` cannot export an `.ipa`. **The web app still serves 1.1.0 (8):** the AJ1 web smoke failed on both clients (Issue 195) and the user chose not to deploy.
 
 ---
 
@@ -339,9 +239,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 ## THE LOOP — for any future item
 
 ```
-(1) Take AJ1 (§2). After it the queue is empty: STOP unless there is a new
-    user selection or instruction, a red gate, or a user report. Never fill
-    in or edit a `Your selection:` line.
+(1) The queue is empty (§2): STOP unless there is a new user selection or
+    instruction (including on Issue 195), a red gate, or a user report.
+    Never fill in or edit a `Your selection:` line.
 (2) "Implemented to spec" and "fixed the problem" are different claims. Check
     the second against the ORIGINAL REPORT in the tracker, not the spec.
 (3) If a fix depends on how a platform or library behaves, read the vendored
@@ -374,7 +274,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 
 ## Close-out
 
-**When AJ1 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are:
+**The queue is empty. Do not invent work.** The only legitimate triggers for further action are:
 1. a new user selection or instruction;
 2. a §1 gate going red (investigate, then file with options);
 3. a user or tester report — for example *Something went wrong. Try again.* while offline, which re-opens the 192 inference (§4).
