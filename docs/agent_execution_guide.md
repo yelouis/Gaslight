@@ -1,10 +1,10 @@
-# Agent Execution Guide — Active Build: one docs-only item (AI16, Issue 194 → A) — October 13, 2026
+# Agent Execution Guide — Queue Complete (Wave AI verified) — October 13, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191) plus two October 12 follow-ups (192, 193). All sixteen of its items, AI1–AI15 and AH1, are built, and AI11's server change is deployed. **The whole wave was verified on October 13** by re-running every gate and re-falsifying every item in scratch clones (§3).
 
-**One item is approved: AI16** (§2). On October 13 the user chose **Issue 194 → Option A** in chat: don't report the Dart VM coverage crash upstream, and keep coverage recorded as unavailable. AI16 records that decision. It changes two docs and no code, and when it is done the queue is empty. **Do not invent work.**
+**No work is approved; the queue is empty (§2).** The last item, AI16, recorded the user's October 13 choice of **Issue 194 → Option A** in chat: the Dart VM coverage crash is not reported upstream, and coverage stays recorded as unavailable. It changed two docs and no code. **Do not invent work.**
 
 **If work arrives** (a selection, a red gate, a user report), these rules apply:
 - **Every number and literal string in a spec is a decision, not a suggestion.** Implement it as written.
@@ -72,7 +72,7 @@
   - Work headless: `xcrun simctl io <udid> screenshot f.png`, marionette, and the VM service. A semantics-tree dump over the VM service (`ext.flutter.debugDumpSemanticsTreeInTraversalOrder`) reads accessibility labels without any grant.
   - If a check truly needs an app, ask the user in chat once.
   - The Inspector's target picker is a pop-up menu that computer-use tools cannot open; on October 12 the user picked the target by hand.
-- **Coverage:** `flutter test --coverage` is broken on Flutter 3.44.6 and 3.47.7 (a Dart VM crash in `getSourceReport`, and `lib/services` and `lib/models` missing from the LCOV; tracker §1 has AI14's findings). **Never use it for validation, and don't retry it** except as AI16's re-try line (added by AI16) allows.
+- **Coverage:** `flutter test --coverage` is broken on Flutter 3.44.6 and 3.47.7 (a Dart VM crash in `getSourceReport`, and `lib/services` and `lib/models` missing from the LCOV; tracker §1 has AI14's findings). **Never use it for validation.** Re-try only when the Flutter SDK is upgraded for another reason: one `--coverage` run of `test/lobby_create_error_test.dart`; the full suite only if that LCOV contains `game_service.dart` (Issue 194 → A).
 
 ---
 
@@ -91,7 +91,7 @@
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH, 19 functions.** It reads STALE after any later commit touching `functions/src` until the next deploy. |
 | `./scripts/check_web_e2e_strings.sh` | **exit 0** |
 | `flutter build ios --release --no-codesign` | **exit 0 — `✓ Built build/ios/iphoneos/Runner.app (50.1MB)`**; `UIDeviceFamily` = `1` (iPhone-only) |
-| `flutter test --coverage` | **Not a gate.** *Coverage is not collectable on Flutter 3.44.6 (runner segfault; `game_service.dart` missing from LCOV) — see Issue 189 findings.* |
+| `flutter test --coverage` | **Not a gate.** *Coverage is not collectable on Flutter 3.44.6 (runner segfault; `game_service.dart` missing from LCOV) — see Issue 189 findings.* Not reported upstream (Issue 194 → A). |
 
 **Production** (read October 13, read-only):
 - 19 functions deployed (18 callables + `cleanupDaily`). The Firestore rules release is newer than the last `firestore.rules` commit (August 20), per `check_deploy_fresh.sh`.
@@ -102,53 +102,9 @@
 
 ---
 
-## 2. AI16 — Record Issue 194 → A: no upstream report; coverage stays unavailable
+## 2. Queue
 
-**What this means for the user.** Nothing in the app changes. The decision is written down where the next agent looks, so nobody reports the crash upstream, and nobody loses an hour re-trying `--coverage` — except once, cheaply, after a Flutter upgrade made for another reason.
-
-**The gap.** Issue 194 is still an open block in `docs/ongoing_general_errors.md` "Unresolved", with a blank `Your selection: _____` line; the user answered in chat instead. This guide's §0.1 coverage bullet and §1 coverage row say "don't retry", with no rule for when a retry *is* worth it. AI14's findings (tracker §1) still say *"Whether to report it upstream is the user's decision."*
-
-### 2.1 Implementation — docs only
-0. **First, if `git status --porcelain` shows the two docs modified** (`docs/agent_execution_guide.md`, `docs/ongoing_general_errors.md`): commit them **unmodified**, on their own, as `docs: commit the October 13 verification and the guide's AI16 spec, unmodified`. Those are the user's pending edits, and committing them first keeps AI16's commit to its own change (the same thing `3a36e91` did on October 12). Check that nothing outside `docs/` is modified before you do; if anything is, STOP and ask the user.
-1. **Tracker, Unresolved:**
-   - Delete the whole **Issue 194** block, from `### Issue 194:` through its `---`. Its blank selection line goes with it. Do not fill it in.
-   - Rewrite the section's intro to say that no issue is open.
-   - Add 194 A (October 13) to the intro's list of selections made in chat.
-2. **Tracker, §3:** add one row at the top of the Wave AI table. Use this wording, adjusted only for line wrapping:
-   - Area: **Issue 194 Option A — no upstream report; coverage stays unavailable** (chosen by the user in chat October 13).
-   - What it records:
-     - AI14 found the crash inside the Dart VM: `getSourceReport`, 24 of 25 crash reports with one stack.
-     - 3.47.7 has it too.
-     - A fresh sample app passed 10/10, so it is not reproduced outside Gaslight.
-     - The user chose not to report it upstream.
-     - Coverage remains not collectable and not a gate.
-     - A re-try happens only on an SDK upgrade made for another reason.
-     - No code changed.
-   - Issues column: `194`.
-   - Contract column: `docs/agent_execution_guide.md` §0.1 and §1; `docs/ongoing_general_errors.md` §1 (AI14 findings).
-3. **Tracker, §1 AI14 findings:** replace the bold sentence *"Not posted. Whether to report it upstream is the user's decision."* with the bold sentence *"Not reported upstream: the user chose Issue 194 Option A on October 13."* Change nothing else in that entry.
-4. **This guide:**
-   - **§0.1 coverage bullet:** replace its last sentence with *"Never use it for validation. Re-try only when the Flutter SDK is upgraded for another reason: one `--coverage` run of `test/lobby_create_error_test.dart`; the full suite only if that LCOV contains `game_service.dart` (Issue 194 → A)."*
-   - **§1 coverage row:** append *"Not reported upstream (Issue 194 → A)."*
-   - **§3:** add a row: **AI16** (194 → A) · your commit hash · "Decision recorded; no code" · "Docs only".
-   - **§5 rejected list:** add *"October 13 rejections: 194 B and C."*
-   - **Switch the guide to queue-complete mode:**
-     - retitle it `# Agent Execution Guide — Queue Complete (Wave AI verified) — <date>`;
-     - make the framing say there is no approved work;
-     - make §2 read *"Queue — empty."* plus one line naming AI16's commit;
-     - make THE LOOP's step (1) and the close-out say the queue is empty, removing every mention of Issue 194 as pending.
-5. **Do not** run `flutter test --coverage`, clone Flutter, draft any upstream report, or post anything anywhere.
-
-### 2.2 Validation
-1. `git status --porcelain` before committing shows only `docs/agent_execution_guide.md` and `docs/ongoing_general_errors.md`.
-2. `grep -c "^### Issue 194" docs/ongoing_general_errors.md` → `0`. `grep -c "^Your selection:" docs/ongoing_general_errors.md` → `0`. Positive control: `git show HEAD:docs/ongoing_general_errors.md | grep -c "^### Issue 194"` → `1`, which proves the query can see the block.
-3. `grep -c "Re-try only when the Flutter SDK is upgraded for another reason" docs/agent_execution_guide.md` → `1`.
-4. `grep -c "Whether to report it upstream is the user's decision" docs/ongoing_general_errors.md` → `0`, and `grep -c "the user chose Issue 194 Option A" docs/ongoing_general_errors.md` → `1`.
-5. `grep -n "194" docs/agent_execution_guide.md` shows no wording that treats 194 as pending or awaiting a selection.
-6. **Doc gates, bare, each exit 0:** `./scripts/check_playthrough_evidence.sh` (no-arg and the four files listed in §1), `./scripts/check_web_e2e_strings.sh`, `./scripts/check_decks_in_sync.sh`. The code gates do not need re-running: no file outside `docs/` changes. Say so in the commit body.
-7. **One commit:** `docs(coverage): record Issue 194 Option A — no upstream report; re-try coverage only on an SDK upgrade (Wave AI / AI16)`. The body holds the WHY, `Falsification: not applicable — documentation only` and `Device check: NOT RUN — documentation only; nothing in the app changed`. Do not push.
-
-**Blast radius:** `docs/ongoing_general_errors.md`, `docs/agent_execution_guide.md`. Nothing else, and no design doc: coverage is tooling, not a design contract.
+**Queue — empty.** AI16 (Issue 194 → A, docs only) was the last item. Its commit is the one titled `docs(coverage): record Issue 194 Option A — no upstream report; re-try coverage only on an SDK upgrade (Wave AI / AI16)`; find it with `git log --grep 'Wave AI / AI16'`.
 
 ---
 
@@ -176,6 +132,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 | **AI12** (190 → A) | `bfa9b18` | The 16 non-`withOpacity` deprecations migrated, with identical output. | Revert → **186** infos, 16 non-`withOpacity` deprecations; `HEAD` 170 and 0. |
 | **AI13** (188 → A) | `6011202` | `TARGETED_DEVICE_FAMILY = 1` in all three Runner configurations: iPhone-only. | Built `UIDeviceFamily` `{ 1 }`; it was `{ 1, 2 }` on October 12. |
 | **AI14** (189 → B) | `3bccfb3` | Coverage investigated: outcome (c), nothing works; the crash is in the Dart VM; 3.47.7 has it too. | Spot check: `game_service.dart` 0, control `lobby_screen.dart` 1. **Correction:** the other absent files vary between runs (36 source files on October 13, 20 for AI14). |
+| **AI16** (194 → A) | the `Wave AI / AI16` commit (`git log --grep 'Wave AI / AI16'`) | Decision recorded; no code. | Docs only. |
 | **192 → B** | `3a36e91` | AH1's device check closed by acceptance (simulator observation plus source trace). | Nothing to falsify. |
 
 ### Earlier waves
@@ -244,7 +201,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **`lastReaction` / `lastReactionAt` are deliberately retained dead fields.** **`lib/utils/prompt_decks.dart` is generated.**
 - **The web E2E string contract (Wave AE)** and the **Wave AB** and **Wave AA** invariants stand as recorded in the design docs.
 
-**Assessed and rejected — do NOT re-propose:** everything listed in the September guides and the tracker §3, including **migrating `withOpacity` → `withValues` (139 C)**. October 10 rejections: 178 A and C; 179 B; 180 B and C; 181 B; 182 B; 183 B; 184 B; 185 B; 186 B; 187 B; 188 B and C; 189 A; 190 B. October 12 rejections: 192 A; 193 A and C.
+**Assessed and rejected — do NOT re-propose:** everything listed in the September guides and the tracker §3, including **migrating `withOpacity` → `withValues` (139 C)**. October 10 rejections: 178 A and C; 179 B; 180 B and C; 181 B; 182 B; 183 B; 184 B; 185 B; 186 B; 187 B; 188 B and C; 189 A; 190 B. October 12 rejections: 192 A; 193 A and C. October 13 rejections: 194 B and C.
 
 **There is no chat or emote feature.**
 
@@ -282,9 +239,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 ## THE LOOP — for any future item
 
 ```
-(1) Take AI16 (§2). After it, the queue is empty: STOP unless there is a new
-    user selection or a red gate. Never fill in or edit a `Your selection:`
-    line.
+(1) The queue is empty (§2): STOP unless there is a new user selection or
+    instruction, a red gate, or a user report. Never fill in or edit a
+    `Your selection:` line.
 (2) "Implemented to spec" and "fixed the problem" are different claims. Check
     the second against the ORIGINAL REPORT in the tracker, not the spec.
 (3) If a fix depends on how a platform or library behaves, read the vendored
@@ -317,11 +274,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 
 ## Close-out
 
-**When AI16 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are:
+**The queue is empty. Do not invent work.** The only legitimate triggers for further action are:
 1. a new user selection or instruction;
 2. a §1 gate going red (investigate, then file with options);
 3. a user or tester report — for example *Something went wrong. Try again.* while offline, which re-opens the 192 inference (§4).
-
-AI16 rewrites this close-out to drop its own first sentence (§2.1 step 4).
 
 Anything else, including tidying, upgrading dependencies or migrating `withOpacity`, is not approved.
