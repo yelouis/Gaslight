@@ -314,3 +314,15 @@ All durations come from `AppMotion`: `fast` 180 ms (presses, stamps) · `standar
 ### In-game rules access (Issue 164 / AA12)
 
 `READ MANUAL` used to exist only on the lobby entry screen, so once a match began there was no route back to the rules. All three in-game screens now carry a manual affordance in the `AppBar` alongside a short per-phase guidance line. **There is one rules source, not two** — the in-game sheet renders the same manual content, so phase copy and manual copy cannot drift apart. `test/guidance_strings_test.dart` asserts the phase strings **verbatim**; keep it that way rather than relaxing to substring matching, because the value of that file is that copy cannot change silently.
+
+### Count labels agree with their numbers (Issue 196 / AL1 — Wave AL, October 2026)
+
+**The rule.** *A count and its noun always agree, through `pluralize` (`lib/utils/pluralize.dart`); zero gets its own phrase where "only 0" would read wrongly.* `pluralize(count, singular, plural)` picks the singular only at exactly 1, so 0, 2 and 10 take the plural.
+
+**What AL1 put under it.** The lobby header (`1 SUSPECT JOINED`, `n SUSPECTS JOINED`) and the game-over screen: `1 Deception`, `1 wrong vote` and `Found by only 1 player`, plus the two labels that were already right and now share the path (`Fooled 1 player`, `… fooled … 1 time`). *Found by* has its own phrase at zero, **`Found by no one`**, because the server can send 0: the cleanest truth is the one found by the fewest players, and nobody may have found it. Counts that arrive in the match-summary map are converted once, with `(value as num?)?.toInt() ?? 0`.
+
+**Left alone, deliberately.** `Pts` / `PTS` (an abbreviation that reads the same at 1), `N PROMPTS` (every deck holds many), `… behind` and `×N` (no noun).
+
+**Not yet under the rule.** A few other count-and-noun strings turned up outside Issue 196's scope and still read wrongly at 1 or build their plural by hand; the tracker's AL1 row lists them with file and line. New copy follows the rule.
+
+**Tests.** `test/pluralize_test.dart` (0, 1, 2, 10); every game-over label at 0, 1 and 2 in `test/game_over_screen_test.dart`; the lobby header at 1 and 2 players in `test/lobby_parlor_sheet_test.dart`. The strings are asserted **verbatim**, so a wording change updates the assertion, never the production code.

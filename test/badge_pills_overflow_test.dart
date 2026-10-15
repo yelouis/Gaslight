@@ -89,7 +89,7 @@ void main() {
 
       // Verify badges are present and fully visible
       expect(find.text('Fooled 2 players'), findsOneWidget);
-      expect(find.text('Found by only 0 players'), findsOneWidget);
+      expect(find.text('Found by no one'), findsOneWidget);
       expect(find.text('4 wrong votes'), findsOneWidget);
 
       // Verify no RenderFlex overflow exceptions occurred

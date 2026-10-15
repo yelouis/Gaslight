@@ -78,12 +78,12 @@ void main() {
       try {
         await setupAndPumpParlor(tester, playerCount: 1);
 
-        final headerText = find.text('1 SUSPECTS JOINED');
+        final headerText = find.text('1 SUSPECT JOINED');
         expect(headerText, findsOneWidget);
 
         final initialTop = tester.getTopLeft(headerText).dy;
 
-        // Drag down on header text '1 SUSPECTS JOINED'
+        // Drag down on header text '1 SUSPECT JOINED'
         await tester.drag(headerText, const Offset(0, 200));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
@@ -100,7 +100,7 @@ void main() {
       try {
         await setupAndPumpParlor(tester, playerCount: 1);
 
-        final headerText = find.text('1 SUSPECTS JOINED');
+        final headerText = find.text('1 SUSPECT JOINED');
         final initialTop = tester.getTopLeft(headerText).dy;
 
         // Tap header to expand to 0.7 (header moves UP, smaller dy)
@@ -118,6 +118,29 @@ void main() {
 
         final collapsedTop = tester.getTopLeft(headerText).dy;
         expect(collapsedTop, greaterThan(expandedTop));
+      } finally {
+        gameService.dispose();
+      }
+    });
+
+    // AL1 (Issue 196 -> A): the header's noun agrees with its count.
+    testWidgets('Header says SUSPECT, not SUSPECTS, for one player', (tester) async {
+      try {
+        await setupAndPumpParlor(tester, playerCount: 1);
+
+        expect(find.text('1 SUSPECT JOINED'), findsOneWidget);
+        expect(find.text('1 SUSPECTS JOINED'), findsNothing);
+      } finally {
+        gameService.dispose();
+      }
+    });
+
+    testWidgets('Header says SUSPECTS for two players', (tester) async {
+      try {
+        await setupAndPumpParlor(tester, playerCount: 2);
+
+        expect(find.text('2 SUSPECTS JOINED'), findsOneWidget);
+        expect(find.text('2 SUSPECT JOINED'), findsNothing);
       } finally {
         gameService.dispose();
       }

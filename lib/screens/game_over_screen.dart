@@ -22,6 +22,7 @@ import '../widgets/shared_ui.dart';
 import '../widgets/raven_mascot.dart';
 import '../widgets/raven_pose_host.dart';
 import '../utils/case_file_saver.dart';
+import '../utils/pluralize.dart';
 
 class GameOverScreen extends StatefulWidget {
   const GameOverScreen({super.key});
@@ -370,6 +371,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
     );
 
     if (trickster != null) {
+      final deceptions = trickster.playersDeceived;
       cards.add(
         const SizedBox(height: 12),
       );
@@ -383,7 +385,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
             subtitle: 'MOST PLAYERS DECEIVED',
             player: trickster,
             sigilType: ThematicIconType.secret,
-            metricText: '${trickster.playersDeceived} Deceptions',
+            metricText: '$deceptions ${pluralize(deceptions, 'Deception', 'Deceptions')}',
           ),
         ),
       );
@@ -707,6 +709,10 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
     final reads = (runningRivalries?['reads'] as List<dynamic>? ?? [])
         .map((r) => Map<String, dynamic>.from(r as Map))
         .toList();
+    // Counts arrive in a map from the server: convert each once, then let `pluralize` pick the noun.
+    final fooled = (bestLie?['fooled'] as num?)?.toInt() ?? 0;
+    final foundCount = (cleanestTruth?['foundCount'] as num?)?.toInt() ?? 0;
+    final wrongVoteCount = (theSting?['wrongVoteCount'] as num?)?.toInt() ?? 0;
 
     if (bestLie == null && cleanestTruth == null && theSting == null && headToHead.isEmpty && reads.isEmpty) {
       return const SizedBox.shrink();
@@ -733,7 +739,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
             sigilType: ThematicIconType.secret,
             quote: bestLie['text'] ?? '',
             subtext: 'By ${bestLie['authorName'] ?? 'Unknown'} for prompt "${bestLie['promptText'] ?? ''}"',
-            badgeText: 'Fooled ${bestLie['fooled']} ${(bestLie['fooled'] == 1) ? 'player' : 'players'}',
+            badgeText: 'Fooled $fooled ${pluralize(fooled, 'player', 'players')}',
           ),
           const SizedBox(height: 12),
         ],
@@ -743,7 +749,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
             sigilType: ThematicIconType.observe,
             quote: cleanestTruth['text'] ?? '',
             subtext: '${cleanestTruth['targetPlayerName'] ?? 'Unknown'}\'s Truth for prompt "${cleanestTruth['promptText'] ?? ''}"',
-            badgeText: 'Found by only ${cleanestTruth['foundCount']} ${(cleanestTruth['foundCount'] == 1) ? 'player' : 'players'}',
+            badgeText: foundCount == 0 ? 'Found by no one' : 'Found by only $foundCount ${pluralize(foundCount, 'player', 'players')}',
           ),
           const SizedBox(height: 12),
         ],
@@ -753,7 +759,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
             sigilType: ThematicIconType.flame,
             quote: theSting['promptText'] ?? '',
             subtext: 'Deadliest prompt on the table',
-            badgeText: '${theSting['wrongVoteCount']} wrong votes',
+            badgeText: '$wrongVoteCount wrong ${pluralize(wrongVoteCount, 'vote', 'votes')}',
           ),
           const SizedBox(height: 12),
         ],
@@ -789,7 +795,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2),
                     child: Text(
-                      '${pair['deceiverName']} fooled ${pair['victimName']} ${pair['count']} times',
+                      _rivalryLine(pair),
                       style: const TextStyle(
                         fontFamily: 'Lora',
                         fontSize: 12,
@@ -815,6 +821,12 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
         ],
       ],
     );
+  }
+
+  /// "Alice fooled Bob 3 times": the count and its noun agree.
+  String _rivalryLine(Map<String, dynamic> pair) {
+    final count = (pair['count'] as num?)?.toInt() ?? 0;
+    return '${pair['deceiverName']} fooled ${pair['victimName']} $count ${pluralize(count, 'time', 'times')}';
   }
 
   Widget _highlightCard({

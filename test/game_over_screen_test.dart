@@ -374,7 +374,7 @@ void main() {
 
       expect(find.text('CLEANEST TRUTH'), findsOneWidget);
       expect(find.text('"I ate cereal in the dark"'), findsOneWidget);
-      expect(find.text('Found by only 0 players'), findsOneWidget);
+      expect(find.text('Found by no one'), findsOneWidget);
 
       expect(find.text('THE STING'), findsOneWidget);
       expect(find.text('"Where did the jewels go?"'), findsOneWidget);
@@ -385,6 +385,117 @@ void main() {
 
       await gameService.leaveRoom();
     });
+
+    // AL1 (Issue 196 -> A): every count label agrees with its number, through `pluralize`. These run on
+    // the real screen with a real match summary. The 1-cases and "Found by no one" are the ones that
+    // fail if the helper or a call site regresses.
+    Future<void> pumpGameOverWithCount(WidgetTester tester, int n) async {
+      final p1 = PlayerState(id: 'p1', name: 'Alice', totalScore: 50, playersDeceived: 6, timesFooled: 1, role: PlayerRole.voter);
+      // Bob is THE DUPLICITOUS (most players deceived; at 0 the score breaks the tie), so his count is n.
+      final p2 = PlayerState(id: 'p2', name: 'Bob', totalScore: 35, playersDeceived: n, timesFooled: 3, role: PlayerRole.voter);
+      final p3 = PlayerState(id: 'p3', name: 'Charlie', totalScore: 20, playersDeceived: 0, timesFooled: 4, role: PlayerRole.voter);
+
+      final summaryPayload = {
+        'bestLie': {
+          'authorId': 'p1',
+          'authorName': 'Alice',
+          'text': 'I saw the cat fly away',
+          'promptText': 'What did you see?',
+          'fooled': n,
+        },
+        'cleanestTruth': {
+          'targetPlayerId': 'p2',
+          'targetPlayerName': 'Bob',
+          'text': 'I ate cereal in the dark',
+          'promptText': 'What was your secret dinner?',
+          'foundCount': n,
+        },
+        'theSting': {
+          'targetPlayerId': 'p3',
+          'promptText': 'Where did the jewels go?',
+          'wrongVoteCount': n,
+        },
+        'headToHead': [
+          {
+            'deceiverId': 'p1',
+            'deceiverName': 'Alice',
+            'victimId': 'p2',
+            'victimName': 'Bob',
+            'count': n,
+          }
+        ],
+      };
+
+      final gameState = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.gameOver,
+        totalPlayers: 3,
+        cards: [],
+        currentCardAssignments: {},
+        readyPlayers: {},
+        matchSummary: summaryPayload,
+      );
+
+      await mockDb.collection('rooms').doc('TEST').set(gameState.toMap());
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('p1').set(p1.toMap()..['authUid'] = 'uid1');
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('p2').set(p2.toMap()..['authUid'] = 'uid2');
+      await mockDb.collection('rooms').doc('TEST').collection('players').doc('p3').set(p3.toMap()..['authUid'] = 'uid3');
+
+      gameService.listenToRoom('TEST');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('room_code', 'TEST');
+      await prefs.setString('player_id', 'p1');
+      await gameService.tryRejoinSession();
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 100));
+      });
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: MaterialApp(
+            builder: (context, child) {
+              return MediaQuery(
+                data: const MediaQueryData(accessibleNavigation: true),
+                child: child!,
+              );
+            },
+            home: const GameOverScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    // What each label must read at n; and the forms it read before AL1, or would read if `pluralize`
+    // always returned the plural. "Fooled …" and "… times" were already right and must stay so.
+    const countLabels = <int, List<String>>{
+      0: ['0 Deceptions', 'Fooled 0 players', 'Found by no one', '0 wrong votes', 'Alice fooled Bob 0 times'],
+      1: ['1 Deception', 'Fooled 1 player', 'Found by only 1 player', '1 wrong vote', 'Alice fooled Bob 1 time'],
+      2: ['2 Deceptions', 'Fooled 2 players', 'Found by only 2 players', '2 wrong votes', 'Alice fooled Bob 2 times'],
+    };
+    const wrongCountLabels = <int, List<String>>{
+      0: ['Found by only 0 players'],
+      1: ['1 Deceptions', 'Fooled 1 players', 'Found by only 1 players', '1 wrong votes', 'Alice fooled Bob 1 times'],
+      2: [],
+    };
+
+    for (final n in [0, 1, 2]) {
+      testWidgets('AL1 (Issue 196): every game-over count label agrees with the number $n', (WidgetTester tester) async {
+        await pumpGameOverWithCount(tester, n);
+
+        for (final label in countLabels[n]!) {
+          expect(find.text(label), findsOneWidget, reason: 'at $n the screen should read "$label"');
+        }
+        for (final wrong in wrongCountLabels[n]!) {
+          expect(find.text(wrong), findsNothing, reason: 'at $n the screen must not read "$wrong"');
+        }
+        expect(tester.takeException(), isNull);
+
+        await gameService.leaveRoom();
+      });
+    }
 
     testWidgets('Issue 111: GameOverScreen degrades gracefully when matchSummary has all null awards', (WidgetTester tester) async {
       final p1 = PlayerState(id: 'p1', name: 'Alice', totalScore: 0, playersDeceived: 0, timesFooled: 0, role: PlayerRole.voter);

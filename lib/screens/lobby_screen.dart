@@ -11,6 +11,7 @@ import '../widgets/lobby_logo.dart';
 import '../models/game_state.dart';
 import '../models/player_state.dart';
 import '../widgets/shared_ui.dart';
+import '../utils/pluralize.dart';
 import '../utils/prompt_decks.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_motion.dart';
@@ -445,6 +446,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     final readyNonHostsCount = nonHostPlayers.where((p) => p.lobbyReady).length;
     final totalNonHostsCount = nonHostPlayers.length;
     final allNonHostsReady = totalNonHostsCount > 0 && readyNonHostsCount == totalNonHostsCount;
+    final joinedCount = players.length;
 
     final String? startWarning = _startWarningFor(gs);
 
@@ -838,7 +840,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16.0),
                               child: Text(
-                                '${players.length} SUSPECTS JOINED',
+                                '$joinedCount ${pluralize(joinedCount, 'SUSPECT', 'SUSPECTS')} JOINED',
                                 style: const TextStyle(
                                   fontFamily: 'CormorantGaramond',
                                   fontSize: 18,
