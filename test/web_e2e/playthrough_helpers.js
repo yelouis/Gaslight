@@ -212,6 +212,7 @@ async function clickElement(page, filterFn, description, clickOffset = null, opt
   console.log(`[CLICK] ${description} at (${cx.toFixed(1)}, ${cy.toFixed(1)})`);
   await page.mouse.click(Math.min(1270, Math.max(10, cx)), Math.min(790, Math.max(10, cy)));
   await page.waitForTimeout(400);
+  return { x: cx, y: cy };
 }
 
 // try* helpers swallow "not found" only. An unresponsive page is never optional.
@@ -745,8 +746,53 @@ class StallDetector {
 // One card's reveal, and the generic driver
 // ---------------------------------------------------------------------------------------------
 
+function rectsAgree(a, b, tolerance) {
+  return ['x', 'y', 'width', 'height'].every(k => Math.abs(a[k] - b[k]) <= tolerance);
+}
+
+// Reads the rect of the element `matcher` finds until two reads 300 ms apart agree within 1 px, for up
+// to 3 s, and returns the element from the last read (null if it is gone). A panel that is still
+// sliding in reads differently each time: that was Wave AL / AL2's false FAIL, a click aimed at
+// y = 714.6 where every other run clicked at y = 505.0 (Wave AM / AM2). When the first two reads
+// disagree, both rects are logged.
+async function settledElement(page, matcher, description, { intervalMs = 300, timeoutMs = 3000, tolerance = 1 } = {}) {
+  const started = Date.now();
+  let previous = await findSemanticsElement(page, matcher);
+  if (!previous) return null;
+  let loggedDisagreement = false;
+  for (;;) {
+    await page.waitForTimeout(intervalMs);
+    const current = await findSemanticsElement(page, matcher);
+    if (!current) return null;
+    if (rectsAgree(previous.rect, current.rect, tolerance)) return current;
+    if (!loggedDisagreement) {
+      console.log(`[SETTLE] ${description}: the first two reads disagree: ${describeRect(previous.rect)} then ${describeRect(current.rect)}`);
+      loggedDisagreement = true;
+    }
+    if (Date.now() - started >= timeoutMs) {
+      console.log(`[SETTLE] ${description}: still moving after ${timeoutMs} ms; clicking where it is now`);
+      return current;
+    }
+    previous = current;
+  }
+}
+
+// One accusation click: wait for the button to stop moving, then click its centre. Returns where it
+// clicked, or null if the button is gone.
+async function accuseClick(page, buttonText, description, attempt) {
+  const matcher = n => n.role === 'button' && n.text === buttonText;
+  const settled = await settledElement(page, matcher, description);
+  if (!settled) return null;
+  return clickElement(page, matcher, `${description}${attempt > 1 ? ' (attempt 2)' : ''}`, { x: settled.rect.width / 2, y: settled.rect.height / 2 });
+}
+
+const ACCUSATION_WAIT_MS = 4000;     // how long a click may take to show up in the room's unmaskGuesses
+const RETRY_MIN_LEFT_MS = 3000;      // a retry needs at least this much of the unmask window left
+
 // Fooled voters see "Accuse the player who wrote the forgery you voted for:" while the unmask
-// window is open. Clicks each candidate once, then waits for the window to close.
+// window is open. Clicks each candidate, waits up to 4 s for the room to record it, and, if it was not
+// recorded and the window still has 3 s left, clicks once more. A window that has closed is never
+// retried: a late click is what the server's deadline_passed reason is for, not a test flake.
 async function accuseWhileWindowOpen({ code, players, roster, readerId }) {
   const nameOf = Object.fromEntries(roster.map(p => [p.id, p.name]));
   const accused = new Set();
@@ -764,11 +810,37 @@ async function accuseWhileWindowOpen({ code, players, roster, readerId }) {
       const candidate = elements.find(n => n.role === 'button' && others.includes(n.text.toLowerCase()));
       if (!candidate) continue;
       console.log(`[UNMASK] ${pageLabel(p.page)} (${p.name}) accuses ${candidate.text}`);
-      await clickElement(p.page, n => n.role === 'button' && n.text === candidate.text, `${pageLabel(p.page)} accuses ${candidate.text}`);
-      await waitForRoom(code, r => {
+      const description = `${pageLabel(p.page)} accuses ${candidate.text}`;
+      const waitingFor = `${nameOf[id]}'s accusation in the room's unmaskGuesses`;
+      const recorded = r => {
         const card = (r.cards || []).find(c => c.targetPlayerId === readerId);
         return !!(card && card.unmaskGuesses && card.unmaskGuesses[id]);
-      }, { timeoutMs: 8000, description: `${nameOf[id]}'s accusation in the room's unmaskGuesses` });
+      };
+      const first = await accuseClick(p.page, candidate.text, description, 1);
+      if (!first) throw new Error(`Could not find element: ${description}`);
+      try {
+        await waitForRoom(code, recorded, { timeoutMs: ACCUSATION_WAIT_MS, description: waitingFor });
+      } catch (firstError) {
+        rethrowIfUnresponsive(firstError);
+        const now = await readRoom(code);
+        if (!recorded(now)) {
+          const stillRevealing = now.currentPhase === 'reveal' && now.currentReaderId === readerId;
+          const msLeft = deadline - Date.now();
+          const clickedAt = `(${first.x.toFixed(1)}, ${first.y.toFixed(1)})`;
+          if (!stillRevealing || msLeft < RETRY_MIN_LEFT_MS) {
+            throw new Error(`${firstError.message}; clicked at ${clickedAt}, not retried (${stillRevealing ? `${Math.max(0, msLeft)} ms of the window left` : 'the reveal has moved on'})`);
+          }
+          console.log(`[UNMASK] retrying accusation for ${nameOf[id]} (first click at ${first.x.toFixed(1)},${first.y.toFixed(1)})`);
+          const second = await accuseClick(p.page, candidate.text, description, 2);
+          if (!second) throw new Error(`${firstError.message}; clicked at ${clickedAt}, and the button was gone for the retry`);
+          try {
+            await waitForRoom(code, recorded, { timeoutMs: Math.max(1500, deadline - Date.now()), description: waitingFor });
+          } catch (secondError) {
+            rethrowIfUnresponsive(secondError);
+            throw new Error(`${secondError.message}; clicked at ${clickedAt}, then retried at (${second.x.toFixed(1)}, ${second.y.toFixed(1)})`);
+          }
+        }
+      }
       accused.add(id);
     }
     room = await readRoom(code);
