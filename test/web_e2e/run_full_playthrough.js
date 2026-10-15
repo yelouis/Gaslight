@@ -29,6 +29,7 @@ const {
   finishVote,
   accuseWhileWindowOpen,
   driveToGameOver,
+  sweepViewports,
   runMain
 } = require('./playthrough_helpers');
 const { UI, FIXTURE } = require('./ui_strings');
@@ -36,6 +37,9 @@ const { UI, FIXTURE } = require('./ui_strings');
 const APP_URL = 'http://127.0.0.1:8777';
 const MAX_TICKS = 60;
 const VIEWPORT = { width: 1280, height: 800 };
+
+// A score chip on the reveal ("Bob: +2"). The chips appear once the unmask beat is over.
+const isChip = n => n.role === 'button' && /^[A-Za-z]+:\s*\S*\d+$/.test(n.text);
 
 // Each player's truth, and two forgeries. They share no vocabulary beyond filler words, so the
 // server's similarity check (Jaccard 0.6, Levenshtein 0.85, containment) never rejects one by
@@ -95,7 +99,7 @@ async function newPlayerPage(browser, label, logs) {
 
 async function run(browser) {
   console.log('===========================================================');
-  console.log('=== STARTING COMPLETE WEB E2E PLAYTHROUGH HARNESS (I2+I3) ===');
+  console.log('=== STARTING COMPLETE WEB E2E PLAYTHROUGH HARNESS (W1-W16 + W21 sweeps) ===');
   console.log('===========================================================\n');
 
   const consoleLogs = { p1: [], p2: [], p3: [] };
@@ -197,6 +201,16 @@ async function run(browser) {
     return players.filter(p => !p.isHost).every(p => p.lobbyReady === true);
   }, { timeoutMs: 10000, description: 'Bob and Charlie to be lobbyReady' });
 
+  // W21: the host's lobby at the three sizes, with all three players in and ready.
+  await sweepViewports(p1, {
+    code,
+    phase: 'lobby',
+    keyControls: [
+      { name: UI.ROOM_CODE, find: n => n.text.includes(UI.ROOM_CODE) || n.ariaLabel.includes(UI.ROOM_CODE) },
+      { name: UI.START_GAME, find: n => n.role === 'button' && n.text === UI.START_GAME }
+    ]
+  });
+
   console.log('Host P1 clicking START GAME...');
   await clickElement(p1, n => n.role === 'button' && n.text === UI.START_GAME, 'START GAME');
   await waitForRoom(code, r => r.currentPhase === 'truth', { timeoutMs: 20000, description: 'the room to enter the truth phase' });
@@ -207,6 +221,16 @@ async function run(browser) {
   console.log('\n--- [W6] Truth Phase ---');
   for (const seat of seats) await waitForCraftField(seat.page);
   await saveScreenshot(p1, 'w6_truth_craft.png');
+
+  // W21: the host's craft screen at the three sizes, before P1 types anything.
+  await sweepViewports(p1, {
+    code,
+    phase: 'truth',
+    keyControls: [
+      { name: 'craft field (TEXTAREA)', find: n => n.tag === 'TEXTAREA' },
+      { name: UI.SUBMIT_DOSSIER, find: n => n.role === 'button' && n.text.includes(UI.SUBMIT_DOSSIER) }
+    ]
+  });
 
   console.log('Submitting truth answers...');
   for (const seat of seats) {
@@ -276,6 +300,22 @@ async function run(browser) {
   }
   await saveScreenshot(voters[0].page, 'w8_vote_lockout.png');
 
+  // W21: the host's vote screen at the three sizes, before P1 votes. A reader has no ballot to cast,
+  // so their key control is the ready toggle; a voter's is the prompt to choose a card.
+  const hostIsReader = readerName === FIXTURE.ALICE;
+  console.log(`[W21] P1 (${FIXTURE.ALICE}) is ${hostIsReader ? 'the reader' : 'a voter'} on this card`);
+  await waitForScreen(p1, els => markerOf(els) === (hostIsReader ? 'vote-target' : 'vote'), {
+    timeoutMs: 15000,
+    description: `to show the ${hostIsReader ? 'reader' : 'voter'}'s vote screen`
+  });
+  await sweepViewports(p1, {
+    code,
+    phase: 'vote',
+    keyControls: hostIsReader
+      ? [{ name: `${UI.IM_READY} / ${UI.NOT_READY}`, find: n => n.role === 'button' && (n.text === UI.IM_READY || n.text === UI.NOT_READY) }]
+      : [{ name: UI.TAP_A_CARD_TO_CHOOSE, find: n => n.role === 'button' && n.text === UI.TAP_A_CARD_TO_CHOOSE }]
+  });
+
   // Bob votes for the truth, Charlie for a forgery (so the unmask window opens whenever Charlie
   // votes), Alice for the first card she can.
   const truthOfReader = TRUTH[readerName];
@@ -306,13 +346,24 @@ async function run(browser) {
   const unmask = await accuseWhileWindowOpen({ code, players: seats, roster, readerId });
   console.log(`[W9] unmask window ${unmask.windowOpened ? 'opened' : 'did not open'}; ${unmask.accused.length} accusation(s)`);
 
+  // W21: the host's reveal at the three sizes. It runs after the accusations (the unmask window lasts
+  // 20 s, and three resizes would spend it) and once the score chips are up (a reveal still mid-beat
+  // would show different content at each size). The room waits on the reveal for the host's CONTINUE.
+  await waitForScreen(p1, els => els.some(isChip), { timeoutMs: 40000, description: 'to show a score chip before the reveal sweep' });
+  await sweepViewports(p1, {
+    code,
+    phase: 'reveal',
+    keyControls: [
+      { name: UI.THE_REVEAL, find: n => n.text.includes(UI.THE_REVEAL) || n.ariaLabel.includes(UI.THE_REVEAL) }
+    ]
+  });
+
   // =========================================================================
   // W10: SCORING & STANDINGS LEADERBOARD
   // =========================================================================
   console.log('\n--- [W10] Scoring & Standings ---');
   // After the unmask beat, each player whose score changed on this card gets a chip ("Bob: +2").
   // A player with no change (a reader nobody fooled anyone for) has none, so the count varies.
-  const isChip = n => n.role === 'button' && /^[A-Za-z]+:\s*\S*\d+$/.test(n.text);
   const chipScreen = await waitForScreen(p1, els => els.filter(isChip).length >= 1, {
     timeoutMs: 40000,
     description: 'to show at least one score chip'
@@ -356,6 +407,15 @@ async function run(browser) {
   }
   await p1.waitForTimeout(4000); // the engraving ceremony
   await saveScreenshot(p1, 'w11_gameover.png');
+
+  // W21: the host's game over screen at the three sizes.
+  await sweepViewports(p1, {
+    code,
+    phase: 'gameOver',
+    keyControls: [
+      { name: UI.SHARE_CASE_FILE, find: n => n.role === 'button' && n.text.includes(UI.SHARE_CASE_FILE) }
+    ]
+  });
 
   // =========================================================================
   // W14: CASE FILE SHARE ON WEB
@@ -435,44 +495,8 @@ async function run(browser) {
   await d2.context.close();
   await d3.context.close();
 
-  // =========================================================================
-  // I3: RESPONSIVE SWEEPS (W17, W18, W19)
-  // =========================================================================
-  console.log('\n--- [I3] Responsive Sweeps (W17, W18, W19) ---');
-
-  const viewports = [
-    { name: 'w17', width: 375, height: 812, isMobile: true },
-    { name: 'w18', width: 768, height: 1024, isMobile: false },
-    { name: 'w19', width: 1280, height: 800, isMobile: false }
-  ];
-
-  for (const vp of viewports) {
-    console.log(`\nCapturing responsive sweep for ${vp.name} (${vp.width}x${vp.height})...`);
-    const rCtx = await browser.newContext({
-      viewport: { width: vp.width, height: vp.height },
-      userAgent: vp.isMobile ? 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36' : undefined,
-      hasTouch: vp.isMobile
-    });
-    const rPage = labelPage(await rCtx.newPage(), 'P7');
-    await openApp(rPage, APP_URL);
-
-    // 1. Title / Entrance
-    await saveScreenshot(rPage, `${vp.name}_lobby.png`);
-
-    // Create room to capture the Parlor at this viewport. The room is in the lobby phase only: the
-    // craft, vote, reveal and game over names below are the lobby again (unchanged since I3).
-    const rCode = await createRoom(rPage, 'Tester');
-    await waitForScreen(rPage, els => markerOf(els) === 'lobby' && hasText(els, rCode), { timeoutMs: 15000, description: `to show room ${rCode}'s lobby at ${vp.width}x${vp.height}` });
-    await saveScreenshot(rPage, `${vp.name}_craft.png`);
-    await saveScreenshot(rPage, `${vp.name}_vote.png`);
-    await saveScreenshot(rPage, `${vp.name}_reveal.png`);
-    await saveScreenshot(rPage, `${vp.name}_gameover.png`);
-
-    await rCtx.close();
-  }
-
   console.log('\n===========================================================');
-  console.log('=== ALL PLAYTHROUGH STAGES COMPLETED SUCCESSFULLY (I2+I3) ===');
+  console.log('=== ALL PLAYTHROUGH STAGES COMPLETED SUCCESSFULLY (W1-W16 + W21 sweeps) ===');
   console.log('===========================================================');
 }
 

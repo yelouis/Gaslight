@@ -14,7 +14,7 @@
 
 ---
 
-## Web Playthrough Assertions (W1 — W19)
+## Web Playthrough Assertions (W1 — W21)
 
 ### W1 — Context Isolation & Session Restoral Falsification
 - **Verdict:** PASS
@@ -279,7 +279,8 @@
 ---
 
 ### W17 — Responsive Sweep: Mobile Viewport (375x812)
-- **Verdict:** PASS
+- **Verdict:** NOT RUN — the in-game screens were never captured (recorded PASS on August 30; corrected October 14, 2026, Issue 197; superseded by W21)
+- **Reason:** the cited Crafting, Voting, Reveal and GameOver images show a one-player lobby (October 14: w17 craft = vote and reveal = gameover by checksum; w18 vote = reveal); the cited Lobby image at each size shows the title screen (THE GUEST LEDGER), not the lobby, so no cited image shows the screen it names. All fifteen files were checked on October 14: twelve opened, three byte-identical to one that was.
 - **Viewport:** 375 x 812 (Mobile device profile)
 - **What I did:**
   1. Loaded web application at 375x812 mobile viewport with touch emulation.
@@ -296,7 +297,8 @@
 ---
 
 ### W18 — Responsive Sweep: Tablet Viewport (768x1024)
-- **Verdict:** PASS
+- **Verdict:** NOT RUN — the in-game screens were never captured (recorded PASS on August 30; corrected October 14, 2026, Issue 197; superseded by W21)
+- **Reason:** the cited Crafting, Voting, Reveal and GameOver images show a one-player lobby (October 14: w17 craft = vote and reveal = gameover by checksum; w18 vote = reveal); the cited Lobby image at each size shows the title screen (THE GUEST LEDGER), not the lobby, so no cited image shows the screen it names. All fifteen files were checked on October 14: twelve opened, three byte-identical to one that was.
 - **Viewport:** 768 x 1024 (Tablet portrait)
 - **What I did:**
   1. Loaded web application at 768x1024 tablet viewport.
@@ -313,7 +315,8 @@
 ---
 
 ### W19 — Responsive Sweep: Desktop Viewport (1280x800)
-- **Verdict:** PASS
+- **Verdict:** NOT RUN — the in-game screens were never captured (recorded PASS on August 30; corrected October 14, 2026, Issue 197; superseded by W21)
+- **Reason:** the cited Crafting, Voting, Reveal and GameOver images show a one-player lobby (October 14: w17 craft = vote and reveal = gameover by checksum; w18 vote = reveal); the cited Lobby image at each size shows the title screen (THE GUEST LEDGER), not the lobby, so no cited image shows the screen it names. All fifteen files were checked on October 14: twelve opened, three byte-identical to one that was.
 - **Viewport:** 1280 x 800 (Desktop landscape)
 - **What I did:**
   1. Loaded web application at 1280x800 desktop viewport.
@@ -365,3 +368,37 @@
 - **Reference:** `lib/screens/game_over_screen.dart:670`
 - **Expected:** In multi-round matches with fooled players, `computeMatchSummary` populates `bestLie`, `cleanestTruth`, and `theSting` referencing actual player submissions, rendering the complete `MATCH HIGHLIGHTS` card.
 
+---
+
+### W21 — Responsive Sweep: lobby and in-game screens at three web sizes
+- **Verdict:** PASS
+- **Viewports:** 375 x 812 (phone), 768 x 1024 (tablet portrait) and 1280 x 800 (desktop landscape): one page, resized in place with `page.setViewportSize`
+- **Clients:** P1 (Alice, the host) in a 3-player match against the local emulators; P2 (Bob) and P3 (Charlie) played the other seats at 1280 x 800
+- **Room Code:** `NJMH`
+- **What I did:**
+  1. Ran `./scripts/run_web_smoke.sh` on October 14, 2026 (exit 0 in 302 s; both playthroughs reached game over; 41 PNGs): an emulator-only web build of the tree at `410f986`, driven by this item's scripts. A second run the same evening (exit 0 in 313 s, room `ALDR`) passed the same sweep with P1 as the reader instead of a voter; its images were not kept.
+  2. At five points of the main game, resized P1's page through the three sizes with `sweepViewports` (`test/web_e2e/playthrough_helpers.js`): the lobby with all three players ready (W5), the craft screen before P1 typed (W6, phase `truth`), the vote screen before P1 voted (W8; P1 was a voter, on Bob's card), the reveal once its score chips were up (W9), and the game over screen after the engraving ceremony (W11).
+  3. At each size the sweep waited 1.5 s for Flutter to lay out again and re-enabled semantics; asserted the room document's `currentPhase` (`lobby`, `truth`, `vote`, `reveal`, `gameOver`); asserted that every key control was present (scrolling with the mouse wheel if need be) and inside the viewport horizontally (`x >= -1` and `x + width <= viewport width + 1`); saved the image scrolled to the top; and logged, for information only, any node whose right edge passed the viewport. It restored 1280 x 800 afterwards.
+  4. Opened all fifteen images and checked that each shows the named screen at the named size.
+- **Observed:**
+  - Lobby, 375 x 812: `docs/playthroughs/evidence/w21_375x812_lobby.png`
+  - Lobby, 768 x 1024: `docs/playthroughs/evidence/w21_768x1024_lobby.png`
+  - Lobby, 1280 x 800: `docs/playthroughs/evidence/w21_1280x800_lobby.png`
+  - Crafting (phase `truth`), 375 x 812: `docs/playthroughs/evidence/w21_375x812_truth.png`
+  - Crafting (phase `truth`), 768 x 1024: `docs/playthroughs/evidence/w21_768x1024_truth.png`
+  - Crafting (phase `truth`), 1280 x 800: `docs/playthroughs/evidence/w21_1280x800_truth.png`
+  - Voting, 375 x 812: `docs/playthroughs/evidence/w21_375x812_vote.png`
+  - Voting, 768 x 1024: `docs/playthroughs/evidence/w21_768x1024_vote.png`
+  - Voting, 1280 x 800: `docs/playthroughs/evidence/w21_1280x800_vote.png`
+  - Reveal, 375 x 812: `docs/playthroughs/evidence/w21_375x812_reveal.png`
+  - Reveal, 768 x 1024: `docs/playthroughs/evidence/w21_768x1024_reveal.png`
+  - Reveal, 1280 x 800: `docs/playthroughs/evidence/w21_1280x800_reveal.png`
+  - GameOver, 375 x 812: `docs/playthroughs/evidence/w21_375x812_gameOver.png`
+  - GameOver, 768 x 1024: `docs/playthroughs/evidence/w21_768x1024_gameOver.png`
+  - GameOver, 1280 x 800: `docs/playthroughs/evidence/w21_1280x800_gameOver.png`
+  - Measured (the run's `[SWEEP]` lines, left to right edge in px): at 375, ROOM CODE 29.0 to 346.0, START GAME 16.0 to 359.0, answer field 49.5 to 331.5, SUBMIT DOSSIER 24.0 to 351.0, TAP A CARD TO CHOOSE 24.0 to 351.0, THE REVEAL 0.0 to 375.0, Share Case File 24.0 to 351.0; at 768, START GAME 16.0 to 752.0 and Share Case File 24.0 to 744.0; at 1280, START GAME 16.0 to 1264.0 and Share Case File 24.0 to 1256.0. Every key control lay inside its viewport at every size.
+  - Information only: on the reveal at 375, two nodes of the Standings strip (Bob's chip: "Bob", "0") had right edges of 487.6 and 509.5. The strip is a horizontal scroll view by design (`lib/screens/phase4_reveal.dart`, `STANDINGS`), so a third chip runs past a phone's edge. No other node passed a right edge at any size.
+  - Seen in the images, not asserted: at 375 x 812 and 1280 x 800 the vote screen's PREV / NEXT row sits under the bottom bar until the page is scrolled (it is fully visible at 768 x 1024), and in this run the deck opens on P1's own forgery, stamped SEALED and "(Your Forgery)". At 375 x 812 the reveal shows only its top (the prompt, the truth and the forgery cards); the points, standings and CONTINUE are below the fold.
+- **Reference:** `test/web_e2e/playthrough_helpers.js` (`sweepViewports`); `test/web_e2e/run_full_playthrough.js` (the calls in W5, W6, W8, W9 and W11)
+- **Expected:** each screen's key controls inside the viewport at each size. Lobby: ROOM CODE and START GAME. Craft: the answer field and SUBMIT DOSSIER. Vote: TAP A CARD TO CHOOSE for a voter, I'M READY or NOT READY for the reader. Reveal: THE REVEAL. Game over: Share Case File.
+- **Limit:** a resized desktop page, with no touch emulation and no mobile user agent (the old w17 context had both, but only ever showed the title screen and a one-player lobby). The build is the emulator-only one, which paints Firebase's red "Running in emulator mode" banner over the bottom 20 to 37 px of every image; at 375 x 812 it covers the lower edge of the bottom-pinned buttons, and the release build has none. Only each key control's horizontal bounds are asserted: nothing here checks vertical fit, text clipping or the parts of a page below the fold, and each image shows the top of its page.

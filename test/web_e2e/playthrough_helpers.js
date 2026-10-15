@@ -863,6 +863,133 @@ async function driveToGameOver({ code, players, maxTicks, craftTextFor = null, v
 }
 
 // ---------------------------------------------------------------------------------------------
+// The responsive sweep (Wave AL / AL2, Issue 197)
+// ---------------------------------------------------------------------------------------------
+
+// The three sizes every phase is checked at, and the size the rest of the script assumes: the click
+// helpers above clamp to 1270 x 790 and scroll with the wheel at (640, 400).
+const SWEEP_SIZES = Object.freeze([
+  { width: 375, height: 812 },
+  { width: 768, height: 1024 },
+  { width: 1280, height: 800 }
+]);
+const SWEEP_RESTORE = Object.freeze({ width: 1280, height: 800 });
+const SWEEP_LAYOUT_WAIT_MS = 1500; // Flutter lays the screen out again after a resize
+const SWEEP_FIND_MS = 3000;        // how long a control may take to appear before the page is scrolled
+const SWEEP_MAX_SCROLLS = 14;
+const SWEEP_LOGGED_OVERFLOWS = 12;
+
+// "w21_375x812_vote.png": the phase is the room's own phase name (lobby, truth, vote, reveal, gameOver).
+function sweepShotName(size, phase) {
+  return `w21_${size.width}x${size.height}_${phase}.png`;
+}
+
+async function wheelPage(page, size, deltaY) {
+  await page.mouse.move(Math.round(size.width / 2), Math.round(size.height / 2));
+  await page.mouse.wheel(0, deltaY);
+  await page.waitForTimeout(300);
+}
+
+// Of the nodes that match, the smallest: an ancestor's text includes its children's, so the first
+// match in document order is usually a container as wide as the screen and would pass vacuously.
+function mostSpecific(matches) {
+  return matches.slice().sort((a, b) => a.rect.width * a.rect.height - b.rect.width * b.rect.height)[0];
+}
+
+// Finds a key control: wait for it at the top of the page, then scroll down with the mouse wheel until
+// it shows up. Flutter keeps a scroll view's children in the semantics tree, so a control below the
+// fold is normally found at the top (measured October 14: the game over screen's MATCH HIGHLIGHTS
+// at y=871 on an 812 px page); the wheel is for a control that is not built until it is scrolled near.
+async function findKeyControl(page, size, control) {
+  await wheelPage(page, size, -10000);
+  const atTop = await waitFor(async () => {
+    const matches = (await getSemanticsElements(page)).filter(control.find);
+    return matches.length ? mostSpecific(matches) : null;
+  }, { timeoutMs: SWEEP_FIND_MS, intervalMs: 300, description: 'a key control' }).catch(e => {
+    rethrowIfUnresponsive(e);
+    return null;
+  });
+  if (atTop) return { el: atTop, scrolled: 0 };
+  for (let step = 1; step <= SWEEP_MAX_SCROLLS; step++) {
+    await wheelPage(page, size, Math.round(size.height * 0.6));
+    const matches = (await getSemanticsElements(page)).filter(control.find);
+    if (matches.length) return { el: mostSpecific(matches), scrolled: step };
+  }
+  return null;
+}
+
+function describeRect(rect) {
+  return `x=${rect.x.toFixed(1)}..${(rect.x + rect.width).toFixed(1)} y=${rect.y.toFixed(1)}..${(rect.y + rect.height).toFixed(1)}`;
+}
+
+// Resizes `page` through the three sizes while the room is in `phase`, and at each one
+//   1. waits for Flutter to lay out again and re-enables semantics;
+//   2. asserts the room document says `phase`;
+//   3. asserts every key control exists (scrolling to it if need be) and sits inside the viewport
+//      horizontally: x >= -1 and x + width <= viewport width + 1;
+//   4. saves w21_<w>x<h>_<phase>.png, scrolled back to the top;
+//   5. logs, as information only, every node whose right edge passes the viewport width (the deck
+//      carousel peeks past the edge on purpose).
+// keyControls: [{ name, find }], find being a predicate on a semantics node. A missing control, a
+// control outside the viewport or the wrong phase throws, so the run fails. The page goes back to
+// 1280x800 in a finally, because every later step assumes that size. This is a resized desktop
+// page: no touch emulation and no mobile user agent.
+async function sweepViewports(page, { code, phase, keyControls }) {
+  const label = pageLabel(page);
+  assertThat(Array.isArray(keyControls) && keyControls.length > 0, `sweep ${phase}: at least one key control is required`);
+  let failure = null;
+  try {
+    for (const size of SWEEP_SIZES) {
+      const at = `${phase} @${size.width}x${size.height}`;
+      await page.setViewportSize(size);
+      await page.waitForTimeout(SWEEP_LAYOUT_WAIT_MS);
+      await enableSemantics(page);
+
+      const room = await readRoom(code);
+      assertThat(room.currentPhase === phase, `sweep ${at}: the room is in phase "${room.currentPhase}", expected "${phase}"`);
+
+      for (const control of keyControls) {
+        const found = await findKeyControl(page, size, control);
+        if (!found) {
+          const all = await getSemanticsElements(page);
+          console.error(`[SWEEP FAILED] ${label} ${at}: "${control.name}" not found. Controls on screen:`, describeElements(all));
+          throw new Error(`ASSERTION FAILED: sweep ${at}: key control "${control.name}" is missing after ${SWEEP_MAX_SCROLLS} scrolls`);
+        }
+        const { rect } = found.el;
+        const inside = rect.x >= -1 && rect.x + rect.width <= size.width + 1;
+        console.log(`[SWEEP] ${label} ${at}: "${control.name}" ${found.el.tag}[${found.el.role || ''}] ${describeRect(rect)} ` +
+          `${inside ? 'inside' : 'OUTSIDE'} the ${size.width}px viewport${found.scrolled ? ` (found after ${found.scrolled} scroll(s))` : ''}`);
+        assertThat(inside, `sweep ${at}: key control "${control.name}" runs past the viewport horizontally (${describeRect(rect)}; the viewport is ${size.width} px wide)`);
+      }
+
+      await wheelPage(page, size, -10000);
+      await saveScreenshot(page, sweepShotName(size, phase));
+
+      const past = (await getSemanticsElements(page)).filter(n => n.rect.x + n.rect.width > size.width + 1);
+      console.log(`[SWEEP] ${label} ${at}: ${past.length} semantics node(s) have a right edge past ${size.width} px (information only)`);
+      for (const n of past.slice(0, SWEEP_LOGGED_OVERFLOWS)) {
+        const name = (n.text || n.ariaLabel).replace(/\s+/g, ' ').slice(0, 60);
+        console.log(`[SWEEP]   ${n.tag}[${n.role || ''}] "${name}" right edge ${(n.rect.x + n.rect.width).toFixed(1)}`);
+      }
+      if (past.length > SWEEP_LOGGED_OVERFLOWS) console.log(`[SWEEP]   ... and ${past.length - SWEEP_LOGGED_OVERFLOWS} more`);
+    }
+  } catch (e) {
+    failure = e;
+    throw e;
+  } finally {
+    try {
+      await page.setViewportSize(SWEEP_RESTORE);
+      await page.waitForTimeout(SWEEP_LAYOUT_WAIT_MS);
+      await enableSemantics(page);
+    } catch (e) {
+      // A failed sweep reports its own reason; a sweep that passed must not hide a page that will not resize back.
+      if (!failure) throw e;
+      console.error(`[SWEEP] ${label}: could not restore ${SWEEP_RESTORE.width}x${SWEEP_RESTORE.height}: ${e.message}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Running a script
 // ---------------------------------------------------------------------------------------------
 
@@ -933,5 +1060,6 @@ module.exports = {
   accuseWhileWindowOpen,
   hostContinue,
   driveToGameOver,
+  sweepViewports,
   runMain
 };
