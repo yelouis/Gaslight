@@ -1,10 +1,10 @@
-# Agent Execution Guide — Active Build: Wave AK (web smoke repair, then the 1.2.0 (9) web release) — October 13, 2026
+# Agent Execution Guide — Queue Complete (Wave AI verified; 1.2.0 (9) live on the web and archived for iOS) — October 14, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191) plus two October 12 follow-ups (192, 193). All sixteen of its items, AI1–AI15 and AH1, are built, and AI11's server change is deployed. **The whole wave was verified on October 13** by re-running every gate and re-falsifying every item in scratch clones (§3).
 
-**Two items are approved: Wave AK (§2).** AJ1 (`adb05fc`) built and verified the 1.2.0 (9) iOS archive; uploading it is the user's step. Its web deploy was blocked because the web playthroughs fail on every client (Issue 195). On October 13 the user chose **Issue 195 → Option A** in chat, extended as the validation recommends. **AK1** repairs the web smoke and makes it one command; **AK2** then deploys 1.2.0 (9) to the web with the user's go-ahead. When AK2 is done the queue is empty. **Do not invent work.**
+**No work is approved; the queue is empty (§2).** The last item, AK2, deployed **1.2.0 (9)** to web hosting with the user's go-ahead; AK1 repaired the web smoke that had blocked it (Issue 195 → A). The iOS archive of 1.2.0 (9) is built and verified, and **uploading it to TestFlight is still the user's step**. **Do not invent work.**
 
 **If work arrives** (a selection, a red gate, a user report), these rules apply:
 - **Every number and literal string in a spec is a decision, not a suggestion.** Implement it as written.
@@ -106,136 +106,9 @@
 
 ---
 
-## 2. Wave AK — repair the web smoke (Issue 195 → A, extended), then ship 1.2.0 (9) to the web
+## 2. Queue
 
-| Step | Item | Why this position |
-|---|---|---|
-| 1 | **AK1** Repair both web playthroughs and make the web smoke one command | The web deploy is blocked on a check that cannot tell the truth. |
-| 2 | **AK2** Web release of 1.2.0 (9) | Only after AK1's smoke exits 0 on `HEAD`, and only with the user's go-ahead. |
-
-**The user's own step runs in parallel:** uploading the archived 1.2.0 (9) to TestFlight from Xcode's Organizer. **Never delete or rebuild `build/ios/archive/`**; it is the artefact the user uploads.
-
-### 2.1 AK1 — Repair the web playthroughs; one-command web smoke (Issue 195 → A, extended)
-
-**What this means for the user.** The web app's only end-to-end check fails on every client, so the 1.2.0 (9) web release is blocked. Worse, one of the two scripts can report success without finishing a game. After AK1, one command builds an emulator-only web app, plays two full games with three browsers against the local emulators, and exits 0 only if both reach game over.
-
-**Why "extended".** The user chose Option A, which this item keeps whole. The October 13 validation (tracker, Issue 195) found three things A as filed did not cover, so this item adds two parts:
-- **What the validation found:**
-  1. The match-summary "hang" is a silent loop that **ends in a false pass**.
-  2. The vote failure is the stacked deck's one-card-at-a-time layout plus the host's `PROCEED TO REVEAL (HOST)` button.
-  3. `firebase emulators:exec` hides failures unless the exit code is passed on.
-- **What AK1 adds:**
-  1. **no vacuous pass** — stall detection and loop exhaustion both throw;
-  2. **a one-command runner.** AJ1 and the validation each spent about 30 minutes re-deriving the emulators, server and port setup by hand.
-
-**The gap.** Issue 195's block in the tracker has the full evidence. In brief:
-- **W7:** it types Alice's truth as P2's "duplicate", but who forges whose card is random per game. After a rejection it cannot find the field, because the field is matched by the word "quill" and a field holding text has an empty `aria-label`.
-- **W5:** it toggles timers on.
-- **The match-summary script:**
-  - it votes only for a button containing `OPTION`, the deck's front card, and never presses `Next option`;
-  - it never presses `PROCEED TO REVEAL (HOST)`;
-  - it logs only when it acts;
-  - it prints success when its 120 ticks run out.
-- **Screenshots:** both scripts write into `docs/playthroughs/evidence/`, and all 20 file names they save are cited in `findings_web.md`.
-
-#### Implementation
-Change `test/web_e2e/*.js` and add `scripts/run_web_smoke.sh`. **No change to `lib/`, `functions/` or any app string.**
-
-1. **Screenshots leave the tracked tree.**
-   - In `playthrough_helpers.js`, `EVIDENCE_DIR` becomes `process.env.WEB_E2E_SHOT_DIR` when set, otherwise `fs.mkdtempSync(path.join(os.tmpdir(), 'gaslight-web-e2e-'))`. Print it once at start.
-   - `saveScreenshot` returns the absolute path. Delete every log line that claims `Saved docs/playthroughs/evidence/…`.
-   - A default run must never write `docs/playthroughs/evidence/`. Re-capturing the cited evidence is **not** part of AK1.
-2. **An oracle for end states: the emulator's room document.** Add `readRoom(code)` to the helpers. It is a `GET` with `Authorization: Bearer owner`:
-   - URL: `${WEB_E2E_FIRESTORE || 'http://127.0.0.1:8080'}/v1/projects/gaslight-46368/databases/(default)/documents/rooms/<code>`;
-   - returns the room's fields, checked October 13 on an emulator room: `currentPhase`, `currentReaderId`, `currentRound`, `currentRotationIndex`, `isTimerDisabled`, `readyPlayers`, `rotationPlan`, and `cards[]`. Each card has `targetPlayerId` and a `votes` map keyed by voter.
-   - Submitted answers are sealed and not on the room, but each submission marks its author in `readyPlayers`.
-
-   The scripts are emulator-only by design (the runner builds with `USE_EMULATOR=true`), so this is safe. It is the only reliable way to assert a phase change.
-3. **Craft field by tag, not by "quill".** Add `typeIntoCraftField(page, text)`.
-   - It finds the visible `TEXTAREA` elements and throws with a dump unless there is **exactly one**.
-   - Then it clicks it, selects all, deletes, and types.
-   - Use it for every truth and forgery entry in both scripts. Keep `typeIntoInput` for labelled fields (`Your Name`, `Room Code`).
-4. **W5 reads before it clicks.** Click `Disable Game Timers` only if `readRoom(code).isTimerDisabled !== true`, then assert it is `true`. Apply the same to the match-summary script's settings step.
-5. **W7 becomes author-aware.**
-   - Read P2's instruction with `/Write a convincing lie as (.+?)\./`.
-   - Log `P2 is forging <Name>'s card`; the validation needs it.
-   - Type **that** player's W6 truth and submit. Within 5 s, assert two things: P2 shows `Too similar to an existing answer! Be more creative.` (add `TOO_SIMILAR` to `UI` in `ui_strings.js`), and P2's craft field is still present.
-   - Then type a valid forgery with `typeIntoCraftField`, submit, and assert P2's craft field is gone within 10 s.
-6. **Voting on the stacked deck (both scripts).** Add `castVote(page, preferText)`:
-   - N comes from the `Show option k of N` labels.
-   - Look at up to N cards. A card is votable when a button's text starts with `OPTION ` and contains `Tap to choose this one` (add `TAP_TO_CHOOSE` to `UI`).
-   - Click the preferred votable card if one is seen, otherwise the first votable one; then click `CONFIRM VOTE`. If the front card is not votable, press `Next option`.
-   - Afterwards assert, within 10 s, that the page no longer shows `CONFIRM VOTE` or `TAP A CARD TO CHOOSE`.
-   - If no card is votable after N presses, throw with a dump.
-   - On the vote screen, a page showing `I'M READY` presses it (the target's toggle). **`NOT READY` means already ready: never press it.**
-7. **Advance on observed state, not on timers.**
-   - After every action, read `readRoom(code).currentPhase`.
-   - The host presses `PROCEED TO REVEAL (HOST)` (add `PROCEED_TO_REVEAL` to `UI`) only when every voter's vote is in the `votes` of the card whose `targetPlayerId` is `currentReaderId`, and only if the phase has not left `vote` within 10 s by itself.
-   - Log which of the two happened.
-8. **No silent loops and no vacuous pass (both scripts).**
-   - Every loop iteration logs one line: the tick, the room phase, and each page's screen marker.
-   - **Stall:** if the room's `currentPhase`, `currentReaderId`, `currentRound`, `currentRotationIndex`, number of `readyPlayers` entries and total number of `votes` entries are all unchanged for **6** consecutive ticks, throw `STALLED`, with every page's buttons and one screenshot per page.
-   - **Loop exhaustion throws**; it never falls through to the success path.
-   - Every `page.evaluate` in the helpers is raced against a **15 s** timeout that throws `PAGE UNRESPONSIVE P<n>`. That separates an app freeze from a script stall.
-   - Each `W` step in `run_full_playthrough.js` ends with **one positive end-state assertion** (a room phase or a screen marker). A `try*` helper may be used only where the action is genuinely optional, and the step still asserts its end state.
-   - Each script must finish within **10 minutes**.
-9. **`scripts/run_web_smoke.sh`, the one command.** Bash, `set -uo pipefail`.
-   1. **Refuse to start** if any of the ports 8777, 8080, 9099, 5001, 4000, 4400, 4500 or 9150 is listening. Print the owning process and **kill nothing** (§0.1).
-   2. `TMP=$(mktemp -d)`; `flutter build web --release --dart-define=USE_EMULATOR=true -o "$TMP/web"` (**never `build/web`**); `npm --prefix functions run build`.
-   3. Run `PATH="/opt/homebrew/bin:/opt/homebrew/opt/openjdk/bin:$PATH" npx firebase-tools emulators:exec --only auth,functions,firestore --project gaslight-46368 "<this script> --inner $TMP"`.
-   4. **Inner mode:**
-      - serve `$TMP/web` with `python3 -m http.server 8777 --bind 127.0.0.1` in the background;
-      - run each script from `test/web_e2e/` under a hard kill, `perl -e 'alarm 600; exec @ARGV' node <script>` (macOS has no `timeout`), with `WEB_E2E_SHOT_DIR=$TMP/shots`;
-      - stop the server;
-      - **`exit` with the combined status as the last command.** `emulators:exec` passes on the exit code of its command's last line.
-   5. Print the shot directory, each script's exit code and the verdict. Then fail if `git status --porcelain docs/playthroughs/evidence` is non-empty.
-   6. **Exit 0 only if both scripts exited 0.**
-10. **Strings:** every new UI literal goes into `ui_strings.js`, so `check_web_e2e_strings.sh` stays at exit 0. Every literal must exist in `lib/`; `Tap to choose this one` is at `lib/widgets/card_grid.dart:650`.
-
-#### Validation
-1. **Falsify the repaired scripts.** These are test code: each fault must compile and run, and must make `./scripts/run_web_smoke.sh` exit non-zero **for the intended reason**. Run each in a scratch clone and reset with `git reset --hard` between runs.
-   - (a) W7 types a fresh, non-duplicate string as the "duplicate" → it fails at the `TOO_SIMILAR` assertion.
-   - (b) `castVote` skips P2 → the match-summary script fails with `STALLED` within its budget (not exit 0, not a 10-minute kill).
-   - (c) the tick cap set to 3 → it fails with "did not reach game over", proving exhaustion no longer passes.
-   - (d) one script calls `process.exit(1)` at its first line → the runner exits non-zero, proving the exit code is passed on.
-   - (e) W5's condition inverted → the `isTimerDisabled === true` assertion fails.
-2. **Acceptance:** run `./scripts/run_web_smoke.sh` repeatedly until **both** rotation cycles of W7 have been seen: `P2 is forging Alice's card` and `P2 is forging Charlie's card`, at least once each.
-   - Stop after at most 8 runs. **Every run must exit 0.**
-   - Record each run's room codes, cycle, duration and exit code.
-   - If both cycles have not appeared within 8 runs, record that; it is not a failure.
-3. **The tree stays clean.** `git status --porcelain docs/playthroughs/evidence` is empty after every run (the runner checks; check by hand once). **Positive control:** the run's shot directory holds at least 20 PNGs.
-4. **Ports are free after every run** (`lsof` on the eight ports); `emulators:exec` stops what it started.
-5. **The nine §1 gates, bare and unchanged:** 0 / 0 / 170; 466; 167; the rest exit 0, including `check_web_e2e_strings.sh` with the new strings.
-6. **Any app defect the repaired scripts expose: STOP.** File it with options and do not change `lib/` in AK1. AK2 does not run.
-7. **One commit:** `test(web): repair the web playthroughs and add a one-command web smoke (Wave AK / AK1, Issue 195 Option A)`. The body includes `Falsification:` (a–e) and `Device check: NOT RUN — no app change; the web smoke itself is the end-to-end check`. Do not push.
-
-**Blast radius:**
-- `test/web_e2e/playthrough_helpers.js`, `run_full_playthrough.js`, `run_match_summary_playthrough.js` and `ui_strings.js`; `scripts/run_web_smoke.sh` (new).
-- `README.md` → Releasing → **1. Web app**: before `flutter build web --release`, run `./scripts/run_web_smoke.sh`, which must exit 0. Note its run time and its needs: Java, and Playwright's Chromium in `test/web_e2e/node_modules`.
-- This guide: §1 gains a **release-time check** row for `run_web_smoke.sh` (not a per-item gate); §0.1 names the runner.
-- The tracker: a §3 row, Issue 195's block deleted, and the Unresolved intro updated.
-- No design doc: this is test tooling.
-
-### 2.2 AK2 — Web release of 1.2.0 (9) (finishes AJ1's web half)
-
-**What this means for the user.** Web players are still on 1.1.0 (8). After AK2 the live site serves 1.2.0 (9), the same client as the iOS archive.
-
-**Preconditions:** AK1 is committed; `./scripts/run_web_smoke.sh` exits 0 on `HEAD`; `pubspec.yaml` still reads `1.2.0+9`; the nine §1 gates are green.
-
-1. **Build.** Look at `build/web` before removing it — **only `build/web`, never `build/ios/archive`**. Then run `flutter build web --release` with **no** `--dart-define`.
-   - `build/web/version.json` must read `"version":"1.2.0"` and `"build_number":"9"`, with a timestamp from this run.
-   - `grep -c '^USE_EMULATOR=true' .env` must be `0`. **Never print `.env` values.**
-   - `test -f build/web/assets/.env` must exit 0.
-2. **Ask the user for the go-ahead** — a hosting deploy changes production. Then run `npx firebase-tools deploy --only hosting` bare; it must exit 0.
-3. **Check the live site without opening the app.** `lib/main.dart:65` signs in anonymously at boot, so loading the page in a browser would create a production Auth user.
-   - `curl -s "https://gaslight-46368.web.app/version.json?t=$(date +%s)"` must show 1.2.0 and 9;
-   - `curl -s -o /dev/null -w '%{http_code}'` must return `200` for `/` and for `/assets/.env` (status only).
-4. **If the user declines,** record `Web deploy: NOT RUN — <reason>`.
-5. **Do not deploy functions** (they are unchanged and fresh), and **do not upload to TestFlight**.
-6. **One docs commit:** `docs(release): record the 1.2.0 (9) web deploy (Wave AK / AK2)`.
-   - A tracker §3 row with the live checks.
-   - The guide's "Release plumbing" line names web 1.2.0 (9) as live.
-   - The guide returns to queue-complete mode: title, framing, §2 "Queue — empty", THE LOOP step (1), close-out.
+**Queue — empty.** AK2 (the web deploy of 1.2.0 (9), approved by the user in chat) was the last item, and AK1 repaired the web smoke it needed. Their commits are the ones titled `docs(release): record the 1.2.0 (9) web deploy (Wave AK / AK2)` and `test(web): repair the web playthroughs and add a one-command web smoke (Wave AK / AK1, Issue 195 Option A)`; find them with `git log --grep 'Wave AK / AK2'` and `git log --grep 'Wave AK / AK1'`. The AK specs are in git at `431992b:docs/agent_execution_guide.md`, §2.
 
 ---
 
@@ -272,7 +145,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **Wave AA** (sixteen items, Issues 153–169, 160, 162) — verified September 11.
 - **Wave Z (152)** leave latch in a `finally` · **Y1 (151)** · **Y2 (149)** · **X1 (147)** · **X2 (148)** · **W1 (146)** · **W2 (145)** · **V1 (143, 144)** · **U1–U5**, **S1**, **R0–R2**, soak blocks **E22–E49**, Waves **Q/P/O**, Issues **96–105, 50–95, 31, 28/29**.
 
-**Release plumbing:** bundle ID `com.whylabs.gaslight` · `CFBundleDisplayName` **`Gaslight`** · `ITSAppUsesNonExemptEncryption` **`false`** · iOS target **15.0** · **iPhone-only** (`UIDeviceFamily` 1) · Node **22**. **TestFlight has build 1.1.0 (8)**, which predates Wave AI. **1.2.0 (9) is archived and verified** (`build/ios/archive/Runner.xcarchive`, October 13; the preflight on the 1.2.0+9 tree read the same numbers as §1), and **its upload is pending — the user's step in Xcode's Organizer**, because this Mac has no Apple Distribution certificate and `flutter build ipa` cannot export an `.ipa`. **The web app still serves 1.1.0 (8):** the AJ1 web smoke failed on both clients (Issue 195) and the user chose not to deploy.
+**Release plumbing:** bundle ID `com.whylabs.gaslight` · `CFBundleDisplayName` **`Gaslight`** · `ITSAppUsesNonExemptEncryption` **`false`** · iOS target **15.0** · **iPhone-only** (`UIDeviceFamily` 1) · Node **22**. **TestFlight has build 1.1.0 (8)**, which predates Wave AI. **1.2.0 (9) is archived and verified** (`build/ios/archive/Runner.xcarchive`, October 13; the preflight on the 1.2.0+9 tree read the same numbers as §1), and **its upload is pending — the user's step in Xcode's Organizer**, because this Mac has no Apple Distribution certificate and `flutter build ipa` cannot export an `.ipa`. **The web app serves 1.2.0 (9):** AK2 deployed hosting on October 14 with the user's go-ahead, after AK1 repaired the web smoke (Issue 195); the live `version.json` reads 1.2.0 / 9.
 
 ---
 
@@ -371,9 +244,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 ## THE LOOP — for any future item
 
 ```
-(1) Take Wave AK in order (§2): AK1, then AK2. After AK2 the queue is empty:
-    STOP unless there is a new user selection or instruction, a red gate, or a
-    user report. Never fill in or edit a `Your selection:` line.
+(1) The queue is empty (§2): STOP unless there is a new user selection or
+    instruction, a red gate, or a user report. Never fill in or edit a
+    `Your selection:` line.
 (2) "Implemented to spec" and "fixed the problem" are different claims. Check
     the second against the ORIGINAL REPORT in the tracker, not the spec.
 (3) If a fix depends on how a platform or library behaves, read the vendored
@@ -406,7 +279,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 
 ## Close-out
 
-**When AK2 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are:
+**The queue is empty. Do not invent work.** The only legitimate triggers for further action are:
 1. a new user selection or instruction;
 2. a §1 gate going red (investigate, then file with options);
 3. a user or tester report — for example *Something went wrong. Try again.* while offline, which re-opens the 192 inference (§4).
