@@ -8,6 +8,25 @@
 
 ## 1. Open & in-flight
 
+**Wave AK verified, October 14, 2026 — AK1 and AK2 hold; 1.2.0 (9) is live on the web.** Checked on `28f8a06` by running the runner and re-falsifying it, not by reading the commit bodies.
+- **Scope:** nothing in `lib/`, `functions/`, `ios/` or `pubspec.*` changed since `adb05fc`; only `test/web_e2e/*.js`, `scripts/run_web_smoke.sh`, `README.md` and docs did.
+- **AK1, the runner (`./scripts/run_web_smoke.sh`), run from a scratch clone of `HEAD`:**
+  - **Acceptance:** exit 0 in 280 s; both playthroughs passed (127 s and 120 s); 41 PNGs in the scratch shot folder; `emulators:exec` exit 0; P2 forged Charlie's card.
+  - **Fault: Bob never votes** (the driver skips him) → runner exit 1. Both scripts fail with `STALLED: no room progress for 6 consecutive ticks` (full after 88 s, match summary after 54 s); P2 forged Alice's card. Both rotation cycles have now been seen in my runs.
+  - **Fault: the match-summary script capped at 3 ticks** → runner exit 1, *"did not reach game over after 3 ticks"* after 34 s, while the full playthrough passed.
+  - The runner reads each script's own exit file rather than trusting `emulators:exec`, refuses busy ports, and fails if the evidence folder changes or a port stays open.
+  - AK1's own five faults (a–e) and five acceptance runs are in `dd4d3ce`.
+- **AK2, read-only:**
+  - The live `version.json` reads 1.2.0 / 9; `/` and `/assets/.env` return 200 (status only).
+  - `check_deploy_fresh.sh` exit 0.
+  - `build/ios/archive` is untouched (October 13, 20:11:30, build 9).
+  - The deploy was made with the user's go-ahead (October 14).
+- **Still open for the user:** the TestFlight upload of the 1.2.0 (9) archive (Organizer).
+- **Found and filed:**
+  - **Issue 196** — four count labels: two AK1 noted without filing, plus *"1 wrong votes"* and *"1 SUSPECTS JOINED"*.
+  - **Issue 197** — the W17–W19 responsive evidence shows only the lobby.
+- **Found and not filed (no product impact):** in emulator web builds, a page reload sends one `accounts:lookup` to the real `identitytoolkit.googleapis.com`, which answers `400`. The Auth SDK restores the saved user inside `Firebase.initializeApp`, before `main.dart` calls `useAuthEmulator`. It never affects a release build, and no data is written.
+
 **AJ1 verified and Issue 195 validated, October 13, 2026 — the iOS half of 1.2.0 (9) holds; the web half is blocked by Issue 195, which is real and now fully explained.**
 
 - **AJ1 (`adb05fc`), checked on the artefact, not the commit body:**
@@ -104,7 +123,69 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-Issues 1–195 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Six selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, and 194 A and 195 A on October 13. **No issue is open.** The user approved the release of **1.2.0 (9)** in chat on October 13. AJ1 built and verified its iOS archive for the user to upload; AK1 repaired the web smoke that had blocked its web deploy, and AK2 deployed 1.2.0 (9) to web hosting on October 14 with the user's go-ahead (§3). The TestFlight upload of the iOS archive is still the user's step.
+Issues 1–195 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Six selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, and 194 A and 195 A on October 13. **Two issues are open: 196 and 197**, both found while verifying AK1 on October 14. **The user chose Option A for both in chat on October 14.** They are specced as guide **Wave AL** (AL1 → 196, AL2 → 197). Their selection lines are left blank, because the choice is recorded here. The user approved the release of **1.2.0 (9)** in chat on October 13. AJ1 built and verified its iOS archive for the user to upload; AK1 repaired the web smoke that had blocked its web deploy, and AK2 deployed 1.2.0 (9) to web hosting on October 14 with the user's go-ahead (§3). The TestFlight upload of the iOS archive is still the user's step.
+
+### Issue 196: Four count labels read wrongly at 0 or 1 — "1 Deceptions", "1 wrong votes", "Found by only 0 players", "1 SUSPECTS JOINED"
+**Status**: ⚠️ Confirmed Unresolved — AK1 saw two of these in its web runs and listed them in `dd4d3ce` without filing them. Confirmed in source on October 14, and all four ship in 1.2.0 (9), on the web and in the iOS archive:
+- **`lib/screens/game_over_screen.dart:386`** — `'${trickster.playersDeceived} Deceptions'` reads *"1 Deceptions"* on THE DUPLICITOUS plaque.
+- **`:756`** — `'${theSting['wrongVoteCount']} wrong votes'` reads *"1 wrong votes"* on The Sting.
+- **`:746`** — `'Found by only ${foundCount} …'` handles 1 against many, but at 0 reads *"Found by only 0 players"* on Cleanest Truth. A count of 0 is real: the server picks the truth found by the fewest players (`functions/src/index.ts:99`), and nobody may have found it.
+- **`lib/screens/lobby_screen.dart:841`** — `'${players.length} SUSPECTS JOINED'` reads *"1 SUSPECTS JOINED"*. **Every host sees this** until a second player joins; the `w17_craft.png` and `w19_vote.png` evidence shows it.
+- **The sibling already gets it right:** `:736` (*"Fooled 1 player"*).
+- **Tests pin some of today's wording** and would need their assertions updated (THE LOOP rule 12): *"Found by only 0 players"* at `test/game_over_screen_test.dart:377` and `test/badge_pills_overflow_test.dart:92`; *"1 SUSPECTS JOINED"* at `test/lobby_parlor_sheet_test.dart:81` and `:103`. The *"3 wrong votes"* and *"4 wrong votes"* assertions are unaffected.
+- **A fix reaches players only in a new build** (1.2.1 (10) or later), so on its own there is no rush.
+
+**Option A (recommended)**: **Fix all four through one small helper.**
+- The wording: *"1 Deception"* / *"n Deceptions"*; *"1 wrong vote"* / *"n wrong votes"*; *"Found by no one"* at 0, *"Found by only 1 player"*, *"Found by only n players"*; *"1 SUSPECT JOINED"* / *"n SUSPECTS JOINED"*.
+- Add one `pluralize(count, singular, plural)` in `lib/utils/` and route all four labels and `:736` through it, so the twins stay fixed (THE LOOP rule 8).
+- Update the four pinned assertions, and add 0 / 1 / 2 cases for each label, with falsification.
+  - *Pros*: Correct wording everywhere a count meets a noun; small, client-only, and nothing for 1.1.0 (8) or the server; tests pin the new forms.
+  - *Cons*: Four visible strings and four test assertions change; it waits for the next build to reach players.
+
+**Option B**: **Rephrase so no plural is needed** — *"Deceived: 1"*, *"Wrong votes: 1"*, *"Found by: 0"*, *"Suspects joined: 1"*.
+  - *Pros*: No plural logic at all; one pattern for every count.
+  - *Cons*: Drops the plaques' Victorian voice for a form-like one, and changes the same tests as A.
+
+**Option C**: **Leave them as they are.**
+  - *Pros*: No work.
+  - *Cons*: A grammar slip greets every host in the lobby and shows on the final screen.
+
+Your selection: _____
+
+---
+
+### Issue 197: The W17–W19 responsive-sweep evidence shows only the lobby, so its PASS verdicts are unsupported — and the repaired script still makes the same mislabelled shots
+**Status**: ⚠️ Confirmed Unresolved — found while verifying AK1 on October 14.
+- **What the record claims:** `docs/playthroughs/findings_web.md` W17, W18 and W19 (about lines 280–330) record **PASS** for *"Captured all key match flow screens: Lobby, Crafting, Voting, Reveal, GameOver"* at 375×812, 768×1024 and 1280×800. They cite `w17_*`, `w18_*` and `w19_*` PNGs, committed on August 30.
+- **What the PNGs show:** `w17_craft.png` and `w19_vote.png` each show a **one-player lobby** (room code, *"1 SUSPECTS JOINED"*, *"Need at least 3 active players to start"*).
+- **The checksums show copies:** at 375, craft = vote and reveal = game over; at 768, vote = reveal.
+- **The script that makes them** (`test/web_e2e/run_full_playthrough.js`, section I3, about `:439–470`) opens a fresh one-player room at each size and saves the lobby four times, under the craft, vote, reveal and game-over names. AK1 kept that and said so in a code comment. Its only assertion is that the lobby loaded.
+- **So nothing has ever shown** the craft, vote, reveal or game-over screens of the **web build** at phone, tablet or desktop sizes. The widget tests check small widths (AI6 and AI7 at 320 and 375 pt), but on Flutter's test renderer, not the web build.
+- **The evidence gate passes anyway,** because its rule R5 checks only that cited files exist.
+- **Web players on phones** are exactly who this would protect; the iOS app is iPhone-only, but the web app serves every browser.
+
+**Option A (recommended)**: **Make the sweep real, and correct the record without rewriting history.**
+- **In the script:**
+  - Delete I3's lobby-only loop.
+  - During the main three-player game, at each phase (craft, vote, reveal, game over), resize P1's page through 375×812, 768×1024 and 1280×800 with `page.setViewportSize`.
+  - At each size, assert the phase (`readRoom` plus the screen marker) and that no element runs past the viewport width, then save `<size>_<phase>.png` to the shot directory.
+  - Restore 1280×800 afterwards.
+- **In `findings_web.md`:** annotate W17–W19 in place as **"NOT SUPPORTED — the cited craft, vote, reveal and game-over images show the lobby (verified October 14)"**. Add a new dated entry citing freshly captured PNGs under **new** names, copied in by hand, and keep the evidence gate (R5, R6) green. **The old files stay as they are**: they are the record of what was actually captured.
+  - *Pros*: Every in-game web screen gets real evidence at three sizes, and the smoke stops producing mislabelled files.
+  - *Cons*: About 30–60 s more per smoke run, and the new evidence must meet the gate's manifest rules. A resized desktop page is not a real phone: touch emulation and a mobile user agent can't change mid-session.
+
+**Option B**: **Correct the record only.**
+- Annotate W17–W19 as in A.
+- Make the sweep save only `<size>_lobby.png`, so no file is named after a screen it doesn't show.
+  - *Pros*: Honest and small; no new evidence work.
+  - *Cons*: The in-game web screens at phone and tablet sizes stay unchecked.
+
+**Option C**: **Withdraw the sweep.** Remove I3 from the script and mark W17–W19 as withdrawn.
+  - *Pros*: The least code, and nothing misleading is produced.
+  - *Cons*: It loses even the lobby-at-three-sizes check, which is real today.
+
+Your selection: _____
+
 
 ## 2. Lessons that still bite
 

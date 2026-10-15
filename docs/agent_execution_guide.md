@@ -1,10 +1,10 @@
-# Agent Execution Guide — Queue Complete (Wave AI verified; 1.2.0 (9) live on the web and archived for iOS) — October 14, 2026
+# Agent Execution Guide — Active Build: Wave AL (count labels, then a real responsive sweep) — October 14, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191) plus two October 12 follow-ups (192, 193). All sixteen of its items, AI1–AI15 and AH1, are built, and AI11's server change is deployed. **The whole wave was verified on October 13** by re-running every gate and re-falsifying every item in scratch clones (§3).
 
-**No work is approved; the queue is empty (§2).** The last item, AK2, deployed **1.2.0 (9)** to web hosting with the user's go-ahead; AK1 repaired the web smoke that had blocked it (Issue 195 → A). The iOS archive of 1.2.0 (9) is built and verified, and **uploading it to TestFlight is still the user's step**. **Do not invent work.**
+**Two items are approved: Wave AL (§2).** On October 14 the user chose **Option A for Issue 196** (count labels) and **Option A for Issue 197** (the responsive sweep) in chat. Wave AK was verified on October 14 (§3): AK1 (`dd4d3ce`) repaired the web smoke, and AK2 (`28f8a06`) deployed **1.2.0 (9)** to the web. The iOS archive of 1.2.0 (9) is built and verified, and **uploading it to TestFlight is still the user's step**. When AL2 is done the queue is empty. **Do not invent work.**
 
 **If work arrives** (a selection, a red gate, a user report), these rules apply:
 - **Every number and literal string in a spec is a decision, not a suggestion.** Implement it as written.
@@ -79,7 +79,7 @@
 
 ---
 
-## 1. Verified baseline — measured October 13, 2026 on `27a6314`; AJ1's preflight on `1.2.0+9` (`adb05fc`) matched it exactly
+## 1. Verified baseline — measured October 13, 2026 on `27a6314`; AJ1 (`adb05fc`) and AK1 (`dd4d3ce`) re-ran all nine gates and matched it exactly (no app code has changed since)
 
 **This is the regression bar.** Every gate was run bare in the verification session.
 
@@ -106,9 +106,135 @@
 
 ---
 
-## 2. Queue
+## 2. Wave AL — count labels (Issue 196 → A), then a real responsive sweep (Issue 197 → A)
 
-**Queue — empty.** AK2 (the web deploy of 1.2.0 (9), approved by the user in chat) was the last item, and AK1 repaired the web smoke it needed. Their commits are the ones titled `docs(release): record the 1.2.0 (9) web deploy (Wave AK / AK2)` and `test(web): repair the web playthroughs and add a one-command web smoke (Wave AK / AK1, Issue 195 Option A)`; find them with `git log --grep 'Wave AK / AK2'` and `git log --grep 'Wave AK / AK1'`. The AK specs are in git at `431992b:docs/agent_execution_guide.md`, §2.
+| Step | Item | Why this position |
+|---|---|---|
+| 1 | **AL1** One pluralize helper for every count label | It changes app strings, so AL2's fresh evidence then shows the corrected wording. |
+| 2 | **AL2** Responsive sweep at every phase; correct the W17–W19 record | It is test code and evidence only, and runs on AL1's tree. |
+
+**No release in this wave.** AL1's wording reaches players only in a new build (1.2.1 (10) or later), which is the user's call. Do not bump `pubspec.yaml`. **`build/ios/archive/` stays untouched** (§5).
+
+### 2.1 AL1 — Count labels agree with their numbers (Issue 196 → A)
+
+**What this means for the user.** Every host currently sees *"1 SUSPECTS JOINED"* in the lobby, and the final screen can say *"1 Deceptions"*, *"1 wrong votes"* or *"Found by only 0 players"*. After AL1 each count reads correctly at 0, 1 and many.
+
+**The gap** (confirmed October 14; line numbers on `28f8a06`):
+
+| Site | Today | Reads wrongly at |
+|---|---|---|
+| `lib/screens/lobby_screen.dart:841` | `'${players.length} SUSPECTS JOINED'` | 1 |
+| `lib/screens/game_over_screen.dart:386` | `'${trickster.playersDeceived} Deceptions'` | 1 |
+| `lib/screens/game_over_screen.dart:746` | `'Found by only ${foundCount} ${foundCount == 1 ? 'player' : 'players'}'` | 0 (the server can send 0, `functions/src/index.ts:99`) |
+| `lib/screens/game_over_screen.dart:756` | `'${wrongVoteCount} wrong votes'` | 1 |
+| `lib/screens/game_over_screen.dart:736` | `'Fooled ${fooled} ${fooled == 1 ? 'player' : 'players'}'` | correct today — a sibling (THE LOOP rule 8) |
+| `lib/screens/game_over_screen.dart:792` | `'… fooled … ${count} times'` | never: the server sends only counts ≥ 2 (`countFoolsPairs(…, 2)`). A sibling. |
+
+**Left alone, deliberately:**
+- `'${…} Pts'` / `'${…} PTS'` — an abbreviation that reads the same at 1;
+- `'${deck.prompts.length} PROMPTS'` — every deck holds many;
+- `'… behind'` — no noun;
+- `'×$count'` — no noun.
+
+#### Implementation
+1. **New `lib/utils/pluralize.dart`:**
+   ```dart
+   /// The noun for [count]: [singular] when [count] is exactly 1, otherwise [plural].
+   String pluralize(int count, String singular, String plural) => count == 1 ? singular : plural;
+   ```
+2. **Exact strings.** Convert summary-map counts with `(value as num?)?.toInt() ?? 0` before using them.
+   - Lobby: `'$n ${pluralize(n, 'SUSPECT', 'SUSPECTS')} JOINED'`
+   - Deceptions: `'$n ${pluralize(n, 'Deception', 'Deceptions')}'`
+   - Found by: at **0**, `'Found by no one'`; otherwise `'Found by only $n ${pluralize(n, 'player', 'players')}'`
+   - Wrong votes: `'$n wrong ${pluralize(n, 'vote', 'votes')}'`
+   - Fooled: `'Fooled $n ${pluralize(n, 'player', 'players')}'` (unchanged output)
+   - Head-to-head: `'… fooled … $n ${pluralize(n, 'time', 'times')}'` (unchanged output)
+3. **Afterwards,** `grep -nE "== 1\) \? '" lib/` returns nothing: every count-noun choice goes through `pluralize`.
+
+#### Validation
+1. **`test/pluralize_test.dart`:** `pluralize` at 0, 1, 2 and 10.
+2. **Widget cases for every changed label at 0, 1 and 2,** on the real screens: `GameOverScreen` with a match summary, and `LobbyScreen` with 1 and 2 players. Reuse the harnesses in `test/game_over_screen_test.dart` and `test/lobby_parlor_sheet_test.dart`. The falsifying cases are the 1-cases and *Found by no one*.
+3. **Update the four pinned assertions** (THE LOOP rule 12 — the assertion changes, not the production code):
+   - `test/game_over_screen_test.dart:377` and `test/badge_pills_overflow_test.dart:92`: `'Found by only 0 players'` → `'Found by no one'`;
+   - `test/lobby_parlor_sheet_test.dart:81` and `:103`: `'1 SUSPECTS JOINED'` → `'1 SUSPECT JOINED'`, plus the comment at `:86`.
+   - **Leave** `'10 SUSPECTS JOINED'` (`:130`), `'3 wrong votes'` and `'4 wrong votes'` as they are.
+4. **Falsify (compiling faults):**
+   - (a) `pluralize` always returns `plural` → every 1-case fails;
+   - (b) the *Found by no one* branch removed → the 0-case fails;
+   - (c) the lobby site restored to its old literal → its 1-case fails.
+   Paste the failures under `Falsification:`.
+5. **Device check (REQUIRED):**
+   - On the iPhone SE simulator with a reset Keychain (§0.1), create a room as host: the lobby reads **`1 SUSPECT JOINED`**.
+   - Tap `DEBUG: ADD 9 BOTS`: it reads **`10 SUSPECTS JOINED`**.
+   - Take screenshots with `xcrun simctl io`. The game-over labels are covered by the widget tests; AL2's screenshots show them on the web.
+6. **The nine §1 gates, bare:** analyze **0 / 0 / 170**; `flutter test` = 466 + the new cases; functions 167; the rest exit 0.
+7. **`./scripts/run_web_smoke.sh` exits 0** (the lobby is recognised by its room code, not its header).
+
+**Blast radius:**
+- `lib/utils/pluralize.dart` (new), `lib/screens/lobby_screen.dart`, `lib/screens/game_over_screen.dart`;
+- the tests above;
+- `docs/design_ui_direction.md` (a copy rule: *"a count and its noun always agree, through `pluralize`; zero gets its own phrase where 'only 0' would read wrongly"*);
+- the tracker (a §3 row; delete Issue 196's block).
+
+### 2.2 AL2 — A real responsive sweep; correct the W17–W19 record (Issue 197 → A)
+
+**What this means for the user.** The web app is played in phone browsers too, but nothing has ever shown its craft, vote, reveal or game-over screens at phone or tablet sizes. The record claims it has. After AL2 the smoke checks all four screens at three sizes in a real game, and the record says what was and wasn't checked.
+
+**The gap.** Issue 197 has the evidence. In brief:
+- `test/web_e2e/run_full_playthrough.js` section I3 (about `:439–470`) saves a one-player lobby under the `<size>_craft/vote/reveal/gameover.png` names.
+- `docs/playthroughs/findings_web.md` W17–W19 (about `:280–330`) record PASS on those images.
+
+#### Implementation
+Change `test/web_e2e/*.js` and docs; copy new PNGs into the evidence folder by hand. No `lib/` change.
+1. **Delete I3's lobby-only loop.** Keep a lobby capture: during the main game's lobby, sweep the three sizes as in step 2, with phase `lobby`.
+2. **Add `sweepViewports(page, { code, phase, keyControls })` to `playthrough_helpers.js`.**
+   - **For each size** — `{375, 812}`, `{768, 1024}`, `{1280, 800}`:
+     1. `page.setViewportSize`, wait 1.5 s for Flutter to lay out again, then `enableSemantics`.
+     2. Assert `readRoom(code).currentPhase === phase`, using the room's phase names: `lobby`, `truth`, `vote`, `reveal`, `gameOver` (checked in `functions/src/index.ts`).
+     3. Assert every listed key control is present, scrolling vertically with the mouse wheel to find it if needed. Its rect must sit **inside the viewport horizontally** (`x >= -1` and `x + width <= width + 1`).
+     4. Save `w21_<w>x<h>_<phase>.png` to the shot directory.
+     5. Log every semantics node whose right edge passes the viewport width, as information only: the deck carousel peeks past the edge on purpose.
+   - **Restore 1280×800 at the end,** in a `finally`.
+3. **Call it on P1 (the host) during the main game:**
+   - **truth:** in W6, before P1 types — the key controls are the craft `TEXTAREA` and `SUBMIT DOSSIER`;
+   - **vote:** in W8, before P1 votes. If P1 is the reader, use `I'M READY` / `NOT READY`, otherwise `TAP A CARD TO CHOOSE`; read the room to tell which.
+   - **reveal:** in W9 — `THE REVEAL`;
+   - **gameOver:** after W10 — `Share Case File`.
+
+   Add any new literal to `ui_strings.js`. A key control that is missing or runs past the viewport edge **fails the run**. If it is a real layout defect, STOP and file it with options; do not change `lib/` in AL2.
+4. **Run `./scripts/run_web_smoke.sh`;** it must exit 0. Then copy that run's 15 `w21_*.png` (5 phases × 3 sizes) from its shot directory into `docs/playthroughs/evidence/`. **Open each one** and check it shows the named screen at the named size (lesson: open the artefact). Never overwrite an existing file.
+5. **`findings_web.md`:**
+   - **Correct W17, W18 and W19 in place:**
+     - Change each `- **Verdict:** PASS` to `- **Verdict:** NOT RUN — the in-game screens were never captured (recorded PASS on August 30; corrected <date>, Issue 197; superseded by W21)`.
+     - Add `- **Reason:** the cited Crafting, Voting, Reveal and GameOver images show a one-player lobby (October 14: w17 craft = vote and reveal = gameover by checksum; w18 vote = reveal); only the Lobby image at each size shows what it names.`
+     - **Keep** the Observed lists and the old files.
+   - **Add W21 — Responsive Sweep: lobby and in-game screens at three web sizes,** in the W17 format:
+     - **Verdict:** PASS
+     - **What I did:** the run's date, the main-game room code and the three sizes
+     - **Observed:** the 15 `docs/playthroughs/evidence/w21_*.png` paths
+     - **Expected:** each screen's key controls inside the viewport at each size
+     - **Limit, stated:** a resized desktop page, with no touch emulation and no mobile user agent
+
+#### Validation
+1. **Falsify (test code; each fault runs through the real runner from a scratch clone, reset with `git reset --hard`):**
+   - (a) a key control's horizontal bound tightened to `width - 400` → the run fails at the first sweep, naming the control and the size;
+   - (b) the sweep asserts phase `vote` during W6 → it fails on the phase;
+   - (c) the sweep skipped → the run passes, but `w21_*` is missing, which the PNG check in step 3 catches by name.
+2. **Acceptance:** the runner exits 0 twice. Every run's shot directory holds all 15 `w21_*` names; the runner's PNG check stays ≥ 20.
+3. **Evidence:**
+   - `./scripts/check_playthrough_evidence.sh docs/playthroughs/findings_web.md` exits 0, and so do the no-argument run and the other three files.
+   - Counted with `grep -c '^- \*\*Verdict:\*\* NOT RUN'`, W17–W19 are NOT RUN blocks with a Reason line.
+   - W21 cites 15 files that exist.
+   - `git diff --stat docs/playthroughs/evidence` shows **only additions**.
+4. **The nine §1 gates, bare** (no `lib/` change); `check_web_e2e_strings.sh` exits 0.
+5. **One commit:** `test(web): sweep every phase at three sizes and correct the W17–W19 record (Wave AL / AL2, Issue 197 Option A)`. Include `Falsification:` (a–c) and `Device check: NOT RUN — no app change; the sweep is the check`. Do not push.
+
+**Blast radius:**
+- `test/web_e2e/playthrough_helpers.js`, `run_full_playthrough.js`, `ui_strings.js`;
+- `docs/playthroughs/findings_web.md`, `docs/playthroughs/evidence/w21_*.png` (new);
+- this guide (remove AK1's I3 accepted-equivalent bullet; §1's smoke row notes the sweep);
+- the tracker (a §3 row; delete Issue 197's block).
+- No design doc.
 
 ---
 
@@ -138,6 +264,8 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 | **AI14** (189 → B) | `3bccfb3` | Coverage investigated: outcome (c), nothing works; the crash is in the Dart VM; 3.47.7 has it too. | Spot check: `game_service.dart` 0, control `lobby_screen.dart` 1. **Correction:** the other absent files vary between runs (36 source files on October 13, 20 for AI14). |
 | **AI16** (194 → A) | `75abb36` | Decision recorded; no code. | Docs only; §2.2's checks re-run with positive controls, doc gates exit 0. |
 | **AJ1** (release) | `adb05fc` | `pubspec.yaml` → `1.2.0+9`; the iOS archive was built and verified for the user to upload. The web deploy did not run (Issue 195 → Wave AK). | Archive read October 13: 1.2.0 / 9 / `{ 1 }`, privacy manifest present, 0 `marionette` strings (control 1). The stale archive read 1.1.0 / 8 / `{ 1, 2 }`. |
+| **AK1** (195 → A, extended) | `dd4d3ce` | Both web playthroughs repaired (author-aware W7, the deck walked with `Next option`, the host's PROCEED, a room-document oracle, no silent loop or vacuous pass), plus `scripts/run_web_smoke.sh`. | October 14: runner exit 0 (280 s, 41 PNGs); Bob never voting → `STALLED`, exit 1; a 3-tick cap → *did not reach game over*, exit 1. |
+| **AK2** (release) | `28f8a06` | 1.2.0 (9) deployed to web hosting with the user's go-ahead. | Live `version.json` 1.2.0 / 9; `/` and `/assets/.env` 200; deploy fresh; iOS archive untouched. |
 | **192 → B** | `3a36e91` | AH1's device check closed by acceptance (simulator observation plus source trace). | Nothing to falsify. |
 
 ### Earlier waves
@@ -162,6 +290,10 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **AI11: the `already_submitted` emulator case uses a 4-player room with two fooled voters.** With one, the window closes on the first guess and a second guess meets `deadline_passed`.
 - **AI12: the two `Matrix4` sites hoist the scale into a local** (`tokenScale`, `scale`) before `scaleByDouble(x, x, x, 1.0)`; the numbers are the same.
 - **AI15: the avatar tokens live on the entry screen, not the parlour.** Kick badges were read in the Inspector for Bots 1–3 of 9; the tree dump shows all nine identical.
+- **AK1: the lobby's House Rules controls are clicked through the DOM (`domClick`), not with the pointer.** They sit behind the full-width suspects sheet, and pointer clicks there never registered. Each click is checked against the room document before and after.
+- **AK1: W10 asserts at least one score chip, not one per player.** A reader whose score does not change gets no chip; the app is right.
+- **AK1: the runner checks more than the spec asked:** `.env`, Playwright and Java up front (exit 2); at least 20 PNGs; free ports afterwards; a 570 s watchdog that explains itself before the 600 s kill. It also refuses a shot directory inside the tracked evidence folder.
+- **AK1: the responsive sweep (I3) still saves the lobby under the craft, vote, reveal and game-over names.** AL2 replaces it (Issue 197 → A); remove this bullet then.
 - **AI7: the unmask heading and the game-over stat line use `maxLines: 3`, not 2.** Measured with the real fonts, two lines cannot hold either string at 320 pt × 1.3. `PrimaryButton`'s scale there is **0.653**.
 - **AI8: the named-control recipe is `Semantics(container: true, button: true, label: …, onTap: <the same callback>, excludeSemantics: true, child: …)`** (lesson §2.46).
   - AI8 also fixed `PEEK INSIDE` with an invisible 44-pt-tall box.
@@ -206,6 +338,13 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **`lastReaction` / `lastReactionAt` are deliberately retained dead fields.** **`lib/utils/prompt_decks.dart` is generated.**
 - **The web E2E string contract (Wave AE)** and the **Wave AB** and **Wave AA** invariants stand as recorded in the design docs.
 
+**The web smoke (AK1)**
+- **Run `./scripts/run_web_smoke.sh` before every web deploy;** it must exit 0.
+- **It never writes `docs/playthroughs/evidence/`.** Re-capturing cited evidence is a deliberate, separate act under the evidence gate's rules.
+- **Its emulator-only build lives in a temp directory and is never deployed.** Only `flutter build web --release` with no `--dart-define`, into `build/web`, is deployable.
+- **Never open the live web app in a browser to check a deploy:** `lib/main.dart:65` signs in anonymously at boot. Use `version.json` and HTTP status codes.
+- **`build/ios/archive/` is the user's upload artefact:** never delete or rebuild it until the user says the upload is done.
+
 **Assessed and rejected — do NOT re-propose:** everything listed in the September guides and the tracker §3, including **migrating `withOpacity` → `withValues` (139 C)**. October 10 rejections: 178 A and C; 179 B; 180 B and C; 181 B; 182 B; 183 B; 184 B; 185 B; 186 B; 187 B; 188 B and C; 189 A; 190 B. October 12 rejections: 192 A; 193 A and C. October 13 rejections: 194 B and C.
 
 **There is no chat or emote feature.**
@@ -244,9 +383,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 ## THE LOOP — for any future item
 
 ```
-(1) The queue is empty (§2): STOP unless there is a new user selection or
-    instruction, a red gate, or a user report. Never fill in or edit a
-    `Your selection:` line.
+(1) Take Wave AL in order (§2): AL1, then AL2. After AL2 the queue is empty:
+    STOP unless there is a new user selection or instruction, a red gate, or a
+    user report. Never fill in or edit a `Your selection:` line.
 (2) "Implemented to spec" and "fixed the problem" are different claims. Check
     the second against the ORIGINAL REPORT in the tracker, not the spec.
 (3) If a fix depends on how a platform or library behaves, read the vendored
@@ -279,8 +418,8 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 
 ## Close-out
 
-**The queue is empty. Do not invent work.** The only legitimate triggers for further action are:
-1. a new user selection or instruction;
+**When AL2 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are:
+1. a new user selection or instruction (a new guide rewrite specs it first);
 2. a §1 gate going red (investigate, then file with options);
 3. a user or tester report — for example *Something went wrong. Try again.* while offline, which re-opens the 192 inference (§4).
 
