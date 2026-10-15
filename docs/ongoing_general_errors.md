@@ -8,6 +8,30 @@
 
 ## 1. Open & in-flight
 
+**Wave AL verified, October 15, 2026 — AL1 and AL2 hold.** Checked on `3a8f7f1` by re-running the battery, the runner and a fault for each item, not by reading the commit bodies.
+- **Battery, all bare, on `HEAD`:**
+  - analyze 0 / 0 / **170**, exit 1;
+  - `flutter test` **475**, exit 0;
+  - functions build exit 0; functions test **167**;
+  - decks, all five evidence invocations and web strings: exit 0;
+  - deploy FRESH;
+  - iOS release build exit 0 (50.1MB).
+- **AL1, from a scratch clone:**
+  - Control: the four affected test files pass **26 / 26**.
+  - Fault: `pluralize` always returns the plural → **+21 −5**, failing on `1 Deception`, `1 SUSPECT JOINED` (×3) and `pluralize_test`'s `'vote'` — exactly as AL1 recorded.
+  - The design rule is in `design_ui_direction.md` (*Count labels agree with their numbers*).
+- **AL2:**
+  - **Runner acceptance:** exit 0 in 315 s; all 15 `w21_*` names in the shot folder; P2 forged Alice's card.
+  - **Fault: the W6 sweep expects phase `vote`** → runner exit 1, *"sweep vote @375x812: the room is in phase "truth", expected "vote""* after 40 s, with only the lobby's 3 `w21_*` names.
+  - **The evidence diff since `d44fc29`** is 15 additions and nothing else, and W21 cites all 15.
+  - **W17–W19** are NOT RUN with a Reason.
+  - **AL2's correction of my own draft is right:** `w17_lobby.png` shows the title screen (THE GUEST LEDGER), not a lobby, so *"only the Lobby image is real"* would have been false.
+- **Follow-ups:**
+  - **AM1 (under Issue 196 → A):** the four remaining count labels AL1 found but left out of scope, in five places — `Waiting for 1 players...` twice, `… × 1 rounds` in the deck-too-small warning (rounds default to 1), and `… prompts from 1 players` in the deck carousel. The design doc's own *"Not yet under the rule"* paragraph lists them.
+  - **AM2 (under Issue 195 → A):** AL2's one-in-twelve false FAIL in the match-summary script, an accusation clicked while the panel was still sliding in.
+  - **Issue 198:** the vote screen's deck navigation sits below the fold.
+- **Checked and left alone:** `Waiting on X of N players to ready up` (`lobby_screen.dart:376`) is only shown with at least 3 active players, so N ≥ 2. `$N of $M ballots sealed` has M ≥ 2 by the 3-player floor. `That is n characters` appears only above the 100-character limit. AL1 was right about all three.
+
 **Wave AK verified, October 14, 2026 — AK1 and AK2 hold; 1.2.0 (9) is live on the web.** Checked on `28f8a06` by running the runner and re-falsifying it, not by reading the commit bodies.
 - **Scope:** nothing in `lib/`, `functions/`, `ios/` or `pubspec.*` changed since `adb05fc`; only `test/web_e2e/*.js`, `scripts/run_web_smoke.sh`, `README.md` and docs did.
 - **AK1, the runner (`./scripts/run_web_smoke.sh`), run from a scratch clone of `HEAD`:**
@@ -123,7 +147,33 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-Issues 1–197 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Eight selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, 194 A and 195 A on October 13, and 196 A and 197 A on October 14. **No issue is open.** The user approved the release of **1.2.0 (9)** in chat on October 13. AJ1 built and verified its iOS archive for the user to upload; AK1 repaired the web smoke that had blocked its web deploy, and AK2 deployed 1.2.0 (9) to web hosting on October 14 with the user's go-ahead (§3). AL1 (Issue 196, count labels) and AL2 (Issue 197, the responsive sweep) are done (§3); AL1's wording fixes are in the code only and reach players with the next build (1.2.1 (10) or later). The TestFlight upload of the iOS archive is still the user's step.
+Issues 1–197 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Eight selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, 194 A and 195 A on October 13, and 196 A and 197 A on October 14. **One issue is open: 198** (the vote screen's deck controls), found while verifying AL2 on October 15. **The user chose Option A in chat on October 15.** It is specced as guide **AM3**. Its selection line is left blank, because the choice is recorded here. Two follow-ups are approved under existing selections and specced as guide **Wave AM**: AM1 brings the remaining count labels under AL1's rule (Issue 196 → A), and AM2 removes a rare false failure from the web smoke (Issue 195 → A). The user approved the release of **1.2.0 (9)** in chat on October 13. AJ1 built and verified its iOS archive for the user to upload; AK1 repaired the web smoke that had blocked its web deploy, and AK2 deployed 1.2.0 (9) to web hosting on October 14 with the user's go-ahead (§3). AL1 (Issue 196, count labels) and AL2 (Issue 197, the responsive sweep) are done (§3); AL1's wording fixes are in the code only and reach players with the next build (1.2.1 (10) or later). The TestFlight upload of the iOS archive is still the user's step.
+
+### Issue 198: On the vote screen, PREV / NEXT and the dots sit below the fold, and a voter's front card is often their own sealed forgery
+**Status**: ⚠️ Confirmed Unresolved — AL2 noted it on October 14 without filing it (no horizontal overflow, nothing to fail); confirmed October 15 from W21's evidence.
+- **What a voter sees:** in `docs/playthroughs/evidence/w21_375x812_vote.png` and `w21_1280x800_vote.png`, the deck's navigation row (PREV, the jump dots, NEXT) is below the visible area or under the pinned `TAP A CARD TO CHOOSE` bar. At 1280×800 only its top edge shows. It is fully visible at 768×1024.
+- **In both images the front card is the voter's own forgery,** stamped SEALED and not tappable. So the screen shows one card that can't be chosen, a disabled button, and a small *"2 behind"* hint. Swiping and scrolling both work, but nothing visible says so.
+- **The cause:** `docs/design_ui_direction.md` (stacked deck, Issue 160) promises *"Six options fit inside a 320×640 pt viewport with no vertical scrolling"*, but that is tested on `CardGrid` alone (`test/vote_option_truncation_test.dart` at 320×640, `test/stacked_deck_navigation_test.dart` at 375×812). On the full vote screen, the header, the *VOTING ON* avatar, two subtitles, the prompt card and the discussion line take about 450 pt above the deck.
+- **iOS uses the same screen code.** The iPhone SE is 667 pt tall, shorter than the 812 observed, so the row is expected to be at least as hidden there; this was **not observed on the SE** in this pass.
+- **Voting is not blocked** (swipe, scroll and the dots all work once found), and nothing is broken in the layout, so this is a design question, not a defect. In a three-player game each voter's own forgery is one of the card's three options, so with a shuffled order it is the front card about one time in three (both W21 vote images show it).
+
+**Option A (recommended)**: **Keep the deck's navigation in view, and open the deck on a card the voter can choose.**
+- Move the PREV · dots · NEXT row into the pinned bottom bar, directly above `TAP A CARD TO CHOOSE`, so it is visible at every height. AI8's 44-pt sizes and spoken names stay.
+- `CardGrid` opens on the first option the viewer can vote for. For the target, who votes on nothing, it opens on card I as today.
+- Validate on the full vote screen, not `CardGrid` alone: at 320×640, 375×667, 375×812 and 1280×800, the row and the button are fully inside the viewport and the front card is votable. Run AL2's sweep and the AI8 tap-target tests unchanged.
+  - *Pros*: The voter always sees how to move through the deck and starts on a card they can pick. It turns the design promise into a screen-level guarantee.
+  - *Cons*: The pinned bar grows by about 44 pt, which covers more of the scrolling content on a small phone. It touches the Issue 160 layout and its tests, and it reaches players only in a new build.
+
+**Option B**: **Only open the deck on the first card the voter can choose.**
+  - *Pros*: The smallest change. It removes the confusing start (a sealed card and a disabled button), and the layout and its tests stay as they are.
+  - *Cons*: PREV / NEXT and the dots stay below the fold; a voter who wants to browse must still find swipe or scroll.
+
+**Option C**: **Leave the screen as it is, and correct the design doc.** State that the 320×640 promise covers `CardGrid` only, and that the vote screen scrolls.
+  - *Pros*: No code change.
+  - *Cons*: The design claim gets weaker instead of true, and the confusing start stays.
+
+Your selection: _____
+
 
 ## 2. Lessons that still bite
 
