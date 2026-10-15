@@ -308,12 +308,17 @@ async function run(browser) {
     timeoutMs: 15000,
     description: `to show the ${hostIsReader ? 'reader' : 'voter'}'s vote screen`
   });
+  // The deck's PREV and NEXT live in the vote screen's pinned bar (Wave AM / AM3), so both are present at every size.
   await sweepViewports(p1, {
     code,
     phase: 'vote',
-    keyControls: hostIsReader
-      ? [{ name: `${UI.IM_READY} / ${UI.NOT_READY}`, find: n => n.role === 'button' && (n.text === UI.IM_READY || n.text === UI.NOT_READY) }]
-      : [{ name: UI.TAP_A_CARD_TO_CHOOSE, find: n => n.role === 'button' && n.text === UI.TAP_A_CARD_TO_CHOOSE }]
+    keyControls: [
+      hostIsReader
+        ? { name: `${UI.IM_READY} / ${UI.NOT_READY}`, find: n => n.role === 'button' && (n.text === UI.IM_READY || n.text === UI.NOT_READY) }
+        : { name: UI.TAP_A_CARD_TO_CHOOSE, find: n => n.role === 'button' && n.text === UI.TAP_A_CARD_TO_CHOOSE },
+      { name: UI.PREVIOUS_OPTION, find: n => n.role === 'button' && (n.ariaLabel === UI.PREVIOUS_OPTION || n.text === UI.PREVIOUS_OPTION) },
+      { name: UI.NEXT_OPTION, find: n => n.role === 'button' && (n.ariaLabel === UI.NEXT_OPTION || n.text === UI.NEXT_OPTION) }
+    ]
   });
 
   // Bob votes for the truth, Charlie for a forgery (so the unmask window opens whenever Charlie

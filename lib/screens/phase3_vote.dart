@@ -44,6 +44,12 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
   String? _localSelectedAuthorId;
   final Map<String, String> _targetForgeryGuesses = {};
 
+  /// The deck's position for the card being voted on. The navigation row is pinned under the scroll
+  /// view, so the screen holds the position and hands it to both (Issue 198 / AM3). A new controller per
+  /// card means each reader's deck starts fresh instead of on the previous card's index.
+  DeckController? _deckController;
+  String? _deckCardId;
+
   void _onAttributeForgery(GameService gs, String cardId, String optionId, String authorId) async {
     setState(() {
       if (authorId.isEmpty) {
@@ -383,6 +389,18 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
       return VotingAnswer(authorId: opt.id, text: opt.text, isSelfAnswer: isSelf);
     }).toList();
 
+    if (_deckController == null || _deckCardId != cardId) {
+      final previous = _deckController;
+      _deckController = DeckController(length: gridAnswers.length);
+      _deckCardId = cardId;
+      // The old controller is still listened to until this build swaps it out, so it goes afterwards.
+      if (previous != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+      }
+    }
+    final deckController = _deckController!;
+    final selectedIndex = gridAnswers.indexWhere((a) => a.authorId == _localSelectedAuthorId);
+
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 500),
       child: Column(
@@ -504,6 +522,9 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                     currentPlayerId: me.id,
                     myOptionIdForThisCard: myOptionId,
                     isTarget: isTarget,
+                    controller: deckController,
+                    showNavigation: false,
+                    openOnFirstVotable: !isTarget,
                     onSelect: isTarget ? (_) {} : (authorId) {
                       setState(() {
                         _localSelectedAuthorId = authorId;
@@ -520,6 +541,11 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
             ),
           ),
           const SizedBox(height: 16),
+          DeckNavigationBar(
+            controller: deckController,
+            selectedIndex: selectedIndex >= 0 ? selectedIndex : null,
+          ),
+          const SizedBox(height: 8),
           if (isTarget) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -684,6 +710,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
   }
   @override
   void dispose() {
+    _deckController?.dispose();
     super.dispose();
   }
 }

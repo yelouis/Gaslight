@@ -78,6 +78,222 @@ class AutoSizedAnswerText extends StatelessWidget {
   }
 }
 
+/// Where a stacked deck is, shared by the [CardGrid] that draws it and the [DeckNavigationBar] that
+/// drives it. The vote screen keeps the navigation row in its pinned bar, outside the scroll view the
+/// deck lives in, so the two cannot share a `State` (Issue 198 / AM3).
+///
+/// [goTo], [next] and [previous] clamp to the deck and notify only when the index changes.
+class DeckController extends ChangeNotifier {
+  DeckController({int length = 0, int index = 0})
+      : _length = length,
+        _index = length <= 0 ? 0 : index.clamp(0, length - 1);
+
+  int _index;
+  int _length;
+
+  /// The option at the front of the deck.
+  int get index => _index;
+
+  /// How many options the deck holds.
+  int get length => _length;
+
+  void next() => goTo(_index + 1);
+
+  void previous() => goTo(_index - 1);
+
+  void goTo(int target) {
+    final clamped = _length <= 0 ? 0 : target.clamp(0, _length - 1);
+    if (clamped == _index) return;
+    _index = clamped;
+    notifyListeners();
+  }
+
+  /// Sets the deck's size and position without notifying. Only the [CardGrid] that holds the deck's
+  /// contents calls it, from `initState` and `didUpdateWidget`: notifying there would mark the
+  /// navigation bar dirty in the middle of a build.
+  void _seed(int length, int index) {
+    _length = length;
+    _index = length <= 0 ? 0 : index.clamp(0, length - 1);
+  }
+}
+
+/// The deck's PREV · jump dots · NEXT row (Issue 160, sized and named by AI8 / Issue 187, moved out of
+/// [CardGrid] by AM3 / Issue 198 so a screen can pin it where it is always on screen).
+///
+/// [selectedIndex] is the option the viewer has chosen: its dot is oxblood when it is not the front one.
+class DeckNavigationBar extends StatelessWidget {
+  final DeckController controller;
+  final int? selectedIndex;
+
+  const DeckNavigationBar({super.key, required this.controller, this.selectedIndex});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final index = controller.index;
+        final length = controller.length;
+        final canGoBack = index > 0;
+        final canGoForward = index < length - 1;
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Compact PREV button
+            Material(
+              color: Colors.transparent,
+              child: Semantics(
+                button: true,
+                enabled: canGoBack,
+                label: 'Previous option',
+                onTap: canGoBack ? controller.previous : null,
+                excludeSemantics: true,
+                child: InkWell(
+                  key: const Key('stacked_deck_prev_button'),
+                  onTap: canGoBack ? controller.previous : null,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+                    decoration: BoxDecoration(
+                      color: canGoBack ? AppColors.brass.withValues(alpha: 0.15) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: canGoBack
+                            ? AppColors.brass.withValues(alpha: 0.5)
+                            : AppColors.brass.withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.chevron_left,
+                          size: 16,
+                          color: canGoBack ? AppColors.brass : AppColors.brass.withValues(alpha: 0.25),
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          'PREV',
+                          style: TextStyle(
+                            fontFamily: 'CormorantGaramond',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1.0,
+                            color: canGoBack ? AppColors.brass : AppColors.brass.withValues(alpha: 0.25),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Dot indicators. Each slot is a 44-pt hit box while the dots fit; with many
+            // options the slots shrink below 44 pt wide and PREV / NEXT stay the accessible
+            // path (Issue 187).
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (int i = 0; i < length; i++)
+                    Flexible(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 44, maxWidth: 44),
+                        child: Semantics(
+                          button: true,
+                          selected: i == index,
+                          label: 'Show option ${i + 1} of $length',
+                          onTap: () => controller.goTo(i),
+                          excludeSemantics: true,
+                          child: GestureDetector(
+                            key: Key('stacked_deck_dot_$i'),
+                            onTap: () => controller.goTo(i),
+                            behavior: HitTestBehavior.opaque,
+                            child: Center(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: i == index ? 14 : 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  color: i == index
+                                      ? AppColors.brass
+                                      : (selectedIndex == i)
+                                          ? AppColors.oxblood
+                                          : AppColors.brass.withValues(alpha: 0.3),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: (selectedIndex == i) ? AppColors.oxblood : Colors.transparent,
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Compact NEXT button
+            Material(
+              color: Colors.transparent,
+              child: Semantics(
+                button: true,
+                enabled: canGoForward,
+                label: 'Next option',
+                onTap: canGoForward ? controller.next : null,
+                excludeSemantics: true,
+                child: InkWell(
+                  key: const Key('stacked_deck_next_button'),
+                  onTap: canGoForward ? controller.next : null,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+                    decoration: BoxDecoration(
+                      color: canGoForward ? AppColors.brass.withValues(alpha: 0.15) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: canGoForward
+                            ? AppColors.brass.withValues(alpha: 0.5)
+                            : AppColors.brass.withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'NEXT',
+                          style: TextStyle(
+                            fontFamily: 'CormorantGaramond',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1.0,
+                            color: canGoForward ? AppColors.brass : AppColors.brass.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: canGoForward ? AppColors.brass : AppColors.brass.withValues(alpha: 0.25),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// Treatment 3: Stacked Deck with Peek (Issue 160)
 ///
 /// Displays options as a physical parlour card deck where the active option
@@ -101,6 +317,19 @@ class CardGrid extends StatefulWidget {
   final void Function(String optionId, String authorId)? onAttributeForgery;
   final int initialIndex;
 
+  /// The deck's position, when the screen drives it from outside (the vote screen's pinned
+  /// [DeckNavigationBar]). Null keeps the position in this widget, as it always was.
+  final DeckController? controller;
+
+  /// Whether this widget draws the PREV · dots · NEXT row under the deck. A screen that renders
+  /// its own [DeckNavigationBar] turns it off.
+  final bool showNavigation;
+
+  /// Open on the first option the viewer can choose, rather than on [initialIndex]. It applies
+  /// only when nothing is selected and the viewer is not the target, and it falls back to
+  /// [initialIndex] when no option is votable.
+  final bool openOnFirstVotable;
+
   const CardGrid({
     super.key,
     required this.answers,
@@ -113,6 +342,9 @@ class CardGrid extends StatefulWidget {
     this.candidateAuthors,
     this.onAttributeForgery,
     this.initialIndex = 0,
+    this.controller,
+    this.showNavigation = true,
+    this.openOnFirstVotable = false,
   });
 
   @override
@@ -120,58 +352,74 @@ class CardGrid extends StatefulWidget {
 }
 
 class _CardGridState extends State<CardGrid> {
-  late int _currentIndex;
+  late DeckController _controller;
+  bool _ownsController = false;
   double _dragDistance = 0;
+
+  int get _currentIndex => _controller.index;
 
   @override
   void initState() {
     super.initState();
+    _attachController();
+  }
+
+  /// The deck's position lives in a [DeckController]: the screen's, or one this widget keeps for itself.
+  /// Attaching seeds it with where the deck opens.
+  void _attachController() {
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? DeckController();
+    _controller._seed(widget.answers.length, _startIndex());
+    _controller.addListener(_onDeckChanged);
+  }
+
+  void _detachController() {
+    _controller.removeListener(_onDeckChanged);
+    if (_ownsController) _controller.dispose();
+  }
+
+  void _onDeckChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// A selection wins; otherwise a viewer who can vote opens on the first option they can choose when
+  /// asked to; otherwise [CardGrid.initialIndex].
+  int _startIndex() {
+    final last = math.max(0, widget.answers.length - 1);
     if (widget.selectedAuthorId != null) {
       final selIdx = widget.answers.indexWhere((a) => a.authorId == widget.selectedAuthorId);
-      _currentIndex = selIdx != -1 ? selIdx : widget.initialIndex.clamp(0, math.max(0, widget.answers.length - 1));
-    } else {
-      _currentIndex = widget.initialIndex.clamp(0, math.max(0, widget.answers.length - 1));
+      if (selIdx != -1) return selIdx;
+    } else if (widget.openOnFirstVotable && !widget.isTarget) {
+      final firstVotable = widget.answers.indexWhere((a) => !_isAnswerUnvotable(a));
+      if (firstVotable != -1) return firstVotable;
     }
+    return widget.initialIndex.clamp(0, last);
   }
 
   @override
   void didUpdateWidget(CardGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_currentIndex >= widget.answers.length) {
-      _currentIndex = math.max(0, widget.answers.length - 1);
+    if (widget.controller != oldWidget.controller) {
+      _detachController();
+      _attachController();
+    } else {
+      // The same deck with a different number of options: keep the position unless it is now past the end.
+      _controller._seed(widget.answers.length, _controller.index);
     }
   }
 
-  void _peelNext() {
-    if (_currentIndex < widget.answers.length - 1) {
-      setState(() {
-        _currentIndex++;
-      });
-    }
+  @override
+  void dispose() {
+    _detachController();
+    super.dispose();
   }
 
-  void _unpeelPrev() {
-    if (_currentIndex > 0) {
-      setState(() {
-        _currentIndex--;
-      });
-    }
-  }
+  void _peelNext() => _controller.next();
 
-  void _goToIndex(int index) {
-    if (index >= 0 && index < widget.answers.length && index != _currentIndex) {
-      setState(() {
-        _currentIndex = index;
-      });
-    }
-  }
+  void _unpeelPrev() => _controller.previous();
 
   void _onCardTap(int index, VotingAnswer ans) {
-    if (index != _currentIndex) {
-      setState(() {
-        _currentIndex = index;
-      });
-    }
+    _controller.goTo(index);
     if (!_isAnswerUnvotable(ans)) {
       widget.onSelect(ans.authorId);
     }
@@ -194,6 +442,7 @@ class _CardGridState extends State<CardGrid> {
     final theme = Theme.of(context);
     final activeAnswer = widget.answers[_currentIndex];
     final isSelected = widget.selectedAuthorId == activeAnswer.authorId;
+    final selectedIndex = widget.answers.indexWhere((a) => a.authorId == widget.selectedAuthorId);
 
     // Order items in stack: background peek cards first, front active card on top
     final stackChildren = <Widget>[];
@@ -344,173 +593,13 @@ class _CardGridState extends State<CardGrid> {
         ),
         const SizedBox(height: 10),
 
-        // Navigation Controls: Compact PREV, Interactive Dots, Compact NEXT
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // Compact PREV button
-            Material(
-              color: Colors.transparent,
-              child: Semantics(
-                button: true,
-                enabled: _currentIndex > 0,
-                label: 'Previous option',
-                onTap: _currentIndex > 0 ? _unpeelPrev : null,
-                excludeSemantics: true,
-                child: InkWell(
-                  key: const Key('stacked_deck_prev_button'),
-                  onTap: _currentIndex > 0 ? _unpeelPrev : null,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
-                    decoration: BoxDecoration(
-                      color: _currentIndex > 0
-                          ? AppColors.brass.withValues(alpha: 0.15)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: _currentIndex > 0
-                            ? AppColors.brass.withValues(alpha: 0.5)
-                            : AppColors.brass.withValues(alpha: 0.15),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.chevron_left,
-                          size: 16,
-                          color: _currentIndex > 0
-                              ? AppColors.brass
-                              : AppColors.brass.withValues(alpha: 0.25),
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          'PREV',
-                          style: TextStyle(
-                            fontFamily: 'CormorantGaramond',
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 1.0,
-                            color: _currentIndex > 0
-                                ? AppColors.brass
-                                : AppColors.brass.withValues(alpha: 0.25),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Dot indicators. Each slot is a 44-pt hit box while the dots fit; with many
-            // options the slots shrink below 44 pt wide and PREV / NEXT stay the accessible
-            // path (Issue 187).
-            Flexible(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (int i = 0; i < widget.answers.length; i++)
-                    Flexible(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 44, maxWidth: 44),
-                        child: Semantics(
-                          button: true,
-                          selected: i == _currentIndex,
-                          label: 'Show option ${i + 1} of ${widget.answers.length}',
-                          onTap: () => _goToIndex(i),
-                          excludeSemantics: true,
-                          child: GestureDetector(
-                            key: Key('stacked_deck_dot_$i'),
-                            onTap: () => _goToIndex(i),
-                            behavior: HitTestBehavior.opaque,
-                            child: Center(
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                width: i == _currentIndex ? 14 : 7,
-                                height: 7,
-                                decoration: BoxDecoration(
-                                  color: i == _currentIndex
-                                      ? AppColors.brass
-                                      : (widget.selectedAuthorId == widget.answers[i].authorId)
-                                          ? AppColors.oxblood
-                                          : AppColors.brass.withValues(alpha: 0.3),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: (widget.selectedAuthorId == widget.answers[i].authorId)
-                                        ? AppColors.oxblood
-                                        : Colors.transparent,
-                                    width: 1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-
-            // Compact NEXT button
-            Material(
-              color: Colors.transparent,
-              child: Semantics(
-                button: true,
-                enabled: _currentIndex < widget.answers.length - 1,
-                label: 'Next option',
-                onTap: _currentIndex < widget.answers.length - 1 ? _peelNext : null,
-                excludeSemantics: true,
-                child: InkWell(
-                  key: const Key('stacked_deck_next_button'),
-                  onTap: _currentIndex < widget.answers.length - 1 ? _peelNext : null,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
-                    decoration: BoxDecoration(
-                      color: _currentIndex < widget.answers.length - 1
-                          ? AppColors.brass.withValues(alpha: 0.15)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: _currentIndex < widget.answers.length - 1
-                            ? AppColors.brass.withValues(alpha: 0.5)
-                            : AppColors.brass.withValues(alpha: 0.15),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'NEXT',
-                          style: TextStyle(
-                            fontFamily: 'CormorantGaramond',
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 1.0,
-                            color: _currentIndex < widget.answers.length - 1
-                                ? AppColors.brass
-                                : AppColors.brass.withValues(alpha: 0.25),
-                          ),
-                        ),
-                        const SizedBox(width: 2),
-                        Icon(
-                          Icons.chevron_right,
-                          size: 16,
-                          color: _currentIndex < widget.answers.length - 1
-                              ? AppColors.brass
-                              : AppColors.brass.withValues(alpha: 0.25),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+        // Navigation Controls: PREV, jump dots, NEXT. A screen that pins its own [DeckNavigationBar]
+        // turns this one off.
+        if (widget.showNavigation)
+          DeckNavigationBar(
+            controller: _controller,
+            selectedIndex: selectedIndex >= 0 ? selectedIndex : null,
+          ),
 
         // AA16b: Target Forgery Attribution Chip Row
         if (widget.isTarget && widget.candidateAuthors != null)
