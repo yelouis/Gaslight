@@ -4,6 +4,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_icons.dart';
+import '../utils/pluralize.dart';
 import '../utils/prompt_decks.dart';
 import '../services/game_service.dart';
 import '../models/player_state.dart';
@@ -322,7 +323,7 @@ class _FolderCard extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '$totalContributions prompts from $contributorsCount players',
+                              '$totalContributions ${pluralize(totalContributions, 'prompt', 'prompts')} from $contributorsCount ${pluralize(contributorsCount, 'player', 'players')}',
                               style: TextStyle(
                                 fontFamily: 'Lora',
                                 fontSize: 8,

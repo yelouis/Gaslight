@@ -15,6 +15,7 @@ import '../widgets/confirm_dialog.dart';
 import '../widgets/auto_advance_timer.dart';
 import '../utils/callable_error_message.dart';
 import '../utils/text_similarity.dart';
+import '../utils/pluralize.dart';
 import '../utils/prompt_decks.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -452,7 +453,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
             ),
           ),
           const SizedBox(height: 10),
-          Text('Waiting for $unready players...', style: const TextStyle(color: Colors.white)),
+          Text('Waiting for $unready ${pluralize(unready, 'player', 'players')}...', style: const TextStyle(color: Colors.white)),
           const SizedBox(height: 16),
           WaitingOnRow(players: activeNonSpectators, readyMap: state.readyPlayers),
           if (_lastSubmittedAnswer != null) ...[

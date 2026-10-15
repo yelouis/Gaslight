@@ -13,6 +13,7 @@ import '../widgets/shared_ui.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/auto_advance_timer.dart';
 import '../widgets/card_grid.dart';
+import '../utils/pluralize.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_motion.dart';
@@ -292,7 +293,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                   ),
                 ),
                 const SizedBox(height: 10),
-                Text('Waiting for $unready players...', style: const TextStyle(color: Colors.white)),
+                Text('Waiting for $unready ${pluralize(unready, 'player', 'players')}...', style: const TextStyle(color: Colors.white)),
                 const SizedBox(height: 16),
                 WaitingOnRow(players: activeNonSpectators, readyMap: state.readyPlayers),
                 ParlourLedger(runningRivalries: state.runningRivalries),

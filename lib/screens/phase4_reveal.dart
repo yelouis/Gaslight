@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/game_service.dart';
 import '../services/audio_service.dart';
 import '../utils/callable_error_message.dart';
+import '../utils/pluralize.dart';
 import '../theme/app_icons.dart';
 import '../models/game_state.dart';
 import '../models/player_state.dart';
@@ -193,7 +194,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${bestPlayer.name}\'s lie fooled $maxVotes player${maxVotes > 1 ? 's' : ''}!',
+                    '${bestPlayer.name}\'s lie fooled $maxVotes ${pluralize(maxVotes, 'player', 'players')}!',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,

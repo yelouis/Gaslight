@@ -85,6 +85,13 @@ String lobbyCallableErrorMessage(Object error, {required LobbyAction action}) {
   return 'Something went wrong. Try again.';
 }
 
+/// The host's warning when the chosen deck cannot cover the game. Every count takes its own noun
+/// through [pluralize] (Issue 196 / AM1).
+String deckTooSmallMessage(int deckSize, int needed, int players, int rounds) =>
+    "Deck too small: selected deck has $deckSize ${pluralize(deckSize, 'prompt', 'prompts')} "
+    "but you need $needed ${pluralize(needed, 'prompt', 'prompts')} "
+    "($players ${pluralize(players, 'player', 'players')} × $rounds ${pluralize(rounds, 'round', 'rounds')}).";
+
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
 
@@ -371,7 +378,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
     } else if (activeCount <= forgeries) {
       return "Need more players than forgeries per card ($forgeries).";
     } else if (deckSize < totalPromptsNeeded) {
-      return "Deck too small: selected deck has $deckSize prompts but you need $totalPromptsNeeded prompts ($activeCount players × $totalRounds rounds).";
+      return deckTooSmallMessage(deckSize, totalPromptsNeeded, activeCount, totalRounds);
     } else if (!allNonHostsReady) {
       return "Waiting on ${totalNonHostsCount - readyNonHostsCount} of $totalNonHostsCount players to ready up.";
     }
