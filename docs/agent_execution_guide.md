@@ -1,10 +1,10 @@
-# Agent Execution Guide — Active Build: Wave AN (a compact vote header on short screens, Issue 199 → A3) — October 19, 2026
+# Agent Execution Guide — Active Build: one docs-only item (AO1, Issue 200 → A) — October 19, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191) plus two October 12 follow-ups (192, 193). All sixteen of its items, AI1–AI15 and AH1, are built, and AI11's server change is deployed. **The whole wave was verified on October 13** by re-running every gate and re-falsifying every item in scratch clones (§3).
 
-**One item is approved: AN1 (§2).** On October 19 the user chose **Issue 199 → Option A3** in chat. The first AN1 spec (A) was stopped on a test-font measurement (`25a155c`); A3 is the re-measured version. Wave AM was verified on October 15 (§3): AM1 `3d50704`, AM2 `64f9d40`, AM3 `7a28dc1`. Uploading 1.2.0 (9) to TestFlight is still the user's step, and the fixes since then reach players only in a new build, which is the user's call. When AN1 is done the queue is empty. **Do not invent work.**
+**One docs-only item is approved: AO1 (§2).** The user chose **Issue 200 → Option A** in chat: keep the IDE auto-fix `f7e7a12`, which migrated every `withOpacity`, and make the docs match. Wave AN was verified on October 19 (§3): AN1 is `7602141`. Uploading 1.2.0 (9) to TestFlight is still the user's step, and the fixes since then reach players only in a new build, which is the user's call. When AO1 is done the queue is empty. **Do not invent work.**
 
 **If work arrives** (a selection, a red gate, a user report), these rules apply:
 - **Every number and literal string in a spec is a decision, not a suggestion.** Implement it as written.
@@ -21,7 +21,7 @@
    - When reverting a whole commit would delete a symbol the test imports, inject a targeted fault instead.
    - Paste the failing output under `Falsification:`.
 3. **Read exit codes bare:** never through `| tail`, never through `timeout` (macOS has none). An empty result means nothing until the same query has been seen to return something (lesson §2.44).
-4. **New code adds zero analyzer infos.** Use `.withValues(alpha: x)`, never `.withOpacity(x)`, and no `print`. `flutter analyze lib test` must stay at **0 errors · 0 warnings · 169 infos**.
+4. **New code adds zero analyzer infos.** Use `.withValues(alpha: x)`, never `.withOpacity(x)`, and no `print`. `flutter analyze lib test` must stay at **0 errors · 0 warnings · 17 infos**, as measured on `f7e7a12`; Issue 200 decides whether that stays the bar.
 5. **Strings are verbatim:** copy, keys, labels, punctuation, the em dash.
 6. **Server changes are additive only.** Build **1.1.0 (8)** is on testers' phones and still matches on `HttpsError` message text, so a message string never changes; a new `details` field is fine.
 7. **Rendered contrast is measured from pixels** with `test/helpers/rendered_contrast.dart` (`measureRenderedContrast`), never with the widget-tree walk in `test/contrast_tokens_test.dart`.
@@ -79,14 +79,14 @@
 
 ---
 
-## 1. Verified baseline — measured October 15, 2026 on `7a28dc1` (after Wave AM)
+## 1. Verified baseline — measured October 19, 2026 on `f7e7a12` (after Wave AN and the IDE auto-fix)
 
 **This is the regression bar.** Every gate was run bare in the verification session.
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors · 0 warnings · 169 infos · exit 1** (AM3 removed one `unnecessary_overrides`; 137 `deprecated_member_use`, all of them `withOpacity` — the rejected 139 C migration) |
-| `flutter test` | **518 passing** (AL1 +9, AM1 +12, AM3 +31), exit 0 |
+| `flutter analyze lib test` | **0 errors · 0 warnings · 17 infos · exit 1** (13 `avoid_print` in tests, 4 `use_build_context_synchronously`). It was 169 until `f7e7a12` migrated the 137 `withOpacity` and applied other `dart fix` clean-ups; **Issue 200** decides whether that commit stays. |
+| `flutter test` | **569 passing** (AL1 +9, AM1 +12, AM3 +31, AN1 +51), exit 0 |
 | `npm --prefix functions run build` | clean, exit 0 |
 | `npm --prefix functions test` | **167 passing**, exit 0 |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
@@ -106,108 +106,62 @@
 
 ---
 
-## 2. Wave AN — one item: a compact vote header on short screens (Issue 199 → A3)
+## 2. AO1 — Record Issue 200 → A: keep the IDE auto-fix `f7e7a12`
 
-**No release in this wave** (no `pubspec.yaml` bump). The fix reaches players only in a new build, which is the user's call. **`build/ios/archive/` stays untouched** (§5).
+**Docs only.** No code, no version bump, no deploy. **`build/ios/archive/` stays untouched** (§5).
 
-**History, so you don't repeat it.** The first AN1 spec (Issue 199 → A) was stopped at its STOP condition (`25a155c`). The cause was a measurement artefact: `test/vote_screen_fit_test.dart` renders Flutter's test font, which is about twice as wide as Lora, with the decks' shortest prompt, and its target is the host, who sees a debug-only button. The case was re-measured on October 19 with the real fonts and real prompt lengths, and the user chose **A3** in chat. The figures below are from that measurement, made in a scratch clone with this exact layout.
+**What this means for the user.** Their IDE's auto-fix (`f7e7a12`) migrated every `withOpacity` to `withValues` and applied a few `dart fix` clean-ups; every gate is green on it. The user chose to **keep it**. The docs still call that migration *rejected* and give an analyzer bar of 169, so the next agent could "fix" it back. AO1 makes the docs match the tree.
 
-### 2.1 AN1 — The vote card is visible at first paint on short screens (Issue 199 → A3)
+**The gap** (on `f7e7a12`):
+- **The tracker:** Issue 200 is an open block with a blank `Your selection: _____`; the user answered in chat.
+- **This guide:**
+  - §0 rule 4 and §1's analyze row say *"Issue 200 decides whether that stays"*;
+  - §5's rejected list calls 139 C rejected and points at Issue 200;
+  - §2 lists Issue 200 as awaiting the user;
+  - THE LOOP's step (1) and the close-out mention Issue 200.
 
-**What this means for the user.** On an iPhone SE (375×667), a voter's first view of each card shows the header, the prompt, the navigation and the button, but **none of the card they must judge**; even at normal text the answer starts about 100 pt below the fold for a typical prompt. After AN1, short screens use a compact header, so the prompt, the front card's label and its answer show without scrolling, at normal and large text. Tall screens look exactly as they do today.
+### 2.1 Implementation — docs only
+0. **First, if `git status --porcelain` shows the two docs modified** (`docs/agent_execution_guide.md`, `docs/ongoing_general_errors.md`), commit them **unmodified**, on their own: `docs: commit the October 19 Wave AN verification and the AO1 spec, unmodified`. If anything outside `docs/` is modified, STOP and ask the user.
+1. **Tracker, Unresolved:**
+   - Delete the whole **Issue 200** block, from `### Issue 200:` to its `Your selection: _____` line. Do not fill that line in.
+   - Rewrite the intro to say no issue is open.
+   - Add **200 A (October 19)** to its list of selections made in chat.
+2. **Tracker, §3:** add one row at the top of the table:
+   - Area: **Issue 200 Option A — the IDE auto-fix `f7e7a12` is kept** (chosen by the user in chat, October 19).
+   - What it records:
+     - 134 `.withOpacity(x)` → `.withValues(alpha: x)` in `lib/` and three tests;
+     - the `dart fix` clean-ups — an unused `dart:ui` import, a local renamed without its underscore, one `.toList()` dropped, and three tests' `../lib/` imports made `package:` imports;
+     - everything green on it: analyze 0 / 0 / 17, `flutter test` 569, functions 167, the pixel contrast tests, the web smoke;
+     - 139 C's rejection is superseded;
+     - no code changed in AO1.
+   - Issues column: `200`.
+   - Contract column: `docs/agent_execution_guide.md` §0 rule 4, §1 and §5.
+3. **This guide.** Edit the phrases where they actually sit, in §0, §1 and §5. The copies quoted in this §2 go away when §2 becomes *"Queue — empty"*.
+   - **§0 rule 4:** delete *"; Issue 200 decides whether that stays the bar"*, so the bar reads **0 · 0 · 17**.
+   - **§1's analyze row:** replace *"**Issue 200** decides whether that commit stays."* with *"kept (Issue 200 → A)."*
+   - **§3:** add a row: **`f7e7a12`** (200 → A) · *"IDE auto-fix kept: `withOpacity` → `withValues` everywhere, plus `dart fix` clean-ups"* · *"October 19: every gate green; analyze 0 / 0 / 17"*.
+   - **§5, rejected list:** replace the clause that begins *"— though that migration was applied on October 19…"* with *"— superseded: the migration was applied by `f7e7a12` and kept (Issue 200 → A)."*
+   - **§5, new invariant under "Vote screen and copy"** (or a new "Code hygiene" heading): **"`withOpacity` is gone. New code uses `.withValues(alpha: …)`; never reintroduce it. `grep -rn 'withOpacity(' lib/ test/` returns nothing."**
+   - **Queue-complete mode:**
+     - retitle the guide `# Agent Execution Guide — Queue Complete (Wave AN verified; f7e7a12 kept) — <date>`;
+     - make the framing say there is no approved work and no open issue;
+     - make §2 read *"Queue — empty."* plus one line naming AO1's commit by its title;
+     - remove Issue 200 from THE LOOP's step (1) and from the close-out.
+4. **Do not** change any code, revert or amend `f7e7a12`, or touch the evidence folder.
 
-**The gap** (re-checked on `25a155c`; find lines by their text if they moved):
-- **The header today.** In `lib/screens/phase3_vote.dart` (about `:410–520`) the scroll view's column holds:
-  - **for a voter:** `VOTING ON` · `PlayerAvatar(size: 50)` · *"One of these is X's truth."* · `WHICH ONE IS THE TRUTH?`;
-  - **for the target:** `PlayerAvatar(me, size: 50)` · `THEY ARE VOTING ON YOUR TRUTH` (18 pt) · *"Keep a straight face while the parlor deliberates."*;
-  - **then, for both:** a 16-pt gap · the prompt `ParchmentCard` (padding `vertical: 12`, a `Prompt:` label, a 6-pt gap, the prompt at **20 pt** bold Lora) · 12 · *"Find the real truth among the forgeries. Talk it out — discussion is part of the game."* · 12 · `CardGrid`.
-- **The test cannot see it.** `test/vote_screen_fit_test.dart` checks the navigation and the button, but not the card. It also renders the **test font** and uses a 29-character prompt — the shortest of the decks' 150 prompts, which run 29–89 characters with a median of 65.
+### 2.2 Validation
+1. Before committing, `git status --porcelain` shows only `docs/agent_execution_guide.md` and `docs/ongoing_general_errors.md`.
+2. **The tracker's selection lines:** `grep -c "^### Issue 200" docs/ongoing_general_errors.md` → `0` and `grep -c "^Your selection:" docs/ongoing_general_errors.md` → `0`. Positive control: `git show HEAD:docs/ongoing_general_errors.md | grep -c "^### Issue 200"` → `1`, run after step 0's commit.
+3. **The invariant is true:** `bash -c "grep -rn 'withOpacity(' lib/ test/ | wc -l"` → `0`. Positive control: `bash -c "git grep -c 'withOpacity(' 25a155c -- lib test | awk -F: '{s+=\$NF} END {print s}'"` → `134`, which proves the query can see the calls.
+4. **The bar is real:** run `flutter analyze lib test` once, bare. It must read **0 errors · 0 warnings · 17 infos** (exit 1), matching §0 and §1.
+5. `grep -n "200" docs/agent_execution_guide.md` shows no wording that treats Issue 200 as pending.
+6. **Doc gates, bare, each exit 0:** `./scripts/check_playthrough_evidence.sh` (no argument and the four files in §1), `./scripts/check_web_e2e_strings.sh`, `./scripts/check_decks_in_sync.sh`. The code gates need no re-run: no file outside `docs/` changes.
+7. **One commit:** `docs: keep the IDE auto-fix f7e7a12 and record the withOpacity migration (Wave AO / AO1, Issue 200 Option A)`.
+   - The body holds the WHY, `Falsification: not applicable — documentation only` and `Device check: NOT RUN — documentation only`.
+   - A commit cannot contain its own hash, so do not try.
+   - Do not push.
 
-#### Implementation
-1. **When the header is compact,** in the vote screen's build:
-   ```dart
-   final double effectiveHeight = MediaQuery.sizeOf(context).height / MediaQuery.textScalerOf(context).scale(1.0);
-   final bool compactHeader = effectiveHeight < 740;
-   ```
-   - **Compact:** 320×640 and 375×667 at both text scales; 375×812 and 1280×800 at 1.3.
-   - **Full:** 375×812, 1280×800 and 768×1024 at 1.0; 768×1024 at 1.3.
-2. **The compact voter header,** replacing everything above the prompt card:
-   - one centred `Row`: `PlayerAvatar(player: targetPlayer, size: 28)`, `SizedBox(width: 8)`, `Flexible(Text("One of these is ${targetPlayer.name}'s truth.", …))`;
-   - the text keeps the same string and style, with `maxLines: 2`;
-   - `VOTING ON` and `WHICH ONE IS THE TRUTH?` are not shown.
-3. **The compact target header:**
-   - one centred `Row`: `PlayerAvatar(player: me, size: 28)`, `SizedBox(width: 8)`, `Flexible(Text('THEY ARE VOTING ON YOUR TRUTH', …))` at **16 pt**, with the same weight and letter-spacing;
-   - **no subtitle:** *"Keep a straight face…"* is not shown when compact.
-4. **Compact, for both views:**
-   - the gap before the prompt card is **10**;
-   - the prompt card's padding is `horizontal: 16, vertical: 8`;
-   - **no `Prompt:` label and no 6-pt gap after it;**
-   - the prompt text is **17 pt** (20 pt when full), with the same weight, colour and font;
-   - the *"Find the real truth…"* line and its spacing are not shown;
-   - the gap before `CardGrid` is **10**.
-5. **Unchanged:**
-   - the full header, byte for byte;
-   - the spectator branch;
-   - `CardGrid`, AM3's pinned bar, the copy, and the colours.
-   New code uses `.withValues(alpha: …)`, never `.withOpacity`.
-
-#### Validation
-1. **`test/vote_screen_fit_test.dart` measures real text.** Load the app fonts in `setUpAll`, exactly as `test/small_phone_truncation_test.dart` does: **Lora**, **CormorantGaramond** and **PhosphorLight** from `assets/fonts/`. AM3's existing cases must still pass unedited.
-2. **Add a group:** *"the front card is visible at first paint (Issue 199 / AN1)"*.
-   - **Setup:**
-     - the real `GaslightApp` on the vote screen;
-     - a card whose options put the voter's own forgery first;
-     - prompts of **29**, **65** and **89** characters: the existing fixture, then *"The trick I use to avoid making small talk with people in public."* and *"The first thing I would buy with lottery money that would make people question my sanity."*;
-     - sizes 320×640, 375×667, 375×812 and 1280×800; text scales 1.0 and 1.3;
-     - as the voter (`p2`) and as a **non-host target**: make `p3` the host in this group. Under `flutter test` `kDebugMode` is true, so a host target would see `DEBUG: BOTS SUBMIT` in the pinned bar, which release builds never show.
-   - **That is 48 cases.** In every one:
-     - **(a)** the front card's `OPTION <roman>` label passes the file's existing "on screen" check: inside the window, inside every enclosing scroll viewport, and reachable by a tap at its centre;
-     - **(b)** the front card's answer `Text` has **at least 20 px** inside the scroll viewport, measured from its top edge.
-   - **The only exceptions to (b),** listed by name in the test with a comment giving the measured value:
-     - 320×640 × 1.3: voter with the 89-character prompt (−10.5 px); target with 65 and 89 (−26.5, −58.5);
-     - 375×667 × 1.3: target with 89 (0.5);
-     - 375×812 × 1.0: the **full** header, unchanged, with 89 (voter 16.5, target −6.5).
-
-     These cases still assert (a).
-   - **Also assert** the header mode from step 1: `VOTING ON` (voter) and the guidance line present only when full; `Prompt:` absent when compact.
-   - **This is the falsifying test:** on the parent commit (b) fails in most short-screen cases. The scratch measurement showed −41.5 to −445 px.
-3. **Three guards pin the full header at sizes that are now compact.** In each, the test states the size it means; **the assertion text is unchanged.** This is THE LOOP rule 12's spirit: the test states its size, and the production code is not bent to the test.
-   - `test/phase3_vote_test.dart`, *'the vote header names whose card is being voted on'* (`VOTING ON`, at the default 800×600);
-   - `test/guidance_strings_test.dart`, the vote phase's guidance line (default 800×600);
-   - `test/vote_screen_contrast_test.dart`'s **target** case, *"'Keep a straight face…' >= 4.5 : 1"* (375×667), which A3 drops when compact.
-
-   **How:**
-   - For the first two, set `tester.view.physicalSize = const Size(430, 932); tester.view.devicePixelRatio = 1.0;` with a tear-down reset.
-   - For the contrast test, give its `pumpVoteScreen` an optional `size` (default 375×667, unchanged for the voter case) and pass `Size(430, 932)` for the target case.
-   - Next to each, add a compact counterpart at 375×667 asserting that the dropped element is absent and the kept one present. For the contrast test, the voter case stays at 375×667 and still measures the voter subtitle, which is kept.
-4. **Falsify (compiling faults):**
-   - (a) threshold 0, so the header is never compact → (b) fails at 375×667;
-   - (b) the prompt at 20 pt when compact → (b) fails for the voter with 89 characters at 375×667 × 1.3 (measured −8.5 without the 17-pt change);
-   - (c) the threshold ignores text scale (raw height) → (b) fails at 375×812 × 1.3. If (c) does not fail, record that, and keep the term anyway.
-5. **Over-reach guards, unedited:**
-   - `blinking_eye_test.dart` and `ui_e2e_test.dart` (`THEY ARE VOTING ON YOUR TRUTH` stays in the compact row);
-   - `stacked_deck_navigation_test.dart`, `vote_option_truncation_test.dart`, `vote_tap_cue_test.dart`, `tap_target_guidelines_test.dart`, `small_phone_truncation_test.dart`, `deck_controller_test.dart`;
-   - AM3's fit cases, and every other vote-screen test.
-6. **STOP condition (narrowed).** If any of the 42 non-exception cases fails (b), or any of the 48 fails (a), STOP before committing, and file it with the measured values. Do not tune sizes beyond this spec.
-7. **Web:** `./scripts/run_web_smoke.sh` exits 0. Its sweep runs at text scale 1.0, where every size is full-header, so the sweep is unchanged.
-8. **Device check (REQUIRED):** iPhone SE simulator (375×667), reset Keychain, emulators.
-   - As a **voter**, at first paint and **without scrolling**, you see the one-line *"One of these is X's truth."* row, the prompt without its label, the front card's `OPTION` label and answer, PREV · dots · NEXT and `TAP A CARD TO CHOOSE`.
-   - Repeat with `xcrun simctl ui <udid> content_size accessibility-extra-extra-extra-large` (the app clamps to 1.3).
-   - As the **target**, the one-line row shows without the subtitle. A debug build shows the host `DEBUG:` button in the pinned bar, so judge the card's visibility for the target from the widget test, not the device.
-   - Take screenshots with `xcrun simctl io`, and restore the text size with `large`.
-9. **The nine §1 gates, bare:** analyze **0 / 0 / 169**; `flutter test` = 518 + the new cases; the rest unchanged.
-10. **One commit:** `fix(ui): a compact vote header on short screens so the card shows at first paint (Wave AN / AN1, Issue 199 Option A3)`, with `Falsification:` (a–c) and `Device check:`. Do not push.
-
-**Blast radius:**
-- `lib/screens/phase3_vote.dart`;
-- `test/vote_screen_fit_test.dart`, `test/phase3_vote_test.dart`, `test/guidance_strings_test.dart`, `test/vote_screen_contrast_test.dart` (the target case's size only);
-- `docs/design_ui_direction.md` → the stacked deck / vote screen section, adding **"Short screens"**:
-  - the threshold, `height / textScale < 740`;
-  - what folds into one line, and what is dropped: the `VOTING ON` label, the heading, the target subtitle, the `Prompt:` label and the guidance line;
-  - the 17-pt prompt;
-  - the guarantee — the front card's label at every tested size, and its first answer line except the listed extremes — tested by `test/vote_screen_fit_test.dart` with the real fonts;
-- the tracker: a §3 row, and Issue 199's block deleted;
-- **lesson §2:** a layout measurement taken under the test font says nothing about real text. Load the app fonts, and use real lengths, before trusting a pixel.
+**Blast radius:** `docs/ongoing_general_errors.md`, `docs/agent_execution_guide.md`. No design doc: `withValues` is an API choice, not a design contract.
 
 ---
 
@@ -244,6 +198,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 | **AM1** (196 → A, completed) | `3d50704` | `Waiting for 1 player...` (craft and vote), the deck-too-small sentence as `deckTooSmallMessage`, the carousel's `prompt(s) from player(s)`, and the reveal banner, all through `pluralize`. | October 15: the single-quoted scan returns exactly the nine allowed lines; no `? 's' : ''` is left. |
 | **AM2** (195 → A, completed) | `64f9d40` | The accusation settles (two reads 300 ms apart within 1 px) before its click, and is retried once while ≥ 3 s of the window remain. | Cause observed (a click mid-animation); 10 of 10 repeat runs; October 15 runner: 6 settle waits, 0 retries. |
 | **AM3** (198 → A) | `7a28dc1` | `DeckController` and `DeckNavigationBar`: the vote deck's PREV · dots · NEXT sit in the pinned bar; the deck opens on the first card the voter can choose; a new controller per card. | October 15: fit and controller tests 31 / 31; `openOnFirstVotable: false` → +8 −9; W22 shows the row at three sizes; runner exit 0. |
+| **AN1** (199 → A3) | `7602141` | A compact vote header when `height / textScale < 740`: a one-line avatar row, no `Prompt:` label, a 17-pt prompt, a one-line target header, and no guidance line. Tall screens are unchanged. | October 19: fit test 65 / 65 with the real fonts; never compact → 36 fail; runner exit 0; SE device check done at 1.0 and 1.3 (the commit's own device report named a non-existent button). |
 | **192 → B** | `3a36e91` | AH1's device check closed by acceptance (simulator observation plus source trace). | Nothing to falsify. |
 
 ### Earlier waves
@@ -271,6 +226,8 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **AK1: the lobby's House Rules controls are clicked through the DOM (`domClick`), not with the pointer.** They sit behind the full-width suspects sheet, and pointer clicks there never registered. Each click is checked against the room document before and after.
 - **AK1: W10 asserts at least one score chip, not one per player.** A reader whose score does not change gets no chip; the app is right.
 - **AK1: the runner checks more than the spec asked:** `.env`, Playwright and Java up front (exit 2); at least 20 PNGs; free ports afterwards; a 570 s watchdog that explains itself before the 600 s kill. It also refuses a shot directory inside the tracked evidence folder.
+- **AN1: six named cases are exempt from the at-least-20-px answer check in `test/vote_screen_fit_test.dart`,** each with its measured value. They are the 320×640 × 1.3 extremes, the SE × 1.3 target with an 89-character prompt, and 375×812 × 1.0 with an 89-character prompt on the unchanged full header. Every case still asserts the `OPTION` label on screen. Do not "fix" them by shrinking type beyond A3.
+- **AN1: card visibility for the target is measured with a non-host target.** Under `flutter test` `kDebugMode` is true, so a host would see the debug-only `DEBUG: BOTS SUBMIT` in the pinned bar, which release builds never show.
 - **AM1: the count-label scan is run with the pattern single-quoted.** In double quotes the shell turns `\$` into `$` and the scan silently finds nothing; my spec had that bug, and the design doc carries the corrected command.
 - **AM1: the deck-too-small sentence's singular forms are unreachable today.** The smallest deck holds 25 prompts, and a room holds at most 8 players; they are asserted on `deckTooSmallMessage` itself.
 - **AM3: `DeckNavigationBar` also takes `selectedIndex`,** so the chosen option's dot stays oxblood as before.
@@ -324,7 +281,8 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **`lastReaction` / `lastReactionAt` are deliberately retained dead fields.** **`lib/utils/prompt_decks.dart` is generated.**
 - **The web E2E string contract (Wave AE)** and the **Wave AB** and **Wave AA** invariants stand as recorded in the design docs.
 
-**Vote screen and copy (AL1, AM1, AM3)**
+**Vote screen and copy (AL1, AM1, AM3, AN1)**
+- **Short screens get the compact vote header** (`height / textScale < 740`). The full header is unchanged on tall screens. Layout pixels are measured with the **real app fonts** and real prompt lengths (29, 65 and 89 characters), never Flutter's test font (lesson §2.49).
 - **Every count label goes through `pluralize`** (`lib/utils/pluralize.dart`); zero gets its own phrase where *only 0* would read wrongly. The exemptions and the single-quoted scan are in `design_ui_direction.md`.
 - **The vote deck's navigation lives in the pinned bar** (`DeckNavigationBar`), never back inside the scroll view. **The deck opens on the first card the viewer can choose** (`openOnFirstVotable`); the target opens on card I. Each card gets a new `DeckController`.
 - **`test/vote_screen_fit_test.dart` judges the whole screen, not `CardGrid` alone.** Its "on screen" means inside the window, inside every enclosing scroll view's viewport, and reachable by a tap at its centre.
@@ -337,7 +295,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **Never open the live web app in a browser to check a deploy:** `lib/main.dart:65` signs in anonymously at boot. Use `version.json` and HTTP status codes.
 - **`build/ios/archive/` is the user's upload artefact:** never delete or rebuild it until the user says the upload is done.
 
-**Assessed and rejected — do NOT re-propose:** everything listed in the September guides and the tracker §3, including **migrating `withOpacity` → `withValues` (139 C)**. October 10 rejections: 178 A and C; 179 B; 180 B and C; 181 B; 182 B; 183 B; 184 B; 185 B; 186 B; 187 B; 188 B and C; 189 A; 190 B. October 12 rejections: 192 A; 193 A and C. October 13 rejections: 194 B and C.
+**Assessed and rejected — do NOT re-propose:** everything listed in the September guides and the tracker §3, including **migrating `withOpacity` → `withValues` (139 C)** — though that migration was applied on October 19 by the user's IDE fix `f7e7a12`, and keeping it is **Issue 200**: until the user decides, do not revert it and do not re-litigate it. October 10 rejections: 178 A and C; 179 B; 180 B and C; 181 B; 182 B; 183 B; 184 B; 185 B; 186 B; 187 B; 188 B and C; 189 A; 190 B. October 12 rejections: 192 A; 193 A and C. October 13 rejections: 194 B and C.
 
 **There is no chat or emote feature.**
 
@@ -377,7 +335,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 ## THE LOOP — for any future item
 
 ```
-(1) Take AN1 (§2). After it the queue is empty: STOP unless there is a new
+(1) Take AO1 (§2). After it the queue is empty: STOP unless there is a new
     user selection or instruction, a red gate, or a user report. Never fill
     in or edit a `Your selection:` line.
 (2) "Implemented to spec" and "fixed the problem" are different claims. Check
@@ -401,8 +359,8 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 (11) Never show an exception object to a player. Map e.code + details.reason.
 (12) A rename broke a test? UPDATE THE ASSERTION, never the production code.
 (13) Server changes the shipped client reads must be ADDITIVE (1.1.0 (8)).
-(14) RE-RUN THE FULL BATTERY: all nine gates bare; analyze 0/0/169; flutter
-     tests at least 518; functions tests at least 167.
+(14) RE-RUN THE FULL BATTERY: all nine gates bare; analyze 0/0/17; flutter
+     tests at least 569; functions tests at least 167.
 (15) COMMIT: ONE ITEM, ONE Conventional Commit; WHY + Falsification + Device
      check in the body; tracker updated in the same commit. Ask before any
      deploy; never upload to TestFlight unless asked.
@@ -412,7 +370,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 
 ## Close-out
 
-**When AN1 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are:
+**When AO1 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are:
 1. a new user selection or instruction (a new guide rewrite specs it first);
 2. a §1 gate going red (investigate, then file with options);
 3. a user or tester report — for example *Something went wrong. Try again.* while offline, which re-opens the 192 inference (§4).

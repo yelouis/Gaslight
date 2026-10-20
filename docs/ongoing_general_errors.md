@@ -8,6 +8,32 @@
 
 ## 1. Open & in-flight
 
+**Wave AN verified, October 19, 2026 — AN1 holds, and one commit outside the item process landed after it.** Checked on `f7e7a12` by re-running the battery, AN1's fit test and one fault, the web smoke, and AN1's device check — not by reading the commit body.
+- **Battery, all bare, on `HEAD`:**
+  - analyze 0 / 0 / **17**, exit 1 — see Issue 200, not AN1;
+  - `flutter test` **569** (518 + AN1's 51);
+  - functions build exit 0; functions test 167;
+  - decks, all five evidence invocations, web strings and deploy fresh: exit 0;
+  - iOS release build exit 0.
+- **AN1 (`7602141`), from a scratch clone:**
+  - Control: `vote_screen_fit_test` passes **65 / 65**.
+  - Fault: never compact (threshold 0) → **36** failures, exactly as AN1 recorded.
+  - The six exceptions are listed by name in the test; every other case asserts at least 20 px of the answer. The real fonts load in `setUpAll`.
+  - The full header is unchanged except one thing the spec did not allow: `VOTING ON`'s colour went `.withOpacity(0.7)` → `.withValues(alpha: 0.7)`. It is moot now that `f7e7a12` migrated every site.
+- **AN1's own record had two gaps:**
+  - **Its device check named a button that does not exist** (*"CAST YOUR VOTE"*; the vote button reads `TAP A CARD TO CHOOSE` or `CONFIRM VOTE`).
+  - **It did not record the web smoke** the spec required.
+- **Both were redone here:**
+  - **The runner:** exit 0 in 310 s (both playthroughs passed, 4 settle waits, 0 retries).
+  - **The device check, on the iPhone SE simulator** (375×667, Keychain reset, emulators, room LMZW with 9 bots, a 74-character truth prompt and a 58-character vote prompt). As a voter at first paint, with no scroll, all of this was on screen:
+    - the one-line *"One of these is Bot 2's truth."* row;
+    - the prompt with no `Prompt:` label;
+    - `CARD I OF III`, the front card's `OPTION I` and its answer;
+    - PREV · dots · NEXT and `TAP A CARD TO CHOOSE`.
+
+    It held at the largest text size too (clamped to 1.3), where the answer wraps to two lines and only the small *"Tap to choose this one"* hint falls below. The text size was restored, and my emulator and `flutter run` were stopped by PID. The target view was not reached on the device; it is covered by the real-font widget test.
+- **Found and filed:** **Issue 200.** `f7e7a12` *"IDE Automatic Flutter fixes"*, committed after AN1, migrated every `withOpacity` — the change recorded as rejected (139 C) — plus some `dart fix` clean-ups. It is green on every gate, but it conflicts with the guide's invariant and analyzer bar.
+
 **Wave AM verified, October 15, 2026 — AM1, AM2 and AM3 hold.** Checked on `7a28dc1` by re-running the battery, the tests behind each item, one fault each for AM1 and AM3, and the runner — not by reading the commit bodies.
 - **Battery, all bare, on `HEAD`:**
   - analyze 0 / 0 / **169**, exit 1. That is one fewer than 170: AM3's `dispose()` now disposes the deck controller, so the `unnecessary_overrides` info is gone.
@@ -165,7 +191,47 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-Issues 1–199 are resolved and indexed in §3; Wave AN (Issue 199 Option A3) was completed on October 19. Ten selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, 194 A and 195 A on October 13, 196 A and 197 A on October 14, 198 A on October 15, and 199 A3 on October 19. **The queue is empty.** The user approved the release of **1.2.0 (9)** in chat on October 13. AJ1 built and verified its iOS archive for the user to upload; AK1 repaired the web smoke that had blocked its web deploy, and AK2 deployed 1.2.0 (9) to web hosting on October 14 with the user's go-ahead (§3). AL1 (Issue 196, count labels), AL2 (Issue 197, the responsive sweep), Wave AM (AM1 count labels, AM2 web smoke accusation, AM3 Issue 198 deck navigation), and Wave AN (AN1 Issue 199 compact vote header) are done (§3). The fixes in AL1, AM1, AM3 and AN1 are in the code only and reach players with the next build (1.2.1 (10) or later). The TestFlight upload of the iOS archive is still the user's step.
+Issues 1–199 are resolved and indexed in §3; Wave AN (Issue 199 Option A3) was completed on October 19. Ten selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, 194 A and 195 A on October 13, 196 A and 197 A on October 14, 198 A on October 15, and 199 A3 on October 19. **One issue is open: 200** — the IDE auto-fix commit `f7e7a12` reverses the recorded 139 C rejection. It was filed on October 19. **The user chose Option A in chat on October 19: keep it.** It is specced as guide step **AO1** (docs only). Its selection line is left blank, because the choice is recorded here. The user approved the release of **1.2.0 (9)** in chat on October 13. AJ1 built and verified its iOS archive for the user to upload; AK1 repaired the web smoke that had blocked its web deploy, and AK2 deployed 1.2.0 (9) to web hosting on October 14 with the user's go-ahead (§3). AL1 (Issue 196, count labels), AL2 (Issue 197, the responsive sweep), Wave AM (AM1 count labels, AM2 web smoke accusation, AM3 Issue 198 deck navigation), and Wave AN (AN1 Issue 199 compact vote header) are done (§3). The fixes in AL1, AM1, AM3 and AN1 are in the code only and reach players with the next build (1.2.1 (10) or later). The TestFlight upload of the iOS archive is still the user's step.
+
+### Issue 200: An IDE auto-fix commit (`f7e7a12`) migrated every `withOpacity` to `withValues` — the change recorded as rejected (139 C). Keep it or revert it?
+**Status**: ⚠️ Confirmed Unresolved — found on October 19 while verifying AN1.
+- **What landed.** `f7e7a12` *"IDE Automatic Flutter fixes"* (22:01, after AN1 at 21:45) changes 23 files (151 + / 152 −). The diff was checked line by line:
+  - **134 lines** are exactly `.withOpacity(x)` → `.withValues(alpha: x)`, in `lib/` and in three tests;
+  - **the rest are `dart fix`-style clean-ups:** an unused `import 'dart:ui' show FontFeature` removed; a local `_latestDeltas` renamed `latestDeltas`; one `.toList()` dropped; and three tests' `../lib/…` imports changed to `package:gaslight/…`.
+- **It went outside the item process:** no Conventional Commit, no WHY, no falsification, no tracker row.
+- **The conflict.** The guide records the `withOpacity` migration as *"assessed and rejected — do NOT re-propose (139 C)"*, and its §1 analyzer bar was **169** infos, 137 of them `withOpacity`. The reason for the rejection is not recorded in the current docs.
+  - The tree and the guide now disagree on the analyzer number and on the invariant.
+  - A new agent reading "never re-propose 139 C" could "fix" the change back.
+- **Verified on `HEAD` (`f7e7a12`), all bare:**
+  - analyze 0 / 0 / **17** (13 `avoid_print` in tests, 4 `use_build_context_synchronously`);
+  - `flutter test` **569**; functions **167**;
+  - decks, all five evidence invocations, web strings and deploy fresh: exit 0;
+  - iOS release build exit 0;
+  - `./scripts/run_web_smoke.sh` exit 0 (310 s).
+  - The pixel-measured contrast tests (AI3, AI4, AI5, AG2 and AN1's contrast guard) all pass, so no measured colour moved.
+
+**Option A (recommended)**: **Keep it and record it.** This is a docs-only change:
+- the guide's analyzer bar becomes **0 / 0 / 17**;
+- the invariant becomes *"`withOpacity` is gone; new code uses `withValues(alpha: …)`; never reintroduce it"*;
+- 139 C's rejection is marked *superseded by the user's October 19 IDE fix (`f7e7a12`)*;
+- the tracker gets a §3 row.
+  - *Pros*: Matches the tree. It removes 134 deprecations before a Flutter release removes `withOpacity`. Every test, including the pixel contrast tests, is green. No code work.
+  - *Cons*: It overrides 139 C's rejection without re-reviewing its reason, which is not in the current docs, and it accepts a commit that skipped the item process.
+
+**Option B**: **Revert `f7e7a12`** (it is the newest commit, so the revert is clean), and restore the bar of 169.
+  - *Pros*: Honours the recorded 139 C decision, and keeps every change going through the item process. A migration could be specced properly later.
+  - *Cons*: Reintroduces 134 deprecations and undoes harmless lint fixes. The revert needs its own battery run.
+
+**Option C**: **Keep it, and have an agent review it as an item.**
+- Falsify two migrated sites against their pixel contrast tests.
+- List per file what changed.
+- Device-check the title, lobby, vote, reveal and game-over screens on the SE.
+- Then record it as in A.
+  - *Pros*: The change gets the same evidence as every other item.
+  - *Cons*: More work for a mechanical change already shown green.
+
+Your selection: _____
+
 
 ## 2. Lessons that still bite
 
