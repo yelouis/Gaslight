@@ -1,15 +1,10 @@
-# Agent Execution Guide — Active Build: Wave AM (finish the count rule; steady the web smoke; fix the vote screen) — October 15, 2026
+# Agent Execution Guide — Active Build: Wave AN (a compact vote header on short screens, Issue 199 → A) — October 19, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191) plus two October 12 follow-ups (192, 193). All sixteen of its items, AI1–AI15 and AH1, are built, and AI11's server change is deployed. **The whole wave was verified on October 13** by re-running every gate and re-falsifying every item in scratch clones (§3).
 
-**Three items are approved: Wave AM (§2).**
-- **AM1** brings the remaining count labels under AL1's rule (Issue 196 → A).
-- **AM2** removes the web smoke's rare false failure (Issue 195 → A).
-- **AM3** keeps the vote screen's deck navigation in view and opens the deck on a card the voter can choose (Issue 198 → A, chosen by the user in chat October 15).
-
-Wave AL was verified on October 15 (§3). Uploading 1.2.0 (9) to TestFlight is still the user's step. When AM3 is done the queue is empty. **Do not invent work.**
+**One item is approved: AN1 (§2).** On October 19 the user chose **Issue 199 → Option A**: on short screens, a compact vote header so the card shows at first paint. Wave AM was verified on October 15 (§3): AM1 `3d50704`, AM2 `64f9d40`, AM3 `7a28dc1`. Uploading 1.2.0 (9) to TestFlight is still the user's step, and the fixes since then reach players only in a new build, which is the user's call. When AN1 is done the queue is empty. **Do not invent work.**
 
 **If work arrives** (a selection, a red gate, a user report), these rules apply:
 - **Every number and literal string in a spec is a decision, not a suggestion.** Implement it as written.
@@ -26,7 +21,7 @@ Wave AL was verified on October 15 (§3). Uploading 1.2.0 (9) to TestFlight is s
    - When reverting a whole commit would delete a symbol the test imports, inject a targeted fault instead.
    - Paste the failing output under `Falsification:`.
 3. **Read exit codes bare:** never through `| tail`, never through `timeout` (macOS has none). An empty result means nothing until the same query has been seen to return something (lesson §2.44).
-4. **New code adds zero analyzer infos.** Use `.withValues(alpha: x)`, never `.withOpacity(x)`, and no `print`. `flutter analyze lib test` must stay at **0 errors · 0 warnings · 170 infos**.
+4. **New code adds zero analyzer infos.** Use `.withValues(alpha: x)`, never `.withOpacity(x)`, and no `print`. `flutter analyze lib test` must stay at **0 errors · 0 warnings · 169 infos**.
 5. **Strings are verbatim:** copy, keys, labels, punctuation, the em dash.
 6. **Server changes are additive only.** Build **1.1.0 (8)** is on testers' phones and still matches on `HttpsError` message text, so a message string never changes; a new `details` field is fine.
 7. **Rendered contrast is measured from pixels** with `test/helpers/rendered_contrast.dart` (`measureRenderedContrast`), never with the widget-tree walk in `test/contrast_tokens_test.dart`.
@@ -84,14 +79,14 @@ Wave AL was verified on October 15 (§3). Uploading 1.2.0 (9) to TestFlight is s
 
 ---
 
-## 1. Verified baseline — measured October 15, 2026 on `3a8f7f1` (after Wave AL); every gate run bare in the verification session
+## 1. Verified baseline — measured October 15, 2026 on `7a28dc1` (after Wave AM)
 
 **This is the regression bar.** Every gate was run bare in the verification session.
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors · 0 warnings · 170 infos · exit 1** (137 `deprecated_member_use`, all of them `withOpacity` — the rejected 139 C migration) |
-| `flutter test` | **475 passing** (466 until AL1 added 9), exit 0 |
+| `flutter analyze lib test` | **0 errors · 0 warnings · 169 infos · exit 1** (AM3 removed one `unnecessary_overrides`; 137 `deprecated_member_use`, all of them `withOpacity` — the rejected 139 C migration) |
+| `flutter test` | **518 passing** (AL1 +9, AM1 +12, AM3 +31), exit 0 |
 | `npm --prefix functions run build` | clean, exit 0 |
 | `npm --prefix functions test` | **167 passing**, exit 0 |
 | `./scripts/check_decks_in_sync.sh` | **exit 0** |
@@ -99,7 +94,7 @@ Wave AL was verified on October 15 (§3). Uploading 1.2.0 (9) to TestFlight is s
 | `./scripts/check_deploy_fresh.sh` | **exit 0 — FRESH, 19 functions.** It reads STALE after any later commit touching `functions/src` until the next deploy. |
 | `./scripts/check_web_e2e_strings.sh` | **exit 0** |
 | `flutter build ios --release --no-codesign` | **exit 0 — `✓ Built build/ios/iphoneos/Runner.app (50.1MB)`**; `UIDeviceFamily` = `1` (iPhone-only) |
-| `./scripts/run_web_smoke.sh` — **a release-time check, not a per-item gate** | **exit 0** — both playthroughs reach game over, and the full one also sweeps the lobby, craft, vote, reveal and game-over screens at 375×812, 768×1024 and 1280×800 (AL2: a wrong phase or a missing or off-screen key control fails the run; 15 `w21_*` PNGs per run). Measured October 14: AK1, 5 runs of 275–279 s; AL2, 2 runs of 302 s and 313 s; every one exit 0, 41 PNGs each, ports free after every run. Needs Java and Playwright's Chromium (§0.1). Run it before `flutter build web --release` (README → Releasing); do not add it to an item's nine-gate battery. |
+| `./scripts/run_web_smoke.sh` — **a release-time check, not a per-item gate** | **exit 0** — both playthroughs reach game over, and the full one also sweeps the lobby, craft, vote, reveal and game-over screens at 375×812, 768×1024 and 1280×800 (AL2: a wrong phase or a missing or off-screen key control fails the run; 15 `w21_*` PNGs per run). Measured: AK1, 5 runs of 275–279 s; AL2, 2 runs of 302 s and 313 s; AM2 and AM3, runs of 315–323 s (October 15, verification: 323 s). Every one exit 0, 41 PNGs each, ports free after every run. The vote sweep also requires `Previous option` and `Next option` inside the viewport (AM3). Needs Java and Playwright's Chromium (§0.1). Run it before `flutter build web --release` (README → Releasing); do not add it to an item's nine-gate battery. |
 | `flutter test --coverage` | **Not a gate.** *Coverage is not collectable on Flutter 3.44.6 (runner segfault; `game_service.dart` missing from LCOV) — see Issue 189 findings.* Not reported upstream (Issue 194 → A). |
 
 **Production** (read October 13, read-only):
@@ -111,183 +106,90 @@ Wave AL was verified on October 15 (§3). Uploading 1.2.0 (9) to TestFlight is s
 
 ---
 
-## 2. Wave AM — finish two approved fixes, then fix the vote screen (Issue 198 → A)
+## 2. Wave AN — one item: a compact vote header on short screens (Issue 199 → A)
 
-| Step | Item | Under | Why this position |
-|---|---|---|---|
-| 1 | **AM1** The remaining count labels go through `pluralize` | Issue 196 → A | App strings; the rule in `design_ui_direction.md` says every count label follows it, and five don't. |
-| 2 | **AM2** The web smoke's accusation waits for its button to settle, and retries once | Issue 195 → A | Test code only. It runs after AM1 so its acceptance runs also cover AM1's strings on the web. |
-| 3 | **AM3** The deck's navigation stays in view; the deck opens on a card you can choose | Issue 198 → A (chosen October 15) | It changes app layout, so it goes last: it is validated by AM2's steadied web smoke, and AL2's sweep checks it at three sizes. |
+**No release in this wave** (no `pubspec.yaml` bump). The fix reaches players only in a new build, which is the user's call. **`build/ios/archive/` stays untouched** (§5).
 
-**No release in this wave** (no `pubspec.yaml` bump): AM1's and AM3's changes reach players only in a new build (1.2.1 (10) or later), which is the user's call. **`build/ios/archive/` stays untouched** (§5). Uploading 1.2.0 (9) to TestFlight is still the user's step.
+### 2.1 AN1 — The vote card is visible at first paint on short screens
 
-### 2.1 AM1 — The remaining count labels go through `pluralize` (Issue 196 → A, completed)
+**What this means for the user.** On an iPhone SE (375×667), a voter's first view of each card shows the header, the prompt, the navigation and the button, but **none of the card they must judge**. After AN1, short screens use a compact header, so the prompt, the front card's label and answer, PREV · dots · NEXT and the button all show without scrolling. Tall screens look exactly as they do today.
 
-**What this means for the user.** A player waiting on the last person reads *"Waiting for 1 players..."*. A host with a too-small custom deck and the default single round reads *"… × 1 rounds"*. The deck carousel can say *"1 prompts from 1 players"*. After AM1 every count label in the app reads correctly at 1.
-
-**The gap** (found by AL1, listed in the design doc's *"Not yet under the rule"*, re-checked October 15 on `3a8f7f1`; find each line by its text if it moved):
-
-| Site | Today |
-|---|---|
-| `lib/screens/phase2_craft.dart:455` | `'Waiting for $unready players...'` |
-| `lib/screens/phase3_vote.dart:295` | `'Waiting for $unready players...'` |
-| `lib/screens/lobby_screen.dart:374` | `"Deck too small: selected deck has $deckSize prompts but you need $totalPromptsNeeded prompts ($activeCount players × $totalRounds rounds)."` |
-| `lib/widgets/deck_carousel.dart:325` | `'$totalContributions prompts from $contributorsCount players'` |
-| `lib/screens/phase4_reveal.dart:196` | `'…fooled $maxVotes player${maxVotes > 1 ? 's' : ''}!'` — correct today, built by hand (a sibling) |
+**The gap** (re-checked on `7a28dc1`; find lines by their text if they moved):
+- **The header today.** In `lib/screens/phase3_vote.dart` (about `:395–500`) the scroll view's column starts with:
+  - **for a voter:** `VOTING ON` (11 pt) · 8 · `PlayerAvatar(size: 50)` · 10 · *"One of these is X's truth."* (13 pt italic, ivory @ 0.75) · 16 · `WHICH ONE IS THE TRUTH?` (20 pt);
+  - **for the target:** `PlayerAvatar(me, size: 50)` · 8 · `THEY ARE VOTING ON YOUR TRUTH` (18 pt) · 4 · *"Keep a straight face while the parlor deliberates."*;
+  - **then, for both:** 16 · the prompt `ParchmentCard` (padding `horizontal: 16, vertical: 12`) · 12 · *"Find the real truth among the forgeries. Talk it out — discussion is part of the game."* · 12 · `CardGrid`.
+- **That is about 450 pt above the deck.** With AM3's pinned bar, the card's top falls below the scroll area at 375×667 (AM3's device check; Issue 199).
+- **`test/vote_screen_fit_test.dart` requires the navigation and the button on screen, but not the card.**
+- **Measured on the web evidence** (`w22_*_vote.png`, full header): at 375×812 and 1280×800 the card's `OPTION I` label and answer are visible today.
 
 #### Implementation
-1. **The waiting lines:** `'Waiting for $unready ${pluralize(unready, 'player', 'players')}...'`, at both sites.
-2. **Deck too small.** Extract the sentence into a top-level function in `lobby_screen.dart` and call it where the literal was. The sentence is unchanged at the plural, and every count gets the matching noun:
+1. **When the header is compact.** In the vote screen's build, compute
    ```dart
-   String deckTooSmallMessage(int deckSize, int needed, int players, int rounds) =>
-       "Deck too small: selected deck has $deckSize ${pluralize(deckSize, 'prompt', 'prompts')} "
-       "but you need $needed ${pluralize(needed, 'prompt', 'prompts')} "
-       "($players ${pluralize(players, 'player', 'players')} × $rounds ${pluralize(rounds, 'round', 'rounds')}).";
+   final double effectiveHeight = MediaQuery.sizeOf(context).height / MediaQuery.textScalerOf(context).scale(1.0);
+   final bool compactHeader = effectiveHeight < 740;
    ```
-3. **The deck carousel:** `'$totalContributions ${pluralize(totalContributions, 'prompt', 'prompts')} from $contributorsCount ${pluralize(contributorsCount, 'player', 'players')}'`.
-4. **The reveal banner:** `'…fooled $maxVotes ${pluralize(maxVotes, 'player', 'players')}!'`. Its output does not change.
-5. **The design doc:** replace *"Not yet under the rule"* with **"Exempt, with the reason"** and list:
-   - `Pts` / `PTS` and `N PROMPTS` (as before);
-   - `That is n characters` (shown only above the 100-character limit);
-   - `Waiting on X of N players to ready up` (shown only with at least 3 active players, so N ≥ 2);
-   - `$N of $M ballots sealed` (M ≥ 2 by the 3-player floor);
-   - the exception text in `lib/utils/prompt_decks.dart` (never shown to a player).
+   The app already clamps text scale to 1.3. So:
+
+   | Screen | Text scale 1.0 | Text scale 1.3 |
+   |---|---|---|
+   | 320×640 | compact | compact |
+   | 375×667 | compact | compact |
+   | 375×812 | **full** | compact |
+   | 1280×800 | **full** | compact |
+   | 768×1024 | **full** | **full** |
+2. **The compact voter header**, replacing everything above the prompt card:
+   - Drop `VOTING ON` and `WHICH ONE IS THE TRUTH?`.
+   - Add one centred `Row`: `PlayerAvatar(player: targetPlayer, size: 28)`, `SizedBox(width: 8)`, then `Flexible(Text("One of these is ${targetPlayer.name}'s truth.", …))`. The text keeps the **same string and style**, with `maxLines: 2`.
+3. **The compact target header:**
+   - One centred `Row`: `PlayerAvatar(player: me, size: 28)`, `SizedBox(width: 8)`, then `Flexible(Text('THEY ARE VOTING ON YOUR TRUTH', …))` at **16 pt** (was 18), same weight and letter-spacing.
+   - Then `SizedBox(height: 4)` and *"Keep a straight face while the parlor deliberates."* exactly as today. **Keep this subtitle:** `test/vote_screen_contrast_test.dart` measures it at 375×667.
+4. **Compact, for both views:**
+   - the gap before the prompt card is **10** (was 16);
+   - the prompt card's padding becomes `horizontal: 16, vertical: 8`, with the same `Prompt:` label and prompt text style;
+   - **drop the *"Find the real truth…"* line and its spacing**, leaving a **10** gap before `CardGrid`.
+5. **Unchanged:**
+   - the full header (non-compact), byte for byte;
+   - the spectator branch;
+   - `CardGrid` and AM3's pinned bar, the copy, and the colours.
+   New code uses `.withValues(alpha: …)`, never `.withOpacity`.
 
 #### Validation
-1. **Tests at 1 and 2 for every changed label,** asserted verbatim:
-   - the craft and vote waiting lines on their real screens: `Waiting for 1 player...` and `Waiting for 2 players...`;
-   - `deckTooSmallMessage` as a unit: 1 round and 2 rounds; deck size 1 and 2;
-   - `DeckCarousel` with a custom deck of 1 prompt from 1 player, and 2 from 2;
-   - the reveal banner at 2.
-   No existing test pins these strings, checked October 15.
-2. **Falsify (compiling faults):**
-   - (a) one waiting site restored to its old literal → its 1-case fails;
-   - (b) `deckTooSmallMessage` with `rounds` always plural → the 1-round case fails;
-   - (c) the carousel restored → its 1-case fails.
-3. **The broad scan.** Run it with bash, not zsh:
-   ```
-   grep -rnE "\$(\{[^}]+\}|[A-Za-z_][A-Za-z0-9_.]*) [A-Za-z]+s\b" lib/ --include="*.dart" | grep -v "pluralize("
-   ```
-   Its output must contain **only** these, matched by file and text, not line:
-   - the `Pts` pair in `game_over_screen.dart`;
-   - `characters` in `phase2_craft.dart`;
-   - `of $totalNonHostsCount players` in `lobby_screen.dart`;
-   - `ballots sealed` in `phase3_vote.dart`;
-   - the exception in `prompt_decks.dart`;
-   - three `has joined` / `has left` lines, where a name is followed by "has" — a false match.
+1. **Strengthen `test/vote_screen_fit_test.dart`.** It already runs four sizes × two text scales × voter and target. In every case, add:
+   - the front card's `OPTION <roman>` label passes the file's existing "on screen" check (inside the window, inside every enclosing scroll viewport, reachable by a tap at its centre);
+   - its answer `Text`'s top edge is inside the scroll viewport with **at least 20 px** of it visible;
+   - the header mode matches the table in step 1 — `find.text('VOTING ON')` (voter) is present only when full, and the guidance line (`find.text('Find the real truth among the forgeries. Talk it out — discussion is part of the game.')`) likewise.
 
-   Anything else is a missed label.
-4. **Device check (REQUIRED):** iPhone SE simulator, reset Keychain (§0.1), emulators.
-   - Create a room, add the 9 bots, start, and submit your truth while bots are pending.
-   - With `DEBUG: BOTS SUBMIT` only some of them submit, so drive it until a waiting screen reads `Waiting for 1 player...` if the flow allows.
-   - If it does not, record `Device check: NOT RUN — the waiting count could not be held at 1` and rely on the widget tests.
-5. **Gates:** the nine §1 gates, bare. Analyze 0 / 0 / 170; `flutter test` = 475 + the new cases; the rest unchanged.
+   **This is the falsifying test:** on the parent commit the card assertion fails at 375×667.
+2. **Two guards pin the full header at the default 800×600 test window,** which is now a short screen:
+   - `test/phase3_vote_test.dart`, *'the vote header names whose card is being voted on'* (`VOTING ON`);
+   - `test/guidance_strings_test.dart`, the vote phase's guidance line.
 
-**Blast radius:** the five files above; their tests; `docs/design_ui_direction.md` (*Count labels agree with their numbers*); the tracker (a §3 row).
-
-### 2.2 AM2 — The accusation waits for its button to settle, and retries once (Issue 195 → A, completed)
-
-**What this means for the user.** The web smoke is the release check for the web app. Once in twelve runs (AL2, October 14) it failed a healthy build, and a false FAIL costs a five-minute rerun and an investigation. After AM2 that failure mode is gone, or it is logged loudly when it happens.
-
-**The gap.** `accuseWhileWindowOpen` in `test/web_e2e/playthrough_helpers.js`:
-- it finds the accusation button as soon as the unmask panel appears and clicks its centre at once;
-- it then waits 8 s for the accusation to appear in the room's `unmaskGuesses`, and **never retries**.
-
-In AL2's failing run, P1's click landed at y = 714.6 where every other run clicked at y = 505.0, and no `submitUnmaskGuess` reached the emulator. The inference, not proven: the panel was still sliding in.
-
-#### Implementation (test code only)
-1. **Before clicking,** read the candidate's rect until two reads 300 ms apart agree within 1 px, up to 3 s. Log both rects whenever the first two disagree.
-2. **After the click,** wait up to **4 s** for the accusation in `unmaskGuesses`.
-3. **If it is not there,** and the window still has at least 3 s left (`unmaskDeadline − now`):
-   - log `retrying accusation for <name> (first click at x,y)`;
-   - re-find the button, settle again, click once more;
-   - wait for the rest of the window.
-4. **If it is still missing, fail** as today, naming both click positions.
-5. **Never retry when the window has closed.** A late click is the case AI11's `deadline_passed` reason exists for, not a test flake.
-
-#### Validation
-1. **Falsify (in a scratch clone, through the real runner):**
-   - (a) offset only the **first** click by +200 px vertically → the run passes and the log shows `retrying accusation`;
-   - (b) the same offset with the retry removed → the match-summary script fails, naming the click position.
-2. **Repetition:** build the emulator web app once, then run `node run_match_summary_playthrough.js` **10 times** inside one `firebase emulators:exec` session. Use a throwaway scratch wrapper that copies the runner's inner mode; do not commit it.
-   - Record each run's exit code and every `retrying accusation` line.
-   - **Pass:** 10 of 10 exit 0.
-3. **Then `./scripts/run_web_smoke.sh`** exits 0 once on the final tree.
-4. **Gates:** `check_web_e2e_strings.sh` exits 0, and the nine §1 gates are unchanged.
-
-**Blast radius:** `test/web_e2e/playthrough_helpers.js`; the tracker (a §3 row noting that AL2's one-in-twelve false FAIL is addressed). No design doc.
-
-### 2.3 AM3 — The deck's navigation stays in view, and the deck opens on a card you can choose (Issue 198 → A)
-
-**What this means for the user.** On the vote screen a voter often sees their own sealed forgery up front, a disabled button and no visible way to move through the deck; PREV, the dots and NEXT are below the fold. After AM3 they are always on screen above the button, and the deck opens on a card the voter can pick.
-
-**The gap** (re-checked October 15 on `3a8f7f1`):
-- **Layout today.** `lib/screens/phase3_vote.dart` (about `:385–585`) lays the vote screen out as `Column[ Expanded(SingleChildScrollView(… header, prompt, discussion line, CardGrid …)), SizedBox(16), <pinned area> ]`.
-  - The pinned area is `PrimaryButton('TAP A CARD TO CHOOSE' / 'CONFIRM VOTE')` for a voter.
-  - For the target it is the `$N of $M ballots sealed` row plus `I'M READY` / `NOT READY`.
-- **`CardGrid` draws its own navigation row** at the bottom of its build, inside the scroll view: `lib/widgets/card_grid.dart` about `:345–470`, with `Previous option`, `Show option k of N` and `Next option` in AI8's `Semantics` recipe.
-- **Its index starts at `initialIndex`,** default 0 (`initState`, about `:127–135`).
-- **The votable test already exists:** `_isAnswerUnvotable(ans)` (about `:180`) is true for the target, the viewer's own option, or a placeholder.
-- **The design promise is tested on `CardGrid` alone:** `test/vote_option_truncation_test.dart` at 320×640, and `test/stacked_deck_navigation_test.dart` at 375×812. Nothing tests the whole screen.
-
-#### Implementation
-1. **A shared deck state.** Add `DeckController extends ChangeNotifier` in `lib/widgets/card_grid.dart`:
-   - it holds `index` and `length`;
-   - methods `next()`, `previous()`, `goTo(int)`, each clamped, each notifying only on a change.
-
-   `CardGrid` takes an optional `controller`. When it is `null`, it keeps its own state exactly as today, so the standalone tests and their behaviour are unchanged.
-2. **The navigation row becomes its own widget.** Move the PREV · dots · NEXT row out of `CardGrid.build` into `DeckNavigationBar({required DeckController controller})`, in the same file.
-   - Keep AI8's recipe exactly: the same labels, `container`, `button`, `onTap`, `excludeSemantics`, the 44-pt heights, the `Flexible` dot slots, and `enabled` / disabled at the ends.
-   - `CardGrid` gets `showNavigation` (default **true**). When true, it renders `DeckNavigationBar` where the row is today, so standalone use is unchanged.
-3. **The deck opens on a card the viewer can choose.** `CardGrid` gets `openOnFirstVotable` (default **false**).
-   - When it is true, `selectedAuthorId` is null and the viewer is not the target, the starting index is the first `i` where `!_isAnswerUnvotable(answers[i])`.
-   - It falls back to `initialIndex` when none is votable.
-   - A selection still wins, as today.
-4. **The vote screen uses them.** In `phase3_vote.dart`:
-   - hold a `DeckController` in the `State`;
-   - **create a new one whenever the card changes** (compare the card id), so each reader's deck starts fresh;
-   - pass it to `CardGrid(controller: …, showNavigation: false, openOnFirstVotable: !isTarget, …)`;
-   - render `DeckNavigationBar(controller: …)` in the **pinned area**: directly above `TAP A CARD TO CHOOSE` for a voter, and above the `ballots sealed` row for the target.
-5. **Do not change** the swipe gestures, peek rendering, card sizes, selection rules, copy, or AC3's tap cue and its suppression on unvotable cards.
-
-#### Validation
-1. **New `test/vote_screen_fit_test.dart` — the screen, not the widget.**
-   - Pump the real `GaslightApp` on the vote screen (reuse `test/vote_screen_contrast_test.dart`'s setup) with three options, **the voter's own forgery first**.
-   - Run it at 320×640, 375×667, 375×812 and 1280×800, at text scale 1.0 and 1.3, as a **voter** and as the **target**.
-   - Assert, **without scrolling**, that `Previous option`, `Next option`, every `Show option k of N`, and the action button (`TAP A CARD TO CHOOSE`, or `I'M READY` for the target) each lie fully inside the screen.
-   - For the voter, assert the front card shows the tap cue `Tap to choose this one` and is not the voter's own. For the target, assert the deck opens on card I.
-   - **This is the falsifying test.** On the parent commit the navigation row is off screen at 375×667 and the front card is the voter's own.
-2. **A reset test.** After the reader changes (the next card's room state is pumped), the deck opens on that card's first votable option, not on the previous index.
+   In each, **set the surface the test means** — `tester.view.physicalSize = const Size(430, 932); tester.view.devicePixelRatio = 1.0;`, with both reset in a tear-down. **Leave the assertions' text unchanged.** Add a compact counterpart at 375×667 beside each: `VOTING ON` and the guidance line absent, *"One of these is X's truth."* present. This is THE LOOP rule 12's spirit: the test states its size; the production code is not bent to the test.
 3. **Falsify (compiling faults):**
-   - (a) `showNavigation: true` on the vote screen, with the pinned bar removed → the fit test fails at 375×667;
-   - (b) `openOnFirstVotable: false` → the front-card assertion fails;
-   - (c) the controller kept across cards → the reset test fails.
+   - (a) the threshold set to 0 (never compact) → the card assertions fail at 375×667;
+   - (b) compact drops the target's subtitle → `vote_screen_contrast_test.dart`, unedited, fails;
+   - (c) the threshold ignores text scale (raw height) → the 375×812 × 1.3 card case fails. **If (c) does not fail,** the text-scale term is not load-bearing at the tested sizes. Keep it anyway, and record that.
 4. **Over-reach guards, unedited:**
-   - `test/stacked_deck_navigation_test.dart`, `test/vote_option_truncation_test.dart`, `test/vote_tap_cue_test.dart`, `test/phase3_vote_target_ready_toggle_test.dart`, and every other vote-screen test.
-   - **`test/tap_target_guidelines_test.dart`**: its PREV / NEXT / dot size assertions must still pass. If the guideline can now evaluate the row, because it no longer touches a scroll view's edge, keep the direct size assertions anyway; do not simplify them (§4).
-5. **The web check.**
-   - Add `UI.PREVIOUS_OPTION` and `UI.NEXT_OPTION` to the vote sweep's key controls in `run_full_playthrough.js` (both already exist in `ui_strings.js`).
-   - `./scripts/run_web_smoke.sh` must exit 0, with all three vote sizes passing.
-   - Copy that run's three `w21_<size>_vote.png` into `docs/playthroughs/evidence/` as **`w22_<size>_vote.png`**; never overwrite.
-   - Open each, and add **W22 — Vote screen: deck navigation in view at three sizes** to `findings_web.md`. Use the W21 format: **Verdict:** PASS, the room code, and the three paths.
-6. **Device check (REQUIRED).**
-   - On the **iPhone SE** simulator (375×667), with a reset Keychain and the emulators, reach a vote as a voter.
-   - Without scrolling, PREV, the dots, NEXT and `TAP A CARD TO CHOOSE` are all on screen, and the front card shows the tap cue.
-   - Press NEXT until your own forgery comes up: it shows SEALED and cannot be chosen.
-   - As the target on a later card, the row sits above the ballots line.
-   - Take screenshots with `xcrun simctl io`.
-7. **The nine §1 gates, bare:** analyze **0 / 0 / 170**; `flutter test` = the previous count + the new cases; the rest unchanged.
+   - `vote_screen_contrast_test.dart` (both subtitles at 375×667);
+   - `blinking_eye_test.dart` and `ui_e2e_test.dart` (`THEY ARE VOTING ON YOUR TRUTH`);
+   - `stacked_deck_navigation_test.dart`, `vote_option_truncation_test.dart`, `vote_tap_cue_test.dart`, `tap_target_guidelines_test.dart`, `small_phone_truncation_test.dart`;
+   - AM3's other fit assertions, and every other vote-screen test.
+5. **STOP condition.** If 320×640 at text scale 1.3 cannot show the card with **exactly** this compact header, STOP before committing. Do not shrink fonts or drop more on your own. File it with options: for example, a smaller prompt font on the shortest screens, or accepting that one size. Include the measured visible pixels.
+6. **Web:** `./scripts/run_web_smoke.sh` exits 0. Its sweep sizes are all full-header at text scale 1.0, so the sweep is unchanged and the compact header is exercised by the widget tests and the device check.
+7. **Device check (REQUIRED):** iPhone SE simulator (375×667), reset Keychain, emulators.
+   - At first paint, **without scrolling**, the voter sees the one-line *"One of these is X's truth."* row, the prompt, the front card's `OPTION` label and answer, PREV · dots · NEXT and `TAP A CARD TO CHOOSE`.
+   - Then set `xcrun simctl ui <udid> content_size accessibility-extra-extra-extra-large` (the app clamps to 1.3) and check the same.
+   - As the target on a later card: the compact target row and its subtitle.
+   - Take screenshots with `xcrun simctl io`, and restore the text size with `large`.
+8. **The nine §1 gates, bare:** analyze **0 / 0 / 169**; `flutter test` = 518 + the new cases; the rest unchanged.
+9. **One commit:** `fix(ui): a compact vote header on short screens so the card shows at first paint (Wave AN / AN1, Issue 199 Option A)`, with `Falsification:` (a–c) and `Device check:`. Do not push.
 
 **Blast radius:**
-- `lib/widgets/card_grid.dart`, `lib/screens/phase3_vote.dart`;
-- `test/vote_screen_fit_test.dart` (new);
-- `test/web_e2e/run_full_playthrough.js`;
-- `docs/playthroughs/findings_web.md` and the three `w22_*.png`;
-- `docs/design_ui_direction.md` → the stacked deck section:
-  - keep *"Six options fit inside a 320×640 pt viewport"* as the `CardGrid` promise;
-  - add the screen-level guarantee: the navigation row lives in the pinned bar above the action button and is visible at every tested size; the deck opens on the first card the viewer can choose, and the target opens on card I;
-  - tested by `test/vote_screen_fit_test.dart`;
-- the tracker: a §3 row, and Issue 198's block deleted.
+- `lib/screens/phase3_vote.dart`;
+- `test/vote_screen_fit_test.dart`, `test/phase3_vote_test.dart`, `test/guidance_strings_test.dart`;
+- `docs/design_ui_direction.md` → the stacked deck / vote screen section: add **"Short screens"** — the threshold (`height / textScale < 740`), what folds into one line, what is dropped (the `VOTING ON` label, the heading, and the guidance line), and that the card's label and first line are visible at first paint at every tested size, tested by `test/vote_screen_fit_test.dart`;
+- the tracker: a §3 row, and Issue 199's block deleted.
 
 ---
 
@@ -321,6 +223,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 | **AK2** (release) | `28f8a06` | 1.2.0 (9) deployed to web hosting with the user's go-ahead. | Live `version.json` 1.2.0 / 9; `/` and `/assets/.env` 200; deploy fresh; iOS archive untouched. |
 | **AL1** (196 → A) | `410f986` | `pluralize` helper; *1 SUSPECT JOINED*, *1 Deception*, *1 wrong vote*, *Found by no one*; the two correct siblings now share the path. | October 15: control 26 / 26; always-plural → +21 −5 (`1 Deception`, `1 SUSPECT JOINED` ×3, `'vote'`). |
 | **AL2** (197 → A) | `3a8f7f1` | The responsive sweep runs on the real game at every phase and three sizes; W17–W19 corrected to NOT RUN; W21 cites 15 new images. | October 15: runner exit 0 (315 s, 15 / 15 `w21_*`); a wrong phase at W6 → exit 1 at the first in-game sweep; the evidence diff is 15 additions. |
+| **AM1** (196 → A, completed) | `3d50704` | `Waiting for 1 player...` (craft and vote), the deck-too-small sentence as `deckTooSmallMessage`, the carousel's `prompt(s) from player(s)`, and the reveal banner, all through `pluralize`. | October 15: the single-quoted scan returns exactly the nine allowed lines; no `? 's' : ''` is left. |
+| **AM2** (195 → A, completed) | `64f9d40` | The accusation settles (two reads 300 ms apart within 1 px) before its click, and is retried once while ≥ 3 s of the window remain. | Cause observed (a click mid-animation); 10 of 10 repeat runs; October 15 runner: 6 settle waits, 0 retries. |
+| **AM3** (198 → A) | `7a28dc1` | `DeckController` and `DeckNavigationBar`: the vote deck's PREV · dots · NEXT sit in the pinned bar; the deck opens on the first card the voter can choose; a new controller per card. | October 15: fit and controller tests 31 / 31; `openOnFirstVotable: false` → +8 −9; W22 shows the row at three sizes; runner exit 0. |
 | **192 → B** | `3a36e91` | AH1's device check closed by acceptance (simulator observation plus source trace). | Nothing to falsify. |
 
 ### Earlier waves
@@ -348,6 +253,11 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **AK1: the lobby's House Rules controls are clicked through the DOM (`domClick`), not with the pointer.** They sit behind the full-width suspects sheet, and pointer clicks there never registered. Each click is checked against the room document before and after.
 - **AK1: W10 asserts at least one score chip, not one per player.** A reader whose score does not change gets no chip; the app is right.
 - **AK1: the runner checks more than the spec asked:** `.env`, Playwright and Java up front (exit 2); at least 20 PNGs; free ports afterwards; a 570 s watchdog that explains itself before the 600 s kill. It also refuses a shot directory inside the tracked evidence folder.
+- **AM1: the count-label scan is run with the pattern single-quoted.** In double quotes the shell turns `\$` into `$` and the scan silently finds nothing; my spec had that bug, and the design doc carries the corrected command.
+- **AM1: the deck-too-small sentence's singular forms are unreachable today.** The smallest deck holds 25 prompts, and a room holds at most 8 players; they are asserted on `deckTooSmallMessage` itself.
+- **AM3: `DeckNavigationBar` also takes `selectedIndex`,** so the chosen option's dot stays oxblood as before.
+- **AM3: the analyzer count fell to 169.** The State's `dispose()` now disposes the deck controller, so its `unnecessary_overrides` info is gone; that is not a regression.
+- **AM3: a comment in `test/tap_target_guidelines_test.dart`** (the vote harness) still describes the old layout. The file is a guard, so it was not edited; its assertions pass unchanged.
 - **AL2: the reveal is swept after the unmask window, and once its score chips are up.** The window lasts 20 s and three resizes would spend it, and a reveal still mid-beat shows different content at each size. The room waits on the reveal for the host's `CONTINUE`, so the phase assertion holds. The spec said only "in W9".
 - **AL2: the W17–W19 Reason line says the Lobby image shows the title screen.** The guide's draft said only the Lobby image shows what it names. Opening the three files showed the title screen (`THE GUEST LEDGER`): the old script saved it under `_lobby` before it created a room. No cited image at any of the three sizes shows the screen it names.
 - **AL2: the sweep's evidence is a resized desktop page, built for the emulator.** No touch emulation and no mobile user agent (the old w17 context had both, but only ever showed the title screen and a lobby). The emulator-only build also paints Firebase's red *"Running in emulator mode"* banner over the bottom 20–37 px of every image, which can cover the lower edge of a bottom-pinned button; the release build has none.
@@ -396,6 +306,11 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **`lastReaction` / `lastReactionAt` are deliberately retained dead fields.** **`lib/utils/prompt_decks.dart` is generated.**
 - **The web E2E string contract (Wave AE)** and the **Wave AB** and **Wave AA** invariants stand as recorded in the design docs.
 
+**Vote screen and copy (AL1, AM1, AM3)**
+- **Every count label goes through `pluralize`** (`lib/utils/pluralize.dart`); zero gets its own phrase where *only 0* would read wrongly. The exemptions and the single-quoted scan are in `design_ui_direction.md`.
+- **The vote deck's navigation lives in the pinned bar** (`DeckNavigationBar`), never back inside the scroll view. **The deck opens on the first card the viewer can choose** (`openOnFirstVotable`); the target opens on card I. Each card gets a new `DeckController`.
+- **`test/vote_screen_fit_test.dart` judges the whole screen, not `CardGrid` alone.** Its "on screen" means inside the window, inside every enclosing scroll view's viewport, and reachable by a tap at its centre.
+
 **The web smoke (AK1)**
 - **Run `./scripts/run_web_smoke.sh` before every web deploy;** it must exit 0.
 - **It never writes `docs/playthroughs/evidence/`.** Re-capturing cited evidence is a deliberate, separate act under the evidence gate's rules.
@@ -424,6 +339,8 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 | Decks, re-roll exclusion, stems | `docs/design_prompt_system.md` |
 | Pixel-measured contrast | `test/helpers/rendered_contrast.dart` |
 | Craft and reveal error mapping | `lib/utils/callable_error_message.dart` |
+| Count labels (`pluralize`), its exemptions and the scan | `lib/utils/pluralize.dart`; `docs/design_ui_direction.md` (*Count labels agree with their numbers*) |
+| The vote deck's navigation and opening card; the whole-screen fit | `lib/widgets/card_grid.dart` (`DeckController`, `DeckNavigationBar`); `test/vote_screen_fit_test.dart`; `docs/design_ui_direction.md` (stacked deck) |
 
 ---
 
@@ -442,9 +359,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 ## THE LOOP — for any future item
 
 ```
-(1) Take Wave AM in order (§2): AM1, AM2, then AM3. After AM3 the queue is
-    empty: STOP unless there is a new user selection or instruction, a red
-    gate, or a user report. Never fill in or edit a `Your selection:` line.
+(1) Take AN1 (§2). After it the queue is empty: STOP unless there is a new
+    user selection or instruction, a red gate, or a user report. Never fill
+    in or edit a `Your selection:` line.
 (2) "Implemented to spec" and "fixed the problem" are different claims. Check
     the second against the ORIGINAL REPORT in the tracker, not the spec.
 (3) If a fix depends on how a platform or library behaves, read the vendored
@@ -466,8 +383,8 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 (11) Never show an exception object to a player. Map e.code + details.reason.
 (12) A rename broke a test? UPDATE THE ASSERTION, never the production code.
 (13) Server changes the shipped client reads must be ADDITIVE (1.1.0 (8)).
-(14) RE-RUN THE FULL BATTERY: all nine gates bare; analyze 0/0/170; flutter
-     tests at least 475; functions tests at least 167.
+(14) RE-RUN THE FULL BATTERY: all nine gates bare; analyze 0/0/169; flutter
+     tests at least 518; functions tests at least 167.
 (15) COMMIT: ONE ITEM, ONE Conventional Commit; WHY + Falsification + Device
      check in the body; tracker updated in the same commit. Ask before any
      deploy; never upload to TestFlight unless asked.
@@ -477,7 +394,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 
 ## Close-out
 
-**When AM3 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are:
+**When AN1 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are:
 1. a new user selection or instruction (a new guide rewrite specs it first);
 2. a §1 gate going red (investigate, then file with options);
 3. a user or tester report — for example *Something went wrong. Try again.* while offline, which re-opens the 192 inference (§4).

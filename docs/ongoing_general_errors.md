@@ -8,6 +8,24 @@
 
 ## 1. Open & in-flight
 
+**Wave AM verified, October 15, 2026 — AM1, AM2 and AM3 hold.** Checked on `7a28dc1` by re-running the battery, the tests behind each item, one fault each for AM1 and AM3, and the runner — not by reading the commit bodies.
+- **Battery, all bare, on `HEAD`:**
+  - analyze 0 / 0 / **169**, exit 1. That is one fewer than 170: AM3's `dispose()` now disposes the deck controller, so the `unnecessary_overrides` info is gone.
+  - `flutter test` **518**, exit 0.
+  - functions build exit 0; functions test **167**.
+  - decks, all five evidence invocations and web strings: exit 0.
+  - deploy FRESH.
+  - iOS release build exit 0 (50.1MB).
+- **AM1:** the count-label scan — single-quoted, as AM1 corrected; my spec's double-quoted command found nothing — returns exactly the nine allowed lines. `? 's' : ''` is gone from `lib/`.
+- **AM3, from a scratch clone:**
+  - Control: `vote_screen_fit_test` and `deck_controller_test` pass **31 / 31**.
+  - Fault: `openOnFirstVotable: false` → **+8 −9**, exactly the voter cases and the reset case, as AM3 recorded.
+  - The W22 images show PREV · dots · NEXT above the button at three sizes.
+- **AM2:** its cause is now **observed**, not inferred: a click on the accusation button while it was still animating in. Its fault (a) and its 10 of 10 repeat runs are in `64f9d40`.
+- **The runner, once, from a scratch clone of `HEAD`:** exit 0 in 323 s; both playthroughs passed (163 s and 127 s); all 15 `w21_*` names, with the vote sweep now also requiring `Previous option` and `Next option` inside the viewport at all three sizes; 6 `[SETTLE]` waits and 0 retries.
+- **Docs AM3 left undone:** the guide was still titled "Active Build" and its analyze bar still read 170. Both are corrected in the October 15 rewrite. A comment in `test/tap_target_guidelines_test.dart` (the vote harness) still describes the old layout; it is a guard file, so it was left alone.
+- **Filed:** **Issue 199** — AM3's own device-check finding that on a 375×667 phone the vote card starts below the fold.
+
 **Wave AL verified, October 15, 2026 — AL1 and AL2 hold.** Checked on `3a8f7f1` by re-running the battery, the runner and a fault for each item, not by reading the commit bodies.
 - **Battery, all bare, on `HEAD`:**
   - analyze 0 / 0 / **170**, exit 1;
@@ -147,7 +165,40 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-Issues 1–198 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Nine selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, 194 A and 195 A on October 13, 196 A and 197 A on October 14, and 198 A on October 15. **No issue is open.** The user approved the release of **1.2.0 (9)** in chat on October 13. AJ1 built and verified its iOS archive for the user to upload; AK1 repaired the web smoke that had blocked its web deploy, and AK2 deployed 1.2.0 (9) to web hosting on October 14 with the user's go-ahead (§3). AL1 (Issue 196, count labels) and AL2 (Issue 197, the responsive sweep) are done, and so are Wave AM's AM1 (the remaining count labels, under Issue 196), AM2 (the web smoke's accusation, under Issue 195) and AM3 (Issue 198, the vote screen's deck navigation) (§3). The fixes in AL1, AM1 and AM3 are in the code only and reach players with the next build (1.2.1 (10) or later). The TestFlight upload of the iOS archive is still the user's step.
+Issues 1–198 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Nine selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, 194 A and 195 A on October 13, 196 A and 197 A on October 14, and 198 A on October 15. **One issue is open: 199** (the vote card starts below the fold on a 375×667 phone). It came from AM3's device check and was filed on October 15. **The user chose Option A in chat on October 19.** It is specced as guide step **AN1**. Its selection line is left blank, because the choice is recorded here, as for every chat selection. The user approved the release of **1.2.0 (9)** in chat on October 13. AJ1 built and verified its iOS archive for the user to upload; AK1 repaired the web smoke that had blocked its web deploy, and AK2 deployed 1.2.0 (9) to web hosting on October 14 with the user's go-ahead (§3). AL1 (Issue 196, count labels) and AL2 (Issue 197, the responsive sweep) are done, and so are Wave AM's AM1 (the remaining count labels, under Issue 196), AM2 (the web smoke's accusation, under Issue 195) and AM3 (Issue 198, the vote screen's deck navigation) (§3). The fixes in AL1, AM1 and AM3 are in the code only and reach players with the next build (1.2.1 (10) or later). The TestFlight upload of the iOS archive is still the user's step.
+
+### Issue 199: On a 375×667 phone (iPhone SE) the vote card itself starts below the fold
+**Status**: ⚠️ Confirmed Unresolved — AM3 (`7a28dc1`) recorded it under *"FOUND, NOT CHANGED"* from its SE device check. It was filed on October 15 because whether to change the layout is the user's call.
+- **What a voter sees at first paint on a 375×667 screen:**
+  - the header — the *VOTING ON* avatar, two subtitles, the prompt card and the discussion line, about 450 pt in all;
+  - then AM3's pinned PREV · dots · NEXT row and the `TAP A CARD TO CHOOSE` button;
+  - **but none of the card they must judge.** Its top sits about 25 pt below the scroll area, so they must scroll or swipe up first.
+- **AM3 made it worse:** before AM3 about 27 pt of the card's top showed. The pinned row added about 44 pt, the cost Issue 198's Option A named, and that took the sliver away. The navigation and the button, which were AM3's point, are in view.
+- **The web evidence supports it.** In `docs/playthroughs/evidence/w22_375x812_vote.png`, with a four-line prompt, the card's top is at about y 553 and the pinned bar starts at about y 685. A 667-pt screen is 145 pt shorter, so its bar starts at about 540, above the card. This was **not re-observed on the SE** in the October 15 verification; it rests on AM3's screenshots and that arithmetic.
+- **Larger text shrinks it further:** at text scale 1.3 the header grows, so taller phones lose more of the card as well.
+- **`test/vote_screen_fit_test.dart`** requires the navigation and the button on screen without scrolling, but **not any part of the card**.
+- **A fix reaches players only in a new build.** It affects iOS on SE-sized phones and the web at short heights.
+
+**Option A (recommended)**: **Compact the vote screen's header on short screens.**
+- When the space above the pinned bar can't show the prompt card plus the top of the deck:
+  - fold the *VOTING ON* avatar and *"One of these is X's truth."* into one line;
+  - drop the *"Find the real truth among the forgeries…"* line (it is the same on every card, and the manual has it);
+  - tighten the prompt card's padding.
+- Tall screens are unchanged.
+- Strengthen `vote_screen_fit_test.dart`: at 320×640 and 375×667, text scale 1.0 and 1.3, the front card's `OPTION` label and its first line of answer must be visible without scrolling.
+  - *Pros*: On the smallest phones the voter sees the prompt, the card, the navigation and the button at first paint, and the fit test then guards the card too.
+  - *Cons*: The header gets two layouts to keep in step; the discussion line disappears on short screens; contrast and truncation tests on the vote screen may need new cases. It reaches players only in a new build.
+
+**Option B**: **Scroll the deck into view on first paint** (an automatic scroll on each new card, so the card's top is visible).
+  - *Pros*: Little code and no layout change.
+  - *Cons*: The prompt card, which is what the voter is judging, can scroll partly off. A scroll on every new card can feel jumpy. At 320×640 the prompt and the card may still not fit together.
+
+**Option C**: **Leave it as it is.**
+  - *Pros*: Nothing to do. The navigation and the button are in view.
+  - *Cons*: On the smallest phones a voter's first view of each card has no card in it.
+
+Your selection: _____
+
 
 ## 2. Lessons that still bite
 
