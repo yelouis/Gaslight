@@ -1,10 +1,10 @@
-# Agent Execution Guide — Active Build: one docs-only item (AO1, Issue 200 → A) — October 19, 2026
+# Agent Execution Guide — Queue Complete (Wave AN verified; f7e7a12 kept) — October 19, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191) plus two October 12 follow-ups (192, 193). All sixteen of its items, AI1–AI15 and AH1, are built, and AI11's server change is deployed. **The whole wave was verified on October 13** by re-running every gate and re-falsifying every item in scratch clones (§3).
 
-**One docs-only item is approved: AO1 (§2).** The user chose **Issue 200 → Option A** in chat: keep the IDE auto-fix `f7e7a12`, which migrated every `withOpacity`, and make the docs match. Wave AN was verified on October 19 (§3): AN1 is `7602141`. Uploading 1.2.0 (9) to TestFlight is still the user's step, and the fixes since then reach players only in a new build, which is the user's call. When AO1 is done the queue is empty. **Do not invent work.**
+**There is no approved work and no open issue.** Wave AN was verified on October 19 (§3): AN1 is `7602141`. The user's IDE auto-fix `f7e7a12` (migrating `withOpacity` to `withValues`) was kept and recorded in Wave AO (AO1, Issue 200 → A). Uploading 1.2.0 (9) to TestFlight is still the user's step, and the fixes since then reach players only in a new build, which is the user's call. **The queue is empty. Do not invent work.**
 
 **If work arrives** (a selection, a red gate, a user report), these rules apply:
 - **Every number and literal string in a spec is a decision, not a suggestion.** Implement it as written.
@@ -21,7 +21,7 @@
    - When reverting a whole commit would delete a symbol the test imports, inject a targeted fault instead.
    - Paste the failing output under `Falsification:`.
 3. **Read exit codes bare:** never through `| tail`, never through `timeout` (macOS has none). An empty result means nothing until the same query has been seen to return something (lesson §2.44).
-4. **New code adds zero analyzer infos.** Use `.withValues(alpha: x)`, never `.withOpacity(x)`, and no `print`. `flutter analyze lib test` must stay at **0 errors · 0 warnings · 17 infos**, as measured on `f7e7a12`; Issue 200 decides whether that stays the bar.
+4. **New code adds zero analyzer infos.** Use `.withValues(alpha: x)`, never `.withOpacity(x)`, and no `print`. `flutter analyze lib test` must stay at **0 errors · 0 warnings · 17 infos**, as measured on `f7e7a12`.
 5. **Strings are verbatim:** copy, keys, labels, punctuation, the em dash.
 6. **Server changes are additive only.** Build **1.1.0 (8)** is on testers' phones and still matches on `HttpsError` message text, so a message string never changes; a new `details` field is fine.
 7. **Rendered contrast is measured from pixels** with `test/helpers/rendered_contrast.dart` (`measureRenderedContrast`), never with the widget-tree walk in `test/contrast_tokens_test.dart`.
@@ -85,7 +85,7 @@
 
 | Gate | Result |
 |---|---|
-| `flutter analyze lib test` | **0 errors · 0 warnings · 17 infos · exit 1** (13 `avoid_print` in tests, 4 `use_build_context_synchronously`). It was 169 until `f7e7a12` migrated the 137 `withOpacity` and applied other `dart fix` clean-ups; **Issue 200** decides whether that commit stays. |
+| `flutter analyze lib test` | **0 errors · 0 warnings · 17 infos · exit 1** (13 `avoid_print` in tests, 4 `use_build_context_synchronously`). It was 169 until `f7e7a12` migrated the 137 `withOpacity` and applied other `dart fix` clean-ups; kept (Issue 200 → A). |
 | `flutter test` | **569 passing** (AL1 +9, AM1 +12, AM3 +31, AN1 +51), exit 0 |
 | `npm --prefix functions run build` | clean, exit 0 |
 | `npm --prefix functions test` | **167 passing**, exit 0 |
@@ -106,62 +106,9 @@
 
 ---
 
-## 2. AO1 — Record Issue 200 → A: keep the IDE auto-fix `f7e7a12`
+## 2. Queue — empty
 
-**Docs only.** No code, no version bump, no deploy. **`build/ios/archive/` stays untouched** (§5).
-
-**What this means for the user.** Their IDE's auto-fix (`f7e7a12`) migrated every `withOpacity` to `withValues` and applied a few `dart fix` clean-ups; every gate is green on it. The user chose to **keep it**. The docs still call that migration *rejected* and give an analyzer bar of 169, so the next agent could "fix" it back. AO1 makes the docs match the tree.
-
-**The gap** (on `f7e7a12`):
-- **The tracker:** Issue 200 is an open block with a blank `Your selection: _____`; the user answered in chat.
-- **This guide:**
-  - §0 rule 4 and §1's analyze row say *"Issue 200 decides whether that stays"*;
-  - §5's rejected list calls 139 C rejected and points at Issue 200;
-  - §2 lists Issue 200 as awaiting the user;
-  - THE LOOP's step (1) and the close-out mention Issue 200.
-
-### 2.1 Implementation — docs only
-0. **First, if `git status --porcelain` shows the two docs modified** (`docs/agent_execution_guide.md`, `docs/ongoing_general_errors.md`), commit them **unmodified**, on their own: `docs: commit the October 19 Wave AN verification and the AO1 spec, unmodified`. If anything outside `docs/` is modified, STOP and ask the user.
-1. **Tracker, Unresolved:**
-   - Delete the whole **Issue 200** block, from `### Issue 200:` to its `Your selection: _____` line. Do not fill that line in.
-   - Rewrite the intro to say no issue is open.
-   - Add **200 A (October 19)** to its list of selections made in chat.
-2. **Tracker, §3:** add one row at the top of the table:
-   - Area: **Issue 200 Option A — the IDE auto-fix `f7e7a12` is kept** (chosen by the user in chat, October 19).
-   - What it records:
-     - 134 `.withOpacity(x)` → `.withValues(alpha: x)` in `lib/` and three tests;
-     - the `dart fix` clean-ups — an unused `dart:ui` import, a local renamed without its underscore, one `.toList()` dropped, and three tests' `../lib/` imports made `package:` imports;
-     - everything green on it: analyze 0 / 0 / 17, `flutter test` 569, functions 167, the pixel contrast tests, the web smoke;
-     - 139 C's rejection is superseded;
-     - no code changed in AO1.
-   - Issues column: `200`.
-   - Contract column: `docs/agent_execution_guide.md` §0 rule 4, §1 and §5.
-3. **This guide.** Edit the phrases where they actually sit, in §0, §1 and §5. The copies quoted in this §2 go away when §2 becomes *"Queue — empty"*.
-   - **§0 rule 4:** delete *"; Issue 200 decides whether that stays the bar"*, so the bar reads **0 · 0 · 17**.
-   - **§1's analyze row:** replace *"**Issue 200** decides whether that commit stays."* with *"kept (Issue 200 → A)."*
-   - **§3:** add a row: **`f7e7a12`** (200 → A) · *"IDE auto-fix kept: `withOpacity` → `withValues` everywhere, plus `dart fix` clean-ups"* · *"October 19: every gate green; analyze 0 / 0 / 17"*.
-   - **§5, rejected list:** replace the clause that begins *"— though that migration was applied on October 19…"* with *"— superseded: the migration was applied by `f7e7a12` and kept (Issue 200 → A)."*
-   - **§5, new invariant under "Vote screen and copy"** (or a new "Code hygiene" heading): **"`withOpacity` is gone. New code uses `.withValues(alpha: …)`; never reintroduce it. `grep -rn 'withOpacity(' lib/ test/` returns nothing."**
-   - **Queue-complete mode:**
-     - retitle the guide `# Agent Execution Guide — Queue Complete (Wave AN verified; f7e7a12 kept) — <date>`;
-     - make the framing say there is no approved work and no open issue;
-     - make §2 read *"Queue — empty."* plus one line naming AO1's commit by its title;
-     - remove Issue 200 from THE LOOP's step (1) and from the close-out.
-4. **Do not** change any code, revert or amend `f7e7a12`, or touch the evidence folder.
-
-### 2.2 Validation
-1. Before committing, `git status --porcelain` shows only `docs/agent_execution_guide.md` and `docs/ongoing_general_errors.md`.
-2. **The tracker's selection lines:** `grep -c "^### Issue 200" docs/ongoing_general_errors.md` → `0` and `grep -c "^Your selection:" docs/ongoing_general_errors.md` → `0`. Positive control: `git show HEAD:docs/ongoing_general_errors.md | grep -c "^### Issue 200"` → `1`, run after step 0's commit.
-3. **The invariant is true:** `bash -c "grep -rn 'withOpacity(' lib/ test/ | wc -l"` → `0`. Positive control: `bash -c "git grep -c 'withOpacity(' 25a155c -- lib test | awk -F: '{s+=\$NF} END {print s}'"` → `134`, which proves the query can see the calls.
-4. **The bar is real:** run `flutter analyze lib test` once, bare. It must read **0 errors · 0 warnings · 17 infos** (exit 1), matching §0 and §1.
-5. `grep -n "200" docs/agent_execution_guide.md` shows no wording that treats Issue 200 as pending.
-6. **Doc gates, bare, each exit 0:** `./scripts/check_playthrough_evidence.sh` (no argument and the four files in §1), `./scripts/check_web_e2e_strings.sh`, `./scripts/check_decks_in_sync.sh`. The code gates need no re-run: no file outside `docs/` changes.
-7. **One commit:** `docs: keep the IDE auto-fix f7e7a12 and record the withOpacity migration (Wave AO / AO1, Issue 200 Option A)`.
-   - The body holds the WHY, `Falsification: not applicable — documentation only` and `Device check: NOT RUN — documentation only`.
-   - A commit cannot contain its own hash, so do not try.
-   - Do not push.
-
-**Blast radius:** `docs/ongoing_general_errors.md`, `docs/agent_execution_guide.md`. No design doc: `withValues` is an API choice, not a design contract.
+Issue 200 Option A was recorded in AO1: `docs: keep the IDE auto-fix f7e7a12 and record the withOpacity migration (Wave AO / AO1, Issue 200 Option A)`.
 
 ---
 
@@ -173,6 +120,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 
 | Item | Commit | What shipped | Falsification re-run |
 |---|---|---|---|
+| **`f7e7a12`** (200 → A) | `f7e7a12` | IDE auto-fix kept: `withOpacity` → `withValues` everywhere, plus `dart fix` clean-ups | October 19: every gate green; analyze 0 / 0 / 17 |
 | **AI1** (178 → B) | `356c5c3` | CocoaPods removed; Swift Package Manager only; the iOS release build is the ninth gate. | Build exit 0; no `Podfile`; parent build exit 1. |
 | **AH1** | `0e7b377` | `unknown` → *"Could not reach the parlour. Check your connection and try again."* for create and join. | Revert → exactly its 2 tests fail. The physical-iPhone check was closed by acceptance (192 → B). |
 | **AI2** (191 → A) | `4addbdb` | README runs `flutter analyze lib test` and points here for the info count. | `grep -c 188 README.md` = 0. |
@@ -287,6 +235,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **The vote deck's navigation lives in the pinned bar** (`DeckNavigationBar`), never back inside the scroll view. **The deck opens on the first card the viewer can choose** (`openOnFirstVotable`); the target opens on card I. Each card gets a new `DeckController`.
 - **`test/vote_screen_fit_test.dart` judges the whole screen, not `CardGrid` alone.** Its "on screen" means inside the window, inside every enclosing scroll view's viewport, and reachable by a tap at its centre.
 
+**Code hygiene (`f7e7a12`, Issue 200 → A)**
+- **`withOpacity` is gone. New code uses `.withValues(alpha: …)`; never reintroduce it. `grep -rn 'withOpacity(' lib/ test/` returns nothing.**
+
 **The web smoke (AK1)**
 - **Run `./scripts/run_web_smoke.sh` before every web deploy;** it must exit 0.
 - **It never writes `docs/playthroughs/evidence/`.** Re-capturing cited evidence is a deliberate, separate act under the evidence gate's rules.
@@ -295,7 +246,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **Never open the live web app in a browser to check a deploy:** `lib/main.dart:65` signs in anonymously at boot. Use `version.json` and HTTP status codes.
 - **`build/ios/archive/` is the user's upload artefact:** never delete or rebuild it until the user says the upload is done.
 
-**Assessed and rejected — do NOT re-propose:** everything listed in the September guides and the tracker §3, including **migrating `withOpacity` → `withValues` (139 C)** — though that migration was applied on October 19 by the user's IDE fix `f7e7a12`, and keeping it is **Issue 200**: until the user decides, do not revert it and do not re-litigate it. October 10 rejections: 178 A and C; 179 B; 180 B and C; 181 B; 182 B; 183 B; 184 B; 185 B; 186 B; 187 B; 188 B and C; 189 A; 190 B. October 12 rejections: 192 A; 193 A and C. October 13 rejections: 194 B and C.
+**Assessed and rejected — do NOT re-propose:** everything listed in the September guides and the tracker §3, including **migrating `withOpacity` → `withValues` (139 C)** — superseded: the migration was applied by `f7e7a12` and kept (Issue 200 → A). October 10 rejections: 178 A and C; 179 B; 180 B and C; 181 B; 182 B; 183 B; 184 B; 185 B; 186 B; 187 B; 188 B and C; 189 A; 190 B. October 12 rejections: 192 A; 193 A and C. October 13 rejections: 194 B and C.
 
 **There is no chat or emote feature.**
 
@@ -335,9 +286,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 ## THE LOOP — for any future item
 
 ```
-(1) Take AO1 (§2). After it the queue is empty: STOP unless there is a new
-    user selection or instruction, a red gate, or a user report. Never fill
-    in or edit a `Your selection:` line.
+(1) The queue is empty: STOP unless there is a new user selection or
+    instruction, a red gate, or a user report. Never fill in or edit a
+    `Your selection:` line.
 (2) "Implemented to spec" and "fixed the problem" are different claims. Check
     the second against the ORIGINAL REPORT in the tracker, not the spec.
 (3) If a fix depends on how a platform or library behaves, read the vendored
@@ -370,9 +321,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 
 ## Close-out
 
-**When AO1 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are:
+**The queue is empty. Do not invent work.** The only legitimate triggers for further action are:
 1. a new user selection or instruction (a new guide rewrite specs it first);
 2. a §1 gate going red (investigate, then file with options);
 3. a user or tester report — for example *Something went wrong. Try again.* while offline, which re-opens the 192 inference (§4).
 
-Anything else, including tidying, upgrading dependencies or migrating `withOpacity`, is not approved.
+Anything else, including tidying, upgrading dependencies or re-opening closed issues, is not approved.
