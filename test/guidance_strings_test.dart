@@ -150,6 +150,10 @@ void main() {
     });
 
     testWidgets('Vote phase displays exact discussion guidance string', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(430, 932);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
       final me = PlayerState(id: 'p1', name: 'Alice', isHost: true);
       final target = PlayerState(id: 'p2', name: 'Bob');
       final card = CardModel(
@@ -183,6 +187,46 @@ void main() {
       const expectedVoteString =
           'Find the real truth among the forgeries. Talk it out — discussion is part of the game.';
       expect(find.text(expectedVoteString), findsOneWidget);
+    });
+
+    testWidgets('Vote phase omits discussion guidance string when compact at 375x667', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(375, 667);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final me = PlayerState(id: 'p1', name: 'Alice', isHost: true);
+      final target = PlayerState(id: 'p2', name: 'Bob');
+      final card = CardModel(
+        targetPlayerId: 'p2',
+        promptText: 'Vote prompt',
+        truthAnswer: 'True answer',
+      );
+      final state = GameState(
+        roomCode: 'TEST',
+        currentPhase: GamePhase.vote,
+        totalPlayers: 2,
+        isTimerDisabled: true,
+        cards: [card],
+        currentCardAssignments: {'p1': 'p2'},
+        resolutionOrder: ['p2'],
+        currentReaderId: 'p2',
+      );
+      gameService.debugSetState(state, [me, target], me.id);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<GameService>.value(
+          value: gameService,
+          child: const MaterialApp(
+            home: Phase3VoteScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      const expectedVoteString =
+          'Find the real truth among the forgeries. Talk it out — discussion is part of the game.';
+      expect(find.text(expectedVoteString), findsNothing);
     });
 
     testWidgets('Reveal phase displays exact guidance string', (WidgetTester tester) async {

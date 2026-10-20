@@ -86,7 +86,7 @@ void main() {
           child: MaterialApp(
             builder: (context, child) {
               return MediaQuery(
-                data: MediaQueryData(accessibleNavigation: reduceMotion),
+                data: MediaQuery.of(context).copyWith(accessibleNavigation: reduceMotion),
                 child: child!,
               );
             },
@@ -103,6 +103,10 @@ void main() {
     // person entirely. Falsified by restoring `PlayerAvatar(player: me)`:
     // both assertions below fail.
     testWidgets('the vote header names whose card is being voted on', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(430, 932);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
       await setupAndPumpVoteScreen(
         tester: tester,
         isReader: false, // viewer is Bob; the card belongs to Alice
@@ -111,6 +115,33 @@ void main() {
       );
 
       expect(find.text('VOTING ON'), findsOneWidget);
+      expect(
+        find.text("One of these is Alice's truth."),
+        findsOneWidget,
+        reason: 'the card belongs to Alice, not to the viewer',
+      );
+      expect(
+        find.text("One of these is Bob's truth."),
+        findsNothing,
+        reason: "the header must not name the viewer",
+      );
+
+      await gameService.leaveRoom();
+    });
+
+    testWidgets('the compact vote header at 375x667 names whose card is being voted on and omits VOTING ON', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(375, 667);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await setupAndPumpVoteScreen(
+        tester: tester,
+        isReader: false,
+        reduceMotion: true,
+        readyPlayers: const {},
+      );
+
+      expect(find.text('VOTING ON'), findsNothing);
       expect(
         find.text("One of these is Alice's truth."),
         findsOneWidget,

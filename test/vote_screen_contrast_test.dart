@@ -54,8 +54,12 @@ void main() {
     });
 
     /// The real app (production theme, background and routing) on the vote screen
-    /// at 375 x 667, inside a root RepaintBoundary.
-    Future<GlobalKey> pumpVoteScreen(WidgetTester tester, {required String localPlayerId}) async {
+    /// at [size], inside a root RepaintBoundary.
+    Future<GlobalKey> pumpVoteScreen(
+      WidgetTester tester, {
+      required String localPlayerId,
+      Size size = const Size(375, 667),
+    }) async {
       final gameState = GameState(
         roomCode: 'TEST',
         currentPhase: GamePhase.vote,
@@ -66,7 +70,7 @@ void main() {
       );
       gameService.debugSetState(gameState, [p1, p2, p3], localPlayerId);
 
-      tester.view.physicalSize = const Size(375, 667);
+      tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       tester.platformDispatcher.accessibilityFeaturesTestValue =
@@ -106,13 +110,24 @@ void main() {
 
     testWidgets("target view: 'Keep a straight face while the parlor deliberates.' >= 4.5 : 1", (tester) async {
       try {
-        final root = await pumpVoteScreen(tester, localPlayerId: 'p1');
+        final root = await pumpVoteScreen(tester, localPlayerId: 'p1', size: const Size(430, 932));
 
         final sample = await measure(tester, root, find.text('Keep a straight face while the parlor deliberates.'));
 
         expect(sample.ratio, greaterThanOrEqualTo(4.5),
             reason: 'target subtitle measured ${sample.ratio.toStringAsFixed(2)} : 1 '
                 '(${sample.foreground} on ${sample.background}); ink on the dark ground measured 1.18 : 1');
+      } finally {
+        gameService.dispose();
+      }
+    });
+
+    testWidgets("target view at 375x667: 'Keep a straight face...' is dropped and heading is present", (tester) async {
+      try {
+        await pumpVoteScreen(tester, localPlayerId: 'p1', size: const Size(375, 667));
+
+        expect(find.text('Keep a straight face while the parlor deliberates.'), findsNothing);
+        expect(find.text('THEY ARE VOTING ON YOUR TRUTH'), findsOneWidget);
       } finally {
         gameService.dispose();
       }

@@ -401,6 +401,9 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
     final deckController = _deckController!;
     final selectedIndex = gridAnswers.indexWhere((a) => a.authorId == _localSelectedAuthorId);
 
+    final double effectiveHeight = MediaQuery.sizeOf(context).height / MediaQuery.textScalerOf(context).scale(1.0);
+    final bool compactHeader = effectiveHeight < 740;
+
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 500),
       child: Column(
@@ -409,113 +412,190 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  if (isTarget) ...[
-                    PlayerAvatar(player: me, size: 50),
-                    const SizedBox(height: 8),
-                    Text(
-                      'THEY ARE VOTING ON YOUR TRUTH',
-                      style: TextStyle(
-                        color: theme.colorScheme.secondary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        letterSpacing: 2,
+                  if (compactHeader) ...[
+                    if (isTarget) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          PlayerAvatar(player: me, size: 28),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'THEY ARE VOTING ON YOUR TRUTH',
+                              style: TextStyle(
+                                color: theme.colorScheme.secondary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                letterSpacing: 2,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Keep a straight face while the parlor deliberates.',
-                      style: TextStyle(
-                        color: AppColors.ivory.withValues(alpha: 0.75),
-                        fontSize: 13,
-                        fontStyle: FontStyle.italic,
+                    ] else if (targetPlayer != null) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          PlayerAvatar(player: targetPlayer, size: 28),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              "One of these is ${targetPlayer.name}'s truth.",
+                              style: TextStyle(
+                                color: AppColors.ivory.withValues(alpha: 0.75),
+                                fontSize: 13,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              maxLines: 2,
+                            ),
+                          ),
+                        ],
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ] else if (targetPlayer != null) ...[
-                    Text(
-                      'VOTING ON',
-                      style: TextStyle(
-                        color: theme.colorScheme.secondary.withOpacity(0.7),
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 3,
+                    ] else ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          PlayerAvatar(player: me, size: 28),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'WHICH ONE IS THE TRUTH?',
+                              style: TextStyle(
+                                color: theme.colorScheme.secondary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                letterSpacing: 2,
+                              ),
+                              maxLines: 2,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    PlayerAvatar(player: targetPlayer, size: 50),
+                    ],
                     const SizedBox(height: 10),
+                    ParchmentCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Text(
+                        currentCard.promptText,
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                          fontFamily: 'Lora',
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ] else ...[
+                    if (isTarget) ...[
+                      PlayerAvatar(player: me, size: 50),
+                      const SizedBox(height: 8),
+                      Text(
+                        'THEY ARE VOTING ON YOUR TRUTH',
+                        style: TextStyle(
+                          color: theme.colorScheme.secondary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          letterSpacing: 2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Keep a straight face while the parlor deliberates.',
+                        style: TextStyle(
+                          color: AppColors.ivory.withValues(alpha: 0.75),
+                          fontSize: 13,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ] else if (targetPlayer != null) ...[
+                      Text(
+                        'VOTING ON',
+                        style: TextStyle(
+                          color: theme.colorScheme.secondary.withOpacity(0.7),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 3,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      PlayerAvatar(player: targetPlayer, size: 50),
+                      const SizedBox(height: 10),
+                      Text(
+                        "One of these is ${targetPlayer.name}'s truth.",
+                        style: TextStyle(
+                          color: AppColors.ivory.withValues(alpha: 0.75),
+                          fontSize: 13,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'WHICH ONE IS THE TRUTH?',
+                        style: TextStyle(
+                          color: theme.colorScheme.secondary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ] else ...[
+                      PlayerAvatar(player: me, size: 50),
+                      const SizedBox(height: 16),
+                      Text(
+                        'WHICH ONE IS THE TRUTH?',
+                        style: TextStyle(
+                          color: theme.colorScheme.secondary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    ParchmentCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Prompt:',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface.withOpacity(0.7),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            currentCard.promptText,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                              fontFamily: 'Lora',
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Text(
-                      "One of these is ${targetPlayer.name}'s truth.",
+                      'Find the real truth among the forgeries. Talk it out — discussion is part of the game.',
                       style: TextStyle(
-                        color: AppColors.ivory.withValues(alpha: 0.75),
-                        fontSize: 13,
+                        fontFamily: 'Lora',
                         fontStyle: FontStyle.italic,
+                        color: AppColors.ivory.withOpacity(0.7),
+                        fontSize: 13,
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'WHICH ONE IS THE TRUTH?',
-                      style: TextStyle(
-                        color: theme.colorScheme.secondary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ] else ...[
-                    PlayerAvatar(player: me, size: 50),
-                    const SizedBox(height: 16),
-                    Text(
-                      'WHICH ONE IS THE TRUTH?',
-                      style: TextStyle(
-                        color: theme.colorScheme.secondary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        letterSpacing: 2,
-                      ),
-                    ),
+                    const SizedBox(height: 12),
                   ],
-                  const SizedBox(height: 16),
-                  ParchmentCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Column(
-                      children: [
-                        Text(
-                          'Prompt:',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          currentCard.promptText,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
-                            fontFamily: 'Lora',
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Find the real truth among the forgeries. Talk it out — discussion is part of the game.',
-                    style: TextStyle(
-                      fontFamily: 'Lora',
-                      fontStyle: FontStyle.italic,
-                      color: AppColors.ivory.withOpacity(0.7),
-                      fontSize: 13,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
                   CardGrid(
                     answers: gridAnswers,
                     selectedAuthorId: isTarget ? null : _localSelectedAuthorId,
