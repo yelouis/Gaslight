@@ -1,10 +1,10 @@
-# Agent Execution Guide — Active Build: Wave AN (a compact vote header on short screens, Issue 199 → A) — October 19, 2026
+# Agent Execution Guide — Active Build: Wave AN (a compact vote header on short screens, Issue 199 → A3) — October 19, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191) plus two October 12 follow-ups (192, 193). All sixteen of its items, AI1–AI15 and AH1, are built, and AI11's server change is deployed. **The whole wave was verified on October 13** by re-running every gate and re-falsifying every item in scratch clones (§3).
 
-**One item is approved: AN1 (§2).** On October 19 the user chose **Issue 199 → Option A**: on short screens, a compact vote header so the card shows at first paint. Wave AM was verified on October 15 (§3): AM1 `3d50704`, AM2 `64f9d40`, AM3 `7a28dc1`. Uploading 1.2.0 (9) to TestFlight is still the user's step, and the fixes since then reach players only in a new build, which is the user's call. When AN1 is done the queue is empty. **Do not invent work.**
+**One item is approved: AN1 (§2).** On October 19 the user chose **Issue 199 → Option A3** in chat. The first AN1 spec (A) was stopped on a test-font measurement (`25a155c`); A3 is the re-measured version. Wave AM was verified on October 15 (§3): AM1 `3d50704`, AM2 `64f9d40`, AM3 `7a28dc1`. Uploading 1.2.0 (9) to TestFlight is still the user's step, and the fixes since then reach players only in a new build, which is the user's call. When AN1 is done the queue is empty. **Do not invent work.**
 
 **If work arrives** (a selection, a red gate, a user report), these rules apply:
 - **Every number and literal string in a spec is a decision, not a suggestion.** Implement it as written.
@@ -106,90 +106,108 @@
 
 ---
 
-## 2. Wave AN — one item: a compact vote header on short screens (Issue 199 → A)
+## 2. Wave AN — one item: a compact vote header on short screens (Issue 199 → A3)
 
 **No release in this wave** (no `pubspec.yaml` bump). The fix reaches players only in a new build, which is the user's call. **`build/ios/archive/` stays untouched** (§5).
 
-### 2.1 AN1 — The vote card is visible at first paint on short screens
+**History, so you don't repeat it.** The first AN1 spec (Issue 199 → A) was stopped at its STOP condition (`25a155c`). The cause was a measurement artefact: `test/vote_screen_fit_test.dart` renders Flutter's test font, which is about twice as wide as Lora, with the decks' shortest prompt, and its target is the host, who sees a debug-only button. The case was re-measured on October 19 with the real fonts and real prompt lengths, and the user chose **A3** in chat. The figures below are from that measurement, made in a scratch clone with this exact layout.
 
-**What this means for the user.** On an iPhone SE (375×667), a voter's first view of each card shows the header, the prompt, the navigation and the button, but **none of the card they must judge**. After AN1, short screens use a compact header, so the prompt, the front card's label and answer, PREV · dots · NEXT and the button all show without scrolling. Tall screens look exactly as they do today.
+### 2.1 AN1 — The vote card is visible at first paint on short screens (Issue 199 → A3)
 
-**The gap** (re-checked on `7a28dc1`; find lines by their text if they moved):
-- **The header today.** In `lib/screens/phase3_vote.dart` (about `:395–500`) the scroll view's column starts with:
-  - **for a voter:** `VOTING ON` (11 pt) · 8 · `PlayerAvatar(size: 50)` · 10 · *"One of these is X's truth."* (13 pt italic, ivory @ 0.75) · 16 · `WHICH ONE IS THE TRUTH?` (20 pt);
-  - **for the target:** `PlayerAvatar(me, size: 50)` · 8 · `THEY ARE VOTING ON YOUR TRUTH` (18 pt) · 4 · *"Keep a straight face while the parlor deliberates."*;
-  - **then, for both:** 16 · the prompt `ParchmentCard` (padding `horizontal: 16, vertical: 12`) · 12 · *"Find the real truth among the forgeries. Talk it out — discussion is part of the game."* · 12 · `CardGrid`.
-- **That is about 450 pt above the deck.** With AM3's pinned bar, the card's top falls below the scroll area at 375×667 (AM3's device check; Issue 199).
-- **`test/vote_screen_fit_test.dart` requires the navigation and the button on screen, but not the card.**
-- **Measured on the web evidence** (`w22_*_vote.png`, full header): at 375×812 and 1280×800 the card's `OPTION I` label and answer are visible today.
+**What this means for the user.** On an iPhone SE (375×667), a voter's first view of each card shows the header, the prompt, the navigation and the button, but **none of the card they must judge**; even at normal text the answer starts about 100 pt below the fold for a typical prompt. After AN1, short screens use a compact header, so the prompt, the front card's label and its answer show without scrolling, at normal and large text. Tall screens look exactly as they do today.
+
+**The gap** (re-checked on `25a155c`; find lines by their text if they moved):
+- **The header today.** In `lib/screens/phase3_vote.dart` (about `:410–520`) the scroll view's column holds:
+  - **for a voter:** `VOTING ON` · `PlayerAvatar(size: 50)` · *"One of these is X's truth."* · `WHICH ONE IS THE TRUTH?`;
+  - **for the target:** `PlayerAvatar(me, size: 50)` · `THEY ARE VOTING ON YOUR TRUTH` (18 pt) · *"Keep a straight face while the parlor deliberates."*;
+  - **then, for both:** a 16-pt gap · the prompt `ParchmentCard` (padding `vertical: 12`, a `Prompt:` label, a 6-pt gap, the prompt at **20 pt** bold Lora) · 12 · *"Find the real truth among the forgeries. Talk it out — discussion is part of the game."* · 12 · `CardGrid`.
+- **The test cannot see it.** `test/vote_screen_fit_test.dart` checks the navigation and the button, but not the card. It also renders the **test font** and uses a 29-character prompt — the shortest of the decks' 150 prompts, which run 29–89 characters with a median of 65.
 
 #### Implementation
-1. **When the header is compact.** In the vote screen's build, compute
+1. **When the header is compact,** in the vote screen's build:
    ```dart
    final double effectiveHeight = MediaQuery.sizeOf(context).height / MediaQuery.textScalerOf(context).scale(1.0);
    final bool compactHeader = effectiveHeight < 740;
    ```
-   The app already clamps text scale to 1.3. So:
-
-   | Screen | Text scale 1.0 | Text scale 1.3 |
-   |---|---|---|
-   | 320×640 | compact | compact |
-   | 375×667 | compact | compact |
-   | 375×812 | **full** | compact |
-   | 1280×800 | **full** | compact |
-   | 768×1024 | **full** | **full** |
-2. **The compact voter header**, replacing everything above the prompt card:
-   - Drop `VOTING ON` and `WHICH ONE IS THE TRUTH?`.
-   - Add one centred `Row`: `PlayerAvatar(player: targetPlayer, size: 28)`, `SizedBox(width: 8)`, then `Flexible(Text("One of these is ${targetPlayer.name}'s truth.", …))`. The text keeps the **same string and style**, with `maxLines: 2`.
+   - **Compact:** 320×640 and 375×667 at both text scales; 375×812 and 1280×800 at 1.3.
+   - **Full:** 375×812, 1280×800 and 768×1024 at 1.0; 768×1024 at 1.3.
+2. **The compact voter header,** replacing everything above the prompt card:
+   - one centred `Row`: `PlayerAvatar(player: targetPlayer, size: 28)`, `SizedBox(width: 8)`, `Flexible(Text("One of these is ${targetPlayer.name}'s truth.", …))`;
+   - the text keeps the same string and style, with `maxLines: 2`;
+   - `VOTING ON` and `WHICH ONE IS THE TRUTH?` are not shown.
 3. **The compact target header:**
-   - One centred `Row`: `PlayerAvatar(player: me, size: 28)`, `SizedBox(width: 8)`, then `Flexible(Text('THEY ARE VOTING ON YOUR TRUTH', …))` at **16 pt** (was 18), same weight and letter-spacing.
-   - Then `SizedBox(height: 4)` and *"Keep a straight face while the parlor deliberates."* exactly as today. **Keep this subtitle:** `test/vote_screen_contrast_test.dart` measures it at 375×667.
+   - one centred `Row`: `PlayerAvatar(player: me, size: 28)`, `SizedBox(width: 8)`, `Flexible(Text('THEY ARE VOTING ON YOUR TRUTH', …))` at **16 pt**, with the same weight and letter-spacing;
+   - **no subtitle:** *"Keep a straight face…"* is not shown when compact.
 4. **Compact, for both views:**
-   - the gap before the prompt card is **10** (was 16);
-   - the prompt card's padding becomes `horizontal: 16, vertical: 8`, with the same `Prompt:` label and prompt text style;
-   - **drop the *"Find the real truth…"* line and its spacing**, leaving a **10** gap before `CardGrid`.
+   - the gap before the prompt card is **10**;
+   - the prompt card's padding is `horizontal: 16, vertical: 8`;
+   - **no `Prompt:` label and no 6-pt gap after it;**
+   - the prompt text is **17 pt** (20 pt when full), with the same weight, colour and font;
+   - the *"Find the real truth…"* line and its spacing are not shown;
+   - the gap before `CardGrid` is **10**.
 5. **Unchanged:**
-   - the full header (non-compact), byte for byte;
+   - the full header, byte for byte;
    - the spectator branch;
-   - `CardGrid` and AM3's pinned bar, the copy, and the colours.
+   - `CardGrid`, AM3's pinned bar, the copy, and the colours.
    New code uses `.withValues(alpha: …)`, never `.withOpacity`.
 
 #### Validation
-1. **Strengthen `test/vote_screen_fit_test.dart`.** It already runs four sizes × two text scales × voter and target. In every case, add:
-   - the front card's `OPTION <roman>` label passes the file's existing "on screen" check (inside the window, inside every enclosing scroll viewport, reachable by a tap at its centre);
-   - its answer `Text`'s top edge is inside the scroll viewport with **at least 20 px** of it visible;
-   - the header mode matches the table in step 1 — `find.text('VOTING ON')` (voter) is present only when full, and the guidance line (`find.text('Find the real truth among the forgeries. Talk it out — discussion is part of the game.')`) likewise.
+1. **`test/vote_screen_fit_test.dart` measures real text.** Load the app fonts in `setUpAll`, exactly as `test/small_phone_truncation_test.dart` does: **Lora**, **CormorantGaramond** and **PhosphorLight** from `assets/fonts/`. AM3's existing cases must still pass unedited.
+2. **Add a group:** *"the front card is visible at first paint (Issue 199 / AN1)"*.
+   - **Setup:**
+     - the real `GaslightApp` on the vote screen;
+     - a card whose options put the voter's own forgery first;
+     - prompts of **29**, **65** and **89** characters: the existing fixture, then *"The trick I use to avoid making small talk with people in public."* and *"The first thing I would buy with lottery money that would make people question my sanity."*;
+     - sizes 320×640, 375×667, 375×812 and 1280×800; text scales 1.0 and 1.3;
+     - as the voter (`p2`) and as a **non-host target**: make `p3` the host in this group. Under `flutter test` `kDebugMode` is true, so a host target would see `DEBUG: BOTS SUBMIT` in the pinned bar, which release builds never show.
+   - **That is 48 cases.** In every one:
+     - **(a)** the front card's `OPTION <roman>` label passes the file's existing "on screen" check: inside the window, inside every enclosing scroll viewport, and reachable by a tap at its centre;
+     - **(b)** the front card's answer `Text` has **at least 20 px** inside the scroll viewport, measured from its top edge.
+   - **The only exceptions to (b),** listed by name in the test with a comment giving the measured value:
+     - 320×640 × 1.3: voter with the 89-character prompt (−10.5 px); target with 65 and 89 (−26.5, −58.5);
+     - 375×667 × 1.3: target with 89 (0.5);
+     - 375×812 × 1.0: the **full** header, unchanged, with 89 (voter 16.5, target −6.5).
 
-   **This is the falsifying test:** on the parent commit the card assertion fails at 375×667.
-2. **Two guards pin the full header at the default 800×600 test window,** which is now a short screen:
-   - `test/phase3_vote_test.dart`, *'the vote header names whose card is being voted on'* (`VOTING ON`);
-   - `test/guidance_strings_test.dart`, the vote phase's guidance line.
+     These cases still assert (a).
+   - **Also assert** the header mode from step 1: `VOTING ON` (voter) and the guidance line present only when full; `Prompt:` absent when compact.
+   - **This is the falsifying test:** on the parent commit (b) fails in most short-screen cases. The scratch measurement showed −41.5 to −445 px.
+3. **Three guards pin the full header at sizes that are now compact.** In each, the test states the size it means; **the assertion text is unchanged.** This is THE LOOP rule 12's spirit: the test states its size, and the production code is not bent to the test.
+   - `test/phase3_vote_test.dart`, *'the vote header names whose card is being voted on'* (`VOTING ON`, at the default 800×600);
+   - `test/guidance_strings_test.dart`, the vote phase's guidance line (default 800×600);
+   - `test/vote_screen_contrast_test.dart`'s **target** case, *"'Keep a straight face…' >= 4.5 : 1"* (375×667), which A3 drops when compact.
 
-   In each, **set the surface the test means** — `tester.view.physicalSize = const Size(430, 932); tester.view.devicePixelRatio = 1.0;`, with both reset in a tear-down. **Leave the assertions' text unchanged.** Add a compact counterpart at 375×667 beside each: `VOTING ON` and the guidance line absent, *"One of these is X's truth."* present. This is THE LOOP rule 12's spirit: the test states its size; the production code is not bent to the test.
-3. **Falsify (compiling faults):**
-   - (a) the threshold set to 0 (never compact) → the card assertions fail at 375×667;
-   - (b) compact drops the target's subtitle → `vote_screen_contrast_test.dart`, unedited, fails;
-   - (c) the threshold ignores text scale (raw height) → the 375×812 × 1.3 card case fails. **If (c) does not fail,** the text-scale term is not load-bearing at the tested sizes. Keep it anyway, and record that.
-4. **Over-reach guards, unedited:**
-   - `vote_screen_contrast_test.dart` (both subtitles at 375×667);
-   - `blinking_eye_test.dart` and `ui_e2e_test.dart` (`THEY ARE VOTING ON YOUR TRUTH`);
-   - `stacked_deck_navigation_test.dart`, `vote_option_truncation_test.dart`, `vote_tap_cue_test.dart`, `tap_target_guidelines_test.dart`, `small_phone_truncation_test.dart`;
-   - AM3's other fit assertions, and every other vote-screen test.
-5. **STOP condition.** If 320×640 at text scale 1.3 cannot show the card with **exactly** this compact header, STOP before committing. Do not shrink fonts or drop more on your own. File it with options: for example, a smaller prompt font on the shortest screens, or accepting that one size. Include the measured visible pixels.
-6. **Web:** `./scripts/run_web_smoke.sh` exits 0. Its sweep sizes are all full-header at text scale 1.0, so the sweep is unchanged and the compact header is exercised by the widget tests and the device check.
-7. **Device check (REQUIRED):** iPhone SE simulator (375×667), reset Keychain, emulators.
-   - At first paint, **without scrolling**, the voter sees the one-line *"One of these is X's truth."* row, the prompt, the front card's `OPTION` label and answer, PREV · dots · NEXT and `TAP A CARD TO CHOOSE`.
-   - Then set `xcrun simctl ui <udid> content_size accessibility-extra-extra-extra-large` (the app clamps to 1.3) and check the same.
-   - As the target on a later card: the compact target row and its subtitle.
+   **How:**
+   - For the first two, set `tester.view.physicalSize = const Size(430, 932); tester.view.devicePixelRatio = 1.0;` with a tear-down reset.
+   - For the contrast test, give its `pumpVoteScreen` an optional `size` (default 375×667, unchanged for the voter case) and pass `Size(430, 932)` for the target case.
+   - Next to each, add a compact counterpart at 375×667 asserting that the dropped element is absent and the kept one present. For the contrast test, the voter case stays at 375×667 and still measures the voter subtitle, which is kept.
+4. **Falsify (compiling faults):**
+   - (a) threshold 0, so the header is never compact → (b) fails at 375×667;
+   - (b) the prompt at 20 pt when compact → (b) fails for the voter with 89 characters at 375×667 × 1.3 (measured −8.5 without the 17-pt change);
+   - (c) the threshold ignores text scale (raw height) → (b) fails at 375×812 × 1.3. If (c) does not fail, record that, and keep the term anyway.
+5. **Over-reach guards, unedited:**
+   - `blinking_eye_test.dart` and `ui_e2e_test.dart` (`THEY ARE VOTING ON YOUR TRUTH` stays in the compact row);
+   - `stacked_deck_navigation_test.dart`, `vote_option_truncation_test.dart`, `vote_tap_cue_test.dart`, `tap_target_guidelines_test.dart`, `small_phone_truncation_test.dart`, `deck_controller_test.dart`;
+   - AM3's fit cases, and every other vote-screen test.
+6. **STOP condition (narrowed).** If any of the 42 non-exception cases fails (b), or any of the 48 fails (a), STOP before committing, and file it with the measured values. Do not tune sizes beyond this spec.
+7. **Web:** `./scripts/run_web_smoke.sh` exits 0. Its sweep runs at text scale 1.0, where every size is full-header, so the sweep is unchanged.
+8. **Device check (REQUIRED):** iPhone SE simulator (375×667), reset Keychain, emulators.
+   - As a **voter**, at first paint and **without scrolling**, you see the one-line *"One of these is X's truth."* row, the prompt without its label, the front card's `OPTION` label and answer, PREV · dots · NEXT and `TAP A CARD TO CHOOSE`.
+   - Repeat with `xcrun simctl ui <udid> content_size accessibility-extra-extra-extra-large` (the app clamps to 1.3).
+   - As the **target**, the one-line row shows without the subtitle. A debug build shows the host `DEBUG:` button in the pinned bar, so judge the card's visibility for the target from the widget test, not the device.
    - Take screenshots with `xcrun simctl io`, and restore the text size with `large`.
-8. **The nine §1 gates, bare:** analyze **0 / 0 / 169**; `flutter test` = 518 + the new cases; the rest unchanged.
-9. **One commit:** `fix(ui): a compact vote header on short screens so the card shows at first paint (Wave AN / AN1, Issue 199 Option A)`, with `Falsification:` (a–c) and `Device check:`. Do not push.
+9. **The nine §1 gates, bare:** analyze **0 / 0 / 169**; `flutter test` = 518 + the new cases; the rest unchanged.
+10. **One commit:** `fix(ui): a compact vote header on short screens so the card shows at first paint (Wave AN / AN1, Issue 199 Option A3)`, with `Falsification:` (a–c) and `Device check:`. Do not push.
 
 **Blast radius:**
 - `lib/screens/phase3_vote.dart`;
-- `test/vote_screen_fit_test.dart`, `test/phase3_vote_test.dart`, `test/guidance_strings_test.dart`;
-- `docs/design_ui_direction.md` → the stacked deck / vote screen section: add **"Short screens"** — the threshold (`height / textScale < 740`), what folds into one line, what is dropped (the `VOTING ON` label, the heading, and the guidance line), and that the card's label and first line are visible at first paint at every tested size, tested by `test/vote_screen_fit_test.dart`;
-- the tracker: a §3 row, and Issue 199's block deleted.
+- `test/vote_screen_fit_test.dart`, `test/phase3_vote_test.dart`, `test/guidance_strings_test.dart`, `test/vote_screen_contrast_test.dart` (the target case's size only);
+- `docs/design_ui_direction.md` → the stacked deck / vote screen section, adding **"Short screens"**:
+  - the threshold, `height / textScale < 740`;
+  - what folds into one line, and what is dropped: the `VOTING ON` label, the heading, the target subtitle, the `Prompt:` label and the guidance line;
+  - the 17-pt prompt;
+  - the guarantee — the front card's label at every tested size, and its first answer line except the listed extremes — tested by `test/vote_screen_fit_test.dart` with the real fonts;
+- the tracker: a §3 row, and Issue 199's block deleted;
+- **lesson §2:** a layout measurement taken under the test font says nothing about real text. Load the app fonts, and use real lengths, before trusting a pixel.
 
 ---
 

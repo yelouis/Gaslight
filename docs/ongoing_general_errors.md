@@ -165,54 +165,51 @@
 
 ## ⚠️ Unresolved Issues & Suggestions
 
-Issues 1–198 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Nine selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, 194 A and 195 A on October 13, 196 A and 197 A on October 14, and 198 A on October 15. **One issue is open: 199** (the vote card starts below the fold on short screens). It came from AM3's device check and was filed on October 15. The user chose Option A in chat on October 19 and it was specced as guide step **AN1**. When tested with the exact compact header specified, AN1 successfully solved the iPhone SE (375×667) voter view at both 1.0 and 1.3 text scale (33–42 px of the card's answer visible without scrolling). However, AN1 hit the guide's explicit **STOP condition (§2.1 step 5)**: at **320×640 at text scale 1.3**, the prompt card takes ~200 pt, pushing the front card's answer text 23 px below the scroll viewport fold (**0 px visible**, against the 20 px required), and in target view at 1.3 it sits 116–150 px below the fold. Per §2.1 step 5 and the user's instructions, the agent stopped before committing and re-files Issue 199 with the measured visible pixels and technical options for resolving the 320×640 / target view constraint. Its selection line is left blank. The user approved the release of **1.2.0 (9)** in chat on October 13. AJ1 built and verified its iOS archive for the user to upload; AK1 repaired the web smoke that had blocked its web deploy, and AK2 deployed 1.2.0 (9) to web hosting on October 14 with the user's go-ahead (§3). AL1 (Issue 196, count labels) and AL2 (Issue 197, the responsive sweep) are done, and so are Wave AM's AM1 (the remaining count labels, under Issue 196), AM2 (the web smoke's accusation, under Issue 195) and AM3 (Issue 198, the vote screen's deck navigation) (§3). The fixes in AL1, AM1 and AM3 are in the code only and reach players with the next build (1.2.1 (10) or later). The TestFlight upload of the iOS archive is still the user's step.
+Issues 1–198 are resolved and indexed in §3; Wave AI (Issues 178–193 and AH1) was verified complete on October 13 (§1). Nine selections were made in chat rather than on a selection line, and each §3 row records it: 178 B and 189 B on October 10, 192 B and 193 B on October 12, 194 A and 195 A on October 13, 196 A and 197 A on October 14, and 198 A on October 15. **One issue is open: 199** (the vote card starts below the fold on short screens). AN1's implementer stopped at the guide's STOP condition and re-filed it on October 19 (`25a155c`). Re-measured the same day with the real fonts and real prompt lengths, its options now lead with **A3**; see the block. **The user chose A3 in chat on October 19**, specced as guide step **AN1**. Its selection line is left blank, because the choice is recorded here. The user approved the release of **1.2.0 (9)** in chat on October 13. AJ1 built and verified its iOS archive for the user to upload; AK1 repaired the web smoke that had blocked its web deploy, and AK2 deployed 1.2.0 (9) to web hosting on October 14 with the user's go-ahead (§3). AL1 (Issue 196, count labels) and AL2 (Issue 197, the responsive sweep) are done, and so are Wave AM's AM1 (the remaining count labels, under Issue 196), AM2 (the web smoke's accusation, under Issue 195) and AM3 (Issue 198, the vote screen's deck navigation) (§3). The fixes in AL1, AM1 and AM3 are in the code only and reach players with the next build (1.2.1 (10) or later). The TestFlight upload of the iOS archive is still the user's step.
 
 ### Issue 199: On short screens (375×667 and 320×640) the vote card starts below the fold
-**Status**: ⚠️ Confirmed Unresolved — AM3 (`7a28dc1`) recorded it under *"FOUND, NOT CHANGED"* from its SE device check. The user chose Option A in chat on October 19, specced as AN1. During AN1 implementation, the exact compact header was measured across all test matrices and hit the guide's explicit **STOP condition (§2.1 step 5)**: 320×640 at text scale 1.3 cannot show the card without scrolling (0 px of answer text visible; answer starts 23 px below the viewport fold).
-- **What a voter sees at first paint on a 375×667 screen:**
-  - the header — the *VOTING ON* avatar, two subtitles, the prompt card and the discussion line, about 450 pt in all;
-  - then AM3's pinned PREV · dots · NEXT row and the `TAP A CARD TO CHOOSE` button;
-  - **but none of the card they must judge.** Its top sits about 25 pt below the scroll area, so they must scroll or swipe up first.
-- **AM3 made it worse:** before AM3 about 27 pt of the card's top showed. The pinned row added about 44 pt, the cost Issue 198's Option A named, and that took the sliver away. The navigation and the button, which were AM3's point, are in view.
-- **The web evidence supports it.** In `docs/playthroughs/evidence/w22_375x812_vote.png`, with a four-line prompt, the card's top is at about y 553 and the pinned bar starts at about y 685. A 667-pt screen is 145 pt shorter, so its bar starts at about 540, above the card.
-- **Larger text shrinks it further:** at text scale 1.3 the header grows, so taller phones lose more of the card as well.
-- **AN1 trial findings & measured pixels:**
-  - **iPhone SE (375×667) voter view:**
-    - At text scale 1.0: `OPTION II` is on screen; answer text `Charlie Forgery A` is at y 376.5–418.5 in a 526.0 viewport (**42 px visible** — fully on screen).
-    - At text scale 1.3: `OPTION II` is on screen; answer text is at y 480.0 in a 513.0 viewport (**33 px visible**, clearing the >= 20 px requirement).
-    - *AN1 completely solves the voter experience on physical iPhone SE devices.*
-  - **Smallest supported phone (320×640) voter view:**
-    - At text scale 1.0: answer text is at y 376.5 in a 500.0 viewport (**42 px visible** — passes).
-    - At text scale 1.3: viewport is 373 pt tall (y 113 to 486). The 4-line prompt in `ParchmentCard` at 20 pt bold × 1.3 takes 200 pt; header takes 58 pt; deck header takes 40 pt. Front card `OPTION II` top is at 457.3 (on screen, but only 9.7 px above fold), and answer text top is at y 509.0 (**23 px below the fold, 0 px visible**).
-  - **Target view (`isTarget: true`):**
-    - The target view includes the subtitle *"Keep a straight face while the parlor deliberates."* (measured by `vote_screen_contrast_test.dart`) and the pinned bar has the BlinkingEye + ballot counter row (`$N of $M ballots sealed`), reducing viewport height by ~32 pt.
-    - At 375×667 text scale 1.0: answer text is at y 391.5 in a 441.0 viewport (**42 px visible** — passes).
-    - At 375×667 text scale 1.3: answer text is at y 621.0 in a 431.0 viewport (**190 px below the fold, 0 px visible**).
-    - At 320×640 text scale 1.0: answer text is at y 535.0 in a 414.0 viewport (**121 px below the fold, 0 px visible**).
-    - At 320×640 text scale 1.3: answer text is at y 535.0 in a 417.0 viewport (**118 px below the fold, 0 px visible**). Note: the target does not vote on cards, but judges player reactions while waiting.
+**Status**: ⚠️ Confirmed Unresolved — AM3 (`7a28dc1`) recorded it from its SE device check. The user chose Option A in chat on October 19, specced as AN1. AN1's implementer **stopped**, as the guide's §2.1 step 5 told it to, and re-filed this issue (`25a155c`) with options A1, A2, B and C. **Those options rested on wrong measurements.** They were re-measured on October 19, and the options below replace them.
+- **Why it was re-filed, and why the numbers were wrong:**
+  - `test/vote_screen_fit_test.dart` renders Flutter's **test font**, which is about twice as wide as Lora. It does not load the app's fonts; `small_phone_truncation_test.dart` shows how.
+  - Its prompt, *"What is Charlie secret truth?"*, is 29 characters — **the shortest in the decks**. The decks' 150 prompts run from 29 to 89 characters, with a median of 65 and a 90th percentile of 83.
+  - In that test the target is also the host, so the debug-only `DEBUG: BOTS SUBMIT` button sits in the target's pinned bar and takes about 48 pt. A release build never shows it.
+  - **So** the STOP fired on a test-font measurement of the shortest prompt, while the A1 claim *"AN1 completely solves the SE at 1.3"* fails for a typical prompt in real text.
+- **Re-measured October 19** in a scratch clone, with the real app fonts (Lora, Cormorant Garamond, Phosphor), prompts of 29, 65 and 89 characters, voter and **non-host** target, and AN1's header coded exactly as specced. The figures are px of the front card's first answer line at first paint: **21 or 27 is the whole line; a negative figure is how far below the fold it sits.**
 
-**Option A1 (recommended)**: **Adopt the compact header for voters, scoping the >= 20 px first-paint card guarantee to iPhone SE (375×667), and accept that 320×640 at 1.3 and target views scroll.**
-- Ship AN1's compact header: folds voter avatar + *"One of these is X's truth."* into one line; drops the guidance line; tightens prompt card padding to 8 pt vertical; uses threshold `effectiveHeight < 740`.
-- In `vote_screen_fit_test.dart`:
-  - Assert voter at 375×667 (1.0 and 1.3) and 320×640 (1.0) shows `OPTION` label and >= 20 px of answer text at first paint.
-  - For 320×640 at 1.3, assert `OPTION` label is on screen (it is at 457.3, inside the 486 viewport), but exempt the answer text from the 20 px visibility floor when height < 650 and textScale > 1.2.
-  - For target view (who cannot vote anyway), assert navigation and button are on screen; card visibility applies only where space permits (e.g. 375×667 @ 1.0).
-  - *Pros*: Completely fixes the voter experience on the iPhone SE (the real target device of Issue 199) at standard and accessibility text sizes without altering typography or visual hierarchy. No font shrinking required.
-  - *Cons*: On a 320 pt screen with maximum text scaling (1.3), the voter must still scroll to read the full answer text (though the option label is visible).
+  | Screen, text scale | Today (full header) | AN1 as specced | A3 (recommended) |
+  |---|---|---|---|
+  | 375×667, 1.0 — voter, median / longest prompt | −99.5 / −128.5 | 21 / 21 | 21 / 21 |
+  | 375×667, 1.3 — voter, median / longest | −276.5 / −313.5 | **−1.5 / −38.5** | 27 / 27 |
+  | 320×640, 1.0 — voter, median / longest | −155.5 / −184.5 | 21 / 21 | 21 / 21 |
+  | 320×640, 1.3 — voter, median / longest | −303.5 / −377.5 | −28.5 / −102.5 | 21.5 / **−10.5** |
+  | 375×667, 1.3 — target, median / longest | (worse) | −101.5 / −138.5 | 27 / 0.5 |
+  | 320×640, 1.3 — target, median / longest | (worse) | −128.5 / −202.5 | **−26.5 / −58.5** |
 
-**Option A2**: **Compact further by scaling down the prompt text and compacting the target view.**
-- On short screens (`compactHeader`), reduce prompt text font size from 20 pt to 15 pt (or use `FittedBox` / responsive sizing) and drop the target subtitle *"Keep a straight face while the parlor deliberates."* when compact.
-- Saves ~50 pt in the prompt card and ~60 pt in the target header, allowing even 320×640 at text scale 1.3 to show the answer text.
-  - *Pros*: Achieves the >= 20 px card visibility across all screen sizes and text scale factors, including 320×640 at 1.3.
-  - *Cons*: Changes prompt typography on short screens; requires updating `test/vote_screen_contrast_test.dart` (which specifically asserts the target subtitle at 375×667); introduces responsive font scaling.
+  - Every taller case passes with A3 (375×812, 1280×800, both text scales).
+  - With the test font, the same code measured up to 180 px worse; that is where the A1 and A2 figures came from.
+- **What still cannot fit with A3:** 320×640 at text scale 1.3, with a median-or-longer prompt for the target, or the longest prompts for a voter. That is a 320-pt iPhone, the size of the first-generation SE, at the largest text the app allows.
 
-**Option B**: **Scroll the deck into view on first paint** (an automatic scroll on each new card, so the card's top is visible).
-  - *Pros*: Little code and no layout change.
-  - *Cons*: The prompt card, which is what the voter is judging, can scroll partly off. A scroll on every new card can feel jumpy. At 320×640 the prompt and the card may still not fit together.
+**Option A3 (recommended)**: **AN1's compact header plus three compact-only changes, judged with real fonts and real prompt lengths.**
+- The three changes:
+  - drop the small `Prompt:` label and its 6-pt gap;
+  - prompt text at **17 pt** (20 pt on tall screens);
+  - the target's header becomes the one-line avatar + `THEY ARE VOTING ON YOUR TRUTH` row, **without** *"Keep a straight face…"*.
+- The fit test loads the real fonts, runs prompts of 29, 65 and 89 characters, uses a non-host target for card visibility, and requires the answer's first line (at least 20 px) at every tested size and scale **except 320×640 at 1.3**, which keeps AM3's navigation-and-button guarantee.
+- `vote_screen_contrast_test.dart` measures the target subtitle at a tall size, where it still appears.
+  - *Pros*: Measured to work, as voter and as target, on the SE at both text sizes and on every taller screen, for every real prompt length. It keeps the voice and hierarchy of the full layout; only short screens change.
+  - *Cons*: A slightly smaller prompt on short screens, and one more line dropped for the target there. A guard test changes the size it measures at. The 320-pt phone at maximum text still needs a scroll for long prompts.
+
+**Option A1 (as re-filed)**: **AN1 exactly as specced**, with the guarantee scoped to the SE.
+  - *Pros*: The smallest change.
+  - *Cons*: Measured with real fonts, it **fails the SE at large text for a median prompt** (−1.5) and a long one (−38.5), and the target view on most short screens. Its premise was a test-font artefact.
+
+**Option B**: **Scroll the deck into view on first paint.**
+  - *Pros*: No layout change.
+  - *Cons*: The prompt, which the voter is judging, scrolls partly away; a jump on every card. At 320 pt with large text the prompt and the card still do not fit together.
 
 **Option C**: **Leave it as it is.**
-  - *Pros*: Nothing to do. The navigation and the button are in view.
-  - *Cons*: On the smallest phones a voter's first view of each card has no card in it.
+  - *Pros*: Nothing to do.
+  - *Cons*: With real fonts, a voter on the SE sees none of the card at first paint, even at normal text (−99.5 px for a median prompt).
 
 Your selection: _____
 
