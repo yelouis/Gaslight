@@ -1,10 +1,10 @@
-# Agent Execution Guide — Queue Complete (Wave AN verified; f7e7a12 kept) — October 19, 2026
+# Agent Execution Guide — Active Build: release 1.2.1 (10) for TestFlight (AP1) — October 20, 2026
 
 **You are an engineering agent with no memory of this project.**
 
 **Where things stand.** Wave AI came from a read-only audit on October 10 (Issues 178–191) plus two October 12 follow-ups (192, 193). All sixteen of its items, AI1–AI15 and AH1, are built, and AI11's server change is deployed. **The whole wave was verified on October 13** by re-running every gate and re-falsifying every item in scratch clones (§3).
 
-**There is no approved work and no open issue.** Wave AN was verified on October 19 (§3): AN1 is `7602141`. The user's IDE auto-fix `f7e7a12` (migrating `withOpacity` to `withValues`) was kept and recorded in Wave AO (AO1, Issue 200 → A). Uploading 1.2.0 (9) to TestFlight is still the user's step, and the fixes since then reach players only in a new build, which is the user's call. **The queue is empty. Do not invent work.**
+**One item is approved: AP1 (§2), a TestFlight build of 1.2.1 (10).** The user asked for it in chat on October 20. It carries every fix since 1.2.0 (9): AL1, AM1, AM3, AN1 and the IDE auto-fix `f7e7a12` (kept, Issue 200 → A). AP1 builds and verifies the archive, and **uploading it is the user's step**. When AP1 is done the queue is empty. **Do not invent work.**
 
 **If work arrives** (a selection, a red gate, a user report), these rules apply:
 - **Every number and literal string in a spec is a decision, not a suggestion.** Implement it as written.
@@ -106,9 +106,85 @@
 
 ---
 
-## 2. Queue — empty
+## 2. AP1 — Build 1.2.1 (10) for TestFlight (requested by the user, October 20)
 
-Issue 200 Option A was recorded in AO1: `docs: keep the IDE auto-fix f7e7a12 and record the withOpacity migration (Wave AO / AO1, Issue 200 Option A)`.
+**What this means for the user.** TestFlight testers have, at best, 1.2.0 (9). Everything fixed since then is in the code only:
+- AL1 and AM1: the count labels;
+- AM3: the vote deck's navigation stays in view, and the deck opens on a card you can choose;
+- AN1: the compact vote header on short phones;
+- `f7e7a12`: the `withValues` migration.
+
+AP1 builds and verifies **1.2.1 (10)** and leaves an iOS archive ready for **the user** to upload from Xcode's Organizer.
+
+**⚠️ AP1 is a release, not a code change.** Exactly **one line** of the application changes: the version in `pubspec.yaml`. Everything else is procedure and verification. **If you find yourself editing a test, a screen, a script or a plist, stop — you have left the item.**
+
+**The gap** (on `088a2e2`):
+- `pubspec.yaml:19` reads `version: 1.2.0+9`.
+- **The old archive:** `build/ios/archive/Runner.xcarchive` holds **1.2.0 (9)** (October 13, 20:11:30). It is the archive AJ1 left for the user. **Move it aside; do not delete it** (step 3).
+- **Signing:** this Mac has **only an Apple Development identity**, so the `.ipa` export step will fail. That is expected (step 4).
+- **Server:** the functions are unchanged since AI11's deploy (`check_deploy_fresh.sh` exit 0). **Do not deploy functions.** The web app stays at 1.2.0 (9) unless the user asks for a web deploy; **AP1 does not deploy the web.**
+
+### 2.1 The only application change
+`pubspec.yaml`: `version: 1.2.0+9` → **`version: 1.2.1+10`**.
+- `CFBundleShortVersionString` and `CFBundleVersion` come from it (`$(FLUTTER_BUILD_NAME)` / `$(FLUTTER_BUILD_NUMBER)`), and so does the title screen's label (`PackageInfo`).
+- Build **10** is higher than any build App Store Connect can hold (8 is on TestFlight; 9 may or may not have been uploaded).
+
+**⚠️ Do not touch `test/lobby_version_test.dart`.** It mocks `9.9.9` and `1.0.0` on purpose. `flutter test` must still report **569**.
+
+### 2.2 Procedure
+0. **Commit pending docs first.** If `git status --porcelain` shows the docs modified, commit them **unmodified**, on their own: `docs: commit the October 20 AP1 release spec, unmodified`. If anything outside `docs/` is modified, STOP and ask the user.
+1. **Bump** `pubspec.yaml` as in §2.1.
+2. **Preflight:** run all nine §1 gates bare, plus `./scripts/run_web_smoke.sh` once. A release is the moment the whole battery must be green, and the web smoke exercises the same client code end to end.
+   - The numbers must equal §1 exactly: analyze **0 / 0 / 17**, `flutter test` **569**, functions **167**, the rest exit 0, and the smoke exit 0.
+3. **Move the old archive aside.**
+   - First `ls -la build/ios/archive build/ios/ipa 2>&1`.
+   - Then `mv build/ios/archive build/ios/archive_1.2.0_9` — kept, in case the user still wants build 9 — and `rm -rf build/ios/ipa` if present.
+   - From here on, `build/ios/archive/` holds only what your run produces.
+4. **`flutter build ipa`.** Judge it by its output, not its exit code.
+   - **Expected:** `✓ Built build/ios/archive/Runner.xcarchive`, then an export error (`No Accounts` / `No signing certificate "iOS Distribution" found`). At AJ1 the exit code was still 0. That outcome is a **pass**.
+   - **If the archive step itself fails, STOP.** Record the error verbatim and file it with options. Never accept Xcode's settings dialog, and never reintroduce a `Podfile`.
+5. **Verify the archive, never an `.ipa`** (`X=build/ios/archive/Runner.xcarchive`, `A=$X/Products/Applications/Runner.app`):
+
+   | Check | Required |
+   |---|---|
+   | `stat -f "%Sm" $X` | a timestamp from this run |
+   | `PlistBuddy :ApplicationProperties:CFBundleShortVersionString` on `$X/Info.plist` | `1.2.1` |
+   | `PlistBuddy :ApplicationProperties:CFBundleVersion` | `10` |
+   | `:UIDeviceFamily` on `$A/Info.plist` | only `1` |
+   | `:MinimumOSVersion` · `:CFBundleDisplayName` · `:ITSAppUsesNonExemptEncryption` · `:CFBundleIdentifier` | `15.0` · `Gaslight` · `false` · `com.whylabs.gaslight` |
+   | `test -f $A/PrivacyInfo.xcprivacy` | exit 0 |
+   | `strings $A/Frameworks/App.framework/App \| grep -c marionette` | `0` |
+   | the same `strings` with `grep -c 'Could not reach the parlour'` | `1` — the positive control that the search can see Dart strings |
+   | the same `strings` with `grep -c 'Found by no one'` | `≥ 1` — AL1's string is in this build; build 9 had `0`, check it on `build/ios/archive_1.2.0_9` |
+
+6. **Device check (REQUIRED).**
+   - On the iPhone SE simulator, with a reset Keychain (§0.1), run `flutter run -d <udid> --dart-define=USE_EMULATOR=true` with the emulators up.
+   - The title screen must show **`v1.2.1 (10)`** beneath READ MANUAL.
+   - Take a screenshot with `xcrun simctl io <udid> screenshot`, then stop your `flutter run` and your emulator by PID.
+7. **Do not upload to TestFlight, do not open Organizer's Distribute flow, and do not deploy anything.** The upload needs the user's Apple account; hand it over (step 9).
+8. **One commit:** `chore(release): ship 1.2.1+10 (Wave AP / AP1)`.
+   - **Files:** `pubspec.yaml` plus the docs:
+     - a tracker §3 row: what shipped, the step-5 table as measured, the preflight;
+     - this guide's §3 *Release plumbing*: 1.2.1 (10) archived and verified, upload pending; the 1.2.0 (9) archive moved to `build/ios/archive_1.2.0_9/`; the web still at 1.2.0 (9);
+     - the guide returned to queue-complete mode (title, framing, §2 *"Queue — empty"*, THE LOOP step (1), close-out).
+   - **Body:** the WHY, `Falsification:` (build 9's archive against build 10's — 1.2.0 / 9 against 1.2.1 / 10, and `Found by no one` 0 against ≥ 1), `Device check: DONE — v1.2.1 (10) …`, and `Web deploy: NOT RUN — not part of AP1`.
+   - A commit cannot contain its own hash. Do not push.
+9. **Hand-off to the user, in your final message:** the upload steps and the *What to Test* text below.
+
+**What to Test (paste into App Store Connect):**
+
+> 1.2.1 (10) — fixes since 1.2.0:
+> • Counts read correctly: "1 SUSPECT JOINED", "Waiting for 1 player...", "1 Deception", "Found by no one".
+> • On the vote screen, PREV / NEXT and the card dots always stay on screen, and the deck opens on a card you can pick — never your own forgery.
+> • On smaller phones (iPhone SE size) and with large text, the vote screen shows the card without scrolling.
+> Please try: (1) with large text on (Settings → Accessibility → Display & Text Size → Larger Text), check that the vote screen shows the card, PREV / NEXT and the vote button without scrolling; (2) turn on Airplane Mode and tap CREATE ROOM — it should say "Could not reach the parlour. Check your connection and try again."
+
+### 2.3 Validation summary
+- **Falsifying:** build 10's archive differs from build 9's in exactly the intended ways — version, build number, and the new strings present.
+- **Over-reach guard:** the release commit's `git diff --stat` shows `pubspec.yaml` and docs only; `flutter test` 569 with `test/lobby_version_test.dart` untouched.
+- **Load-bearing checks (REQUIRED):** the title screen's `v1.2.1 (10)`, the preflight including the web smoke, and the step-5 table. Each outcome goes in the commit body either way.
+
+**Blast radius:** `pubspec.yaml`, `docs/ongoing_general_errors.md`, `docs/agent_execution_guide.md`. No design doc.
 
 ---
 
@@ -244,7 +320,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 - **It also sweeps the web screens (AL2).** The full playthrough resizes P1's page through 375×812, 768×1024 and 1280×800 at the lobby, craft, vote, reveal and game over, and fails on a wrong phase or a missing or off-screen key control. It saves `w21_<w>x<h>_<phase>.png` to the scratch shot directory; the 15 cited copies in `docs/playthroughs/evidence/` were copied in by hand and are never overwritten. A skipped sweep does not fail the runner (26 PNGs still clear its minimum of 20): check the 15 `w21_*` names by name.
 - **Its emulator-only build lives in a temp directory and is never deployed.** Only `flutter build web --release` with no `--dart-define`, into `build/web`, is deployable.
 - **Never open the live web app in a browser to check a deploy:** `lib/main.dart:65` signs in anonymously at boot. Use `version.json` and HTTP status codes.
-- **`build/ios/archive/` is the user's upload artefact:** never delete or rebuild it until the user says the upload is done.
+- **`build/ios/archive/` is the user's upload artefact:** never delete it. AP1 moves the 1.2.0 (9) archive to `build/ios/archive_1.2.0_9/` before building 1.2.1 (10); after that, leave both until the user says the upload is done.
 
 **Assessed and rejected — do NOT re-propose:** everything listed in the September guides and the tracker §3, including **migrating `withOpacity` → `withValues` (139 C)** — superseded: the migration was applied by `f7e7a12` and kept (Issue 200 → A). October 10 rejections: 178 A and C; 179 B; 180 B and C; 181 B; 182 B; 183 B; 184 B; 185 B; 186 B; 187 B; 188 B and C; 189 A; 190 B. October 12 rejections: 192 A; 193 A and C. October 13 rejections: 194 B and C.
 
@@ -286,9 +362,9 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 ## THE LOOP — for any future item
 
 ```
-(1) The queue is empty: STOP unless there is a new user selection or
-    instruction, a red gate, or a user report. Never fill in or edit a
-    `Your selection:` line.
+(1) Take AP1 (§2). After it the queue is empty: STOP unless there is a new
+    user selection or instruction, a red gate, or a user report. Never fill
+    in or edit a `Your selection:` line.
 (2) "Implemented to spec" and "fixed the problem" are different claims. Check
     the second against the ORIGINAL REPORT in the tracker, not the spec.
 (3) If a fix depends on how a platform or library behaves, read the vendored
@@ -321,7 +397,7 @@ Each row's falsification was **re-run independently** in a scratch clone of `HEA
 
 ## Close-out
 
-**The queue is empty. Do not invent work.** The only legitimate triggers for further action are:
+**When AP1 is done the queue is empty. Do not invent work.** The only legitimate triggers for further action are:
 1. a new user selection or instruction (a new guide rewrite specs it first);
 2. a §1 gate going red (investigate, then file with options);
 3. a user or tester report — for example *Something went wrong. Try again.* while offline, which re-opens the 192 inference (§4).
