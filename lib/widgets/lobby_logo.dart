@@ -64,7 +64,7 @@ class _AnimatedLobbyLogoState extends State<AnimatedLobbyLogo> with SingleTicker
                 border: Border.all(color: secondaryColor, width: 3),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.8),
+                    color: Colors.black.withValues(alpha: 0.8),
                     blurRadius: 25,
                     offset: const Offset(0, 15),
                   )
@@ -86,7 +86,7 @@ class _AnimatedLobbyLogoState extends State<AnimatedLobbyLogo> with SingleTicker
                              shape: BoxShape.circle,
                              boxShadow: [
                                BoxShadow(
-                                 color: primaryColor.withOpacity(0.5 * _flickerController.value),
+                                 color: primaryColor.withValues(alpha: 0.5 * _flickerController.value),
                                  blurRadius: 20 * _flickerController.value,
                                  spreadRadius: 5 * _flickerController.value,
                                )
@@ -115,12 +115,12 @@ class _AnimatedLobbyLogoState extends State<AnimatedLobbyLogo> with SingleTicker
             color: secondaryColor,
             shadows: [
               Shadow(
-                color: Colors.black.withOpacity(0.9),
+                color: Colors.black.withValues(alpha: 0.9),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
               Shadow(
-                color: primaryColor.withOpacity(0.6),
+                color: primaryColor.withValues(alpha: 0.6),
                 blurRadius: 20,
               )
             ]

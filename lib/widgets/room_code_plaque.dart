@@ -73,7 +73,7 @@ class _RoomCodePlaqueState extends State<RoomCodePlaque> {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -157,7 +157,7 @@ class _RoomCodePlaqueState extends State<RoomCodePlaque> {
                             child: ThematicIcon(
                               type: ThematicIconType.envelope,
                               size: 22,
-                              color: AppColors.ink.withOpacity(0.7),
+                              color: AppColors.ink.withValues(alpha: 0.7),
                             ),
                           ),
                         ),

@@ -204,7 +204,7 @@ class _ThematicIconPainter extends CustomPainter {
           ..quadraticBezierTo(w * 0.4, h * 0.55, w * 0.48, h * 0.4)   // Chest
           ..close();
         canvas.drawPath(path, paint);
-        canvas.drawPath(path, fillPaint..color = color.withOpacity(0.25));
+        canvas.drawPath(path, fillPaint..color = color.withValues(alpha: 0.25));
 
         // Eye dot
         canvas.drawCircle(Offset(w * 0.56, h * 0.32), w * 0.04, fillPaint..color = color);
@@ -218,7 +218,7 @@ class _ThematicIconPainter extends CustomPainter {
           ..cubicTo(w * 0.55, h * 0.7, w * 0.55, h * 0.3, w * 0.35, h * 0.2)
           ..close();
         canvas.drawPath(path, paint);
-        canvas.drawPath(path, fillPaint..color = color.withOpacity(0.2));
+        canvas.drawPath(path, fillPaint..color = color.withValues(alpha: 0.2));
         break;
 
       case ThematicIconType.hourglass:
@@ -248,7 +248,7 @@ class _ThematicIconPainter extends CustomPainter {
           ..lineTo(w * 0.52, h * 0.49)
           ..lineTo(w * 0.48, h * 0.49)
           ..close();
-        canvas.drawPath(sandTop, fillPaint..color = color.withOpacity(0.5));
+        canvas.drawPath(sandTop, fillPaint..color = color.withValues(alpha: 0.5));
 
         // Sand pile bottom
         final sandBottom = Path()
@@ -283,7 +283,7 @@ class _ThematicIconPainter extends CustomPainter {
           ..lineTo(w * 0.3, h * 0.8)
           ..cubicTo(w * 0.55, h * 0.65, w * 0.8, h * 0.4, w * 0.8, h * 0.15);
         canvas.drawPath(quillPath, paint);
-        canvas.drawPath(quillPath, fillPaint..color = color.withOpacity(0.15));
+        canvas.drawPath(quillPath, fillPaint..color = color.withValues(alpha: 0.15));
 
         // Shaft center line
         canvas.drawLine(Offset(w * 0.8, h * 0.15), Offset(w * 0.2, h * 0.75), paint);
@@ -313,7 +313,7 @@ class _ThematicIconPainter extends CustomPainter {
         }
         path.close();
         canvas.drawPath(path, paint);
-        canvas.drawPath(path, fillPaint..color = color.withOpacity(0.3));
+        canvas.drawPath(path, fillPaint..color = color.withValues(alpha: 0.3));
 
         // Monogram / Inner stamp detail (wax seal stamp impression)
         canvas.drawCircle(center, w * 0.22, paint);
@@ -376,7 +376,7 @@ class _ThematicIconPainter extends CustomPainter {
           ..quadraticBezierTo(w * 0.65, h * 0.35, w * 0.5, h * 0.25)
           ..close();
         canvas.drawPath(path, paint);
-        canvas.drawPath(path, fillPaint..color = color.withOpacity(0.2));
+        canvas.drawPath(path, fillPaint..color = color.withValues(alpha: 0.2));
 
         canvas.drawCircle(Offset(w * 0.5, h * 0.72), w * 0.06, fillPaint);
         canvas.drawLine(Offset(w * 0.25, h * 0.65), Offset(w * 0.75, h * 0.65), paint);
@@ -393,7 +393,7 @@ class _ThematicIconPainter extends CustomPainter {
           ..quadraticBezierTo(w * 0.65, h * 0.35, w * 0.5, h * 0.25)
           ..close();
         canvas.drawPath(path, paint);
-        canvas.drawPath(path, fillPaint..color = color.withOpacity(0.1));
+        canvas.drawPath(path, fillPaint..color = color.withValues(alpha: 0.1));
 
         canvas.drawCircle(Offset(w * 0.5, h * 0.72), w * 0.06, fillPaint);
         canvas.drawLine(Offset(w * 0.25, h * 0.65), Offset(w * 0.75, h * 0.65), paint);
@@ -601,7 +601,7 @@ class _WaxSealPainter extends CustomPainter {
 
     // 4. Highlight
     final highlightPaint = Paint()
-      ..color = AppColors.ivory.withOpacity(0.25)
+      ..color = AppColors.ivory.withValues(alpha: 0.25)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.05 * sz
       ..strokeCap = StrokeCap.round;
@@ -888,7 +888,7 @@ class _AnimatedThematicIconPainter extends CustomPainter {
           final double halfWidth = 0.075 * w;
 
           final highlightPaint = Paint()
-            ..color = AppColors.ivory.withOpacity(0.35)
+            ..color = AppColors.ivory.withValues(alpha: 0.35)
             ..style = PaintingStyle.stroke
             ..strokeWidth = paint.strokeWidth * 1.5
             ..strokeCap = StrokeCap.round;
@@ -912,7 +912,7 @@ class _AnimatedThematicIconPainter extends CustomPainter {
           ..quadraticBezierTo(w * 0.4, h * 0.55, w * 0.48, h * 0.4)
           ..close();
         canvas.drawPath(path, paint);
-        canvas.drawPath(path, fillPaint..color = color.withOpacity(0.25));
+        canvas.drawPath(path, fillPaint..color = color.withValues(alpha: 0.25));
 
         // Eye dot
         final eyeCenter = Offset(w * 0.56, h * 0.32);
@@ -931,7 +931,7 @@ class _AnimatedThematicIconPainter extends CustomPainter {
           ..cubicTo(w * 0.55 + drift, h * 0.7, w * 0.55 + drift, h * 0.3, w * 0.35, h * 0.2)
           ..close();
         canvas.drawPath(path, paint);
-        canvas.drawPath(path, fillPaint..color = color.withOpacity(0.2));
+        canvas.drawPath(path, fillPaint..color = color.withValues(alpha: 0.2));
         break;
 
       case ThematicIconType.hourglass:
@@ -961,7 +961,7 @@ class _AnimatedThematicIconPainter extends CustomPainter {
           ..lineTo(w * 0.52, h * 0.49)
           ..lineTo(w * 0.48, h * 0.49)
           ..close();
-        canvas.drawPath(sandTop, fillPaint..color = color.withOpacity(0.5));
+        canvas.drawPath(sandTop, fillPaint..color = color.withValues(alpha: 0.5));
 
         // Sand pile bottom
         final double growth = (t >= 0.2 && t <= 0.8) ? ((t - 0.2) / 0.6) * 1.5 : (t > 0.8 ? 1.5 : 0.0);

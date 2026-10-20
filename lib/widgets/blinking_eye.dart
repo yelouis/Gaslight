@@ -131,7 +131,7 @@ class _BlinkingEyePainter extends CustomPainter {
 
     // Draw eyelids stroke
     final strokePaint = Paint()
-      ..color = color.withOpacity(0.8)
+      ..color = color.withValues(alpha: 0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     canvas.drawPath(path, strokePaint);

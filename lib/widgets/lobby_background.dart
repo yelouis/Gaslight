@@ -71,7 +71,7 @@ class _AnimatedLobbyBackgroundState extends State<AnimatedLobbyBackground> with 
           Image.asset(
             'assets/images/lobby_background.gif',
             fit: BoxFit.cover,
-            color: Colors.black.withOpacity(0.5), // Darken slightly so text remains readable
+            color: Colors.black.withValues(alpha: 0.5), // Darken slightly so text remains readable
             colorBlendMode: BlendMode.darken,
           ),
           Positioned.fill(

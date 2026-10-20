@@ -163,10 +163,10 @@ class _ThinkingPainter extends CustomPainter {
       if (currentOpacity < 0) currentOpacity = 0;
 
       final textStyle = TextStyle(
-        color: AppColors.brass.withOpacity(currentOpacity * 0.4), // Dimmer brass glowing embers
+        color: AppColors.brass.withValues(alpha: currentOpacity * 0.4), // Dimmer brass glowing embers
         fontSize: p.size,
         shadows: [
-          Shadow(color: Colors.orange.withOpacity(currentOpacity * 0.3), blurRadius: p.size / 2)
+          Shadow(color: Colors.orange.withValues(alpha: currentOpacity * 0.3), blurRadius: p.size / 2)
         ],
       );
       

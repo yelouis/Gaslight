@@ -76,7 +76,7 @@ class _DeckPeekSheetState extends State<DeckPeekSheet> {
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: AppColors.ivory.withOpacity(0.3),
+                    color: AppColors.ivory.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -112,7 +112,7 @@ class _DeckPeekSheetState extends State<DeckPeekSheet> {
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.8,
-                            color: AppColors.ivory.withOpacity(0.6),
+                            color: AppColors.ivory.withValues(alpha: 0.6),
                           ),
                         ),
                       ],
@@ -182,7 +182,7 @@ class _DeckPeekSheetState extends State<DeckPeekSheet> {
                             color: AppColors.ground,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: AppColors.brass.withOpacity(0.2),
+                              color: AppColors.brass.withValues(alpha: 0.2),
                               width: 1,
                             ),
                           ),
@@ -192,7 +192,7 @@ class _DeckPeekSheetState extends State<DeckPeekSheet> {
                               Text(
                                 '• ',
                                 style: TextStyle(
-                                  color: AppColors.brass.withOpacity(0.8),
+                                  color: AppColors.brass.withValues(alpha: 0.8),
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
                                 ),

@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../lib/services/game_service.dart';
-import '../lib/services/audio_service.dart';
-import '../lib/models/game_state.dart';
-import '../lib/models/player_state.dart';
-import '../lib/models/card_model.dart';
-import '../lib/screens/phase4_reveal.dart';
+import 'package:gaslight/services/game_service.dart';
+import 'package:gaslight/services/audio_service.dart';
+import 'package:gaslight/models/game_state.dart';
+import 'package:gaslight/models/player_state.dart';
+import 'package:gaslight/models/card_model.dart';
+import 'package:gaslight/screens/phase4_reveal.dart';
 import 'fake_functions.dart';
 import 'simulation_test.dart'; // Import FakeFirestore
 import 'audio_service_test.dart';

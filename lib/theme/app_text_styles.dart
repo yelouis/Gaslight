@@ -44,7 +44,7 @@ class AppTextStyles {
     fontFamily: 'Lora',
     fontSize: 12,
     fontWeight: FontWeight.w600,
-    color: AppColors.brass.withOpacity(0.7),
+    color: AppColors.brass.withValues(alpha: 0.7),
     letterSpacing: 2,
   );
 

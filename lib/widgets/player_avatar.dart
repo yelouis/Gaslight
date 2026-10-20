@@ -48,22 +48,22 @@ class PlayerAvatar extends StatelessWidget {
         ),
         gradient: RadialGradient(
           colors: [
-            chipColor.withOpacity(0.4),
-            chipColor.withOpacity(0.9),
-            Colors.black.withOpacity(0.7),
+            chipColor.withValues(alpha: 0.4),
+            chipColor.withValues(alpha: 0.9),
+            Colors.black.withValues(alpha: 0.7),
           ],
           stops: const [0.2, 0.7, 1.0],
         ),
         boxShadow: [
           if (isActiveReader)
             BoxShadow(
-              color: AppColors.brass.withOpacity(0.8),
+              color: AppColors.brass.withValues(alpha: 0.8),
               blurRadius: 12,
               spreadRadius: 3,
             )
           else
             BoxShadow(
-              color: Colors.black.withOpacity(0.7),
+              color: Colors.black.withValues(alpha: 0.7),
               blurRadius: 8,
               offset: const Offset(2, 6),
             )
@@ -73,7 +73,7 @@ class PlayerAvatar extends StatelessWidget {
         margin: EdgeInsets.all(max(2.0, size / 20)),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: borderColor.withOpacity(0.5), width: 1.5),
+          border: Border.all(color: borderColor.withValues(alpha: 0.5), width: 1.5),
         ),
         child: Center(
           child: AnimatedThematicIcon(
@@ -214,7 +214,7 @@ class _PulsingHaloState extends State<_PulsingHalo> with SingleTickerProviderSta
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: AppColors.brass.withOpacity(_glowAnimation.value),
+                color: AppColors.brass.withValues(alpha: _glowAnimation.value),
                 blurRadius: 10 + 6 * _glowAnimation.value,
                 spreadRadius: 2 + 2 * _glowAnimation.value,
               )

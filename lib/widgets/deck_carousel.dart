@@ -292,7 +292,7 @@ class _FolderCard extends StatelessWidget {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     ),
@@ -328,7 +328,7 @@ class _FolderCard extends StatelessWidget {
                                 fontFamily: 'Lora',
                                 fontSize: 8,
                                 fontStyle: FontStyle.italic,
-                                color: AppColors.ink.withOpacity(0.6),
+                                color: AppColors.ink.withValues(alpha: 0.6),
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -394,7 +394,7 @@ class _FolderCard extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -438,7 +438,7 @@ class _FolderCard extends StatelessWidget {
                                 fontFamily: 'Lora',
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.ink.withOpacity(0.7),
+                                color: AppColors.ink.withValues(alpha: 0.7),
                               ),
                             ),
                             if (canPeek) ...[
@@ -512,7 +512,7 @@ class _FolderStringTiePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.ink.withOpacity(0.3)
+      ..color = AppColors.ink.withValues(alpha: 0.3)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 

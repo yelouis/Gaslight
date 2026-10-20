@@ -150,7 +150,7 @@ void main() {
         expect(find.text('THE REVEAL'), findsOneWidget);
         await tick(6000); // Wait for the beats sequence to reveal points and unmask tray
         final currentTargetName = gameService.players.firstWhere((p) => p.id == gameService.gameState!.currentReaderId).name.toUpperCase();
-        expect(find.text("RESOLVING ${currentTargetName}'S CARD"), findsOneWidget);
+        expect(find.text("RESOLVING $currentTargetName'S CARD"), findsOneWidget);
         expect(find.text('POINTS AWARDED THIS CARD'), findsOneWidget);
       }
 

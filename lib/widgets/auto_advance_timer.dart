@@ -108,7 +108,7 @@ class _AutoAdvanceTimerState extends State<AutoAdvanceTimer> with SingleTickerPr
     final timerWidget = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: isLowTime ? theme.colorScheme.error.withOpacity(0.15) : theme.colorScheme.secondary.withOpacity(0.1),
+        color: isLowTime ? theme.colorScheme.error.withValues(alpha: 0.15) : theme.colorScheme.secondary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isLowTime ? theme.colorScheme.error : theme.colorScheme.secondary,

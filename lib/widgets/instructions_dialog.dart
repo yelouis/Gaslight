@@ -37,7 +37,7 @@ class GameInstructionsDialog extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
               ),
-              Divider(color: theme.colorScheme.primary.withOpacity(0.5), thickness: 2),
+              Divider(color: theme.colorScheme.primary.withValues(alpha: 0.5), thickness: 2),
               const SizedBox(height: 12),
               Expanded(
                 child: SingleChildScrollView(
@@ -141,7 +141,7 @@ class GameInstructionsDialog extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceTint.withOpacity(0.1),
+              color: theme.colorScheme.surfaceTint.withValues(alpha: 0.1),
               border: Border(left: BorderSide(color: theme.colorScheme.secondary, width: 4)),
             ),
             child: Text(

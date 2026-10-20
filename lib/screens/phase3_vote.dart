@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:ui' show FontFeature;
 import 'package:provider/provider.dart';
 import '../services/audio_service.dart';
 import '../services/game_service.dart';
@@ -160,7 +159,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
     final roomCodeStyle = AppTextStyles.sectionLabel.copyWith(
       letterSpacing: 1.5,
       fontSize: 11,
-      color: theme.colorScheme.secondary.withOpacity(0.8),
+      color: theme.colorScheme.secondary.withValues(alpha: 0.8),
     );
 
     final List<TextSpan> appBarLines = [
@@ -295,7 +294,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                     color: theme.colorScheme.secondary,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 2,
-                    shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 8)],
+                    shadows: [Shadow(color: Colors.black.withValues(alpha: 0.8), blurRadius: 8)],
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -515,7 +514,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                       Text(
                         'VOTING ON',
                         style: TextStyle(
-                          color: theme.colorScheme.secondary.withOpacity(0.7),
+                          color: theme.colorScheme.secondary.withValues(alpha: 0.7),
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 3,
@@ -564,7 +563,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                           Text(
                             'Prompt:',
                             style: TextStyle(
-                              color: theme.colorScheme.onSurface.withOpacity(0.7),
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
                             ),
@@ -589,7 +588,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                       style: TextStyle(
                         fontFamily: 'Lora',
                         fontStyle: FontStyle.italic,
-                        color: AppColors.ivory.withOpacity(0.7),
+                        color: AppColors.ivory.withValues(alpha: 0.7),
                         fontSize: 13,
                       ),
                       textAlign: TextAlign.center,
@@ -730,7 +729,7 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
                   children: [
                     Text(
                       'Prompt:',
-                      style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontWeight: FontWeight.bold),
+                      style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.7), fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -746,9 +745,9 @@ class _Phase3VoteScreenState extends State<Phase3VoteScreen> with RavenPoseHost<
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.3)),
+                border: Border.all(color: theme.colorScheme.secondary.withValues(alpha: 0.3)),
               ),
               child: Column(
                 children: [

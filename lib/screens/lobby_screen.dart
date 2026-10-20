@@ -498,7 +498,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                     color: theme.colorScheme.secondary, // Gold
                     fontWeight: FontWeight.bold,
                     letterSpacing: 2,
-                    shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 10)],
+                    shadows: [Shadow(color: Colors.black.withValues(alpha: 0.8), blurRadius: 10)],
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -657,7 +657,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                           Text(
                                             '15–300 seconds. Voting gets 75% of this.',
                                             style: TextStyle(
-                                              color: AppColors.ivory.withOpacity(0.6),
+                                              color: AppColors.ivory.withValues(alpha: 0.6),
                                               fontSize: 12,
                                             ),
                                           ),
@@ -735,7 +735,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                         Text(
                           'Only the host can modify house rules.',
                           style: TextStyle(
-                            color: AppColors.ivory.withOpacity(0.6),
+                            color: AppColors.ivory.withValues(alpha: 0.6),
                             fontSize: 12,
                             fontStyle: FontStyle.italic,
                             fontFamily: 'Lora',
@@ -778,7 +778,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.5),
+                        color: Colors.black.withValues(alpha: 0.5),
                         blurRadius: 15,
                         spreadRadius: 2,
                         offset: const Offset(0, -4),
@@ -839,7 +839,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                 width: 40,
                                 height: 4,
                                 decoration: BoxDecoration(
-                                  color: AppColors.brass.withOpacity(0.5),
+                                  color: AppColors.brass.withValues(alpha: 0.5),
                                   borderRadius: BorderRadius.circular(2),
                                 ),
                               ),
@@ -864,7 +864,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                 fontSize: 13,
                                 fontFamily: 'Lora',
                                 fontStyle: FontStyle.italic,
-                                color: AppColors.ink.withOpacity(0.6),
+                                color: AppColors.ink.withValues(alpha: 0.6),
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -998,7 +998,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.brass.withOpacity(0.5),
+                                color: AppColors.brass.withValues(alpha: 0.5),
                                 blurRadius: 16,
                                 spreadRadius: 1,
                               )
@@ -1106,21 +1106,21 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                 decoration: InputDecoration(
                                   labelText: 'Your Name *',
                                   errorText: _nameError ? 'Please enter a name first' : null,
-                                  labelStyle: TextStyle(color: ivoryColor.withOpacity(0.7), fontWeight: FontWeight.bold),
+                                  labelStyle: TextStyle(color: ivoryColor.withValues(alpha: 0.7), fontWeight: FontWeight.bold),
                                   errorStyle: const TextStyle(fontWeight: FontWeight.bold),
                                   contentPadding: isSmallHeight ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8) : null,
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: crimsonColor.withOpacity(0.4)),
+                                    borderSide: BorderSide(color: crimsonColor.withValues(alpha: 0.4)),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide: BorderSide(color: crimsonColor, width: 2),
                                   ),
                                   filled: true,
-                                  fillColor: Colors.black.withOpacity(0.5),
-                                  prefixIcon: ThematicIcon(type: ThematicIconType.writing, size: 20, color: crimsonColor.withOpacity(0.8)),
+                                  fillColor: Colors.black.withValues(alpha: 0.5),
+                                  prefixIcon: ThematicIcon(type: ThematicIconType.writing, size: 20, color: crimsonColor.withValues(alpha: 0.8)),
                                 ),
                                 onChanged: (_) {
                                   if (_nameError) setState(() => _nameError = false);
@@ -1157,7 +1157,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                             width: 2.5,
                                           ),
                                           boxShadow: isSelected ? [
-                                            BoxShadow(color: crimsonColor.withOpacity(0.5), blurRadius: 10, spreadRadius: 1.5)
+                                            BoxShadow(color: crimsonColor.withValues(alpha: 0.5), blurRadius: 10, spreadRadius: 1.5)
                                           ] : null,
                                         ),
                                         child: Opacity(
@@ -1183,15 +1183,15 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                 padding: EdgeInsets.symmetric(vertical: isSmallHeight ? 6 : 12),
                                 child: Row(
                                   children: [
-                                    Expanded(child: Divider(color: crimsonColor.withOpacity(0.3), thickness: 1)),
+                                    Expanded(child: Divider(color: crimsonColor.withValues(alpha: 0.3), thickness: 1)),
                                     Padding(
                                       padding: const EdgeInsets.symmetric(horizontal: 16),
                                       child: Text(
                                         'OR',
-                                        style: TextStyle(fontWeight: FontWeight.bold, color: ivoryColor.withOpacity(0.6), letterSpacing: 2),
+                                        style: TextStyle(fontWeight: FontWeight.bold, color: ivoryColor.withValues(alpha: 0.6), letterSpacing: 2),
                                       ),
                                     ),
-                                    Expanded(child: Divider(color: crimsonColor.withOpacity(0.3), thickness: 1)),
+                                    Expanded(child: Divider(color: crimsonColor.withValues(alpha: 0.3), thickness: 1)),
                                   ],
                                 ),
                               ),
@@ -1209,22 +1209,22 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                 textAlign: TextAlign.center,
                                 decoration: InputDecoration(
                                   labelText: 'Room Code (4 Letters)',
-                                  labelStyle: TextStyle(color: ivoryColor.withOpacity(0.7), fontWeight: FontWeight.bold, letterSpacing: 0),
+                                  labelStyle: TextStyle(color: ivoryColor.withValues(alpha: 0.7), fontWeight: FontWeight.bold, letterSpacing: 0),
                                   contentPadding: isSmallHeight ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8) : null,
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: crimsonColor.withOpacity(0.4)),
+                                    borderSide: BorderSide(color: crimsonColor.withValues(alpha: 0.4)),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide: BorderSide(color: crimsonColor, width: 2),
                                   ),
                                   filled: true,
-                                  fillColor: Colors.black.withOpacity(0.5),
+                                  fillColor: Colors.black.withValues(alpha: 0.5),
                                    prefixIcon: Padding(
                                      padding: const EdgeInsets.all(12.0),
-                                     child: ThematicIcon(type: ThematicIconType.secret, color: crimsonColor.withOpacity(0.8), size: 20),
+                                     child: ThematicIcon(type: ThematicIconType.secret, color: crimsonColor.withValues(alpha: 0.8), size: 20),
                                    ),
                                   counterText: '',
                                 ),
@@ -1239,7 +1239,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                                   minimumSize: Size(double.infinity, isSmallHeight ? 44 : 58),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
-                                    side: BorderSide(color: crimsonColor.withOpacity(0.4), width: 1.5), // Crimson Border
+                                    side: BorderSide(color: crimsonColor.withValues(alpha: 0.4), width: 1.5), // Crimson Border
                                   ),
                                   elevation: 6,
                                 ),
@@ -1339,7 +1339,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                 decoration: BoxDecoration(
                   color: AppColors.ground,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.brass.withOpacity(0.5)),
+                  border: Border.all(color: AppColors.brass.withValues(alpha: 0.5)),
                 ),
                 child: Text(
                   'Lobby Total: $totalContributions/$activeCount',
@@ -1374,7 +1374,7 @@ class _LobbyScreenState extends State<LobbyScreen> with RavenPoseHost<LobbyScree
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: AppColors.brass.withOpacity(0.3)),
+                      borderSide: BorderSide(color: AppColors.brass.withValues(alpha: 0.3)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),

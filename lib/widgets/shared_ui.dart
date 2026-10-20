@@ -26,18 +26,18 @@ class CrimsonShadowCard extends StatelessWidget {
         color: AppColors.groundRaised, // Deep dark coal background
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: theme.colorScheme.primary.withOpacity(0.8), // Crimson outline
+          color: theme.colorScheme.primary.withValues(alpha: 0.8), // Crimson outline
           width: 2.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.primary.withOpacity(0.35), // Vibrant crimson glow shadow
+            color: theme.colorScheme.primary.withValues(alpha: 0.35), // Vibrant crimson glow shadow
             blurRadius: 20,
             offset: const Offset(0, 10),
             spreadRadius: 1,
           ),
           BoxShadow(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.black.withValues(alpha: 0.5),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -72,12 +72,12 @@ class ParchmentCard extends StatelessWidget {
         border: Border.all(color: theme.colorScheme.secondary, width: 3), // Gold
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.6),
+            color: Colors.black.withValues(alpha: 0.6),
             blurRadius: 30,
             offset: const Offset(0, 15),
           ),
           BoxShadow(
-            color: theme.colorScheme.secondary.withOpacity(0.1),
+            color: theme.colorScheme.secondary.withValues(alpha: 0.1),
             blurRadius: 8,
             spreadRadius: 1,
           ),
@@ -262,7 +262,7 @@ class _PrimaryButtonState extends State<PrimaryButton> with TickerProviderStateM
                     boxShadow: isEnabled
                         ? [
                             BoxShadow(
-                              color: theme.colorScheme.primary.withOpacity(0.4 * (1.0 - _flashAnimation.value)),
+                              color: theme.colorScheme.primary.withValues(alpha: 0.4 * (1.0 - _flashAnimation.value)),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             )
@@ -279,7 +279,7 @@ class _PrimaryButtonState extends State<PrimaryButton> with TickerProviderStateM
                         side: BorderSide(
                           color: isEnabled
                               ? Color.lerp(
-                                  theme.colorScheme.primary.withOpacity(0.5),
+                                  theme.colorScheme.primary.withValues(alpha: 0.5),
                                   theme.colorScheme.secondary,
                                   _flashAnimation.value,
                                 )!
@@ -288,7 +288,7 @@ class _PrimaryButtonState extends State<PrimaryButton> with TickerProviderStateM
                         ),
                       ),
                       elevation: isEnabled ? 6 : 0,
-                      shadowColor: Colors.black.withOpacity(0.5),
+                      shadowColor: Colors.black.withValues(alpha: 0.5),
                     ),
                     onPressed: widget.loading || widget.onPressed == null
                         ? null
@@ -366,7 +366,7 @@ class _PrimaryButtonState extends State<PrimaryButton> with TickerProviderStateM
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: theme.colorScheme.secondary.withOpacity(0.3 * _flashAnimation.value),
+                            color: theme.colorScheme.secondary.withValues(alpha: 0.3 * _flashAnimation.value),
                             width: 3.0 * _flashAnimation.value,
                           ),
                         ),
@@ -400,7 +400,7 @@ class SecondaryButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.primary.withOpacity(0.2),
+            color: theme.colorScheme.primary.withValues(alpha: 0.2),
             blurRadius: 8,
             offset: const Offset(0, 3),
           )
@@ -413,7 +413,7 @@ class SecondaryButton extends StatelessWidget {
           minimumSize: const Size(200, 52),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.4), width: 1.5), // Crimson
+            side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.4), width: 1.5), // Crimson
           ),
           elevation: 6,
         ),

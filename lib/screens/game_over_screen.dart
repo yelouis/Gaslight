@@ -247,7 +247,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                                 fontWeight: FontWeight.bold,
                                 fontFamily: 'CormorantGaramond',
                                 letterSpacing: 3,
-                                shadows: [Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 10)],
+                                shadows: [Shadow(color: Colors.black.withValues(alpha: 0.8), blurRadius: 10)],
                               ),
                             ),
                             const SizedBox(height: 30),
@@ -278,11 +278,11 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
         decoration: BoxDecoration(
           color: AppColors.ground,
           border: Border(
-            top: BorderSide(color: AppColors.brass.withOpacity(0.25), width: 1),
+            top: BorderSide(color: AppColors.brass.withValues(alpha: 0.25), width: 1),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.4),
+              color: Colors.black.withValues(alpha: 0.4),
               blurRadius: 8,
               offset: const Offset(0, -2),
             ),
@@ -466,7 +466,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.4),
+            color: Colors.black.withValues(alpha: 0.4),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -522,7 +522,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                       fontFamily: 'Lora',
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.ink.withOpacity(0.7),
+                      color: AppColors.ink.withValues(alpha: 0.7),
                       letterSpacing: 1,
                     ),
                   ),
@@ -593,7 +593,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
           decoration: BoxDecoration(
             color: AppColors.groundRaised,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.brass.withOpacity(0.3), width: 1.5),
+            border: Border.all(color: AppColors.brass.withValues(alpha: 0.3), width: 1.5),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
@@ -603,7 +603,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
               itemCount: sortedByScore.length,
               separatorBuilder: (_, __) => Divider(
                 height: 1,
-                color: AppColors.brass.withOpacity(0.15),
+                color: AppColors.brass.withValues(alpha: 0.15),
               ),
               itemBuilder: (context, index) {
                 final player = sortedByScore[index];
@@ -618,7 +618,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                 } else if (rank == 3) {
                   rankColor = const Color(0xFFCD7F32);
                 } else {
-                  rankColor = AppColors.ivory.withOpacity(0.6);
+                  rankColor = AppColors.ivory.withValues(alpha: 0.6);
                 }
 
                 return Padding(
@@ -671,7 +671,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
                               style: TextStyle(
                                 fontFamily: 'Lora',
                                 fontSize: 11,
-                                color: AppColors.ivory.withOpacity(0.6),
+                                color: AppColors.ivory.withValues(alpha: 0.6),
                               ),
                             ),
                           ],
@@ -769,7 +769,7 @@ class _GameOverScreenState extends State<GameOverScreen> with RavenPoseHost<Game
             decoration: BoxDecoration(
               color: AppColors.groundRaised,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.brass.withOpacity(0.3), width: 1.5),
+              border: Border.all(color: AppColors.brass.withValues(alpha: 0.3), width: 1.5),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -869,7 +869,7 @@ class HighlightCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.groundRaised,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.brass.withOpacity(0.3), width: 1.5),
+        border: Border.all(color: AppColors.brass.withValues(alpha: 0.3), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -898,7 +898,7 @@ class HighlightCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.ground,
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: AppColors.brass.withOpacity(0.4)),
+              border: Border.all(color: AppColors.brass.withValues(alpha: 0.4)),
             ),
             child: Text(
               badgeText,
@@ -926,7 +926,7 @@ class HighlightCard extends StatelessWidget {
             style: TextStyle(
               fontFamily: 'Lora',
               fontSize: 11,
-              color: AppColors.ivory.withOpacity(0.6),
+              color: AppColors.ivory.withValues(alpha: 0.6),
             ),
           ),
         ],
@@ -1076,7 +1076,7 @@ class _DynamicEmberPainter extends CustomPainter {
       if (p.y < 100) {
         fade = p.y / 100;
       }
-      paint.color = Colors.orangeAccent.withOpacity(p.opacity * fade);
+      paint.color = Colors.orangeAccent.withValues(alpha: p.opacity * fade);
       canvas.drawCircle(Offset(p.x, p.y), p.radius, paint);
     }
   }
@@ -1089,7 +1089,7 @@ class _StaticEmberPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.orangeAccent.withOpacity(0.2)
+      ..color = Colors.orangeAccent.withValues(alpha: 0.2)
       ..style = PaintingStyle.fill;
     final r = math.Random(42);
     for (int i = 0; i < 15; i++) {

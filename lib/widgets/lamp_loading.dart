@@ -151,8 +151,8 @@ class _LampPainter extends CustomPainter {
       final glowPaint = Paint()
         ..shader = RadialGradient(
           colors: [
-            AppColors.brass.withOpacity(glowOpacity),
-            AppColors.brass.withOpacity(0.0),
+            AppColors.brass.withValues(alpha: glowOpacity),
+            AppColors.brass.withValues(alpha: 0.0),
           ],
         ).createShader(Rect.fromCircle(center: bulbCenter, radius: glowRadius))
         ..style = PaintingStyle.fill;
@@ -168,7 +168,7 @@ class _LampPainter extends CustomPainter {
 
     // Glass bulb: circle r 0.22*size, stroke 2 dp brass @0.7, centered at 0.38*size from top
     final bulbPaint = Paint()
-      ..color = AppColors.brass.withOpacity(0.7)
+      ..color = AppColors.brass.withValues(alpha: 0.7)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     canvas.drawCircle(bulbCenter, bulbRadius, bulbPaint);
@@ -186,7 +186,7 @@ class _LampPainter extends CustomPainter {
         final double tailPhase = sparkPhase - i * 0.02;
         if (tailPhase > 0) {
           final tailPaint = Paint()
-            ..color = AppColors.ivory.withOpacity(0.4 * (1 - i / 5.0))
+            ..color = AppColors.ivory.withValues(alpha: 0.4 * (1 - i / 5.0))
             ..style = PaintingStyle.fill;
           canvas.drawCircle(_getSparkOffset(tailPhase, size, bulbCenter), 2.0 * (1 - i / 5.0), tailPaint);
         }
@@ -219,7 +219,7 @@ class _LampPainter extends CustomPainter {
 
       // Outer flame path
       final outerPaint = Paint()
-        ..color = AppColors.brass.withOpacity(0.85)
+        ..color = AppColors.brass.withValues(alpha: 0.85)
         ..style = PaintingStyle.fill;
 
       final Path outerPath = CandlePaths.flamePath(
@@ -232,7 +232,7 @@ class _LampPainter extends CustomPainter {
 
       // Core flame path
       final corePaint = Paint()
-        ..color = AppColors.ivory.withOpacity(0.9)
+        ..color = AppColors.ivory.withValues(alpha: 0.9)
         ..style = PaintingStyle.fill;
 
       final double coreHeight = baseFlameHeight * 0.55;

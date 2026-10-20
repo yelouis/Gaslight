@@ -127,8 +127,8 @@ class _CandleFlamePainter extends CustomPainter {
     final glowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          AppColors.brass.withOpacity(0.15),
-          AppColors.brass.withOpacity(0.0),
+          AppColors.brass.withValues(alpha: 0.15),
+          AppColors.brass.withValues(alpha: 0.0),
         ],
       ).createShader(Rect.fromCircle(center: wickTop, radius: 26))
       ..style = PaintingStyle.fill;
@@ -145,7 +145,7 @@ class _CandleFlamePainter extends CustomPainter {
 
     // Outer flame: brass @ 0.85
     final outerPaint = Paint()
-      ..color = AppColors.brass.withOpacity(0.85)
+      ..color = AppColors.brass.withValues(alpha: 0.85)
       ..style = PaintingStyle.fill;
 
     final Path outerPath = CandlePaths.flamePath(
@@ -158,7 +158,7 @@ class _CandleFlamePainter extends CustomPainter {
 
     // Core flame: anchor to wick, 55% scale, ivory @ 0.9
     final corePaint = Paint()
-      ..color = AppColors.ivory.withOpacity(0.9)
+      ..color = AppColors.ivory.withValues(alpha: 0.9)
       ..style = PaintingStyle.fill;
 
     final double coreHeight = flameHeight * 0.55;
@@ -293,7 +293,7 @@ class _WaitingOnRowState extends State<WaitingOnRow> with SingleTickerProviderSt
               style: TextStyle(
                 fontSize: 12,
                 fontFamily: 'Lora',
-                color: isReady ? AppColors.ivory : AppColors.ivory.withOpacity(0.5),
+                color: isReady ? AppColors.ivory : AppColors.ivory.withValues(alpha: 0.5),
               ),
             ),
           ],

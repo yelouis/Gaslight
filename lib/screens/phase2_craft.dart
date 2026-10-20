@@ -252,7 +252,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
     final roomCodeStyle = AppTextStyles.sectionLabel.copyWith(
       letterSpacing: 1.5,
       fontSize: 11,
-      color: theme.colorScheme.secondary.withOpacity(0.8),
+      color: theme.colorScheme.secondary.withValues(alpha: 0.8),
     );
     final rotationStyle = AppTextStyles.sectionLabel;
 
@@ -391,9 +391,9 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.3)),
+            border: Border.all(color: theme.colorScheme.secondary.withValues(alpha: 0.3)),
           ),
           child: Column(
             children: [
@@ -556,7 +556,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
             border: Border.all(color: AppColors.brass, width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
@@ -601,7 +601,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
                       border: Border.all(color: AppColors.brass, width: 1.5),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.4),
+                          color: Colors.black.withValues(alpha: 0.4),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -638,7 +638,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
                           style: TextStyle(
                             fontFamily: 'Lora',
                             fontStyle: FontStyle.italic,
-                            color: AppColors.ink.withOpacity(0.7),
+                            color: AppColors.ink.withValues(alpha: 0.7),
                             fontSize: 13,
                           ),
                           textAlign: TextAlign.center,
@@ -754,7 +754,7 @@ class _Phase2CraftScreenState extends State<Phase2CraftScreen> with WidgetsBindi
                                 backgroundColor: AppColors.ground,
                                 foregroundColor: AppColors.brass,
                                 side: BorderSide(
-                                  color: canReroll ? AppColors.brass : AppColors.brass.withOpacity(0.3),
+                                  color: canReroll ? AppColors.brass : AppColors.brass.withValues(alpha: 0.3),
                                   width: 1,
                                 ),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

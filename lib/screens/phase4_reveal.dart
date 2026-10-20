@@ -162,12 +162,12 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
         margin: const EdgeInsets.symmetric(vertical: 16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: AppColors.oxblood.withOpacity(0.9),
+          color: AppColors.oxblood.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.brass, width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: AppColors.oxblood.withOpacity(0.4),
+              color: AppColors.oxblood.withValues(alpha: 0.4),
               blurRadius: 12,
               spreadRadius: 2,
             )
@@ -421,7 +421,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
       } catch (_) {}
     }
 
-    final _latestDeltas = currentCard?.scoreDeltas ?? const <String, int>{};
+    final latestDeltas = currentCard?.scoreDeltas ?? const <String, int>{};
 
     if (currentTargetId != _previousTargetId) {
       _previousTargetId = currentTargetId;
@@ -473,7 +473,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
     final roomCodeStyle = AppTextStyles.sectionLabel.copyWith(
       letterSpacing: 1.5,
       fontSize: 11,
-      color: theme.colorScheme.secondary.withOpacity(0.8),
+      color: theme.colorScheme.secondary.withValues(alpha: 0.8),
     );
 
     final List<TextSpan> appBarLines = [
@@ -591,7 +591,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                             style: TextStyle(
                               fontFamily: 'Lora',
                               fontStyle: FontStyle.italic,
-                              color: AppColors.ivory.withOpacity(0.7),
+                              color: AppColors.ivory.withValues(alpha: 0.7),
                               fontSize: 13,
                             ),
                             textAlign: TextAlign.center,
@@ -628,7 +628,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                             _buildRevengeGuessTray(state, currentCard, gs, theme),
 
                           if (revealStage >= 4) ...[
-                            if (_latestDeltas.isNotEmpty) ...[
+                            if (latestDeltas.isNotEmpty) ...[
                               Column(
                                 key: const ValueKey('points_awarded_this_card_block'),
                                 children: [
@@ -651,7 +651,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                     spacing: 12,
                                     runSpacing: 8,
                                     alignment: WrapAlignment.center,
-                                    children: _latestDeltas.entries.where((e) => e.value != 0).map((e) {
+                                    children: latestDeltas.entries.where((e) => e.value != 0).map((e) {
                                       final player = gs.players.firstWhere((p) => p.id == e.key, orElse: () => PlayerState(id: e.key, name: 'Unknown'));
                                       final isPositive = e.value > 0;
                                       final prefix = isPositive ? '+' : '';
@@ -781,7 +781,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                     ],
                                   ),
                                 );
-                              }).toList(),
+                              }),
                             ],
 
                             // Rivalry Teaser - Issue 177 / AG3
@@ -817,7 +817,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                 fontFamily: 'Lora',
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.brass.withOpacity(0.9),
+                                color: AppColors.brass.withValues(alpha: 0.9),
                                 letterSpacing: 3,
                               ),
                             ),
@@ -829,7 +829,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                 children: (gs.players.where((p) => p.role != PlayerRole.spectator).toList()
                                       ..sort((a, b) => b.totalScore.compareTo(a.totalScore)))
                                     .map((player) {
-                                      final delta = revealStage >= 4 ? (_latestDeltas[player.id] ?? 0) : 0;
+                                      final delta = revealStage >= 4 ? (latestDeltas[player.id] ?? 0) : 0;
                                       return Padding(
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         child: Container(
@@ -838,7 +838,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                             color: AppColors.groundRaised,
                                             borderRadius: BorderRadius.circular(12),
                                             border: Border.all(
-                                              color: AppColors.brass.withOpacity(0.4),
+                                              color: AppColors.brass.withValues(alpha: 0.4),
                                               width: 1.5,
                                             ),
                                           ),
@@ -958,7 +958,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
           ),
           boxShadow: [
             BoxShadow(
-              color: isLowTime ? Colors.redAccent.withOpacity(0.3) : AppColors.brass.withOpacity(0.15),
+              color: isLowTime ? Colors.redAccent.withValues(alpha: 0.3) : AppColors.brass.withValues(alpha: 0.15),
               blurRadius: 15,
               spreadRadius: 2,
             )
@@ -1002,10 +1002,10 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isLowTime ? Colors.redAccent.withOpacity(0.2) : AppColors.ground,
+                        color: isLowTime ? Colors.redAccent.withValues(alpha: 0.2) : AppColors.ground,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: isLowTime ? Colors.redAccent : AppColors.brass.withOpacity(0.5),
+                          color: isLowTime ? Colors.redAccent : AppColors.brass.withValues(alpha: 0.5),
                         ),
                       ),
                       child: Text(
@@ -1168,7 +1168,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                           ),
                           backgroundColor: AppColors.ground,
                           side: BorderSide(
-                            color: hasGuessed ? AppColors.verdigris.withOpacity(0.5) : AppColors.brass.withOpacity(0.3),
+                            color: hasGuessed ? AppColors.verdigris.withValues(alpha: 0.5) : AppColors.brass.withValues(alpha: 0.3),
                           ),
                         );
                       }).toList(),
@@ -1199,19 +1199,19 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
           color: cardColor,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isTruth ? truthBorderColor : forgeryBorderColor.withOpacity(0.7),
+            color: isTruth ? truthBorderColor : forgeryBorderColor.withValues(alpha: 0.7),
             width: isTruth ? 3.0 : 1.5,
           ),
           boxShadow: [
             BoxShadow(
               color: isTruth 
-                  ? truthBorderColor.withOpacity(0.2) 
-                  : forgeryBorderColor.withOpacity(0.1),
+                  ? truthBorderColor.withValues(alpha: 0.2) 
+                  : forgeryBorderColor.withValues(alpha: 0.1),
               blurRadius: 10,
               spreadRadius: 1,
             ),
             BoxShadow(
-              color: Colors.black.withOpacity(0.4),
+              color: Colors.black.withValues(alpha: 0.4),
               blurRadius: 8,
               offset: const Offset(0, 4),
             )
@@ -1240,7 +1240,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                             decoration: BoxDecoration(
                               color: AppColors.ground,
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: AppColors.brass.withOpacity(0.4)),
+                              border: Border.all(color: AppColors.brass.withValues(alpha: 0.4)),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -1267,7 +1267,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                   decoration: BoxDecoration(
                                     color: AppColors.ground,
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: AppColors.verdigris.withOpacity(0.8)),
+                                    border: Border.all(color: AppColors.verdigris.withValues(alpha: 0.8)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -1298,7 +1298,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                                     decoration: BoxDecoration(
                                       color: AppColors.ground,
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: AppColors.oxblood.withOpacity(0.6)),
+                                      border: Border.all(color: AppColors.oxblood.withValues(alpha: 0.6)),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -1347,7 +1347,7 @@ class _Phase4RevealScreenState extends State<Phase4RevealScreen> with RavenPoseH
                     Text(
                       'VOTES',
                       style: TextStyle(
-                        color: theme.colorScheme.secondary.withOpacity(0.6),
+                        color: theme.colorScheme.secondary.withValues(alpha: 0.6),
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1,
